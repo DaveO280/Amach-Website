@@ -1,0 +1,57 @@
+<svg viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="treeGlow" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" style="stop-color:#0ea5e9;stop-opacity:0.8"/>
+      <stop offset="100%" style="stop-color:#38bdf8;stop-opacity:0.4"/>
+    </linearGradient>
+    <radialGradient id="leafGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" style="stop-color:#064e3b;stop-opacity:0.3"/>
+      <stop offset="100%" style="stop-color:#064e3b;stop-opacity:0.1"/>
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background glow -->
+  <path d="M400 700 C400 700 150 500 150 300 C150 100 400 50 400 50 C400 50 650 100 650 300 C650 500 400 700 400 700"
+        fill="none" stroke="#0ea5e9" stroke-width="1" filter="url(#glow)" opacity="0.2"/>
+
+  <!-- Tree trunk with circuit patterns -->
+  <path d="M400 750 C400 750 380 600 380 500 C380 400 400 350 400 300" 
+        stroke="url(#treeGlow)" 
+        stroke-width="40" 
+        fill="none"
+        class="circuit-path"
+        filter="url(#glow)"/>
+
+  <!-- Main branches -->
+  <path d="M400 400 C350 350 300 300 200 350" stroke="url(#treeGlow)" stroke-width="25" fill="none" filter="url(#glow)"/>
+  <path d="M400 400 C450 350 500 300 600 350" stroke="url(#treeGlow)" stroke-width="25" fill="none" filter="url(#glow)"/>
+  
+  <!-- Secondary branches -->
+  <path d="M300 350 C250 300 200 250 150 300" stroke="url(#treeGlow)" stroke-width="15" fill="none" filter="url(#glow)"/>
+  <path d="M500 350 C550 300 600 250 650 300" stroke="url(#treeGlow)" stroke-width="15" fill="none" filter="url(#glow)"/>
+
+  <!-- Circuit patterns -->
+  <g class="circuits" stroke="#38bdf8" stroke-width="2" fill="none" filter="url(#glow)">
+    <path d="M400 500 L420 500 L420 450 L400 450"/>
+    <path d="M380 400 L360 400 L360 350 L380 350"/>
+    <circle cx="400" cy="500" r="5" fill="#38bdf8"/>
+    <circle cx="400" cy="400" r="5" fill="#38bdf8"/>
+  </g>
+
+  <!-- Leaves -->
+  <g class="leaves">
+    <path d="M100 200 C200 100 300 200 200 300 C100 400 0 300 100 200" fill="url(#leafGlow)"/>
+    <path d="M700 200 C600 100 500 200 600 300 C700 400 800 300 700 200" fill="url(#leafGlow)"/>
+    <path d="M400 100 C500 0 600 100 500 200 C400 300 300 200 400 100" fill="url(#leafGlow)"/>
+  </g>
+
+  <!-- Ground glow -->
+  <ellipse cx="400" cy="750" rx="300" ry="30" fill="#f59e0b" opacity="0.2" filter="url(#glow)"/>
+</svg>

@@ -1,0 +1,58 @@
+{
+  "name": "amach-health",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "prepare": "husky install",
+    "type-check": "tsc --noEmit",
+    "test": "echo \"No tests specified\""
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.6",
+    "@radix-ui/react-dropdown-menu": "^2.1.6",
+    "@radix-ui/react-slot": "^1.1.2",
+    "@shadcn/ui": "^0.0.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "next": "15.1.7",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^3.0.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/forms": "^0.5.10",
+    "@tailwindcss/typography": "^0.5.16",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "10.0.1",
+    "eslint": "^9",
+    "eslint-config-next": "15.1.7",
+    "husky": "^8.0.0",
+    "lint-staged": "^15.4.3",
+    "postcss": "8.4.31",
+    "tailwindcss": "3.3.0",
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "^5"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "sharp"
+    ],
+    "onlyBuiltDependencies": [
+      "sharp"
+    ]
+  },
+  "lint-staged": {
+    "**/*.{ts,tsx}": [
+      "pnpm eslint --fix",
+      "pnpm prettier --write",
+      "pnpm type-check"
+    ]
+  }
+}

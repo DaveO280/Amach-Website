@@ -1,10 +1,10 @@
-"use client"
+"use client";
 
-import React from 'react';
-import { whitepaperContent } from '../content';
-import { Button } from '@/components/ui/button';
-import { Printer, ArrowLeft, Download } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import React from "react";
+import { whitepaperContent } from "../content";
+import { Button } from "@/components/ui/button";
+import { Printer, ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function PrintWhitepaper() {
   const router = useRouter();
@@ -16,7 +16,7 @@ export default function PrintWhitepaper() {
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-emerald-50 print:bg-white">
       {/* Navigation - hidden when printing */}
       <div className="fixed top-4 left-4 print:hidden">
-        <Button 
+        <Button
           variant="ghost"
           onClick={() => router.back()}
           className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
@@ -35,7 +35,7 @@ export default function PrintWhitepaper() {
             <p>2. Select "Save as PDF" as destination</p>
             <p>3. Click Save</p>
           </div>
-          <Button 
+          <Button
             onClick={handlePrint}
             className="bg-emerald-600 hover:bg-emerald-700 text-white"
           >
@@ -65,9 +65,9 @@ export default function PrintWhitepaper() {
           {/* Main content */}
           {Object.values(whitepaperContent).map((content, index) => (
             <div key={index} className="relative print:break-after-page">
-              <div 
+              <div
                 className="print:break-inside-avoid"
-                dangerouslySetInnerHTML={{ __html: content }} 
+                dangerouslySetInnerHTML={{ __html: content }}
               />
             </div>
           ))}
@@ -75,4 +75,4 @@ export default function PrintWhitepaper() {
       </div>
     </div>
   );
-} 
+}

@@ -1,51 +1,12 @@
-"use client"
+"use client";
 
-import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Download, Menu } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-} from '@/components/ui/sheet';
-import { Section, WhitepaperContent } from '@/types/whitepaper';
-import { saveAs } from 'file-saver';
-import { useRouter } from 'next/navigation';
-
-// Add this to your globals.css
-const whitepaperStyles = `
-  .whitepaper-content {
-    @apply font-sans;
-  }
-  
-  .main-title {
-    @apply font-serif text-4xl font-bold text-emerald-800 mb-4;
-  }
-  
-  .subtitle {
-    @apply font-serif text-2xl text-emerald-800 italic mb-8;
-  }
-  
-  .section {
-    @apply mb-8;
-  }
-  
-  .section h3 {
-    @apply font-sans text-xl font-medium uppercase tracking-wide text-emerald-800 mb-3;
-  }
-  
-  .section p {
-    @apply text-amber-900/80 leading-relaxed mb-4;
-  }
-  
-  .section ul, .section ol {
-    @apply ml-6 mb-4;
-  }
-  
-  .section li {
-    @apply text-amber-900/80 mb-2;
-  }
-`;
+import React, { useState } from "react";
+import { ChevronLeft, ChevronRight, Menu } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Section, WhitepaperContent } from "@/types/whitepaper";
+import { saveAs } from "file-saver";
+import { useRouter } from "next/navigation";
 
 const sections: Section[] = [
   { title: "Abstract & Contents", page: 1 },
@@ -54,7 +15,7 @@ const sections: Section[] = [
   { title: "Data Privacy", page: 4 },
   { title: "Tokenomics", page: 5 },
   { title: "Roadmap", page: 6 },
-  { title: "Conclusion", page: 7 }
+  { title: "Conclusion", page: 7 },
 ];
 
 const whitepaperContent: WhitepaperContent = {
@@ -311,21 +272,15 @@ const whitepaperContent: WhitepaperContent = {
         </div>
       </div>
     </div>
-  `
-};
-
-const handleDownloadPDF = () => {
-  const pdfUrl = '/whitepaper.pdf';
-  saveAs(pdfUrl, 'Amach-Health-Whitepaper.pdf');
+  `,
 };
 
 export default function WhitepaperPage() {
   const router = useRouter();
   const [currentPage, setCurrentPage] = useState(1);
-  const totalPages = 7;
 
   const handlePrintView = () => {
-    router.push('/whitepaper/print');
+    router.push("/whitepaper/print");
   };
 
   return (
@@ -334,7 +289,11 @@ export default function WhitepaperPage() {
       <div className="fixed top-4 right-4 lg:hidden z-50">
         <Sheet>
           <SheetTrigger asChild>
-            <Button variant="outline" size="icon" className="border-emerald-600">
+            <Button
+              variant="outline"
+              size="icon"
+              className="border-emerald-600"
+            >
               <Menu className="h-4 w-4 text-emerald-600" />
             </Button>
           </SheetTrigger>
@@ -345,19 +304,20 @@ export default function WhitepaperPage() {
                   key={index}
                   variant={currentPage === section.page ? "default" : "ghost"}
                   className={`justify-start text-amber-900 hover:text-emerald-600 ${
-                    currentPage === section.page ? 'bg-emerald-600 text-white hover:text-white' : ''
+                    currentPage === section.page
+                      ? "bg-emerald-600 text-white hover:text-white"
+                      : ""
                   }`}
                   onClick={() => setCurrentPage(section.page)}
                 >
                   {section.title}
                 </Button>
               ))}
-              <Button 
+              <Button
                 variant="outline"
                 className="mt-4 border-2 border-emerald-600 text-emerald-600 hover:bg-emerald-700 hover:border-emerald-700 hover:text-white transition-colors duration-200"
                 onClick={handlePrintView}
               >
-                <Download className="h-4 w-4 mr-2" />
                 View & Download PDF
               </Button>
             </nav>
@@ -374,19 +334,20 @@ export default function WhitepaperPage() {
                 key={index}
                 variant={currentPage === section.page ? "default" : "ghost"}
                 className={`justify-start text-amber-900 hover:text-emerald-600 ${
-                  currentPage === section.page ? 'bg-emerald-600 text-white hover:text-white' : ''
+                  currentPage === section.page
+                    ? "bg-emerald-600 text-white hover:text-white"
+                    : ""
                 }`}
                 onClick={() => setCurrentPage(section.page)}
               >
                 {section.title}
               </Button>
             ))}
-            <Button 
+            <Button
               variant="outline"
               className="mt-4 border-2 border-emerald-600 text-emerald-600 hover:bg-emerald-700 hover:border-emerald-700 hover:text-white transition-colors duration-200"
               onClick={handlePrintView}
             >
-              <Download className="h-4 w-4 mr-2" />
               View & Download PDF
             </Button>
           </nav>
@@ -394,7 +355,9 @@ export default function WhitepaperPage() {
 
         {/* Main Content */}
         <div className="flex-1 p-8">
-          <div dangerouslySetInnerHTML={{ __html: whitepaperContent[currentPage] }} />
+          <div
+            dangerouslySetInnerHTML={{ __html: whitepaperContent[currentPage] }}
+          />
         </div>
       </div>
     </div>

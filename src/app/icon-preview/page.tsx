@@ -2,7 +2,7 @@ export default function IconPreview() {
   return (
     <div className="p-8 grid gap-8">
       <h1>Icon Preview</h1>
-      
+
       {/* Original size */}
       <div>
         <h2>32x32 (Original)</h2>
@@ -25,6 +25,6 @@ export default function IconPreview() {
 }
 
 export const metadata = {
-  title: 'Icon Preview - Amach Health',
-  description: 'Icon preview and testing page',
+  title: "Icon Preview - Amach Health",
+  description: "Icon preview and testing page",
 };

@@ -226,5 +226,5 @@ export const whitepaperContent = {
         </div>
       </div>
     </div>
-  `
-}; 
+  `,
+};

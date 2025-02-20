@@ -5,4 +5,4 @@ export interface Section {
 
 export interface WhitepaperContent {
   [key: number]: string;
-} 
+}

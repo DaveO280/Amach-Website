@@ -5,47 +5,48 @@ const nextConfig = {
     // Handle SVGs
     config.module.rules.push({
       test: /\.svg$/,
-      use: ['@svgr/webpack']
+      use: ["@svgr/webpack"],
     });
-    
+
     // Handle fonts and other static assets
     config.module.rules.push({
       test: /\.(woff|woff2|eot|ttf|otf)$/i,
-      type: 'asset/resource'
+      type: "asset/resource",
     });
-    
+
     return config;
   },
   // Optimize static file handling
   experimental: {
     optimizeCss: true,
-    optimizePackageImports: ['@radix-ui/react-icons']
+    optimizePackageImports: ["@radix-ui/react-icons"],
   },
   async headers() {
     return [
       {
-        source: '/:path*',
+        source: "/:path*",
         headers: [
           {
-            key: 'X-Frame-Options',
-            value: 'DENY',
+            key: "X-Frame-Options",
+            value: "DENY",
           },
           {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
+            key: "X-Content-Type-Options",
+            value: "nosniff",
           },
           {
-            key: 'Referrer-Policy',
-            value: 'origin-when-cross-origin',
+            key: "Referrer-Policy",
+            value: "origin-when-cross-origin",
           },
           {
-            key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';",
+            key: "Content-Security-Policy",
+            value:
+              "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';",
           },
         ],
       },
     ];
   },
-}
+};
 
-module.exports = nextConfig 
+module.exports = nextConfig;

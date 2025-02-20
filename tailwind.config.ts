@@ -23,23 +23,21 @@ const config: Config = {
           foreground: "hsl(var(--secondary-foreground))",
         },
         amber: {
-          50: '#fffbeb',
+          50: "#fffbeb",
           // ... other amber colors
         },
         emerald: {
-          50: '#ecfdf5',
+          50: "#ecfdf5",
           // ... other emerald colors
         },
       },
       animation: {
-        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'circuit-glow': 'circuit-glow 4s ease-in-out infinite',
+        "pulse-slow": "pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "circuit-glow": "circuit-glow 4s ease-in-out infinite",
       },
     },
   },
-  plugins: [
-    require('@tailwindcss/typography'),
-  ],
+  plugins: [require("@tailwindcss/typography")],
 };
 
 export default config;

@@ -1,24 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Amach Health Website
+
+A Next.js-powered platform for decentralized healthcare data management.
+
+## Overview
+
+Amach Health is pioneering a revolutionary approach to healthcare by creating a decentralized infrastructure that integrates traditional healing wisdom with modern medical data analytics.
+
+## Features
+
+- 🔒 Privacy-first architecture
+- 🔄 Decentralized data storage
+- 🧬 Health data integration
+- 📊 Advanced analytics dashboard
+- 🤝 Community-driven development
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+# Install dependencies
+pnpm install
+
+# Run development server
 pnpm dev
-# or
-bun dev
+
+# Build for production
+pnpm build
+
+# Start production server
+pnpm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Development Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Next.js 14
+- TypeScript
+- Tailwind CSS
+- Shadcn/ui
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+## Code of Conduct
+
+This project adheres to our [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Learn More
 

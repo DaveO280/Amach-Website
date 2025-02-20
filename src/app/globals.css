@@ -128,4 +128,76 @@
   .integrate {
     animation: integrate 2s forwards;
   }
+}
+
+.whitepaper-content {
+  @apply font-sans max-w-4xl mx-auto space-y-12;
+}
+
+.main-title {
+  @apply text-2xl font-black text-emerald-900;
+}
+
+.subtitle {
+  @apply hidden;
+}
+
+.section {
+  @apply space-y-6;
+}
+
+.section h3 {
+  @apply text-sm font-semibold text-emerald-600 tracking-wide uppercase mb-4;
+}
+
+.section p {
+  @apply text-lg text-amber-800/80 leading-relaxed;
+}
+
+.section ul {
+  @apply space-y-4 ml-6;
+}
+
+.section li {
+  @apply text-lg text-amber-800/80 leading-relaxed flex items-start;
+}
+
+.section li strong {
+  @apply text-emerald-700 font-semibold mr-2;
+}
+
+.section a {
+  @apply text-emerald-600 hover:text-emerald-700 transition-colors;
+}
+
+.section * {
+  @apply transition-colors duration-300;
+}
+
+@media print {
+  @page {
+    margin: 2cm;
+    size: A4;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  .whitepaper-content {
+    page-break-after: always;
+  }
+
+  h1, h2, h3 {
+    page-break-after: avoid;
+  }
+
+  img, table {
+    page-break-inside: avoid;
+  }
+
+  /* Hide all gradients and decorative elements when printing */
+  .bg-gradient-to-br {
+    background: none !important;
+  }
 } 

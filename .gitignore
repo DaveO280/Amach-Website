@@ -1,21 +1,19 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+node_modules
+.pnpm-store
+*-DaveLaptop.yaml
+*-*-laptop.yaml
+*-*-desktop.yaml
+*-personal.yaml
 
 # testing
 /coverage
 
 # next.js
-/.next/
-/out/
+.next
+out
 
 # production
 /build
@@ -31,7 +29,9 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
+.env
+.env.*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +39,21 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# IDE files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# System-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+*.swp
+*.swo

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Menu, Wallet, Bot, Activity, Brain, Leaf, Lock } from 'lucide-react';
+import circuitTree from '@/assets/circuit-tree.svg'
 
 const MainPage = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -105,14 +106,16 @@ const MainPage = () => {
               <p className="text-xl text-amber-800/80 leading-relaxed">
                 By capturing insights from medical diagnostics, wearable technologies, and traditional wellness metrics, we&apos;re building a future where health decisions are backed by both clinical evidence and generational wisdom.
               </p>
-              <div className="flex justify-center mt-8">
+              <div className="flex flex-col items-center mt-8 space-y-4">
                 <Button 
-                  variant="outline" 
-                  className="px-8 py-6 text-lg border-2 border-emerald-600 text-emerald-600 hover:bg-emerald-50 transition-all duration-300 hover:scale-105"
+                  className="px-8 py-6 text-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-all duration-300 hover:scale-105"
                   onClick={() => window.location.href = '/learn'}
                 >
                   Learn More
                 </Button>
+                <p className="text-sm text-amber-800/60">
+                  For inquiries: <a href="mailto:amachhealth@gmail.com" className="text-emerald-600 hover:text-emerald-700 underline">amachhealth@gmail.com</a>
+                </p>
               </div>
             </div>
             
@@ -155,6 +158,15 @@ const MainPage = () => {
           </div>
         </div>
       </section>
+
+      {/* Add this before closing the main container */}
+      <div className="mt-24 py-8 border-t border-emerald-100">
+        <div className="text-center text-amber-800/60">
+          <p className="text-sm">
+            Contact us: <a href="mailto:amachhealth@gmail.com" className="text-emerald-600 hover:text-emerald-700">amachhealth@gmail.com</a>
+          </p>
+        </div>
+      </div>
     </div>
   );
 };

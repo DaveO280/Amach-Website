@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /icon-preview
+
+Sitemap: https://amachhealth.com/sitemap.xml 

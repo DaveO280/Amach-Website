@@ -2,9 +2,15 @@
   "typescript.tsdk": "node_modules/typescript/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": true
+    "source.fixAll.eslint": true,
+    "source.organizeImports": true
   },
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.formatOnSave": true,
-  "typescript.preferences.importModuleSpecifier": "non-relative"
+  "typescript.preferences.importModuleSpecifier": "non-relative",
+  "typescript.validate.enable": true,
+  "typescript.suggestionActions.enabled": true,
+  "typescript.surveys.enabled": false,
+  "errorLens.enabled": true,
+  "errorLens.enabledInMergeConflict": true
 } 

@@ -5,11 +5,4 @@ export interface Section {
 
 export interface WhitepaperContent {
   [key: number]: string;
-}
-
-export interface WhitepaperStyles {
-  whitepaper-content: string;
-  main-title: string;
-  subtitle: string;
-  section: string;
 } 

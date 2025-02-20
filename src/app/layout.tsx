@@ -6,8 +6,14 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Amach Health",
-  description: "Bridging ancestral wisdom with modern analytics in healthcare",
+  description: "Driven by Data, Guided by Nature",
   keywords: ["healthcare", "AI", "blockchain", "analytics", "medicine"],
+  icons: {
+    icon: {
+      url: '/icon.svg',
+      type: 'image/svg+xml',
+    },
+  },
 };
 
 export default function RootLayout({

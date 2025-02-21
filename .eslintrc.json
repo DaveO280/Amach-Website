@@ -1,21 +1,9 @@
 {
-  "extends": "next/core-web-vitals",
+  "extends": ["next/core-web-vitals", "prettier"],
+  "plugins": ["@typescript-eslint"],
+  "parser": "@typescript-eslint/parser",
   "rules": {
     "@next/next/no-img-element": "warn",
-    "react/no-unescaped-entities": [
-      "error",
-      {
-        "forbid": [
-          {
-            "char": ">",
-            "alternatives": ["&gt;"]
-          },
-          {
-            "char": "}",
-            "alternatives": ["&#125;"]
-          }
-        ]
-      }
-    ]
+    "react/no-unescaped-entities": "off"
   }
 }

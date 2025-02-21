@@ -1,10 +1,9 @@
 "use client";
 
-import React from "react";
-import { whitepaperContent } from "../content";
 import { Button } from "@/components/ui/button";
-import { Printer, ArrowLeft } from "lucide-react";
+import { ArrowLeft, Printer } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { whitepaperContent } from "../content";
 
 export default function PrintWhitepaper() {
   const router = useRouter();
@@ -32,7 +31,7 @@ export default function PrintWhitepaper() {
           <div className="text-sm text-amber-800/60 text-right">
             <p>To save as PDF:</p>
             <p>1. Click Print below</p>
-            <p>2. Select "Save as PDF" as destination</p>
+            <p>2. Select &ldquo;Save as PDF&rdquo; as destination</p>
             <p>3. Click Save</p>
           </div>
           <Button
@@ -55,7 +54,7 @@ export default function PrintWhitepaper() {
               Amach Health
             </h1>
             <p className="text-2xl text-emerald-600 print:text-black italic">
-              "Driven by Data, Guided by Nature"
+              &ldquo;Driven by Data, Guided by Nature&rdquo;
             </p>
             <p className="mt-8 text-lg text-amber-800/80 print:text-black">
               Whitepaper v1.0

@@ -1,13 +1,33 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Menu, Wallet, Bot, Activity, Brain, Leaf, Lock } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Activity,
+  Bot,
+  Brain,
+  Leaf,
+  Lock,
+  Menu,
+  Wallet,
+  X,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 
 const MainPage = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeCard, setActiveCard] = useState(0);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const cards = [
     {
@@ -37,10 +57,19 @@ const MainPage = () => {
     return () => clearInterval(timer);
   }, [cards.length]);
 
+  const navItems = [
+    { label: "Mission", href: "/mission" },
+    { label: "Whitepaper", href: "/whitepaper" },
+  ];
+
+  const dropdownItems = [
+    { label: "Dashboard", href: "#", icon: Activity },
+    { label: "AI Agent", href: "#", icon: Bot },
+  ];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-emerald-50">
-      {/* Header */}
-      <header className="border-b border-amber-100">
+      <header className="border-b border-amber-100 relative">
         <div className="container mx-auto py-4">
           <div className="flex justify-between items-center max-w-7xl mx-auto">
             <div className="flex items-center">
@@ -49,7 +78,7 @@ const MainPage = () => {
                   Amach Health
                 </h1>
                 <span className="text-2xl font-normal italic text-emerald-900 hidden sm:inline-block">
-                  - &ldquo;Driven by Data, Guided by Nature&rdquo;
+                  - &quot;Driven by Data, Guided by Nature&quot;
                 </span>
               </div>
             </div>
@@ -57,18 +86,15 @@ const MainPage = () => {
             <nav className="hidden md:flex items-center justify-end w-1/2">
               <div className="flex items-center justify-between w-full">
                 <div className="flex items-center space-x-16 ml-auto mr-16">
-                  <a
-                    href="/mission"
-                    className="text-amber-900 hover:text-emerald-600"
-                  >
-                    Mission
-                  </a>
-                  <a
-                    href="/whitepaper"
-                    className="text-amber-900 hover:text-emerald-600"
-                  >
-                    Whitepaper
-                  </a>
+                  {navItems.map((item) => (
+                    <a
+                      key={item.label}
+                      href={item.href}
+                      className="text-amber-900 hover:text-emerald-600"
+                    >
+                      {item.label}
+                    </a>
+                  ))}
                 </div>
                 <div
                   className="relative"
@@ -91,46 +117,94 @@ const MainPage = () => {
                     }`}
                   >
                     <div className="py-1">
-                      <a
-                        href="#"
-                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-emerald-50"
-                      >
-                        <Activity className="h-4 w-4 mr-2" />
-                        Dashboard
-                      </a>
-                      <a
-                        href="#"
-                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-emerald-50"
-                      >
-                        <Bot className="h-4 w-4 mr-2" />
-                        AI Agent
-                      </a>
+                      {dropdownItems.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <a
+                            key={item.label}
+                            href={item.href}
+                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-emerald-50"
+                          >
+                            <Icon className="h-4 w-4 mr-2" />
+                            {item.label}
+                          </a>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
               </div>
             </nav>
 
-            {/* Mobile menu button */}
-            <Button variant="outline" className="md:hidden">
-              <Menu className="h-5 w-5" />
+            <Button
+              variant="outline"
+              className="md:hidden"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            >
+              {isMobileMenuOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
             </Button>
+          </div>
+
+          <div
+            className={`absolute left-0 right-0 bg-white shadow-lg transition-all duration-300 ease-in-out z-50 border-b border-amber-100 ${
+              isMobileMenuOpen
+                ? "opacity-100 translate-y-0"
+                : "opacity-0 -translate-y-2 pointer-events-none"
+            } md:hidden`}
+          >
+            <div className="container mx-auto py-4 px-4 space-y-4">
+              {navItems.map((item) => (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  className="block text-lg text-amber-900 hover:text-emerald-600 py-2"
+                >
+                  {item.label}
+                </a>
+              ))}
+
+              <Button
+                variant="outline"
+                className="w-full justify-start text-amber-900 hover:text-emerald-600"
+              >
+                <Wallet className="h-4 w-4 mr-2" />
+                Connect Wallet
+              </Button>
+
+              <div className="pt-4 border-t border-gray-200">
+                {dropdownItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <a
+                      key={item.label}
+                      href={item.href}
+                      className="flex items-center text-gray-700 hover:text-emerald-600 py-2"
+                    >
+                      <Icon className="h-4 w-4 mr-2" />
+                      {item.label}
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
       <section className="relative overflow-hidden">
         <div className="container mx-auto px-4 py-12">
           <div className="grid md:grid-cols-2 gap-12 items-center">
-            {/* Left side content */}
             <div className="space-y-6">
               <div className="text-sm font-semibold text-emerald-600 tracking-wide">
                 YOUR HEALTH, YOUR CHOICE
               </div>
               <h2 className="text-4xl font-light text-amber-900 leading-relaxed">
-                Amach — from the Gaelic word for &ldquo;outsider&rdquo; or
-                &ldquo;rebellion&rdquo; — embodies our vision for healthcare
+                Amach — from the Gaelic word for &quot;outsider&quot; or
+                &quot;rebellion&quot; — embodies our vision for healthcare
                 transformation.
               </h2>
               <p className="text-xl text-amber-800/80 leading-relaxed">
@@ -140,25 +214,31 @@ const MainPage = () => {
                 clinical evidence and generational wisdom.
               </p>
               <div className="flex flex-col items-center mt-8 space-y-4">
-                <Button
-                  className="px-8 py-6 text-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-all duration-300 hover:scale-105"
-                  onClick={() => (window.location.href = "/learn")}
-                >
-                  Learn More
-                </Button>
-                <p className="text-sm text-amber-800/60">
-                  For inquiries:{" "}
-                  <a
-                    href="mailto:amachhealth@gmail.com"
-                    className="text-emerald-600 hover:text-emerald-700 underline"
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <Button
+                    variant="outline"
+                    className="px-8 py-6 text-lg text-emerald-600 hover:bg-emerald-50 border-emerald-600 transition-all duration-300"
+                    onClick={() => (window.location.href = "/learn")}
                   >
-                    amachhealth@gmail.com
-                  </a>
+                    Learn More
+                  </Button>
+                  <Button
+                    className="px-8 py-6 text-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-all duration-300 hover:scale-105"
+                    onClick={() =>
+                      (window.location.href =
+                        "mailto:amachhealth@gmail.com?subject=Early Protocol Access")
+                    }
+                  >
+                    Join Protocol
+                  </Button>
+                </div>
+                <p className="text-sm text-amber-800/80 max-w-md text-center">
+                  Join our early access list to be among the first to experience
+                  the future of health data sovereignty.
                 </p>
               </div>
             </div>
 
-            {/* Right side - Rotating cards */}
             <div className="relative h-[400px] w-full">
               {cards.map((card, index) => {
                 const Icon = card.icon;
@@ -202,17 +282,11 @@ const MainPage = () => {
         </div>
       </section>
 
-      {/* Add this before closing the main container */}
       <div className="mt-24 py-8 border-t border-emerald-100">
         <div className="text-center text-amber-800/60">
           <p className="text-sm">
-            Contact us:{" "}
-            <a
-              href="mailto:amachhealth@gmail.com"
-              className="text-emerald-600 hover:text-emerald-700"
-            >
-              amachhealth@gmail.com
-            </a>
+            © 2025 Amach Health - Transforming Healthcare Through Data
+            Liberation
           </p>
         </div>
       </div>

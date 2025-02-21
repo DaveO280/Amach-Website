@@ -14,6 +14,7 @@
     "rebuild": "pnpm clean && pnpm install && pnpm build",
     "dev:clean": "pnpm clean:windows && pnpm dev",
     "build:clean": "rimraf .next && pnpm install && pnpm build",
+    "build:prod": "rimraf .next && pnpm install --prod && pnpm build",
     "start:clean": "rimraf .next && pnpm build && pnpm start",
     "clean:windows": "rimraf --no-glob .next && rimraf --no-glob node_modules/.cache && pnpm rebuild",
     "pre-commit": "lint-staged && pnpm type-check"

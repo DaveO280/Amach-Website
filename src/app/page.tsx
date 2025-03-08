@@ -1,11 +1,19 @@
 "use client";
 
+import HealthDashboardModal from "@/components/HealthDashboardModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Activity,
   Bot,
   Brain,
+  ChevronDown,
   Leaf,
   Lock,
   Menu,
@@ -15,9 +23,9 @@ import {
 import { useEffect, useState } from "react";
 
 const MainPage = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeCard, setActiveCard] = useState(0);
+  const [isHealthDashboardOpen, setIsHealthDashboardOpen] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -63,12 +71,28 @@ const MainPage = () => {
   ];
 
   const dropdownItems = [
-    { label: "Dashboard", href: "#", icon: Activity },
-    { label: "AI Agent", href: "#", icon: Bot },
+    {
+      label: "Dashboard",
+      action: () => setIsHealthDashboardOpen(true),
+      icon: Activity,
+      href: "#",
+    },
+    {
+      label: "AI Agent",
+      action: null,
+      href: "#",
+      icon: Bot,
+    },
   ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-emerald-50">
+      {/* Health dashboard modal */}
+      <HealthDashboardModal
+        isOpen={isHealthDashboardOpen}
+        onClose={() => setIsHealthDashboardOpen(false)}
+      />
+
       <header className="border-b border-amber-100 relative">
         <div className="container mx-auto py-4">
           <div className="flex justify-between items-center max-w-7xl mx-auto">
@@ -96,43 +120,41 @@ const MainPage = () => {
                     </a>
                   ))}
                 </div>
-                <div
-                  className="relative"
-                  onMouseEnter={() => setIsMenuOpen(true)}
-                  onMouseLeave={() => setIsMenuOpen(false)}
-                >
-                  <Button
-                    variant="outline"
-                    className="text-amber-900 hover:text-emerald-600"
-                  >
-                    <Wallet className="h-4 w-4 mr-2" />
-                    Connect Wallet
-                  </Button>
 
-                  <div
-                    className={`absolute top-full right-0 mt-2 w-48 bg-white rounded-md shadow-lg overflow-hidden transition-all duration-200 ease-in-out ${
-                      isMenuOpen
-                        ? "opacity-100 translate-y-0"
-                        : "opacity-0 -translate-y-2 pointer-events-none"
-                    }`}
-                  >
-                    <div className="py-1">
-                      {dropdownItems.map((item) => {
-                        const Icon = item.icon;
-                        return (
-                          <a
-                            key={item.label}
-                            href={item.href}
-                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-emerald-50"
-                          >
-                            <Icon className="h-4 w-4 mr-2" />
-                            {item.label}
-                          </a>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
+                {/* Using Radix UI Dropdown Menu instead of custom implementation */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="text-amber-900 hover:text-emerald-600"
+                    >
+                      <Wallet className="h-4 w-4 mr-2" />
+                      Connect Wallet
+                      <ChevronDown className="h-4 w-4 ml-2" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {dropdownItems.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <DropdownMenuItem
+                          key={item.label}
+                          onClick={() => {
+                            if (item.action) {
+                              item.action();
+                            } else if (item.href && item.href !== "#") {
+                              window.location.href = item.href;
+                            }
+                          }}
+                          className="flex items-center cursor-pointer text-sm py-2"
+                        >
+                          <Icon className="h-4 w-4 mr-2" />
+                          {item.label}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </nav>
 
@@ -148,49 +170,60 @@ const MainPage = () => {
               )}
             </Button>
           </div>
+        </div>
 
-          <div
-            className={`absolute left-0 right-0 bg-white shadow-lg transition-all duration-300 ease-in-out z-50 border-b border-amber-100 ${
-              isMobileMenuOpen
-                ? "opacity-100 translate-y-0"
-                : "opacity-0 -translate-y-2 pointer-events-none"
-            } md:hidden`}
-          >
-            <div className="container mx-auto py-4 px-4 space-y-4">
-              {navItems.map((item) => (
-                <a
-                  key={item.label}
-                  href={item.href}
-                  className="block text-lg text-amber-900 hover:text-emerald-600 py-2"
-                >
-                  {item.label}
-                </a>
-              ))}
-
-              <Button
-                variant="outline"
-                className="w-full justify-start text-amber-900 hover:text-emerald-600"
+        <div
+          className={`absolute left-0 right-0 bg-white shadow-lg transition-all duration-300 ease-in-out z-50 border-b border-amber-100 ${
+            isMobileMenuOpen
+              ? "opacity-100 translate-y-0"
+              : "opacity-0 -translate-y-2 pointer-events-none"
+          } md:hidden`}
+        >
+          <div className="container mx-auto py-4 px-4 space-y-4">
+            {navItems.map((item) => (
+              <a
+                key={item.label}
+                href={item.href}
+                className="block text-lg text-amber-900 hover:text-emerald-600 py-2"
               >
-                <Wallet className="h-4 w-4 mr-2" />
-                Connect Wallet
-              </Button>
+                {item.label}
+              </a>
+            ))}
 
-              <div className="pt-4 border-t border-gray-200">
+            {/* Mobile dropdown using same Radix UI components */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start text-amber-900 hover:text-emerald-600"
+                >
+                  <Wallet className="h-4 w-4 mr-2" />
+                  Connect Wallet
+                  <ChevronDown className="h-4 w-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-full">
                 {dropdownItems.map((item) => {
                   const Icon = item.icon;
                   return (
-                    <a
+                    <DropdownMenuItem
                       key={item.label}
-                      href={item.href}
-                      className="flex items-center text-gray-700 hover:text-emerald-600 py-2"
+                      onClick={() => {
+                        if (item.action) {
+                          item.action();
+                        } else if (item.href && item.href !== "#") {
+                          window.location.href = item.href;
+                        }
+                      }}
+                      className="flex items-center cursor-pointer text-sm py-2"
                     >
                       <Icon className="h-4 w-4 mr-2" />
                       {item.label}
-                    </a>
+                    </DropdownMenuItem>
                   );
                 })}
-              </div>
-            </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>

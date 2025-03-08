@@ -19,12 +19,15 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@health/*": ["./my-health-app/src/*"]
     }
   },
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
+    "my-health-app/src/**/*.ts",
+    "my-health-app/src/**/*.tsx",
     "next-env.d.ts",
     ".next/types/**/*.ts"
   ],

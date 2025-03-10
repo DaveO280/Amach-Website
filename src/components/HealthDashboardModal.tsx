@@ -7,7 +7,7 @@ import React, { useState } from "react";
 // Import the actual components instead of the page
 // This way we can wrap them in the providers ourselves
 const HealthDataSelector = dynamic(
-  () => import("../../my-health-app/src/components/HealthDataSelector"),
+  () => import("../my-health-app/components/HealthDataSelector"),
   {
     ssr: false,
     loading: () => (
@@ -19,7 +19,7 @@ const HealthDataSelector = dynamic(
 );
 
 const HealthDashboard = dynamic(
-  () => import("../../my-health-app/src/components/dashboard/HealthDashboard"),
+  () => import("../my-health-app/components/dashboard/HealthDashboard"),
   {
     ssr: false,
     loading: () => (
@@ -33,7 +33,7 @@ const HealthDashboard = dynamic(
 // Import the providers directly to ensure they're available
 const SelectionProvider = dynamic(
   () =>
-    import("../../my-health-app/src/store/selectionStore/provider").then(
+    import("../my-health-app/store/selectionStore/provider").then(
       (mod) => mod.SelectionProvider,
     ),
   {
@@ -43,7 +43,7 @@ const SelectionProvider = dynamic(
 
 const HealthDataProvider = dynamic(
   () =>
-    import("../../my-health-app/src/store/healthDataStore/provider").then(
+    import("../my-health-app/store/healthDataStore/provider").then(
       (mod) => mod.HealthDataProvider,
     ),
   {

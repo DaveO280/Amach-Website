@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --primary: #006B4F;
+  --primary-light: #E8F5F0;
+  --primary-dark: #005540;
+  --accent: #B25D42;
+  --warm-bg: #FDF6E3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+    --primary-light: #1a332d;
+  }
+}
+
+@layer base {
+  body {
+    color: var(--foreground);
+    background: var(--background);
+    font-family: var(--font-geist-sans), Arial, sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply py-3 px-4 rounded-lg font-medium text-white transition-colors;
+    background-color: var(--primary);
+  }
+
+  .btn-primary:hover {
+    background-color: var(--primary-dark);
+  }
+
+  .btn-primary:disabled {
+    @apply bg-gray-300 cursor-not-allowed;
+  }
+
+  .metric-card {
+    @apply p-3 rounded-lg text-sm transition-colors;
+  }
+
+  .metric-card {
+    @apply p-3 rounded-lg text-sm transition-colors;
+  }
+
+  .file-input {
+    @apply block w-full text-sm text-gray-500;
+  }
+
+  .file-input::file-selector-button {
+    @apply mr-4 py-2 px-4 rounded-lg border-0 text-sm font-semibold;
+    background-color: var(--primary-light);
+    color: var(--primary);
+  }
+
+  .file-input::file-selector-button:hover {
+    @apply bg-opacity-90;
+  }
+}

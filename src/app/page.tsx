@@ -77,6 +77,9 @@ const MainPage = () => {
   const handleDashboardClick = () => {
     setShowBetaNotification(true);
 
+    // Close mobile menu if open
+    setIsMobileMenuOpen(false);
+
     // This will also help close any open dropdown menus
     const clickEvent = new MouseEvent("mousedown", {
       bubbles: true,
@@ -214,45 +217,43 @@ const MainPage = () => {
                 key={item.label}
                 href={item.href}
                 className="block text-lg text-amber-900 hover:text-emerald-600 py-2"
+                onClick={() => setIsMobileMenuOpen(false)}
               >
                 {item.label}
               </a>
             ))}
 
-            {/* Mobile dropdown using same Radix UI components */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start text-amber-900 hover:text-emerald-600"
-                >
-                  <Wallet className="h-4 w-4 mr-2" />
-                  Connect Wallet
-                  <ChevronDown className="h-4 w-4 ml-2" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-full">
-                {dropdownItems.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <DropdownMenuItem
-                      key={item.label}
-                      onClick={() => {
-                        if (item.action) {
+            {/* Mobile Connect Wallet button - no dropdown */}
+            <div className="space-y-2">
+              <div className="text-lg text-amber-900 py-2">Connect Wallet</div>
+
+              {/* Direct links instead of dropdown for mobile */}
+              {dropdownItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.label}
+                    onClick={() => {
+                      // Close mobile menu first
+                      setIsMobileMenuOpen(false);
+
+                      // Then perform the action
+                      if (item.action) {
+                        setTimeout(() => {
                           item.action();
-                        } else if (item.href && item.href !== "#") {
-                          window.location.href = item.href;
-                        }
-                      }}
-                      className="flex items-center cursor-pointer text-sm py-2"
-                    >
-                      <Icon className="h-4 w-4 mr-2" />
-                      {item.label}
-                    </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                        }, 300); // Short delay to allow menu close animation
+                      } else if (item.href && item.href !== "#") {
+                        window.location.href = item.href;
+                      }
+                    }}
+                    className="flex items-center text-sm py-2 pl-4 w-full text-left text-amber-800 hover:text-emerald-600"
+                  >
+                    <Icon className="h-4 w-4 mr-2" />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </header>

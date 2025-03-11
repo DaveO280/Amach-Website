@@ -96,18 +96,6 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
       view: window,
     });
     document.body.dispatchEvent(clickEvent);
-
-    // If we can find any open dropdown elements, try more direct methods
-    const openDropdowns = document.querySelectorAll('[data-state="open"]');
-    openDropdowns.forEach((dropdown) => {
-      // Try to find and click close buttons
-      const closeButtons = dropdown.querySelectorAll(
-        'button[aria-label*="close" i], button[aria-label*="dismiss" i]',
-      );
-      if (closeButtons.length > 0) {
-        (closeButtons[0] as HTMLButtonElement).click();
-      }
-    });
   };
 
   if (!isOpen) return null;
@@ -127,8 +115,8 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
         }}
       >
         <div className="sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center justify-between border-b border-amber-100 px-4 py-3 sm:px-6 sm:py-4 bg-white/80 backdrop-blur-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl sm:text-2xl font-black text-emerald-900">
+          <div className="flex items-center justify-between w-full sm:w-auto">
+            <h2 className="text-lg sm:text-xl md:text-2xl font-black text-emerald-900 truncate mr-2">
               Amach Health Dashboard
             </h2>
             <button
@@ -177,6 +165,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
         <div
           className="p-2 sm:p-4 md:p-6 overflow-auto"
           style={{ maxHeight: "calc(90vh - 64px)" }}
+          onClick={(e) => e.stopPropagation()} // Prevent clicks from closing the modal
         >
           {/* Make sure we wrap the components in their required providers */}
           <SelectionProvider>

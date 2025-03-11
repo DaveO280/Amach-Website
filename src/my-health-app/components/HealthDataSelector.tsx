@@ -76,7 +76,13 @@ const HealthDataSelector = (): React.ReactElement => {
     });
   };
 
-  const handleProcess = async (): Promise<void> => {
+  const handleProcess = async (
+    e: React.MouseEvent<HTMLButtonElement>,
+  ): Promise<void> => {
+    // Prevent the event from bubbling up to parent elements
+    e.preventDefault();
+    e.stopPropagation();
+
     if (!uploadedFile) {
       setProcessingError("Please select a file first");
       return;
@@ -273,7 +279,10 @@ const HealthDataSelector = (): React.ReactElement => {
             {timeFrameOptions.map((option) => (
               <button
                 key={option.value}
-                onClick={() => setTimeFrame(option.value as TimeFrame)}
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent event bubbling
+                  setTimeFrame(option.value as TimeFrame);
+                }}
                 className={`p-3 rounded-lg text-sm font-medium transition-colors ${
                   timeFrame === option.value
                     ? "bg-[#006B4F] text-white border-b-2 border-[#005540]"
@@ -306,7 +315,10 @@ const HealthDataSelector = (): React.ReactElement => {
             {coreMetrics.map((metric) => (
               <button
                 key={metric.id}
-                onClick={() => toggleMetric(metric.id)}
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent event bubbling
+                  toggleMetric(metric.id);
+                }}
                 disabled={processingState.isProcessing}
                 className={`p-3 rounded-lg text-sm transition-colors ${
                   selectedMetrics.includes(metric.id)
@@ -332,6 +344,7 @@ const HealthDataSelector = (): React.ReactElement => {
               onChange={handleFileSelect}
               disabled={processingState.isProcessing}
               className="file-input w-full p-2 border border-amber-100 rounded-lg"
+              onClick={(e) => e.stopPropagation()} // Prevent event bubbling
             />
 
             <button

@@ -64,6 +64,8 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
   const [activeTab, setActiveTab] = useState<"selector" | "dashboard">(
     "selector",
   );
+  // Add state to track dropdown menu open status
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   // Check viewport size to adjust UI accordingly
   React.useEffect(() => {
@@ -80,6 +82,13 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
     // Clean up listener
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  // New function to handle tab changes and close any menus
+  const handleTabChange = (tab: "selector" | "dashboard") => {
+    setActiveTab(tab);
+    // Close any open menus when changing tabs
+    setIsMenuOpen(false);
+  };
 
   if (!isOpen) return null;
 
@@ -111,10 +120,10 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
           </div>
 
           <div className="mt-2 sm:mt-0 flex w-full sm:w-auto justify-between sm:justify-end">
-            {/* Tabs for switching between selector and dashboard */}
+            {/* Tabs for switching between selector and dashboard - UPDATED */}
             <div className="flex space-x-2 flex-1 sm:flex-auto">
               <button
-                onClick={() => setActiveTab("selector")}
+                onClick={() => handleTabChange("selector")}
                 className={`flex-1 sm:flex-auto px-4 py-2 text-sm rounded-lg transition-colors ${
                   activeTab === "selector"
                     ? "bg-[#006B4F] text-white border-b-2 border-[#005540]"
@@ -124,7 +133,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
                 Data Selector
               </button>
               <button
-                onClick={() => setActiveTab("dashboard")}
+                onClick={() => handleTabChange("dashboard")}
                 className={`flex-1 sm:flex-auto px-4 py-2 text-sm rounded-lg transition-colors ${
                   activeTab === "dashboard"
                     ? "bg-[#006B4F] text-white border-b-2 border-[#005540]"

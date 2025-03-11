@@ -257,14 +257,14 @@ const HealthDataSelector = (): React.ReactElement => {
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      <div className="border-none shadow-lg bg-transparent backdrop-blur-sm p-6">
+      <div className="border-none shadow-lg bg-transparent p-6">
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-emerald-900">
             Health Data Selector
           </h2>
         </div>
 
-        {/* Time Frame Selection */}
+        {/* Time Frame Selection - UPDATED FOR MOBILE */}
         <div className="mb-8">
           <h3 className="text-xl font-semibold mb-4 text-emerald-700">
             Select Time Frame
@@ -274,10 +274,10 @@ const HealthDataSelector = (): React.ReactElement => {
               <button
                 key={option.value}
                 onClick={() => setTimeFrame(option.value as TimeFrame)}
-                className={`p-3 rounded-lg text-sm font-medium transition-colors shadow-lg backdrop-blur-sm ${
+                className={`p-3 rounded-lg text-sm font-medium transition-colors ${
                   timeFrame === option.value
                     ? "bg-[#006B4F] text-white border-b-2 border-[#005540]"
-                    : "bg-transparent text-[#006B4F] hover:bg-[#E8F5F0]/30 border border-[#006B4F]/30"
+                    : "bg-white/80 text-[#006B4F] hover:bg-[#E8F5F0]/30 border border-[#006B4F]/30"
                 }`}
               >
                 {option.label}
@@ -286,7 +286,7 @@ const HealthDataSelector = (): React.ReactElement => {
           </div>
         </div>
 
-        {/* Core Metrics Section */}
+        {/* Core Metrics Section - UPDATED FOR MOBILE */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-xl font-semibold text-emerald-700">
@@ -308,10 +308,10 @@ const HealthDataSelector = (): React.ReactElement => {
                 key={metric.id}
                 onClick={() => toggleMetric(metric.id)}
                 disabled={processingState.isProcessing}
-                className={`p-3 rounded-lg text-sm transition-colors shadow-lg backdrop-blur-sm ${
+                className={`p-3 rounded-lg text-sm transition-colors ${
                   selectedMetrics.includes(metric.id)
                     ? "bg-[#006B4F] text-white border-b-2 border-[#005540]"
-                    : "bg-transparent text-[#006B4F] hover:bg-[#E8F5F0]/30 border border-[#006B4F]/30"
+                    : "bg-white/80 text-[#006B4F] hover:bg-[#E8F5F0]/30 border border-[#006B4F]/30"
                 }`}
               >
                 {metric.name}

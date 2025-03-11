@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import dynamic from "next/dynamic";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 // Import the actual components instead of the page
 // This way we can wrap them in the providers ourselves
@@ -64,11 +64,12 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
   const [activeTab, setActiveTab] = useState<"selector" | "dashboard">(
     "selector",
   );
-  // Add state to track dropdown menu open status
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  // Create a reference to track dropdown menus
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Check viewport size to adjust UI accordingly
-  React.useEffect(() => {
+  useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
     };
@@ -83,11 +84,30 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // New function to handle tab changes and close any menus
+  // Force close any dropdowns when tab changes
   const handleTabChange = (tab: "selector" | "dashboard") => {
     setActiveTab(tab);
-    // Close any open menus when changing tabs
-    setIsMenuOpen(false);
+
+    // This will close any open Radix UI dropdowns by simulating a click outside
+    // It works by dispatching a click event to the document body
+    const clickEvent = new MouseEvent("mousedown", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+    });
+    document.body.dispatchEvent(clickEvent);
+
+    // If we can find any open dropdown elements, try more direct methods
+    const openDropdowns = document.querySelectorAll('[data-state="open"]');
+    openDropdowns.forEach((dropdown) => {
+      // Try to find and click close buttons
+      const closeButtons = dropdown.querySelectorAll(
+        'button[aria-label*="close" i], button[aria-label*="dismiss" i]',
+      );
+      if (closeButtons.length > 0) {
+        (closeButtons[0] as HTMLButtonElement).click();
+      }
+    });
   };
 
   if (!isOpen) return null;
@@ -95,6 +115,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-sm flex justify-center items-center p-2">
       <div
+        ref={dropdownRef}
         className={`relative w-full rounded-lg shadow-xl overflow-hidden animate-in fade-in duration-300 ${
           isMobile
             ? "max-w-full max-h-[95vh]" // Full width on mobile with slight padding
@@ -120,7 +141,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
           </div>
 
           <div className="mt-2 sm:mt-0 flex w-full sm:w-auto justify-between sm:justify-end">
-            {/* Tabs for switching between selector and dashboard - UPDATED */}
+            {/* Tabs for switching between selector and dashboard */}
             <div className="flex space-x-2 flex-1 sm:flex-auto">
               <button
                 onClick={() => handleTabChange("selector")}

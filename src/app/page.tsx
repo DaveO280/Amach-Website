@@ -1,5 +1,6 @@
 "use client";
 
+import BetaNotification from "@/components/BetaNotification"; // Import the new component
 import HealthDashboardModal from "@/components/HealthDashboardModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,6 +27,8 @@ const MainPage = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeCard, setActiveCard] = useState(0);
   const [isHealthDashboardOpen, setIsHealthDashboardOpen] = useState(false);
+  // Add new state for the beta notification
+  const [showBetaNotification, setShowBetaNotification] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -70,10 +73,29 @@ const MainPage = () => {
     { label: "Whitepaper", href: "/whitepaper" },
   ];
 
+  // Handler to show notification instead of directly opening dashboard
+  const handleDashboardClick = () => {
+    setShowBetaNotification(true);
+
+    // This will also help close any open dropdown menus
+    const clickEvent = new MouseEvent("mousedown", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+    });
+    document.body.dispatchEvent(clickEvent);
+  };
+
+  // Only open dashboard after notification is dismissed with "Got it" button
+  const openDashboard = () => {
+    setIsHealthDashboardOpen(true);
+  };
+
   const dropdownItems = [
     {
       label: "Dashboard",
-      action: () => setIsHealthDashboardOpen(true),
+      // Updated to show notification instead of directly opening dashboard
+      action: handleDashboardClick,
       icon: Activity,
       href: "#",
     },
@@ -91,6 +113,13 @@ const MainPage = () => {
       <HealthDashboardModal
         isOpen={isHealthDashboardOpen}
         onClose={() => setIsHealthDashboardOpen(false)}
+      />
+
+      {/* Beta notification component */}
+      <BetaNotification
+        isOpen={showBetaNotification}
+        onClose={() => setShowBetaNotification(false)}
+        onConfirm={openDashboard} // Open dashboard after notification is dismissed
       />
 
       <header className="border-b border-amber-100 relative">

@@ -64,9 +64,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
   const [activeTab, setActiveTab] = useState<"selector" | "dashboard">(
     "selector",
   );
-
-  // Create a reference to track dropdown menus
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   // Check viewport size to adjust UI accordingly
   useEffect(() => {
@@ -89,7 +87,6 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
     setActiveTab(tab);
 
     // This will close any open Radix UI dropdowns by simulating a click outside
-    // It works by dispatching a click event to the document body
     const clickEvent = new MouseEvent("mousedown", {
       bubbles: true,
       cancelable: true,
@@ -98,12 +95,17 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
     document.body.dispatchEvent(clickEvent);
   };
 
+  // Prevent clicks on the modal from closing it
+  const handleModalClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-sm flex justify-center items-center p-2">
       <div
-        ref={dropdownRef}
+        ref={modalRef}
         className={`relative w-full rounded-lg shadow-xl overflow-hidden animate-in fade-in duration-300 ${
           isMobile
             ? "max-w-full max-h-[95vh]" // Full width on mobile with slight padding
@@ -113,11 +115,14 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
           background:
             "linear-gradient(to bottom right, #FFE3B4, #ffffff, #CAF2DD)",
         }}
+        onClick={handleModalClick}
       >
-        <div className="sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center justify-between border-b border-amber-100 px-4 py-3 sm:px-6 sm:py-4 bg-white/80 backdrop-blur-sm">
-          <div className="flex items-center justify-between w-full sm:w-auto">
-            <h2 className="text-lg sm:text-xl md:text-2xl font-black text-emerald-900 truncate mr-2">
-              Amach Health Dashboard
+        {/* New simplified header structure for better mobile compatibility */}
+        <header className="sticky top-0 z-10 w-full bg-white/90 border-b border-amber-100 backdrop-blur-sm">
+          {/* Title row */}
+          <div className="px-3 py-2 flex items-center justify-between">
+            <h2 className="text-base font-black text-emerald-900">
+              Amach Health
             </h2>
             <button
               onClick={onClose}
@@ -128,43 +133,43 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
             </button>
           </div>
 
-          <div className="mt-2 sm:mt-0 flex w-full sm:w-auto justify-between sm:justify-end">
-            {/* Tabs for switching between selector and dashboard */}
-            <div className="flex space-x-2 flex-1 sm:flex-auto">
+          {/* Tabs in a separate div for clean separation */}
+          <div className="px-3 pb-2">
+            <div className="flex space-x-2">
               <button
                 onClick={() => handleTabChange("selector")}
-                className={`flex-1 sm:flex-auto px-4 py-2 text-sm rounded-lg transition-colors ${
+                className={`flex-1 px-3 py-1.5 text-xs sm:text-sm rounded-lg transition-colors ${
                   activeTab === "selector"
-                    ? "bg-[#006B4F] text-white border-b-2 border-[#005540]"
-                    : "bg-transparent text-[#006B4F] hover:bg-[#E8F5F0] border border-[#006B4F]/30"
+                    ? "bg-[#006B4F] text-white border-b border-[#005540]"
+                    : "bg-white text-[#006B4F] hover:bg-[#E8F5F0] border border-[#006B4F]/30"
                 }`}
               >
                 Data Selector
               </button>
               <button
                 onClick={() => handleTabChange("dashboard")}
-                className={`flex-1 sm:flex-auto px-4 py-2 text-sm rounded-lg transition-colors ${
+                className={`flex-1 px-3 py-1.5 text-xs sm:text-sm rounded-lg transition-colors ${
                   activeTab === "dashboard"
-                    ? "bg-[#006B4F] text-white border-b-2 border-[#005540]"
-                    : "bg-transparent text-[#006B4F] hover:bg-[#E8F5F0] border border-[#006B4F]/30"
+                    ? "bg-[#006B4F] text-white border-b border-[#005540]"
+                    : "bg-white text-[#006B4F] hover:bg-[#E8F5F0] border border-[#006B4F]/30"
                 }`}
               >
                 Visualizations
               </button>
+              <button
+                onClick={onClose}
+                className="rounded-full p-2 text-amber-900 hover:text-emerald-600 hover:bg-emerald-50 transition-colors hidden sm:block"
+                aria-label="Close dashboard"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-            <button
-              onClick={onClose}
-              className="rounded-full p-2 ml-4 text-amber-900 hover:text-emerald-600 hover:bg-emerald-50 transition-colors hidden sm:block"
-              aria-label="Close dashboard"
-            >
-              <X className="h-5 w-5" />
-            </button>
           </div>
-        </div>
+        </header>
 
         <div
           className="p-2 sm:p-4 md:p-6 overflow-auto"
-          style={{ maxHeight: "calc(90vh - 64px)" }}
+          style={{ maxHeight: "calc(90vh - 110px)" }}
           onClick={(e) => e.stopPropagation()} // Prevent clicks from closing the modal
         >
           {/* Make sure we wrap the components in their required providers */}

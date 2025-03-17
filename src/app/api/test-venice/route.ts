@@ -1,6 +1,9 @@
 import axios, { AxiosError } from "axios";
 import { NextResponse } from "next/server";
 
+// Add Edge Runtime configuration
+export const runtime = "edge";
+
 export async function GET() {
   try {
     const apiKey = process.env.VENICE_API_KEY;

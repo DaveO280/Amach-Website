@@ -33,7 +33,7 @@ export class VeniceApiService {
       headers: {
         "Content-Type": "application/json",
       },
-      timeout: 120000, // 120 second timeout
+      timeout: 60000, // 60 second timeout to match Edge Runtime
     });
 
     // Request logging interceptor

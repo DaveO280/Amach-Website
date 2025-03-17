@@ -1,5 +1,7 @@
-import axios, { AxiosError } from "axios";
 import { NextRequest, NextResponse } from "next/server";
+
+// Add Edge Runtime configuration
+export const runtime = "edge";
 
 export async function OPTIONS(request: NextRequest) {
   return NextResponse.json(
@@ -34,21 +36,20 @@ export async function POST(request: NextRequest) {
       requestBody: {
         model: body.model,
         messageCount: body.messages?.length || 0,
-        maxTokens: body.max_tokens,
+        maxTokens: body.maxTokens || body.max_tokens,
       },
     });
 
     if (!apiKey) {
-      console.error("[Venice API Route] API key is missing");
       throw new Error("API key is not configured");
     }
 
     // Forward the request to Venice API
     const requestBody = {
       messages: body.messages || [],
-      max_tokens: body.max_tokens, // Don't override the client's max_tokens
+      max_tokens: body.maxTokens || body.max_tokens || 2000,
       temperature: body.temperature || 0.7,
-      model: modelName, // Always use the model name from environment
+      model: modelName,
     };
 
     // Validate request body
@@ -77,27 +78,33 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const response = await axios.post(
-      `${apiEndpoint}/chat/completions`,
-      requestBody,
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        timeout: 60000, // 60 second timeout
+    // Forward the request to Venice API
+    const response = await fetch(`${apiEndpoint}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Venice API error: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const data = await response.json();
 
     // Log successful response
     console.log("[Venice API Route] Success:", {
       status: response.status,
-      hasChoices: Boolean(response.data?.choices),
-      choiceCount: response.data?.choices?.length || 0,
+      hasChoices: Boolean(data?.choices),
+      choiceCount: data?.choices?.length || 0,
     });
 
     // Return the response to the client with CORS headers
-    return NextResponse.json(response.data, {
+    return NextResponse.json(data, {
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -110,56 +117,34 @@ export async function POST(request: NextRequest) {
       errorName: error instanceof Error ? error.name : "Unknown",
       errorMessage: error instanceof Error ? error.message : "Unknown error",
       stack: error instanceof Error ? error.stack : undefined,
-      axiosError: axios.isAxiosError(error)
-        ? {
-            status: error.response?.status,
-            statusText: error.response?.statusText,
-            data: error.response?.data,
-            headers: error.response?.headers,
-            config: {
-              url: error.config?.url,
-              method: error.config?.method,
-              headers: error.config?.headers,
-              data: error.config?.data,
-            },
-          }
-        : undefined,
     });
 
     // Type-safe error handling
     let errorMessage = "Unknown error";
     let errorStatus = 500;
-    let errorDetails = null;
 
     if (error instanceof Error) {
       errorMessage = error.message;
     }
 
-    // Check if it's an Axios error
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError;
-      errorStatus = axiosError.response?.status || 500;
-      errorDetails = axiosError.response?.data;
-    }
-
-    // Provide detailed error information for debugging
-    const errorResponse = {
-      message: "Error connecting to Venice API",
-      status: errorStatus,
-      details: errorDetails || errorMessage,
-      environment: process.env.NODE_ENV,
-      hasApiKey: Boolean(process.env.VENICE_API_KEY),
-      apiEndpoint: process.env.VENICE_API_ENDPOINT,
-      modelName: process.env.VENICE_MODEL_NAME,
-    };
-
-    return NextResponse.json(errorResponse, {
-      status: errorStatus,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    return NextResponse.json(
+      {
+        message: "Error connecting to Venice API",
+        status: errorStatus,
+        details: errorMessage,
+        environment: process.env.NODE_ENV,
+        hasApiKey: Boolean(process.env.VENICE_API_KEY),
+        apiEndpoint: process.env.VENICE_API_ENDPOINT,
+        modelName: process.env.VENICE_MODEL_NAME,
       },
-    });
+      {
+        status: errorStatus,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
+      },
+    );
   }
 }

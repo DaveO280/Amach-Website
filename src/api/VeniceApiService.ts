@@ -101,7 +101,7 @@ export class VeniceApiService {
 
   async generateVeniceResponse(
     prompt: string,
-    maxTokens: number = 280,
+    maxTokens: number = 2000,
   ): Promise<string | null> {
     const requestId = Date.now().toString();
 

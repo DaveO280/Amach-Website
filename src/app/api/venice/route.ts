@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     // Forward the request to Venice API
     const requestBody = {
       messages: body.messages || [],
-      max_tokens: body.max_tokens || 280,
+      max_tokens: body.max_tokens, // Don't override the client's max_tokens
       temperature: body.temperature || 0.7,
       model: modelName, // Always use the model name from environment
     };
@@ -58,6 +58,11 @@ export async function POST(request: NextRequest) {
       requestBody.messages.length === 0
     ) {
       throw new Error("Invalid request: messages array is required");
+    }
+
+    // Validate max_tokens
+    if (!requestBody.max_tokens || requestBody.max_tokens < 1) {
+      throw new Error("Invalid request: max_tokens must be a positive number");
     }
 
     console.log("[Venice API Route] Sending request to Venice:", {
@@ -80,7 +85,7 @@ export async function POST(request: NextRequest) {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        timeout: 30000, // 30 second timeout
+        timeout: 60000, // 60 second timeout
       },
     );
 

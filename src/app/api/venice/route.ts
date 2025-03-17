@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!apiKey) {
+      console.error("[Venice API Route] API key is missing");
       throw new Error("API key is not configured");
     }
 
@@ -46,7 +47,22 @@ export async function POST(request: NextRequest) {
     const requestBody = {
       ...body,
       model: modelName, // Override the model name from the request
+      messages: body.messages || [], // Ensure messages array exists
+      max_tokens: body.max_tokens || 280, // Default max tokens if not specified
+      temperature: body.temperature || 0.7, // Default temperature if not specified
     };
+
+    console.log("[Venice API Route] Sending request to Venice:", {
+      endpoint: `${apiEndpoint}/chat/completions`,
+      model: modelName,
+      messageCount: requestBody.messages?.length || 0,
+      maxTokens: requestBody.max_tokens,
+      fullRequestBody: JSON.stringify(requestBody, null, 2), // Log the full request body
+      headers: {
+        Authorization: `Bearer ${apiKey.substring(0, 4)}...`, // Only log first 4 chars of API key
+        "Content-Type": "application/json",
+      },
+    });
 
     const response = await axios.post(
       `${apiEndpoint}/chat/completions`,
@@ -56,6 +72,7 @@ export async function POST(request: NextRequest) {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
+        timeout: 30000, // 30 second timeout
       },
     );
 
@@ -86,6 +103,12 @@ export async function POST(request: NextRequest) {
             statusText: error.response?.statusText,
             data: error.response?.data,
             headers: error.response?.headers,
+            config: {
+              url: error.config?.url,
+              method: error.config?.method,
+              headers: error.config?.headers,
+              data: error.config?.data,
+            },
           }
         : undefined,
     });
@@ -114,6 +137,7 @@ export async function POST(request: NextRequest) {
       environment: process.env.NODE_ENV,
       hasApiKey: Boolean(process.env.VENICE_API_KEY),
       apiEndpoint: process.env.VENICE_API_ENDPOINT,
+      modelName: process.env.VENICE_MODEL_NAME,
     };
 
     return NextResponse.json(errorResponse, {

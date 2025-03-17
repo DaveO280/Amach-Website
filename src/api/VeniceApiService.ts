@@ -119,7 +119,6 @@ export class VeniceApiService {
       const requestBody = {
         messages: [{ role: "user", content: prompt }],
         max_tokens: maxTokens,
-        model: this.modelName,
         temperature: 0.7,
       };
 
@@ -128,6 +127,7 @@ export class VeniceApiService {
         promptLength: prompt.length,
         totalSize: JSON.stringify(requestBody).length,
         maxTokens,
+        model: this.modelName,
       });
 
       const response = await this.retryOperation(() =>
@@ -152,53 +152,43 @@ export class VeniceApiService {
   // Other existing methods remain the same
   private async retryOperation<T>(
     operation: () => Promise<T>,
-    maxAttempts: number = 3,
+    maxRetries: number = 2,
+    initialDelay: number = 1000,
   ): Promise<T> {
     let lastError: Error | null = null;
+    let delay = initialDelay;
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await operation();
-      } catch (error: any) {
-        lastError = error as Error;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
 
-        // Extract rate limit info if available
-        const rateLimitInfo = this.extractRateLimitInfo(error);
-
-        if (rateLimitInfo) {
-          logger.warn(
-            `Rate limit detected. Waiting until reset time: ${rateLimitInfo.reset.toLocaleString()}`,
-            {
-              waitTimeMs: rateLimitInfo.retryAfter,
-              attempt,
-            },
-          );
-
-          // Wait until the rate limit resets
-          await new Promise((resolve) =>
-            setTimeout(resolve, rateLimitInfo.retryAfter + 1000),
-          ); // Add 1 second buffer
-        } else {
-          // Standard exponential backoff for other errors
-          if (attempt < maxAttempts) {
-            logger.warn(`Retry attempt ${attempt} failed`, {
-              error: (error as Error).message,
-              nextAttempt: attempt + 1,
-            });
-
-            // Calculate delay with exponential backoff and jitter
-            const baseDelay = 1000 * Math.pow(2, attempt - 1); // Start with 1s, then 2s, 4s, etc.
-            const jitter = Math.random() * 0.3 * baseDelay; // Add 0-30% jitter
-            const delay = Math.floor(baseDelay + jitter);
-
-            logger.info(`Retrying in ${delay}ms...`);
-            await new Promise((resolve) => setTimeout(resolve, delay));
+        // Don't retry on 4xx errors (except 429)
+        if (axios.isAxiosError(error) && error.response?.status) {
+          const status = error.response.status;
+          if (status >= 400 && status < 500 && status !== 429) {
+            throw error; // Don't retry on client errors
           }
         }
+
+        if (attempt === maxRetries) {
+          throw lastError;
+        }
+
+        logger.warn(`Retry attempt ${attempt} failed`, {
+          error: lastError.message,
+          attempt,
+          maxRetries,
+        });
+
+        logger.info(`Retrying in ${delay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay *= 2; // Exponential backoff
       }
     }
 
-    throw lastError || new Error("Operation failed after multiple attempts");
+    throw lastError;
   }
 
   private extractRateLimitInfo(error: any): RateLimitInfo | null {

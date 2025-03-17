@@ -1,11 +1,25 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import {
   HealthDataByType,
   HealthDataPoint,
   ProcessingState,
 } from "../../types/healthData";
+
+// Add global window property declaration
+declare global {
+  interface Window {
+    __healthDataProviderMounted?: boolean;
+    __selectionProviderMounted?: boolean;
+  }
+}
 
 interface HealthDataContextType {
   metricData: HealthDataByType;
@@ -60,6 +74,9 @@ export function HealthDataProvider({
 
   const addMetricData = useCallback(
     (metricId: string, data: HealthDataPoint[]) => {
+      console.log(
+        `[DEBUG] Adding ${metricId} to store with ${data.length} records`,
+      );
       setMetricData((prev) => ({
         ...prev,
         [metricId]: data,
@@ -80,6 +97,25 @@ export function HealthDataProvider({
         (data) => Array.isArray(data) && data.length > 0,
       )
     );
+  }, [metricData]);
+
+  // Add diagnostic logging
+  useEffect(() => {
+    console.log("[HealthDataProvider] Data status:", {
+      hasData: Boolean(Object.keys(metricData).length > 0),
+      metricCount: Object.keys(metricData).length,
+      metricIDs: Object.keys(metricData),
+      totalDataPoints: Object.values(metricData).reduce(
+        (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
+        0,
+      ),
+    });
+
+    // Add flag to check component mounting
+    window.__healthDataProviderMounted = true;
+    return () => {
+      window.__healthDataProviderMounted = false;
+    };
   }, [metricData]);
 
   return (

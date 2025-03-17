@@ -1,13 +1,17 @@
 "use client";
 
-import React from 'react';
-import GlobalStyles from './GlobalStyles';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { HealthDataProvider } from '../store/healthDataStore/provider';
-import { SelectionProvider } from '../store/selectionStore/provider';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import React from "react";
+import { HealthDataProvider } from "../store/healthDataStore/provider";
+import { SelectionProvider } from "../store/selectionStore/provider";
+import GlobalStyles from "./GlobalStyles";
 
-export default function ClientWrapper({ children }: { children: React.ReactNode }) {
+export default function ClientWrapper({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
 
   return (
@@ -24,22 +28,22 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
                 </h1>
               </div>
               <div className="ml-6 flex items-center space-x-4">
-                <Link 
-                  href="/" 
+                <Link
+                  href="/"
                   className={`px-3 py-2 rounded-md text-sm font-medium ${
-                    pathname === '/' 
-                      ? 'bg-[--primary-light] text-[--primary]' 
-                      : 'text-gray-500 hover:text-[--primary] hover:bg-[--primary-light]/30'
+                    pathname === "/"
+                      ? "bg-[--primary-light] text-[--primary]"
+                      : "text-gray-500 hover:text-[--primary] hover:bg-[--primary-light]/30"
                   }`}
                 >
                   Data Selector
                 </Link>
-                <Link 
-                  href="/dashboard" 
+                <Link
+                  href="/dashboard"
                   className={`px-3 py-2 rounded-md text-sm font-medium ${
-                    pathname === '/dashboard' 
-                      ? 'bg-[--primary-light] text-[--primary]' 
-                      : 'text-gray-500 hover:text-[--primary] hover:bg-[--primary-light]/30'
+                    pathname === "/dashboard"
+                      ? "bg-[--primary-light] text-[--primary]"
+                      : "text-gray-500 hover:text-[--primary] hover:bg-[--primary-light]/30"
                   }`}
                 >
                   Dashboard
@@ -50,9 +54,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
         </div>
       </nav>
       <SelectionProvider>
-        <HealthDataProvider>
-          {children}
-        </HealthDataProvider>
+        <HealthDataProvider>{children}</HealthDataProvider>
       </SelectionProvider>
     </>
   );

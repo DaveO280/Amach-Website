@@ -18,6 +18,14 @@ out
 # production
 /build
 
+# environment variables
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+
 # misc
 .DS_Store
 *.pem
@@ -32,6 +40,7 @@ yarn-error.log*
 .env
 .env.*
 !.env.example
+.env.local
 
 # vercel
 .vercel

@@ -1,7 +1,9 @@
 "use client";
 
+import AiCompanionModal from "@/components/AiCompanionModal";
 import BetaNotification from "@/components/BetaNotification"; // Import the new component
 import HealthDashboardModal from "@/components/HealthDashboardModal";
+import { useHealthContext } from "@/components/HealthDataContextWrapper";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -26,8 +28,16 @@ import { useEffect, useState } from "react";
 const MainPage = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeCard, setActiveCard] = useState(0);
-  const [isHealthDashboardOpen, setIsHealthDashboardOpen] = useState(false);
-  // Add new state for the beta notification
+
+  // Use the shared context instead of local state
+  const {
+    isDashboardOpen,
+    setIsDashboardOpen,
+    isAiCompanionOpen,
+    setIsAiCompanionOpen,
+  } = useHealthContext();
+
+  // Keep the beta notification state local
   const [showBetaNotification, setShowBetaNotification] = useState(false);
 
   useEffect(() => {
@@ -91,7 +101,7 @@ const MainPage = () => {
 
   // Only open dashboard after notification is dismissed with "Got it" button
   const openDashboard = () => {
-    setIsHealthDashboardOpen(true);
+    setIsDashboardOpen(true);
   };
 
   const dropdownItems = [
@@ -104,7 +114,7 @@ const MainPage = () => {
     },
     {
       label: "AI Agent",
-      action: null,
+      action: () => setIsAiCompanionOpen(true),
       href: "#",
       icon: Bot,
     },
@@ -114,8 +124,14 @@ const MainPage = () => {
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-emerald-50">
       {/* Health dashboard modal */}
       <HealthDashboardModal
-        isOpen={isHealthDashboardOpen}
-        onClose={() => setIsHealthDashboardOpen(false)}
+        isOpen={isDashboardOpen}
+        onClose={() => setIsDashboardOpen(false)}
+      />
+
+      {/* AI Companion modal */}
+      <AiCompanionModal
+        isOpen={isAiCompanionOpen}
+        onClose={() => setIsAiCompanionOpen(false)}
       />
 
       {/* Beta notification component */}

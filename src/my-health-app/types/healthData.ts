@@ -22,6 +22,21 @@ export interface HealthDataPoint {
   unit?: string; // Optional unit info
   source?: string; // Optional source info (e.g., "Apple Watch")
   device?: string; // Optional device info
+  type?: string; // Type of health data
+  chartData?: {
+    average: number;
+    min?: number;
+    max?: number;
+    total?: number;
+    count: number;
+    dailyData?: any[];
+    phases?: {
+      deep: number;
+      rem: number;
+      light: number;
+      awake: number;
+    };
+  };
 }
 
 // Define the mapping of metric IDs to their data points

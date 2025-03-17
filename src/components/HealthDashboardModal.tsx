@@ -4,8 +4,7 @@ import { X } from "lucide-react";
 import dynamic from "next/dynamic";
 import React, { useEffect, useRef, useState } from "react";
 
-// Import the actual components instead of the page
-// This way we can wrap them in the providers ourselves
+// Import the actual components directly to avoid chunk loading errors
 const HealthDataSelector = dynamic(
   () => import("../my-health-app/components/HealthDataSelector"),
   {
@@ -27,27 +26,6 @@ const HealthDashboard = dynamic(
         <div className="animate-pulse-slow rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-600"></div>
       </div>
     ),
-  },
-);
-
-// Import the providers directly to ensure they're available
-const SelectionProvider = dynamic(
-  () =>
-    import("../my-health-app/store/selectionStore/provider").then(
-      (mod) => mod.SelectionProvider,
-    ),
-  {
-    ssr: false,
-  },
-);
-
-const HealthDataProvider = dynamic(
-  () =>
-    import("../my-health-app/store/healthDataStore/provider").then(
-      (mod) => mod.HealthDataProvider,
-    ),
-  {
-    ssr: false,
   },
 );
 
@@ -117,11 +95,11 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
         }}
         onClick={handleModalClick}
       >
-        {/* New simplified header structure for better mobile compatibility */}
+        {/* Adaptive header structure for both mobile and desktop */}
         <header className="sticky top-0 z-10 w-full bg-white/90 border-b border-amber-100 backdrop-blur-sm">
           {/* Title row */}
           <div className="px-3 py-2 flex items-center justify-between">
-            <h2 className="text-base font-black text-emerald-900">
+            <h2 className="text-base sm:text-xl font-black text-emerald-900">
               Amach Health
             </h2>
             <button
@@ -133,9 +111,11 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
             </button>
           </div>
 
-          {/* Tabs in a separate div for clean separation */}
+          {/* Tabs in a separate div with improved desktop layout */}
           <div className="px-3 pb-2">
-            <div className="flex space-x-2">
+            <div
+              className={`flex space-x-2 ${!isMobile ? "max-w-md mx-auto" : ""}`}
+            >
               <button
                 onClick={() => handleTabChange("selector")}
                 className={`flex-1 px-3 py-1.5 text-xs sm:text-sm rounded-lg transition-colors ${
@@ -156,14 +136,14 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
               >
                 Visualizations
               </button>
-              <button
-                onClick={onClose}
-                className="rounded-full p-2 text-amber-900 hover:text-emerald-600 hover:bg-emerald-50 transition-colors hidden sm:block"
-                aria-label="Close dashboard"
-              >
-                <X className="h-5 w-5" />
-              </button>
             </div>
+            <button
+              onClick={onClose}
+              className="absolute right-3 top-2 rounded-full p-2 text-amber-900 hover:text-emerald-600 hover:bg-emerald-50 transition-colors hidden sm:block"
+              aria-label="Close dashboard"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
         </header>
 
@@ -172,16 +152,12 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
           style={{ maxHeight: "calc(90vh - 110px)" }}
           onClick={(e) => e.stopPropagation()} // Prevent clicks from closing the modal
         >
-          {/* Make sure we wrap the components in their required providers */}
-          <SelectionProvider>
-            <HealthDataProvider>
-              {activeTab === "selector" ? (
-                <HealthDataSelector />
-              ) : (
-                <HealthDashboard />
-              )}
-            </HealthDataProvider>
-          </SelectionProvider>
+          {/* Removed the providers since they're now at a higher level */}
+          {activeTab === "selector" ? (
+            <HealthDataSelector />
+          ) : (
+            <HealthDashboard />
+          )}
         </div>
       </div>
     </div>

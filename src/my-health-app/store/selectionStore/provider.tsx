@@ -10,6 +10,14 @@ import React, {
 import { coreMetrics, optionalMetrics } from "../../core/metricDefinitions";
 import { TimeFrame } from "../../types/healthData";
 
+// Add global window property declaration if not already defined
+declare global {
+  interface Window {
+    __healthDataProviderMounted?: boolean;
+    __selectionProviderMounted?: boolean;
+  }
+}
+
 interface SelectionContextType {
   // Time frame selection
   timeFrame: TimeFrame;
@@ -59,6 +67,21 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("selectedMetrics", JSON.stringify(selectedMetrics));
     }
   }, [selectedMetrics]);
+
+  // Add diagnostic logging and provider mounting flag
+  useEffect(() => {
+    console.log("[SelectionProvider] Current selections:", {
+      timeFrame,
+      selectedMetricsCount: selectedMetrics.length,
+      selectedMetrics: selectedMetrics,
+      hasUploadedFile: uploadedFile !== null,
+    });
+
+    window.__selectionProviderMounted = true;
+    return () => {
+      window.__selectionProviderMounted = false;
+    };
+  }, [timeFrame, selectedMetrics, uploadedFile]);
 
   const toggleMetric = useCallback((metricId: string) => {
     setSelectedMetrics((prev) =>

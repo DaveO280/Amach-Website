@@ -81,9 +81,12 @@ export const generateCSV = (
         .map((header) => {
           const field = record[header];
           if (!field) return "";
-          return field.includes(",") || field.includes('"')
-            ? `"${field.replace(/"/g, '""')}"`
-            : field;
+          // Convert to string if it's not already a string
+          const fieldStr =
+            typeof field === "string" ? field : JSON.stringify(field);
+          return fieldStr.includes(",") || fieldStr.includes('"')
+            ? `"${fieldStr.replace(/"/g, '""')}"`
+            : fieldStr;
         })
         .join(","),
     ),

@@ -32,6 +32,15 @@ export const HealthDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
 
+  // Add diagnostic logging for when health data changes
+  useEffect(() => {
+    console.log("[HealthDashboard] Health data changed:", {
+      hasData: Boolean(Object.keys(healthData).length > 0),
+      metricCount: Object.keys(healthData).length,
+      metricIDs: Object.keys(healthData),
+    });
+  }, [healthData]);
+
   // Set loading state
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -50,27 +59,63 @@ export const HealthDashboard = () => {
       );
 
   // Get data for specific metrics
-  const heartRateData = healthData["HKQuantityTypeIdentifierHeartRate"] || [];
-  const stepCountData = healthData["HKQuantityTypeIdentifierStepCount"] || [];
-  const sleepAnalysisData =
-    healthData["HKCategoryTypeIdentifierSleepAnalysis"] || [];
-  const distanceWalkingRunningData =
-    healthData["HKQuantityTypeIdentifierDistanceWalkingRunning"] || [];
-  const activeEnergyBurnedData =
-    healthData["HKQuantityTypeIdentifierActiveEnergyBurned"] || [];
-  const exerciseTimeData =
-    healthData["HKQuantityTypeIdentifierAppleExerciseTime"] || [];
-  const hrvData =
-    healthData["HKQuantityTypeIdentifierHeartRateVariabilitySDNN"] || [];
+  const heartRateData = useMemo(
+    () => healthData["HKQuantityTypeIdentifierHeartRate"] || [],
+    [healthData],
+  );
+  const stepCountData = useMemo(
+    () => healthData["HKQuantityTypeIdentifierStepCount"] || [],
+    [healthData],
+  );
+  const sleepAnalysisData = useMemo(
+    () => healthData["HKCategoryTypeIdentifierSleepAnalysis"] || [],
+    [healthData],
+  );
+  const distanceWalkingRunningData = useMemo(
+    () => healthData["HKQuantityTypeIdentifierDistanceWalkingRunning"] || [],
+    [healthData],
+  );
+  const activeEnergyBurnedData = useMemo(
+    () => healthData["HKQuantityTypeIdentifierActiveEnergyBurned"] || [],
+    [healthData],
+  );
+  const exerciseTimeData = useMemo(
+    () => healthData["HKQuantityTypeIdentifierAppleExerciseTime"] || [],
+    [healthData],
+  );
+  const hrvData = useMemo(
+    () => healthData["HKQuantityTypeIdentifierHeartRateVariabilitySDNN"] || [],
+    [healthData],
+  );
 
-  // Process sleep sessions
+  // Process sleep sessions - with diagnostic logging
   const processedSleepSessions = useMemo(() => {
-    if (!sleepAnalysisData || sleepAnalysisData.length === 0) return [];
-    return processSleepData(sleepAnalysisData);
+    if (!sleepAnalysisData || sleepAnalysisData.length === 0) {
+      console.log("[HealthDashboard] No sleep data to process");
+      return [];
+    }
+
+    console.log("[HealthDashboard] Processing sleep data:", {
+      recordCount: sleepAnalysisData.length,
+      sampleRecord: sleepAnalysisData[0],
+    });
+
+    const processedSessions = processSleepData(sleepAnalysisData);
+
+    console.log("[HealthDashboard] Sleep processing complete:", {
+      sessionCount: processedSessions.length,
+      sampleSession: processedSessions.length > 0 ? processedSessions[0] : null,
+    });
+
+    return processedSessions;
   }, [sleepAnalysisData]);
 
   // Process data for each metric into daily summaries
   const processedData = useMemo(() => {
+    console.log(
+      "[HealthDashboard] Starting data processing for daily summaries",
+    );
+
     interface DailyHeartRateData {
       values: number[];
       min: number;
@@ -133,6 +178,11 @@ export const HealthDashboard = () => {
 
     // Heart Rate Data
     if (heartRateData.length > 0) {
+      console.log(
+        "[HealthDashboard] Processing heart rate data:",
+        heartRateData.length,
+        "records",
+      );
       const dailyData: Record<string, DailyHeartRateData> = {};
       heartRateData.forEach((point) => {
         try {
@@ -166,10 +216,20 @@ export const HealthDashboard = () => {
         minHeartRate: Math.round(data.min),
         maxHeartRate: Math.round(data.max),
       }));
+      console.log(
+        "[HealthDashboard] Processed",
+        processed.heartRate.length,
+        "days of heart rate data",
+      );
     }
 
     // Step Count Data
     if (stepCountData.length > 0) {
+      console.log(
+        "[HealthDashboard] Processing step count data:",
+        stepCountData.length,
+        "records",
+      );
       const dailyData: Record<string, DailyStepData> = {};
       stepCountData.forEach((point) => {
         try {
@@ -193,10 +253,20 @@ export const HealthDashboard = () => {
         date: day,
         steps: Math.round(data.total),
       }));
+      console.log(
+        "[HealthDashboard] Processed",
+        processed.stepCount.length,
+        "days of step count data",
+      );
     }
 
     // Active Energy Data
     if (activeEnergyBurnedData.length > 0) {
+      console.log(
+        "[HealthDashboard] Processing active energy data:",
+        activeEnergyBurnedData.length,
+        "records",
+      );
       const dailyData: Record<string, DailyEnergyData> = {};
       activeEnergyBurnedData.forEach((point) => {
         try {
@@ -220,10 +290,20 @@ export const HealthDashboard = () => {
         date: day,
         activeCalories: Math.round(data.total),
       }));
+      console.log(
+        "[HealthDashboard] Processed",
+        processed.activeEnergy.length,
+        "days of active energy data",
+      );
     }
 
     // Exercise Time Data
     if (exerciseTimeData.length > 0) {
+      console.log(
+        "[HealthDashboard] Processing exercise time data:",
+        exerciseTimeData.length,
+        "records",
+      );
       const dailyData: Record<string, DailyExerciseData> = {};
       exerciseTimeData.forEach((point) => {
         try {
@@ -248,10 +328,20 @@ export const HealthDashboard = () => {
         date: day,
         exerciseMinutes: Math.round(data.total),
       }));
+      console.log(
+        "[HealthDashboard] Processed",
+        processed.exerciseTime.length,
+        "days of exercise time data",
+      );
     }
 
     // Sleep Data
     if (processedSleepSessions.length > 0) {
+      console.log(
+        "[HealthDashboard] Processing already-processed sleep sessions:",
+        processedSleepSessions.length,
+        "sessions",
+      );
       const sleepMetricsByDate: Record<string, SleepMetrics> = {};
 
       processedSleepSessions.forEach((session) => {
@@ -271,8 +361,11 @@ export const HealthDashboard = () => {
 
         sleepMetricsByDate[date].sleepDuration += session.sleepDuration;
 
+        // Handle sleep efficiency calculation
         const currentTotal =
           sleepMetricsByDate[date].sleepDuration - session.sleepDuration;
+
+        // Calculate new weighted average for efficiency
         const newEfficiency =
           currentTotal > 0
             ? (sleepMetricsByDate[date].sleepEfficiency * currentTotal +
@@ -281,6 +374,8 @@ export const HealthDashboard = () => {
             : session.metrics.sleepEfficiency;
 
         sleepMetricsByDate[date].sleepEfficiency = newEfficiency;
+
+        // Accumulate sleep stage data
         sleepMetricsByDate[date].deepSleepMinutes += session.stageData.deep;
         sleepMetricsByDate[date].remSleepMinutes += session.stageData.rem;
         sleepMetricsByDate[date].lightSleepMinutes += session.stageData.core;
@@ -290,7 +385,7 @@ export const HealthDashboard = () => {
       processed.sleep = Object.entries(sleepMetricsByDate).map(
         ([date, metrics]) => ({
           date,
-          sleepHours: Math.round((metrics.sleepDuration / 60) * 10) / 10,
+          sleepHours: Math.round((metrics.sleepDuration / 60) * 10) / 10, // Convert to hours with 1 decimal place
           sleepEfficiency: Math.round(metrics.sleepEfficiency),
           deepSleepHours: Math.round((metrics.deepSleepMinutes / 60) * 10) / 10,
           remSleepHours: Math.round((metrics.remSleepMinutes / 60) * 10) / 10,
@@ -299,6 +394,13 @@ export const HealthDashboard = () => {
           awakenings: metrics.awakeningsCount,
         }),
       );
+      console.log(
+        "[HealthDashboard] Processed",
+        processed.sleep.length,
+        "days of sleep data",
+      );
+    } else {
+      console.log("[HealthDashboard] No processed sleep sessions available");
     }
 
     // Combine all metrics into a single dataset
@@ -344,6 +446,24 @@ export const HealthDashboard = () => {
       })
       .sort((a, b) => a.date.localeCompare(b.date));
 
+    console.log("[HealthDashboard] Final combined data created:", {
+      totalDays: combinedData.length,
+      metrics: {
+        heartRate: Boolean(processed.heartRate?.length),
+        stepCount: Boolean(processed.stepCount?.length),
+        activeEnergy: Boolean(processed.activeEnergy?.length),
+        exerciseTime: Boolean(processed.exerciseTime?.length),
+        sleep: Boolean(processed.sleep?.length),
+      },
+      dateRange:
+        combinedData.length > 0
+          ? {
+              start: combinedData[0].date,
+              end: combinedData[combinedData.length - 1].date,
+            }
+          : null,
+    });
+
     return {
       combined: combinedData,
       metrics: {
@@ -359,14 +479,23 @@ export const HealthDashboard = () => {
     stepCountData,
     activeEnergyBurnedData,
     exerciseTimeData,
-    processedSleepSessions,
+    processedSleepSessions, // This dependency ensures sleep processing is complete before using it
   ]);
 
   const handleDownloadData = async () => {
     setIsDownloading(true);
     try {
       const data = processedData.combined;
-      if (data.length === 0) return;
+      if (data.length === 0) {
+        console.log("[HealthDashboard] No data to download");
+        return;
+      }
+
+      console.log(
+        "[HealthDashboard] Starting download of",
+        data.length,
+        "days of data",
+      );
 
       // Add headers with descriptions
       const headerDescriptions = [
@@ -427,18 +556,32 @@ export const HealthDashboard = () => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `health_data_daily_summary.csv`;
+      link.download = `health_data_daily_summary_${timeFrame}_${new Date().toISOString().split("T")[0]}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+
+      console.log("[HealthDashboard] Download completed successfully");
+
+      // Also save a reference to the data in window for debugging/troubleshooting
+      // This allows us to inspect the data in the console and can help with AI integration
+      window.__healthDataSummary = {
+        generatedAt: new Date().toISOString(),
+        timeFrame,
+        data: processedData,
+      };
+      console.log(
+        "[HealthDashboard] Health data summary saved to window.__healthDataSummary for troubleshooting",
+      );
     } catch (error) {
-      console.error("Error downloading data:", error);
+      console.error("[HealthDashboard] Error downloading data:", error);
     } finally {
       setIsDownloading(false);
     }
   };
 
+  // The rest of the component remains the same, including the rendering logic
   if (isLoading) {
     // Loading state display...
     return (
@@ -468,6 +611,7 @@ export const HealthDashboard = () => {
   }
 
   if (!dataAvailable) {
+    console.log("[HealthDashboard] No data available to display");
     // No data display...
     return (
       <div className="min-h-screen bg-[linear-gradient(to_bottom_right,var(--warm-bg)_0%,white_50%,var(--primary-light)_100%)]">
@@ -626,6 +770,7 @@ export const HealthDashboard = () => {
               </Card>
             )}
 
+            {/* Additional heart rate charts remain the same */}
             {heartRateData.length > 0 && (
               <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
                 <CardHeader className="border-b border-amber-50/20">
@@ -634,7 +779,7 @@ export const HealthDashboard = () => {
                   </CardTitle>
                   <CardDescription className="text-emerald-800">
                     Distribution of heart rate readings across different
-                    intensity zones
+                    intensityzones
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
@@ -770,5 +915,18 @@ export const HealthDashboard = () => {
     </div>
   );
 };
+
+// Add a global declaration for the health data summary
+declare global {
+  interface Window {
+    __healthDataProviderMounted?: boolean;
+    __selectionProviderMounted?: boolean;
+    __healthDataSummary?: {
+      generatedAt: string;
+      timeFrame: string;
+      data: any;
+    };
+  }
+}
 
 export default HealthDashboard;

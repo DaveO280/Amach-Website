@@ -111,7 +111,6 @@ export class VeniceApiService {
         console.log(`Generating Venice response [${requestId}]`, {
           promptLength: prompt.length,
           maxTokens,
-          model: this.modelName,
         });
       }
 
@@ -127,7 +126,6 @@ export class VeniceApiService {
         promptLength: prompt.length,
         totalSize: JSON.stringify(requestBody).length,
         maxTokens,
-        model: this.modelName,
       });
 
       const response = await this.retryOperation(() =>

@@ -43,23 +43,31 @@ export async function POST(request: NextRequest) {
       throw new Error("API key is not configured");
     }
 
-    // Forward the request to Venice API, but use our model name
+    // Forward the request to Venice API
     const requestBody = {
-      ...body,
-      model: modelName, // Override the model name from the request
-      messages: body.messages || [], // Ensure messages array exists
-      max_tokens: body.max_tokens || 280, // Default max tokens if not specified
-      temperature: body.temperature || 0.7, // Default temperature if not specified
+      messages: body.messages || [],
+      max_tokens: body.max_tokens || 280,
+      temperature: body.temperature || 0.7,
+      model: modelName, // Always use the model name from environment
     };
+
+    // Validate request body
+    if (
+      !requestBody.messages ||
+      !Array.isArray(requestBody.messages) ||
+      requestBody.messages.length === 0
+    ) {
+      throw new Error("Invalid request: messages array is required");
+    }
 
     console.log("[Venice API Route] Sending request to Venice:", {
       endpoint: `${apiEndpoint}/chat/completions`,
       model: modelName,
       messageCount: requestBody.messages?.length || 0,
       maxTokens: requestBody.max_tokens,
-      fullRequestBody: JSON.stringify(requestBody, null, 2), // Log the full request body
+      fullRequestBody: JSON.stringify(requestBody, null, 2),
       headers: {
-        Authorization: `Bearer ${apiKey.substring(0, 4)}...`, // Only log first 4 chars of API key
+        Authorization: `Bearer ${apiKey.substring(0, 4)}...`,
         "Content-Type": "application/json",
       },
     });

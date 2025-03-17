@@ -392,10 +392,10 @@ Available Metrics:`;
    */
   static createFromEnv(): CosaintAiService {
     // Get API key and endpoint from environment variables
-    const apiKey = process.env.NEXT_PUBLIC_VENICE_API_KEY || "";
+    const apiKey = process.env.VENICE_API_KEY || "";
     const apiEndpoint =
-      process.env.NEXT_PUBLIC_VENICE_API_ENDPOINT || "https://api.venice.ai/v1";
-    const modelName = process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "venice-xl";
+      process.env.VENICE_API_ENDPOINT || "https://api.venice.ai/v1";
+    const modelName = process.env.VENICE_MODEL_NAME || "venice-xl";
     const debugMode = process.env.API_DEBUG_MODE === "true";
 
     // Create the Venice API service instance

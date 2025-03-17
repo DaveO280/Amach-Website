@@ -27,10 +27,9 @@ export class VeniceApiService {
     this.modelName = modelName;
     this.debugMode = debugMode;
 
-    // For client-side usage, point to your own API endpoint instead of directly to Venice
-    // The apiKey parameter is now unused on the client side (it's used server-side)
+    // For client-side usage, point to our API route
     this.client = axios.create({
-      baseURL: "", // Empty base URL as we'll use relative paths
+      baseURL: "", // Remove baseURL to use absolute path
       headers: {
         "Content-Type": "application/json",
       },
@@ -44,6 +43,7 @@ export class VeniceApiService {
           logger.info(`API Request to ${config.url}`, {
             method: config.method,
             data: config.data,
+            fullUrl: config.url,
           });
         }
         return config;
@@ -87,7 +87,7 @@ export class VeniceApiService {
     // Note: These are only used for logging purposes on the client side
     // The actual API key is now only used on the server
     const debugMode = process.env.NODE_ENV === "development";
-    const modelName = process.env.LARGE_VENICE_MODEL || "venice-latest";
+    const modelName = process.env.VENICE_MODEL_NAME || "llama-3.1-405b";
 
     return new VeniceApiService(
       "client-side-proxy", // Placeholder as API key is only used server-side now

@@ -56,9 +56,7 @@ export function AiProvider({ children }: { children: ReactNode }) {
         // Debug log to check environment variables
         console.log("[AiProvider] Environment variables:", {
           NODE_ENV: process.env.NODE_ENV,
-          VENICE_API_KEY: process.env.NEXT_PUBLIC_VENICE_API_KEY
-            ? "Set"
-            : "Not set",
+          VENICE_API_KEY: process.env.VENICE_API_KEY ? "Set" : "Not set",
           USE_MOCK_AI: process.env.USE_MOCK_AI,
         });
 
@@ -67,7 +65,7 @@ export function AiProvider({ children }: { children: ReactNode }) {
           // In a development environment, you might want to use a mock
           if (
             process.env.NODE_ENV === "development" &&
-            !process.env.NEXT_PUBLIC_VENICE_API_KEY &&
+            !process.env.VENICE_API_KEY &&
             process.env.USE_MOCK_AI !== "false"
           ) {
             console.log("[AiProvider] Using mock AI service for development");

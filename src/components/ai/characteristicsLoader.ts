@@ -1,3 +1,4 @@
+import { randomChoice } from "../../my-health-app/utils/utils";
 import { AgentCharacteristics, HealthAgentCharacteristics } from "./types";
 
 class CharacteristicsLoader {
@@ -65,11 +66,7 @@ class CharacteristicsLoader {
     };
   }
 
-  public getResponseForMetric(
-    metric: string,
-    value: number,
-    trend: string,
-  ): string {
+  public getResponseForMetric(metric: string, trend: string): string {
     const responses = this.characteristics.healthMetricResponses?.[metric];
     if (!responses) return this.getDefaultResponse();
 
@@ -81,17 +78,17 @@ class CharacteristicsLoader {
     let responseText = "";
 
     if (responses.interpretation && responses.interpretation.length > 0) {
-      responseText += this.randomChoice(responses.interpretation) + " ";
+      responseText += randomChoice(responses.interpretation) + " ";
     }
 
     if (responses.suggestions && responses.suggestions.length > 0) {
-      responseText += this.randomChoice(responses.suggestions) + " ";
+      responseText += randomChoice(responses.suggestions) + " ";
     }
 
     if (trendResponses.length > 0) {
       // Since TypeScript isn't recognizing that items in trendResponses are strings,
       // we'll use a type assertion here to help it
-      const trendResponse = this.randomChoice(trendResponses) as string;
+      const trendResponse = randomChoice(trendResponses) as string;
       responseText += trendResponse.replace(/\{\{metric\}\}/g, metric);
     }
 
@@ -105,15 +102,15 @@ class CharacteristicsLoader {
     const parts: string[] = [];
 
     if (viz.patterns && viz.patterns.length > 0) {
-      parts.push(this.randomChoice(viz.patterns));
+      parts.push(randomChoice(viz.patterns));
     }
 
     if (viz.insights && viz.insights.length > 0) {
-      parts.push(this.randomChoice(viz.insights));
+      parts.push(randomChoice(viz.insights));
     }
 
     if (viz.recommendations && viz.recommendations.length > 0) {
-      parts.push(this.randomChoice(viz.recommendations));
+      parts.push(randomChoice(viz.recommendations));
     }
 
     return parts.length > 0 ? parts.join(" ") : this.getDefaultResponse();
@@ -124,7 +121,7 @@ class CharacteristicsLoader {
     if (!greetings || greetings.length === 0) {
       return "Hello! I'm your health companion.";
     }
-    return this.randomChoice(greetings);
+    return randomChoice(greetings);
   }
 
   public getDefaultResponse(): string {
@@ -133,15 +130,11 @@ class CharacteristicsLoader {
     if (!defaultResponses || defaultResponses.length === 0) {
       return "I'm here to help with your health questions.";
     }
-    return this.randomChoice(defaultResponses);
+    return randomChoice(defaultResponses);
   }
 
   public getBio(): string {
     return this.characteristics.bio.join(" ");
-  }
-
-  private randomChoice<T>(array: T[]): T {
-    return array[Math.floor(Math.random() * array.length)];
   }
 }
 

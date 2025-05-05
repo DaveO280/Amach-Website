@@ -1,9 +1,9 @@
 "use client";
 
-import React from 'react';
-import HealthDataSelector from '../components/HealthDataSelector';
+import React from "react";
+import HealthDataSelector from "../components/HealthDataSelector";
 
-export default function Home() {
+export default function Home(): React.ReactNode {
   return (
     <main className="min-h-screen bg-[linear-gradient(to_bottom_right,var(--warm-bg)_0%,white_50%,var(--primary-light)_100%)]">
       <div className="container mx-auto py-8">

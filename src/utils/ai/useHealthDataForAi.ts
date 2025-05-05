@@ -11,7 +11,10 @@ interface HealthMetricSummary {
   unit: string;
 }
 
-export function useHealthDataForAi() {
+export function useHealthDataForAi(): {
+  hasHealthData: boolean;
+  getMetricsSummary: () => HealthMetricSummary[];
+} {
   const healthData = useHealthData();
   const selection = useSelection();
 

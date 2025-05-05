@@ -1,188 +1,503 @@
 // src/store/aiStore.tsx
-import {
-  SummarizedData,
-  useHealthSummary,
-} from "@/components/ai/HealthDataProvider";
+"use client";
+
+import { useHealthData } from "@/my-health-app/store/healthDataStore/provider";
+import { extractDatePart } from "@/my-health-app/utils/dataDeduplicator";
+import { processSleepData } from "@/my-health-app/utils/sleepDataProcessor";
 import { CosaintAiService } from "@/services/CosaintAiService";
-import {
-  createContext,
-  ReactNode,
-  useContext,
-  useEffect,
-  useState,
-} from "react";
+import React, { createContext, useContext, useMemo, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 
 // Define types for our messages and context
 interface Message {
   id: string;
-  role: "system" | "user" | "assistant";
+  role: "user" | "assistant";
   content: string;
-  timestamp: string;
+  timestamp: Date;
 }
 
-interface MessageContext {
-  healthData?: SummarizedData;
-  [key: string]: any; // Allow for other context properties
+interface HealthDataPoint {
+  startDate: string;
+  value: string;
+}
+
+interface Metrics {
+  steps: {
+    average: number;
+    total: number;
+    high: number;
+    low: number;
+  };
+  exercise: {
+    average: number;
+    total: number;
+    high: number;
+    low: number;
+  };
+  heartRate: {
+    average: number;
+    total: number;
+    high: number;
+    low: number;
+  };
+  hrv: {
+    average: number;
+    total: number;
+    high: number;
+    low: number;
+  };
+  restingHR: {
+    average: number;
+    total: number;
+    high: number;
+    low: number;
+  };
+  respiratory: {
+    average: number;
+    total: number;
+    high: number;
+    low: number;
+  };
+  activeEnergy: {
+    average: number;
+    total: number;
+    high: number;
+    low: number;
+  };
+  sleep: {
+    average: number;
+    efficiency: number;
+    high: number;
+    low: number;
+  };
 }
 
 interface AiContextType {
   messages: Message[];
+  sendMessage: (message: string) => Promise<void>;
   isLoading: boolean;
   error: string | null;
-  sendMessage: (
-    messageText: string,
-    context?: MessageContext,
-  ) => Promise<Message | undefined>;
   clearMessages: () => void;
+  healthData: Metrics;
 }
 
 // Create context with a default value that matches the interface
 const AiContext = createContext<AiContextType | null>(null);
 
-// Create our AI service instance
-let aiService: CosaintAiService | null = null;
+// Define explicit types for the return values
+interface NumericDayData {
+  day: string;
+  date: Date;
+  value: number;
+  count: number;
+  values: number[];
+}
 
-export function AiProvider({ children }: { children: ReactNode }) {
+interface HeartRateDayData {
+  day: string;
+  date: Date;
+  avg: number;
+  min: number;
+  max: number;
+  count: number;
+}
+
+const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { metricData } = useHealthData();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const { summarizedData } = useHealthSummary();
+  const [aiService, setAiService] = useState<CosaintAiService | null>(null);
+
+  // Process sleep data
+  const processedSleepData = useMemo(() => {
+    const sleepData = metricData["HKCategoryTypeIdentifierSleepAnalysis"] || [];
+    return processSleepData(sleepData);
+  }, [metricData]);
+
+  // Calculate metrics using the same format as charts
+  const metrics = useMemo(() => {
+    const stepsData = metricData["HKQuantityTypeIdentifierStepCount"] || [];
+    const exerciseData =
+      metricData["HKQuantityTypeIdentifierAppleExerciseTime"] || [];
+    const heartRateData = metricData["HKQuantityTypeIdentifierHeartRate"] || [];
+    const hrvData =
+      metricData["HKQuantityTypeIdentifierHeartRateVariabilitySDNN"] || [];
+    const restingHRData =
+      metricData["HKQuantityTypeIdentifierRestingHeartRate"] || [];
+    const respiratoryData =
+      metricData["HKQuantityTypeIdentifierRespiratoryRate"] || [];
+    const activeEnergyData =
+      metricData["HKQuantityTypeIdentifierActiveEnergyBurned"] || [];
+
+    console.log("[AiStore] Raw metric data counts:", {
+      steps: stepsData.length,
+      exercise: exerciseData.length,
+      heartRate: heartRateData.length,
+      hrv: hrvData.length,
+      restingHR: restingHRData.length,
+      respiratory: respiratoryData.length,
+      activeEnergy: activeEnergyData.length,
+      sleep: metricData["HKCategoryTypeIdentifierSleepAnalysis"]?.length || 0,
+    });
+
+    // Process each metric type
+    const processNumericData = (
+      data: HealthDataPoint[],
+      transform: (value: number) => number = (v) => v,
+    ): NumericDayData[] => {
+      const dailyData: Record<
+        string,
+        { total: number; count: number; values: number[] }
+      > = {};
+
+      data.forEach((point) => {
+        try {
+          const dayKey = extractDatePart(point.startDate);
+          const value = parseFloat(point.value);
+
+          if (!isNaN(value)) {
+            if (!dailyData[dayKey]) {
+              dailyData[dayKey] = { total: 0, count: 0, values: [] };
+            }
+            dailyData[dayKey].total += transform(value);
+            dailyData[dayKey].count += 1;
+            dailyData[dayKey].values.push(value);
+          }
+        } catch (e) {
+          console.error("Error processing data point:", e);
+        }
+      });
+
+      return Object.entries(dailyData)
+        .map(([day, data]) => ({
+          day,
+          date: new Date(day + "T12:00:00"),
+          value: Math.round(data.total),
+          count: data.count,
+          values: data.values,
+        }))
+        .sort((a, b) => a.date.getTime() - b.date.getTime());
+    };
+
+    const processHeartRateData = (
+      data: HealthDataPoint[],
+    ): HeartRateDayData[] => {
+      const dailyData: Record<
+        string,
+        { values: number[]; min: number; max: number }
+      > = {};
+
+      data.forEach((point) => {
+        try {
+          const dayKey = extractDatePart(point.startDate);
+          const value = parseFloat(point.value);
+
+          if (!isNaN(value)) {
+            if (!dailyData[dayKey]) {
+              dailyData[dayKey] = {
+                values: [],
+                min: Number.MAX_SAFE_INTEGER,
+                max: Number.MIN_SAFE_INTEGER,
+              };
+            }
+            dailyData[dayKey].values.push(value);
+            dailyData[dayKey].min = Math.min(dailyData[dayKey].min, value);
+            dailyData[dayKey].max = Math.max(dailyData[dayKey].max, value);
+          }
+        } catch (e) {
+          console.error("Error processing heart rate data point:", e);
+        }
+      });
+
+      return Object.entries(dailyData)
+        .map(([day, data]) => ({
+          day,
+          date: new Date(day + "T12:00:00"),
+          avg: Math.round(
+            data.values.reduce((sum: number, val: number) => sum + val, 0) /
+              data.values.length,
+          ),
+          min: Math.round(data.min),
+          max: Math.round(data.max),
+          count: data.values.length,
+        }))
+        .sort((a, b) => a.date.getTime() - b.date.getTime());
+    };
+
+    // Process each metric
+    const steps = processNumericData(stepsData);
+    const exercise = processNumericData(exerciseData);
+    const heartRate = processHeartRateData(heartRateData);
+    const hrv = processHeartRateData(hrvData);
+    const restingHR = processNumericData(restingHRData);
+    const respiratory = processNumericData(respiratoryData);
+    const activeEnergy = processNumericData(activeEnergyData);
+
+    return {
+      steps: {
+        average:
+          steps.length > 0
+            ? Math.round(
+                steps.reduce(
+                  (sum: number, day: NumericDayData) => sum + day.value,
+                  0,
+                ) / steps.length,
+              )
+            : 0,
+        total: steps.reduce(
+          (sum: number, day: NumericDayData) => sum + day.value,
+          0,
+        ),
+        high: steps.length > 0 ? Math.max(...steps.map((day) => day.value)) : 0,
+        low: steps.length > 0 ? Math.min(...steps.map((day) => day.value)) : 0,
+      },
+      exercise: {
+        average:
+          exercise.length > 0
+            ? Math.round(
+                exercise.reduce(
+                  (sum: number, day: NumericDayData) => sum + day.value,
+                  0,
+                ) / exercise.length,
+              )
+            : 0,
+        total: exercise.reduce(
+          (sum: number, day: NumericDayData) => sum + day.value,
+          0,
+        ),
+        high:
+          exercise.length > 0
+            ? Math.max(...exercise.map((day) => day.value))
+            : 0,
+        low:
+          exercise.length > 0
+            ? Math.min(...exercise.map((day) => day.value))
+            : 0,
+      },
+      heartRate: {
+        average:
+          heartRate.length > 0
+            ? Math.round(
+                heartRate.reduce(
+                  (sum: number, day: HeartRateDayData) => sum + day.avg,
+                  0,
+                ) / heartRate.length,
+              )
+            : 0,
+        total: heartRate.reduce(
+          (sum: number, day: HeartRateDayData) => sum + day.avg,
+          0,
+        ),
+        high:
+          heartRate.length > 0
+            ? Math.max(...heartRate.map((day) => day.max))
+            : 0,
+        low:
+          heartRate.length > 0
+            ? Math.min(...heartRate.map((day) => day.min))
+            : 0,
+      },
+      hrv: {
+        average:
+          hrv.length > 0
+            ? Math.round(
+                hrv.reduce(
+                  (sum: number, day: HeartRateDayData) => sum + day.avg,
+                  0,
+                ) / hrv.length,
+              )
+            : 0,
+        total: hrv.reduce(
+          (sum: number, day: HeartRateDayData) => sum + day.avg,
+          0,
+        ),
+        high: hrv.length > 0 ? Math.max(...hrv.map((day) => day.max)) : 0,
+        low: hrv.length > 0 ? Math.min(...hrv.map((day) => day.min)) : 0,
+      },
+      restingHR: {
+        average:
+          restingHR.length > 0
+            ? Math.round(
+                restingHR.reduce(
+                  (sum: number, day: NumericDayData) => sum + day.value,
+                  0,
+                ) / restingHR.length,
+              )
+            : 0,
+        total: restingHR.reduce(
+          (sum: number, day: NumericDayData) => sum + day.value,
+          0,
+        ),
+        high:
+          restingHR.length > 0
+            ? Math.max(...restingHR.map((day) => day.value))
+            : 0,
+        low:
+          restingHR.length > 0
+            ? Math.min(...restingHR.map((day) => day.value))
+            : 0,
+      },
+      respiratory: {
+        average:
+          respiratory.length > 0
+            ? Math.round(
+                respiratory.reduce(
+                  (sum: number, day: NumericDayData) =>
+                    sum +
+                    day.values.reduce((s: number, v: number) => s + v, 0) /
+                      day.values.length,
+                  0,
+                ) / respiratory.length,
+              )
+            : 0,
+        total: respiratory.reduce(
+          (sum: number, day: NumericDayData) =>
+            sum + day.values.reduce((s: number, v: number) => s + v, 0),
+          0,
+        ),
+        high:
+          respiratory.length > 0
+            ? Math.max(...respiratory.map((day) => Math.max(...day.values)))
+            : 0,
+        low:
+          respiratory.length > 0
+            ? Math.min(...respiratory.map((day) => Math.min(...day.values)))
+            : 0,
+      },
+      activeEnergy: {
+        average:
+          activeEnergy.length > 0
+            ? Math.round(
+                activeEnergy.reduce(
+                  (sum: number, day: NumericDayData) => sum + day.value,
+                  0,
+                ) / activeEnergy.length,
+              )
+            : 0,
+        total: activeEnergy.reduce(
+          (sum: number, day: NumericDayData) => sum + day.value,
+          0,
+        ),
+        high:
+          activeEnergy.length > 0
+            ? Math.max(...activeEnergy.map((day) => day.value))
+            : 0,
+        low:
+          activeEnergy.length > 0
+            ? Math.min(...activeEnergy.map((day) => day.value))
+            : 0,
+      },
+      sleep:
+        processedSleepData.length > 0
+          ? {
+              average: Math.round(
+                processedSleepData.reduce(
+                  (sum: number, day: { sleepDuration: number }) =>
+                    sum + day.sleepDuration,
+                  0,
+                ) / processedSleepData.length,
+              ),
+              efficiency: Math.round(
+                processedSleepData.reduce(
+                  (
+                    sum: number,
+                    day: { metrics: { sleepEfficiency: number } },
+                  ) => sum + day.metrics.sleepEfficiency,
+                  0,
+                ) / processedSleepData.length,
+              ),
+              high: Math.round(
+                Math.max(...processedSleepData.map((day) => day.sleepDuration)),
+              ),
+              low: Math.round(
+                Math.min(...processedSleepData.map((day) => day.sleepDuration)),
+              ),
+            }
+          : { average: 0, efficiency: 0, high: 0, low: 0 },
+    };
+  }, [metricData, processedSleepData]);
 
   // Initialize the AI service
-  useEffect(() => {
-    const initializeAiService = async () => {
-      try {
-        // Debug log to check environment variables
-        console.log("[AiProvider] Environment variables:", {
-          NODE_ENV: process.env.NODE_ENV,
-          VENICE_API_KEY: process.env.VENICE_API_KEY ? "Set" : "Not set",
-          USE_MOCK_AI: process.env.USE_MOCK_AI,
-        });
-
-        // Initialize the AI service if it hasn't been created yet
-        if (!aiService) {
-          // In a development environment, you might want to use a mock
-          if (
-            process.env.NODE_ENV === "development" &&
-            !process.env.VENICE_API_KEY &&
-            process.env.USE_MOCK_AI !== "false"
-          ) {
-            console.log("[AiProvider] Using mock AI service for development");
-            // We'll implement real service later when API keys are available
-            aiService = {
-              generateResponse: async (message, history) => {
-                return `[DEV MODE] This is a simulated response to: "${message}"`;
-              },
-            } as CosaintAiService;
-          } else {
-            // In production, use the real service
-            aiService = CosaintAiService.createFromEnv();
-            console.log("[AiProvider] Venice AI service initialized");
-          }
-        }
-      } catch (err) {
-        console.error("[AiProvider] Failed to initialize AI service:", err);
-        setError("Failed to initialize AI service. Please try again later.");
-      }
-    };
-
-    initializeAiService();
-  }, []);
-
-  // Add logging when summarized data changes
-  useEffect(() => {
-    console.log("[AiProvider] Health summary data:", {
-      available: Boolean(summarizedData),
-      metrics: summarizedData?.stats.metrics
-        ? Object.entries(summarizedData.stats.metrics)
-            .filter(([_, data]) => data.available)
-            .map(([key]) => key)
-        : "none",
-      days: summarizedData?.daily.length || 0,
-    });
-  }, [summarizedData]);
+  const getAIService = async (): Promise<CosaintAiService> => {
+    if (!aiService) {
+      const service = CosaintAiService.createFromEnv();
+      setAiService(service);
+      return service;
+    }
+    return aiService;
+  };
 
   // Function to send a message to the AI
-  const sendMessage = async (
-    messageText: string,
-    context: MessageContext = {},
-  ): Promise<Message | undefined> => {
-    if (!messageText.trim()) return;
-    if (!aiService) {
-      setError("AI service is not initialized. Please try again later.");
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    // Add user message to chat
-    const userMessage: Message = {
-      id: uuidv4(),
-      role: "user",
-      content: messageText,
-      timestamp: new Date().toISOString(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-
+  const sendMessage = async (message: string): Promise<void> => {
     try {
-      // Format message history for the AI service
-      const messageHistory = messages
-        .filter((m) => m.role === "user" || m.role === "assistant")
-        .slice(-10) // Last 10 messages for context
-        .map((m) => ({
-          role: m.role === "system" ? "assistant" : m.role,
-          content: m.content,
-        }));
+      setIsLoading(true);
+      setError(null);
 
-      // Use the detailed health data if available
-      const healthData = summarizedData || context.healthData;
-
-      // Call the AI service with the detailed health data
-      const aiResponse = await aiService.generateResponse(
-        messageText,
-        messageHistory,
-        healthData,
-      );
-
-      // Add AI response to chat
-      const assistantMessage: Message = {
+      // Create a new message
+      const newMessage: Message = {
         id: uuidv4(),
-        role: "assistant",
-        content: aiResponse,
-        timestamp: new Date().toISOString(),
+        content: message,
+        role: "user",
+        timestamp: new Date(),
       };
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      // Add the message to the list
+      setMessages((prev) => [...prev, newMessage]);
 
-      return assistantMessage;
+      // Get the AI service
+      const service = await getAIService();
+
+      // Prepare the context with health data
+      const context = {
+        messages: messages.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        })),
+        healthData: metrics,
+      };
+
+      // Send the message to the AI
+      const response = await service.generateResponse(
+        message,
+        context.messages,
+        context.healthData,
+      );
+
+      // Add the response to the messages
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uuidv4(),
+          content: response,
+          role: "assistant",
+          timestamp: new Date(),
+        },
+      ]);
     } catch (err) {
-      console.error("[AiProvider] Error sending message to AI:", err);
-      setError("Failed to get a response. Please try again.");
-      return undefined;
+      setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Clear all messages
-  const clearMessages = () => {
+  // Function to clear messages
+  const clearMessages = (): void => {
     setMessages([]);
     setError(null);
   };
 
   const value: AiContextType = {
     messages,
+    sendMessage,
     isLoading,
     error,
-    sendMessage,
     clearMessages,
+    healthData: metrics,
   };
 
   return <AiContext.Provider value={value}>{children}</AiContext.Provider>;
-}
+};
 
 // Custom hook to use the AI context
 export function useAi(): AiContextType {
@@ -192,3 +507,5 @@ export function useAi(): AiContextType {
   }
   return context;
 }
+
+export default AiProvider;

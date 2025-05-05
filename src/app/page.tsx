@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
-const MainPage = () => {
+const MainPage: React.FC = (): JSX.Element => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeCard, setActiveCard] = useState(0);
 
@@ -41,13 +41,15 @@ const MainPage = () => {
   const [showBetaNotification, setShowBetaNotification] = useState(false);
 
   useEffect(() => {
-    const handleResize = () => {
+    const handleResize = (): void => {
       if (window.innerWidth >= 768) {
         setIsMobileMenuOpen(false);
       }
     };
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    return (): void => {
+      return window.removeEventListener("resize", handleResize);
+    };
   }, []);
 
   const cards = [
@@ -72,10 +74,10 @@ const MainPage = () => {
   ];
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setActiveCard((current) => (current + 1) % cards.length);
+    const timer = setInterval((): void => {
+      setActiveCard((current: number): number => (current + 1) % cards.length);
     }, 4000);
-    return () => clearInterval(timer);
+    return (): void => clearInterval(timer);
   }, [cards.length]);
 
   const navItems = [
@@ -84,13 +86,9 @@ const MainPage = () => {
   ];
 
   // Handler to show notification instead of directly opening dashboard
-  const handleDashboardClick = () => {
+  const handleDashboardClick = (): void => {
     setShowBetaNotification(true);
-
-    // Close mobile menu if open
     setIsMobileMenuOpen(false);
-
-    // This will also help close any open dropdown menus
     const clickEvent = new MouseEvent("mousedown", {
       bubbles: true,
       cancelable: true,
@@ -100,7 +98,7 @@ const MainPage = () => {
   };
 
   // Only open dashboard after notification is dismissed with "Got it" button
-  const openDashboard = () => {
+  const openDashboard = (): void => {
     setIsDashboardOpen(true);
   };
 
@@ -114,7 +112,7 @@ const MainPage = () => {
     },
     {
       label: "AI Agent",
-      action: () => setIsAiCompanionOpen(true),
+      action: (): void => setIsAiCompanionOpen(true),
       href: "#",
       icon: Bot,
     },

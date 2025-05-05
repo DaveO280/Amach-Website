@@ -1,12 +1,12 @@
 "use client";
 
-import React from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Network, Lock, Brain, Users } from "lucide-react";
+import { ArrowLeft, Brain, Lock, Network, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
+import React from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
-function ErrorFallback({ error }: { error: Error }) {
+function ErrorFallback({ error }: { error: Error }): JSX.Element {
   return (
     <div className="text-red-600 p-4">
       <p>Something went wrong:</p>
@@ -15,7 +15,7 @@ function ErrorFallback({ error }: { error: Error }) {
   );
 }
 
-const Mission = () => {
+const Mission: React.FC = () => {
   const router = useRouter();
 
   return (

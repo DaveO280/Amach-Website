@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-export default function IconPreview() {
+export default function IconPreview(): JSX.Element {
   return (
     <div className="p-8 grid gap-8">
       <h1>Icon Preview</h1>

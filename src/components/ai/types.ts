@@ -6,7 +6,7 @@ export interface AgentCharacteristics {
   bio: string[];
   lore: string[];
   knowledge: string[];
-  messageExamples: any[][];
+  messageExamples: string[][];
   topics: string[];
   style: {
     all: string[];

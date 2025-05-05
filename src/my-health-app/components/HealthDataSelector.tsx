@@ -1,22 +1,35 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React from "react";
 import { coreMetrics, timeFrameOptions } from "../core/metricDefinitions";
 import {
-  XMLStreamParser,
   validateHealthExportFile,
-} from "../core/parsers/XMLStreamParser";
+  XMLStreamParser,
+} from "../data/parsers/XMLStreamParser";
+import { healthDataStore } from "../data/store/healthDataStore";
+import {
+  ActiveEnergyMetric,
+  DataSource,
+  ExerciseTimeMetric,
+  HealthMetric,
+  HeartRateMetric,
+  HRVMetric,
+  MetricType,
+  RespiratoryRateMetric,
+  RestingHeartRateMetric,
+  SleepAnalysisMetric,
+  SleepStage,
+  StepCountMetric,
+} from "../data/types/healthMetrics";
 import { useHealthData } from "../store/healthDataStore";
 import { useSelection } from "../store/selectionStore";
-import { HealthDataPoint, TimeFrame } from "../types/healthData";
+import { TimeFrame } from "../types/healthData";
 import {
   deduplicateData,
   isDeduplicatableMetric,
 } from "../utils/dataDeduplicator";
-import { generateAndDownloadCSV } from "../utils/exportUtils";
 
-const HealthDataSelector = (): React.ReactElement => {
-  // Use the selection store for user selections
+const HealthDataSelector: () => React.ReactElement = () => {
   const {
     timeFrame,
     setTimeFrame,
@@ -27,24 +40,15 @@ const HealthDataSelector = (): React.ReactElement => {
     setUploadedFile,
   } = useSelection();
 
-  // Use the health data store for processing state and data
   const {
     processingState,
     setProcessingState,
     updateProcessingProgress,
     setProcessingError,
     addMetricData,
+    clearData,
+    hasData,
   } = useHealthData();
-
-  // Add debugging effect to log selections
-  useEffect(() => {
-    console.log("Current selections:", {
-      timeFrame,
-      selectedMetricsCount: selectedMetrics.length,
-      selectedMetricsList: selectedMetrics,
-      hasUploadedFile: uploadedFile !== null,
-    });
-  }, [timeFrame, selectedMetrics, uploadedFile]);
 
   const handleFileSelect = (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -56,9 +60,6 @@ const HealthDataSelector = (): React.ReactElement => {
       return;
     }
 
-    console.log("File selected:", file.name, file.type, file.size);
-
-    // Check if it looks like a health export
     if (!validateHealthExportFile(file)) {
       setProcessingError(
         "Please select the export.xml file from your Apple Health Export",
@@ -76,26 +77,64 @@ const HealthDataSelector = (): React.ReactElement => {
     });
   };
 
-  const handleProcess = async (
-    e: React.MouseEvent<HTMLButtonElement>,
-  ): Promise<void> => {
-    // Prevent the event from bubbling up to parent elements
-    e.preventDefault();
-    e.stopPropagation();
+  const convertToSleepStage = (rawValue: string): SleepStage => {
+    // Map Apple Health sleep stage values to our internal format
+    const sleepStageMap: Record<string, SleepStage> = {
+      HKCategoryValueSleepAnalysisInBed: "inBed",
+      HKCategoryValueSleepAnalysisAsleepCore: "core",
+      HKCategoryValueSleepAnalysisAsleepDeep: "deep",
+      HKCategoryValueSleepAnalysisAsleepREM: "rem",
+      HKCategoryValueSleepAnalysisAwake: "awake",
+      // Handle short format values
+      inBed: "inBed",
+      core: "core",
+      deep: "deep",
+      rem: "rem",
+      awake: "awake",
+      // Handle numeric values
+      "0": "inBed",
+      "1": "core",
+      "2": "deep",
+      "3": "rem",
+      "4": "awake",
+    };
 
-    if (!uploadedFile) {
-      setProcessingError("Please select a file first");
-      return;
+    const stage = sleepStageMap[rawValue];
+    if (!stage) {
+      console.warn(`Unknown sleep stage value: ${rawValue}`);
+      return "inBed"; // Default to inBed for unknown values
     }
+    return stage;
+  };
 
-    // Check if any metrics are selected
-    const selected = getAllSelectedMetrics();
-    console.log("Starting processing with metrics:", selected);
+  const handleClearData = async (): Promise<void> => {
+    try {
+      setProcessingState({
+        isProcessing: true,
+        progress: 0,
+        status: "Clearing data...",
+        error: null,
+      });
 
-    if (selected.length === 0) {
-      setProcessingError("Please select at least one metric to process");
-      return;
+      await healthDataStore.clearHealthData();
+      clearData();
+      setUploadedFile(null);
+
+      setProcessingState({
+        isProcessing: false,
+        progress: 100,
+        status: "Data cleared successfully",
+        error: null,
+      });
+    } catch (error) {
+      setProcessingError(
+        error instanceof Error ? error.message : "Error clearing data",
+      );
     }
+  };
+
+  const handleProcess = async (): Promise<void> => {
+    if (!uploadedFile || selectedMetrics.length === 0) return;
 
     setProcessingState({
       isProcessing: true,
@@ -106,157 +145,133 @@ const HealthDataSelector = (): React.ReactElement => {
 
     try {
       const selectedMetrics = getAllSelectedMetrics();
-
-      // Metrics we want to specifically track
-      const debugMetrics = [
-        "HKQuantityTypeIdentifierStepCount",
-        "HKQuantityTypeIdentifierActiveEnergyBurned",
-        "HKQuantityTypeIdentifierAppleExerciseTime",
-        "HKCategoryTypeIdentifierSleepAnalysis",
-      ];
-
-      // Create parser with selected options
       const parser = new XMLStreamParser({
         selectedMetrics,
         timeFrame,
-        onProgress: (progress) => {
+        onProgress: (progress): void => {
           updateProcessingProgress(
             progress.progress,
             `Processing: ${progress.progress}% complete (${progress.recordCount} records)`,
           );
-
-          // Log progress to console for debugging
-          if (progress.recordCount % 1000 === 0 || progress.progress >= 100) {
-            console.log(`Processed ${progress.recordCount} records...`);
-            console.log("Current metrics found:", progress.metricCounts);
-          }
         },
       });
 
-      // Parse the file
-      console.log("Beginning file parse...");
       const results = await parser.parseFile(uploadedFile);
+      const healthDataResults: Partial<Record<MetricType, HealthMetric[]>> = {};
 
-      // Log raw results for tracked metrics
-      console.log("Parse complete. Results for tracked metrics:");
-      for (const metric of debugMetrics) {
-        if (results[metric]) {
-          console.log(
-            `[DEBUG] Before deduplication - ${metric}: ${results[metric].length} records`,
-          );
-          if (results[metric].length > 0) {
-            console.log(
-              `[DEBUG] Sample record for ${metric}:`,
-              results[metric][0],
-            );
+      for (const [metricType, dataPoints] of Object.entries(results)) {
+        const metricTypeKey = metricType as MetricType;
+        const source = (dataPoints[0]?.source || "Apple Health") as DataSource;
+        const processedPoints = isDeduplicatableMetric(metricType)
+          ? deduplicateData(dataPoints, metricType)
+          : dataPoints;
+
+        const metrics = processedPoints.map((point) => {
+          const baseMetric = {
+            type: metricTypeKey,
+            startDate: point.startDate,
+            endDate: point.endDate,
+            value: point.value,
+            source,
+            device: point.device,
+          };
+
+          switch (metricTypeKey) {
+            case "HKQuantityTypeIdentifierStepCount":
+              return { ...baseMetric, unit: "count" } as StepCountMetric;
+            case "HKQuantityTypeIdentifierHeartRate":
+              return { ...baseMetric, unit: "bpm" } as HeartRateMetric;
+            case "HKQuantityTypeIdentifierHeartRateVariabilitySDNN":
+              return { ...baseMetric, unit: "ms" } as HRVMetric;
+            case "HKQuantityTypeIdentifierRespiratoryRate":
+              return {
+                ...baseMetric,
+                unit: "count/min",
+              } as RespiratoryRateMetric;
+            case "HKQuantityTypeIdentifierAppleExerciseTime":
+              return { ...baseMetric, unit: "min" } as ExerciseTimeMetric;
+            case "HKQuantityTypeIdentifierRestingHeartRate":
+              return { ...baseMetric, unit: "bpm" } as RestingHeartRateMetric;
+            case "HKQuantityTypeIdentifierActiveEnergyBurned":
+              return { ...baseMetric, unit: "kcal" } as ActiveEnergyMetric;
+            case "HKCategoryTypeIdentifierSleepAnalysis":
+              return {
+                ...baseMetric,
+                value: convertToSleepStage(point.value),
+                unit: "hr",
+              } as SleepAnalysisMetric;
+            default:
+              return { ...baseMetric, unit: "count" } as HealthMetric;
           }
-        } else {
-          console.log(`[DEBUG] No data found for ${metric}`);
-        }
+        });
+
+        healthDataResults[metricTypeKey] = metrics;
       }
 
-      console.log(
-        "Parse complete. Results:",
-        Object.keys(results).map(
-          (key) => `${key}: ${results[key]?.length || 0} records`,
-        ),
+      await healthDataStore.saveHealthData(
+        healthDataResults as Record<MetricType, HealthMetric[]>,
       );
 
-      // Apply deduplication to applicable metrics
-      for (const [metric, dataArray] of Object.entries(results)) {
-        // Add proper type assertion for the data array
-        const typedDataArray = dataArray as HealthDataPoint[];
+      // Convert to CSV format
+      const headers = ["Date", "Metric", "Value", "Unit", "Source", "Device"];
+      const rows = Object.entries(healthDataResults).flatMap(
+        ([metricType, metrics]) => {
+          return metrics.map((metric) => [
+            metric.startDate,
+            metricType,
+            metric.value,
+            metric.unit || "",
+            metric.source || "",
+            metric.device || "",
+          ]);
+        },
+      );
 
-        if (
-          isDeduplicatableMetric(metric) &&
-          typedDataArray &&
-          typedDataArray.length > 0
-        ) {
-          console.log(
-            `Found ${metric} data with ${typedDataArray.length} records, applying deduplication...`,
-          );
+      const csvContent = [
+        headers.join(","),
+        ...rows.map((row) =>
+          row
+            .map((field) =>
+              field.includes(",") || field.includes('"') || field.includes("\n")
+                ? `"${String(field).replace(/"/g, '""')}"`
+                : field,
+            )
+            .join(","),
+        ),
+      ].join("\n");
 
-          // Store original count for tracked metrics
-          if (debugMetrics.includes(metric)) {
-            console.log(
-              `[DEBUG] ${metric} before deduplication: ${typedDataArray.length} records`,
-            );
-          }
+      // Create and download CSV file
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `HealthData(${new Date().toISOString().split("T")[0]}).csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
-          results[metric] = deduplicateData(typedDataArray, metric);
-
-          // Log after deduplication for tracked metrics
-          if (debugMetrics.includes(metric)) {
-            console.log(
-              `[DEBUG] ${metric} after deduplication: ${results[metric].length} records`,
-            );
-            if (results[metric].length > 0) {
-              console.log(
-                `[DEBUG] Sample deduplicated record for ${metric}:`,
-                results[metric][0],
-              );
-            } else {
-              console.log(
-                `[DEBUG] WARNING: All ${metric} records were removed during deduplication!`,
-              );
-            }
-          }
-
-          console.log(`After deduplication: ${results[metric].length} records`);
-
-          // Update processing status to inform user
-          updateProcessingProgress(
-            processingState.progress,
-            `Deduplicated ${metric} data: ${results[metric].length} records`,
-          );
-        }
+      // Update the store
+      for (const [metricType, metrics] of Object.entries(healthDataResults)) {
+        const dataPoints = metrics.map((metric) => ({
+          startDate: metric.startDate,
+          endDate: metric.endDate,
+          value: metric.value,
+          source: metric.source,
+          device: metric.device,
+        }));
+        addMetricData(metricType, dataPoints);
       }
 
-      // Generate CSVs for each metric with data
-      let processedFiles = 0;
-      for (const [metric, dataArray] of Object.entries(results)) {
-        // Add proper type assertion for the data array
-        const typedDataArray = dataArray as HealthDataPoint[];
-
-        // Debug for tracked metrics before adding to store
-        if (debugMetrics.includes(metric)) {
-          console.log(
-            `[DEBUG] Adding ${metric} to store with ${typedDataArray?.length || 0} records`,
-          );
-        }
-
-        console.log(
-          `Processing metric ${metric} with ${typedDataArray?.length || 0} records`,
-        );
-        if (typedDataArray && typedDataArray.length > 0) {
-          // Add data to store
-          addMetricData(metric, typedDataArray);
-
-          // Generate and download CSV
-          try {
-            console.log(`Generating CSV for ${metric}`);
-            await generateAndDownloadCSV(metric, typedDataArray);
-            processedFiles++;
-            console.log(`CSV generated for ${metric}`);
-          } catch (csvError) {
-            console.error(`Error generating CSV for ${metric}:`, csvError);
-          }
-        } else {
-          console.log(`No data found for metric ${metric}`);
-        }
-      }
-
-      console.log(`Processing complete. Generated ${processedFiles} files.`);
       setProcessingState({
         isProcessing: false,
         progress: 100,
-        status: `Processing complete! Generated ${processedFiles} files. Check your downloads folder.`,
+        status: "Processing complete",
         error: null,
       });
     } catch (error) {
-      console.error("Processing error:", error);
       setProcessingError(
-        error instanceof Error ? error.message : "An unknown error occurred",
+        error instanceof Error ? error.message : "Error processing file",
       );
     }
   };
@@ -270,7 +285,6 @@ const HealthDataSelector = (): React.ReactElement => {
           </h2>
         </div>
 
-        {/* Time Frame Selection - UPDATED FOR MOBILE */}
         <div className="mb-8">
           <h3 className="text-xl font-semibold mb-4 text-emerald-700">
             Select Time Frame
@@ -280,7 +294,7 @@ const HealthDataSelector = (): React.ReactElement => {
               <button
                 key={option.value}
                 onClick={(e) => {
-                  e.stopPropagation(); // Prevent event bubbling
+                  e.stopPropagation();
                   setTimeFrame(option.value as TimeFrame);
                 }}
                 className={`p-3 rounded-lg text-sm font-medium transition-colors ${
@@ -295,7 +309,6 @@ const HealthDataSelector = (): React.ReactElement => {
           </div>
         </div>
 
-        {/* Core Metrics Section - UPDATED FOR MOBILE */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-xl font-semibold text-emerald-700">
@@ -316,7 +329,7 @@ const HealthDataSelector = (): React.ReactElement => {
               <button
                 key={metric.id}
                 onClick={(e) => {
-                  e.stopPropagation(); // Prevent event bubbling
+                  e.stopPropagation();
                   toggleMetric(metric.id);
                 }}
                 disabled={processingState.isProcessing}
@@ -332,7 +345,6 @@ const HealthDataSelector = (): React.ReactElement => {
           </div>
         </div>
 
-        {/* Upload Section */}
         <div className="border-t border-amber-50/20 pt-6">
           <h3 className="text-xl font-semibold mb-4 text-emerald-700">
             Upload Health Export
@@ -344,24 +356,33 @@ const HealthDataSelector = (): React.ReactElement => {
               onChange={handleFileSelect}
               disabled={processingState.isProcessing}
               className="file-input w-full p-2 border border-amber-100 rounded-lg"
-              onClick={(e) => e.stopPropagation()} // Prevent event bubbling
+              onClick={(e) => e.stopPropagation()}
             />
 
-            <button
-              onClick={handleProcess}
-              disabled={
-                processingState.isProcessing ||
-                !uploadedFile ||
-                selectedMetrics.length === 0
-              }
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {processingState.isProcessing
-                ? "Processing..."
-                : "Process Selected Data"}
-            </button>
+            <div className="flex gap-4">
+              <button
+                onClick={handleProcess}
+                disabled={
+                  processingState.isProcessing ||
+                  !uploadedFile ||
+                  selectedMetrics.length === 0
+                }
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {processingState.isProcessing
+                  ? "Processing..."
+                  : "Process Selected Data"}
+              </button>
 
-            {/* Display selected metrics count */}
+              <button
+                onClick={handleClearData}
+                disabled={processingState.isProcessing || !hasData()}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Clear All Data
+              </button>
+            </div>
+
             <div className="mt-2 text-center text-sm text-gray-600">
               {selectedMetrics.length === 0 ? (
                 <span className="text-red-500">

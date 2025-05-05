@@ -1,19 +1,17 @@
 "use client";
 
-import React from 'react';
-
-export default function GlobalStyles() {
+export default function GlobalStyles(): JSX.Element {
   return (
     <style jsx global>{`
       :root {
-        --primary: #006B4F;
-        --primary-light: #E8F5F0;
-        --accent: #B25D42;
-        --warm-bg: #FDF6E3;
+        --primary: #006b4f;
+        --primary-light: #e8f5f0;
+        --accent: #b25d42;
+        --warm-bg: #fdf6e3;
         --text: #333333;
         --background: #f8f9fa;
       }
-      
+
       .metric-card {
         padding: 0.75rem;
         border-radius: 0.5rem;
@@ -22,7 +20,7 @@ export default function GlobalStyles() {
         cursor: pointer;
         text-align: center;
       }
-      
+
       .file-input {
         width: 100%;
         padding: 0.5rem;
@@ -31,7 +29,7 @@ export default function GlobalStyles() {
         background-color: var(--primary-light);
         color: var(--primary);
       }
-      
+
       .btn-primary {
         padding: 0.75rem 1rem;
         background-color: var(--primary);
@@ -40,11 +38,11 @@ export default function GlobalStyles() {
         font-weight: 500;
         transition: all 0.2s ease;
       }
-      
+
       .btn-primary:hover:not(:disabled) {
         background-color: #005540;
       }
-      
+
       .btn-primary:disabled {
         opacity: 0.7;
         cursor: not-allowed;

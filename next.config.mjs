@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 const nextConfig = {
   // Keep any existing options
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
 
   // Add webpack config to include my-health-app

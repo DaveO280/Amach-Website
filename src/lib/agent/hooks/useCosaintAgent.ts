@@ -28,7 +28,21 @@ export interface ChatContext {
   previousMessages: VeniceMessage[];
 }
 
-export const useCosaintAgent = () => {
+export const useCosaintAgent = (): {
+  isLoading: boolean;
+  error: string | null;
+  sendMessage: (
+    message: string,
+    context: ChatContext,
+  ) => Promise<{ content: string; context: ChatContext } | null>;
+  initializeContext: (metrics: MetricContext[]) => ChatContext;
+  prepareMetricContext: (
+    metricId: string,
+    displayName: string,
+    data: HealthDataPoint[],
+  ) => MetricContext;
+  characteristics: CharacteristicsLoader;
+} => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const characteristics = useMemo(

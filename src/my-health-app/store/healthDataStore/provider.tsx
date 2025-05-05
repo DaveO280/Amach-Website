@@ -1,12 +1,7 @@
 "use client";
 
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-} from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { healthDataStore } from "../../data/store/healthDataStore";
 import {
   HealthDataByType,
   HealthDataPoint,
@@ -43,61 +38,83 @@ const HealthDataContext = createContext<HealthDataContextType | undefined>(
   undefined,
 );
 
-export function HealthDataProvider({
+export const HealthDataProvider: ({
   children,
 }: {
   children: React.ReactNode;
-}) {
+}) => JSX.Element = ({ children }) => {
   const [metricData, setMetricData] = useState<HealthDataByType>({});
   const [processingState, setProcessingState] = useState<ProcessingState>(
     defaultProcessingState,
   );
 
-  const updateProcessingProgress = useCallback(
-    (progress: number, status: string) => {
-      setProcessingState((prev) => ({
-        ...prev,
-        progress,
-        status,
-      }));
-    },
-    [],
-  );
+  // Load data from IndexedDB on startup
+  useEffect(() => {
+    const loadData = async (): Promise<void> => {
+      try {
+        const data = await healthDataStore.getHealthData();
+        console.log("[HealthDataProvider] Loaded data from IndexedDB:", {
+          hasData: !!data,
+          availableMetrics: data ? Object.keys(data) : [],
+          sampleCounts: data
+            ? Object.entries(data).reduce(
+                (acc, [key, value]) => ({
+                  ...acc,
+                  [key]: Array.isArray(value) ? value.length : 0,
+                }),
+                {},
+              )
+            : {},
+        });
+        setMetricData(data || {});
+      } catch (error) {
+        console.error("[HealthDataProvider] Error loading data:", error);
+        setMetricData({});
+      }
+    };
 
-  const setProcessingError = useCallback((error: string) => {
+    loadData();
+  }, []);
+
+  const updateProcessingProgress = (progress: number, status: string): void => {
+    setProcessingState((prev) => ({
+      ...prev,
+      progress,
+      status,
+    }));
+  };
+
+  const setProcessingError = (error: string): void => {
     setProcessingState((prev) => ({
       ...prev,
       error,
       isProcessing: false,
     }));
-  }, []);
+  };
 
-  const addMetricData = useCallback(
-    (metricId: string, data: HealthDataPoint[]) => {
-      console.log(
-        `[DEBUG] Adding ${metricId} to store with ${data.length} records`,
-      );
-      setMetricData((prev) => ({
-        ...prev,
-        [metricId]: data,
-      }));
-    },
-    [],
-  );
+  const addMetricData = (metricId: string, data: HealthDataPoint[]): void => {
+    console.log(
+      `[DEBUG] Adding ${metricId} to store with ${data.length} records`,
+    );
+    setMetricData((prev) => ({
+      ...prev,
+      [metricId]: data,
+    }));
+  };
 
-  const clearData = useCallback(() => {
+  const clearData = (): void => {
     setMetricData({});
     setProcessingState(defaultProcessingState);
-  }, []);
+  };
 
-  const hasData = useCallback(() => {
+  const hasData = (): boolean => {
     return (
       Object.keys(metricData).length > 0 &&
       Object.values(metricData).some(
         (data) => Array.isArray(data) && data.length > 0,
       )
     );
-  }, [metricData]);
+  };
 
   // Add diagnostic logging
   useEffect(() => {
@@ -113,7 +130,7 @@ export function HealthDataProvider({
 
     // Add flag to check component mounting
     window.__healthDataProviderMounted = true;
-    return () => {
+    return (): void => {
       window.__healthDataProviderMounted = false;
     };
   }, [metricData]);
@@ -134,12 +151,12 @@ export function HealthDataProvider({
       {children}
     </HealthDataContext.Provider>
   );
-}
+};
 
-export function useHealthData() {
+export const useHealthData: () => HealthDataContextType = () => {
   const context = useContext(HealthDataContext);
   if (context === undefined) {
     throw new Error("useHealthData must be used within a HealthDataProvider");
   }
   return context;
-}
+};

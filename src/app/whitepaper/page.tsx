@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
-import { ChevronLeft, ChevronRight, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Section, WhitepaperContent } from "@/types/whitepaper";
-import { saveAs } from "file-saver";
+import { Menu } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 const sections: Section[] = [
   { title: "Abstract & Contents", page: 1 },
@@ -275,11 +274,11 @@ const whitepaperContent: WhitepaperContent = {
   `,
 };
 
-export default function WhitepaperPage() {
+export default function WhitepaperPage(): JSX.Element {
   const router = useRouter();
   const [currentPage, setCurrentPage] = useState(1);
 
-  const handlePrintView = () => {
+  const handlePrintView = (): void => {
     router.push("/whitepaper/print");
   };
 

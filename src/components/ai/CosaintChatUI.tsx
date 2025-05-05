@@ -4,36 +4,26 @@ import { Button } from "@/components/ui/button";
 import { useAi } from "@/store/aiStore";
 import { Send } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
-import { useHealthSummary } from "./HealthDataProvider";
 
 // Define types for our message interface
 interface MessageType {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
-  timestamp: string;
+  timestamp: Date;
 }
 
 const CosaintChatUI: React.FC = () => {
-  const { messages, sendMessage, isLoading, error, clearMessages } = useAi();
-  const healthSummary = useHealthSummary();
+  const {
+    messages,
+    sendMessage,
+    isLoading,
+    error,
+    healthData: metrics,
+  } = useAi();
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // Check if health data is available (with null/undefined safety)
-  const hasHealthData = Boolean(
-    healthSummary?.summarizedData?.stats?.totalDays &&
-      healthSummary.summarizedData.stats.totalDays > 0,
-  );
-
-  // Safely get available metrics
-  const availableMetrics =
-    hasHealthData && healthSummary.summarizedData?.stats?.metrics
-      ? Object.entries(healthSummary.summarizedData.stats.metrics)
-          .filter(([_, data]) => data.available)
-          .map(([key]) => key)
-      : [];
 
   // Scroll to the bottom when messages change
   useEffect(() => {
@@ -45,14 +35,13 @@ const CosaintChatUI: React.FC = () => {
     textareaRef.current?.focus();
   }, []);
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (): Promise<void> => {
     if (input.trim() === "") return;
-
     await sendMessage(input);
     setInput("");
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent): void => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -62,12 +51,25 @@ const CosaintChatUI: React.FC = () => {
   return (
     <div className="flex flex-col h-[60vh] max-h-[600px]">
       {/* Health Data Status */}
-      {hasHealthData && (
-        <div className="mb-2 text-sm text-emerald-800">
-          <span className="font-semibold">Health metrics available:</span>{" "}
-          {availableMetrics.join(", ")}
-        </div>
-      )}
+      <div className="mb-2 text-sm text-emerald-800">
+        Available Metrics:{" "}
+        {Object.keys(metrics)
+          .map((key) => {
+            // Special case for HRV
+            if (key === "hrv") return "HRV";
+            // Special case for RestingHR
+            if (key === "restingHR") return "Resting HR";
+            // Default case
+            return (
+              key.charAt(0).toUpperCase() +
+              key
+                .slice(1)
+                .split(/(?=[A-Z])/)
+                .join(" ")
+            );
+          })
+          .join(", ")}
+      </div>
 
       {/* Chat History */}
       <div className="flex-1 overflow-y-auto p-4 bg-white/30 rounded-lg mb-4 border border-emerald-100">
@@ -80,8 +82,8 @@ const CosaintChatUI: React.FC = () => {
               Welcome to Cosaint AI Health Companion
             </h3>
             <p className="text-sm max-w-md">
-              I'm here to provide holistic health insights combining traditional
-              wisdom with modern science. How can I help you today?
+              I&apos;m here to provide holistic health insights combining
+              traditional wisdom with modern science. How can I help you today?
             </p>
           </div>
         ) : (

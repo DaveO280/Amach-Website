@@ -1,45 +1,51 @@
-import * as React from "react"
+import * as React from "react";
 
 const Button = React.forwardRef<
   HTMLButtonElement,
   React.ButtonHTMLAttributes<HTMLButtonElement> & {
-    variant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link"
-    size?: "default" | "sm" | "lg" | "icon"
+    variant?:
+      | "default"
+      | "destructive"
+      | "outline"
+      | "secondary"
+      | "ghost"
+      | "link";
+    size?: "default" | "sm" | "lg" | "icon";
   }
 >(({ className, variant = "default", size = "default", ...props }, ref) => {
-  const getVariantClasses = () => {
+  const getVariantClasses = (): string => {
     switch (variant) {
       case "default":
-        return "bg-primary text-primary-foreground hover:bg-primary/90"
+        return "bg-primary text-primary-foreground hover:bg-primary/90";
       case "destructive":
-        return "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+        return "bg-destructive text-destructive-foreground hover:bg-destructive/90";
       case "outline":
-        return "border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+        return "border border-input bg-background hover:bg-accent hover:text-accent-foreground";
       case "secondary":
-        return "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+        return "bg-secondary text-secondary-foreground hover:bg-secondary/80";
       case "ghost":
-        return "hover:bg-accent hover:text-accent-foreground"
+        return "hover:bg-accent hover:text-accent-foreground";
       case "link":
-        return "text-primary underline-offset-4 hover:underline"
+        return "text-primary underline-offset-4 hover:underline";
       default:
-        return "bg-primary text-primary-foreground hover:bg-primary/90"
+        return "bg-primary text-primary-foreground hover:bg-primary/90";
     }
-  }
+  };
 
-  const getSizeClasses = () => {
+  const getSizeClasses = (): string => {
     switch (size) {
       case "default":
-        return "h-10 px-4 py-2"
+        return "h-10 px-4 py-2";
       case "sm":
-        return "h-9 rounded-md px-3"
+        return "h-9 rounded-md px-3";
       case "lg":
-        return "h-11 rounded-md px-8"
+        return "h-11 rounded-md px-8";
       case "icon":
-        return "h-10 w-10"
+        return "h-10 w-10";
       default:
-        return "h-10 px-4 py-2"
+        return "h-10 px-4 py-2";
     }
-  }
+  };
 
   return (
     <button
@@ -47,8 +53,8 @@ const Button = React.forwardRef<
       ref={ref}
       {...props}
     />
-  )
-})
-Button.displayName = "Button"
+  );
+});
+Button.displayName = "Button";
 
-export { Button } 
+export { Button };

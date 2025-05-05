@@ -90,12 +90,9 @@ export const generateAndDownloadCSV = async (
 /**
  * Exports all health data to a single ZIP file containing multiple CSVs
  *
- * @param metricData - Map of metric IDs to health data arrays
  * @returns Promise that resolves when the download is complete
  */
-export const exportAllDataToZip = async (
-  metricData: Record<string, HealthDataPoint[]>,
-): Promise<void> => {
+export const exportAllDataToZip = async (): Promise<void> => {
   // This is a placeholder for future implementation
   // Would require a ZIP library like JSZip
   console.log("ZIP export not yet implemented");

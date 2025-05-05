@@ -1,14 +1,14 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
-    "lib": ["dom", "dom.iterable", "esnext", "es2015", "es2016", "es2017"],
+    "target": "es2015",
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "module": "esnext",
+    "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
@@ -21,23 +21,33 @@
     "paths": {
       "@/*": ["./src/*"],
       "@health/*": ["./my-health-app/src/*"]
-    }
+    },
+    "typeRoots": ["./node_modules/@types"],
+    "types": [
+      "node",
+      "jest",
+      "react",
+      "react-dom",
+      "next",
+      "node-fetch",
+      "offscreencanvas",
+      "prop-types",
+      "uuid",
+      "d3-array",
+      "d3-color",
+      "d3-ease",
+      "d3-interpolate",
+      "d3-path",
+      "d3-scale",
+      "d3-shape",
+      "d3-time",
+      "d3-timer",
+      "seedrandom"
+    ],
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "my-health-app/src/**/*.ts",
-    "my-health-app/src/**/*.tsx",
-    "next-env.d.ts",
-    ".next/types/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    ".next",
-    "build",
-    "dist",
-    "out",
-    "**/*.js",
-    "**/node_modules/*"
-  ]
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
 }

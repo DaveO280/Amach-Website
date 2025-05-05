@@ -3,7 +3,12 @@
   "plugins": ["@typescript-eslint"],
   "parser": "@typescript-eslint/parser",
   "rules": {
-    "@next/next/no-img-element": "warn",
-    "react/no-unescaped-entities": "off"
+    "@next/next/no-img-element": "error",
+    "react/no-unescaped-entities": "error",
+    "@typescript-eslint/no-explicit-any": "error",
+    "@typescript-eslint/explicit-function-return-type": "error",
+    "@typescript-eslint/no-unused-vars": "error",
+    "react/jsx-no-useless-fragment": "error",
+    "react/prop-types": "off"
   }
 }

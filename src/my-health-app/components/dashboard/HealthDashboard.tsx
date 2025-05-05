@@ -25,21 +25,12 @@ import HeartRateChart from "./charts/HeartRateChart";
 import SleepAnalysisChart from "./charts/SleepAnalysisChart";
 import StepCountChart from "./charts/StepCountChart";
 
-export const HealthDashboard = () => {
-  const { metricData: healthData, hasData, processingState } = useHealthData();
+export const HealthDashboard: () => JSX.Element = () => {
+  const { metricData: healthData, hasData } = useHealthData();
   const { timeFrame, selectedOptionalMetrics } = useSelection();
   const [activeTab, setActiveTab] = useState("heart");
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
-
-  // Add diagnostic logging for when health data changes
-  useEffect(() => {
-    console.log("[HealthDashboard] Health data changed:", {
-      hasData: Boolean(Object.keys(healthData).length > 0),
-      metricCount: Object.keys(healthData).length,
-      metricIDs: Object.keys(healthData),
-    });
-  }, [healthData]);
 
   // Set loading state
   useEffect(() => {
@@ -47,7 +38,7 @@ export const HealthDashboard = () => {
       setIsLoading(false);
     }, 1000);
 
-    return () => clearTimeout(timer);
+    return (): void => clearTimeout(timer);
   }, [healthData, timeFrame, selectedOptionalMetrics]);
 
   // Check if we have data to display
@@ -88,34 +79,19 @@ export const HealthDashboard = () => {
     [healthData],
   );
 
-  // Process sleep sessions - with diagnostic logging
+  // Process sleep sessions
   const processedSleepSessions = useMemo(() => {
     if (!sleepAnalysisData || sleepAnalysisData.length === 0) {
-      console.log("[HealthDashboard] No sleep data to process");
       return [];
     }
 
-    console.log("[HealthDashboard] Processing sleep data:", {
-      recordCount: sleepAnalysisData.length,
-      sampleRecord: sleepAnalysisData[0],
-    });
-
     const processedSessions = processSleepData(sleepAnalysisData);
-
-    console.log("[HealthDashboard] Sleep processing complete:", {
-      sessionCount: processedSessions.length,
-      sampleSession: processedSessions.length > 0 ? processedSessions[0] : null,
-    });
 
     return processedSessions;
   }, [sleepAnalysisData]);
 
   // Process data for each metric into daily summaries
   const processedData = useMemo(() => {
-    console.log(
-      "[HealthDashboard] Starting data processing for daily summaries",
-    );
-
     interface DailyHeartRateData {
       values: number[];
       min: number;
@@ -141,6 +117,13 @@ export const HealthDashboard = () => {
       remSleepMinutes: number;
       lightSleepMinutes: number;
       awakeningsCount: number;
+    }
+
+    interface DailyRespiratoryRateData {
+      values: number[];
+      avg: number;
+      min: number;
+      max: number;
     }
 
     interface ProcessedData {
@@ -171,6 +154,12 @@ export const HealthDashboard = () => {
         lightSleepHours: number;
         awakenings: number;
       }>;
+      respiratoryRate?: Array<{
+        date: string;
+        avg: number;
+        min: number;
+        max: number;
+      }>;
     }
 
     const processed: ProcessedData = {};
@@ -178,11 +167,6 @@ export const HealthDashboard = () => {
 
     // Heart Rate Data
     if (heartRateData.length > 0) {
-      console.log(
-        "[HealthDashboard] Processing heart rate data:",
-        heartRateData.length,
-        "records",
-      );
       const dailyData: Record<string, DailyHeartRateData> = {};
       heartRateData.forEach((point) => {
         try {
@@ -216,20 +200,10 @@ export const HealthDashboard = () => {
         minHeartRate: Math.round(data.min),
         maxHeartRate: Math.round(data.max),
       }));
-      console.log(
-        "[HealthDashboard] Processed",
-        processed.heartRate.length,
-        "days of heart rate data",
-      );
     }
 
     // Step Count Data
     if (stepCountData.length > 0) {
-      console.log(
-        "[HealthDashboard] Processing step count data:",
-        stepCountData.length,
-        "records",
-      );
       const dailyData: Record<string, DailyStepData> = {};
       stepCountData.forEach((point) => {
         try {
@@ -253,20 +227,10 @@ export const HealthDashboard = () => {
         date: day,
         steps: Math.round(data.total),
       }));
-      console.log(
-        "[HealthDashboard] Processed",
-        processed.stepCount.length,
-        "days of step count data",
-      );
     }
 
     // Active Energy Data
     if (activeEnergyBurnedData.length > 0) {
-      console.log(
-        "[HealthDashboard] Processing active energy data:",
-        activeEnergyBurnedData.length,
-        "records",
-      );
       const dailyData: Record<string, DailyEnergyData> = {};
       activeEnergyBurnedData.forEach((point) => {
         try {
@@ -290,20 +254,10 @@ export const HealthDashboard = () => {
         date: day,
         activeCalories: Math.round(data.total),
       }));
-      console.log(
-        "[HealthDashboard] Processed",
-        processed.activeEnergy.length,
-        "days of active energy data",
-      );
     }
 
     // Exercise Time Data
     if (exerciseTimeData.length > 0) {
-      console.log(
-        "[HealthDashboard] Processing exercise time data:",
-        exerciseTimeData.length,
-        "records",
-      );
       const dailyData: Record<string, DailyExerciseData> = {};
       exerciseTimeData.forEach((point) => {
         try {
@@ -328,20 +282,61 @@ export const HealthDashboard = () => {
         date: day,
         exerciseMinutes: Math.round(data.total),
       }));
-      console.log(
-        "[HealthDashboard] Processed",
-        processed.exerciseTime.length,
-        "days of exercise time data",
+    }
+
+    // Respiratory Rate Data
+    const respiratoryRateData =
+      healthData["HKQuantityTypeIdentifierRespiratoryRate"] || [];
+    if (respiratoryRateData.length > 0) {
+      const dailyData: Record<string, DailyRespiratoryRateData> = {};
+      respiratoryRateData.forEach((point) => {
+        try {
+          const date = new Date(point.startDate);
+          const dayKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+          allDates.add(dayKey);
+          const value = parseFloat(point.value);
+
+          // Convert from count/min to breaths/min
+          const breathsPerMinute = value / 60;
+
+          if (!isNaN(breathsPerMinute)) {
+            if (!dailyData[dayKey]) {
+              dailyData[dayKey] = {
+                values: [],
+                avg: 0,
+                min: Number.MAX_SAFE_INTEGER,
+                max: Number.MIN_SAFE_INTEGER,
+              };
+            }
+            dailyData[dayKey].values.push(breathsPerMinute);
+            dailyData[dayKey].min = Math.min(
+              dailyData[dayKey].min,
+              breathsPerMinute,
+            );
+            dailyData[dayKey].max = Math.max(
+              dailyData[dayKey].max,
+              breathsPerMinute,
+            );
+          }
+        } catch (err) {
+          console.error("Error processing respiratory rate data point:", err);
+        }
+      });
+
+      processed.respiratoryRate = Object.entries(dailyData).map(
+        ([day, data]) => ({
+          date: day,
+          avg: Math.round(
+            data.values.reduce((sum, val) => sum + val, 0) / data.values.length,
+          ),
+          min: Math.round(data.min),
+          max: Math.round(data.max),
+        }),
       );
     }
 
     // Sleep Data
     if (processedSleepSessions.length > 0) {
-      console.log(
-        "[HealthDashboard] Processing already-processed sleep sessions:",
-        processedSleepSessions.length,
-        "sessions",
-      );
       const sleepMetricsByDate: Record<string, SleepMetrics> = {};
 
       processedSleepSessions.forEach((session) => {
@@ -394,13 +389,6 @@ export const HealthDashboard = () => {
           awakenings: metrics.awakeningsCount,
         }),
       );
-      console.log(
-        "[HealthDashboard] Processed",
-        processed.sleep.length,
-        "days of sleep data",
-      );
-    } else {
-      console.log("[HealthDashboard] No processed sleep sessions available");
     }
 
     // Combine all metrics into a single dataset
@@ -446,24 +434,6 @@ export const HealthDashboard = () => {
       })
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    console.log("[HealthDashboard] Final combined data created:", {
-      totalDays: combinedData.length,
-      metrics: {
-        heartRate: Boolean(processed.heartRate?.length),
-        stepCount: Boolean(processed.stepCount?.length),
-        activeEnergy: Boolean(processed.activeEnergy?.length),
-        exerciseTime: Boolean(processed.exerciseTime?.length),
-        sleep: Boolean(processed.sleep?.length),
-      },
-      dateRange:
-        combinedData.length > 0
-          ? {
-              start: combinedData[0].date,
-              end: combinedData[combinedData.length - 1].date,
-            }
-          : null,
-    });
-
     return {
       combined: combinedData,
       metrics: {
@@ -479,23 +449,17 @@ export const HealthDashboard = () => {
     stepCountData,
     activeEnergyBurnedData,
     exerciseTimeData,
-    processedSleepSessions, // This dependency ensures sleep processing is complete before using it
+    processedSleepSessions,
+    healthData,
   ]);
 
-  const handleDownloadData = async () => {
+  const handleDownloadData = async (): Promise<void> => {
     setIsDownloading(true);
     try {
       const data = processedData.combined;
       if (data.length === 0) {
-        console.log("[HealthDashboard] No data to download");
         return;
       }
-
-      console.log(
-        "[HealthDashboard] Starting download of",
-        data.length,
-        "days of data",
-      );
 
       // Add headers with descriptions
       const headerDescriptions = [
@@ -562,8 +526,6 @@ export const HealthDashboard = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      console.log("[HealthDashboard] Download completed successfully");
-
       // Also save a reference to the data in window for debugging/troubleshooting
       // This allows us to inspect the data in the console and can help with AI integration
       window.__healthDataSummary = {
@@ -571,9 +533,6 @@ export const HealthDashboard = () => {
         timeFrame,
         data: processedData,
       };
-      console.log(
-        "[HealthDashboard] Health data summary saved to window.__healthDataSummary for troubleshooting",
-      );
     } catch (error) {
       console.error("[HealthDashboard] Error downloading data:", error);
     } finally {
@@ -611,7 +570,6 @@ export const HealthDashboard = () => {
   }
 
   if (!dataAvailable) {
-    console.log("[HealthDashboard] No data available to display");
     // No data display...
     return (
       <div className="min-h-screen bg-[linear-gradient(to_bottom_right,var(--warm-bg)_0%,white_50%,var(--primary-light)_100%)]">
@@ -625,7 +583,7 @@ export const HealthDashboard = () => {
                 Health Dashboard
               </CardTitle>
               <CardDescription className="text-emerald-800 italic">
-                "Driven by Data, Guided by Nature"
+                &quot;Driven by Data, Guided by Nature&quot;
               </CardDescription>
             </CardHeader>
             <CardContent className="py-6 bg-white/10 backdrop-blur-sm">
@@ -635,7 +593,7 @@ export const HealthDashboard = () => {
                   <li>Go to the Data Selector page</li>
                   <li>Upload your Apple Health export.xml file</li>
                   <li>Select the metrics you want to analyze</li>
-                  <li>Click "Process Data"</li>
+                  <li>Click &quot;Process Data&quot;</li>
                 </ol>
               </Alert>
             </CardContent>
@@ -659,7 +617,8 @@ export const HealthDashboard = () => {
                 Health Dashboard
               </CardTitle>
               <CardDescription className="text-emerald-800 italic">
-                "Driven by Data, Guided by Nature" — {timeFrame} Health Overview
+                &quot;Driven by Data, Guided by Nature&quot; — {timeFrame}{" "}
+                Health Overview
               </CardDescription>
             </div>
             <div className="flex items-center space-x-3">
@@ -906,7 +865,7 @@ export const HealthDashboard = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
-                <MetricSummary metricData={healthData as any} />
+                <MetricSummary metricData={healthData} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -924,7 +883,7 @@ declare global {
     __healthDataSummary?: {
       generatedAt: string;
       timeFrame: string;
-      data: any;
+      data: Record<string, unknown> | unknown[] | undefined;
     };
   }
 }

@@ -12,7 +12,6 @@ export const isWithinTimeFrame = (
   timeFrame: TimeFrame,
 ): boolean => {
   const date = new Date(dateStr);
-  const now = new Date();
   const cutoff = getTimeFrameCutoffDate(timeFrame);
   return date >= cutoff;
 };

@@ -1,11 +1,11 @@
 "use client";
 
-import React from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Shield, Brain, Coins } from "lucide-react";
+import { ArrowLeft, Brain, Coins, Shield } from "lucide-react";
 import { useRouter } from "next/navigation";
+import React from "react";
 
-const LearnMore = () => {
+const LearnMore: React.FC = () => {
   const router = useRouter();
 
   return (

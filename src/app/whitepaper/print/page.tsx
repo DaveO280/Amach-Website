@@ -5,9 +5,9 @@ import { ArrowLeft, Printer } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { whitepaperContent } from "../content";
 
-export default function PrintWhitepaper() {
+export default function PrintWhitepaper(): JSX.Element {
   const router = useRouter();
-  const handlePrint = () => {
+  const handlePrint = (): void => {
     window.print();
   };
 

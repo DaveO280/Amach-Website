@@ -77,7 +77,7 @@ export const getMetricName = (metricId: string): string => {
 };
 
 // Helper function to get all metrics organized by category
-export const getMetricsByCategory = () => {
+export const getMetricsByCategory = (): Record<string, Metric[]> => {
   const allMetrics = [...coreMetrics, ...optionalMetrics];
   return {
     vitals: allMetrics.filter((m) => m.category === "vitals"),

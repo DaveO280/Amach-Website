@@ -48,7 +48,11 @@ const SelectionContext = createContext<SelectionContextType | undefined>(
   undefined,
 );
 
-export function SelectionProvider({ children }: { children: React.ReactNode }) {
+export function SelectionProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element {
   // Fix timeFrame state to match the type definition
   // Change "3M" to "3mo" to match the TimeFrame type
   const [timeFrame, setTimeFrame] = useState<TimeFrame>("3mo");
@@ -78,12 +82,12 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     });
 
     window.__selectionProviderMounted = true;
-    return () => {
+    return (): void => {
       window.__selectionProviderMounted = false;
     };
   }, [timeFrame, selectedMetrics, uploadedFile]);
 
-  const toggleMetric = useCallback((metricId: string) => {
+  const toggleMetric = useCallback((metricId: string): void => {
     setSelectedMetrics((prev) =>
       prev.includes(metricId)
         ? prev.filter((id) => id !== metricId)
@@ -91,22 +95,22 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  const getAllSelectedMetrics = useCallback(() => {
+  const getAllSelectedMetrics = useCallback((): string[] => {
     return selectedMetrics;
   }, [selectedMetrics]);
 
   // Clear all selections
-  const clearSelections = useCallback(() => {
+  const clearSelections = useCallback((): void => {
     setSelectedMetrics([]);
   }, []);
 
   // Select only one metric (useful for testing)
-  const selectOnlyMetric = useCallback((metricId: string) => {
+  const selectOnlyMetric = useCallback((metricId: string): void => {
     setSelectedMetrics([metricId]);
   }, []);
 
   // Select all core metrics
-  const selectAllCoreMetrics = useCallback(() => {
+  const selectAllCoreMetrics = useCallback((): void => {
     setSelectedMetrics(coreMetrics.map((m) => m.id));
   }, []);
 
@@ -116,11 +120,13 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
   );
 
   // Legacy function renamed for backward compatibility
-  const toggleOptionalMetric = toggleMetric;
+  const toggleOptionalMetric = (metricId: string): void => {
+    toggleMetric(metricId);
+  };
 
   // Check if a metric is selected
   const isMetricSelected = useCallback(
-    (metricId: string) => {
+    (metricId: string): boolean => {
       return selectedMetrics.includes(metricId);
     },
     [selectedMetrics],
@@ -150,10 +156,10 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useSelection() {
+export const useSelection: () => SelectionContextType = () => {
   const context = useContext(SelectionContext);
   if (context === undefined) {
     throw new Error("useSelection must be used within a SelectionProvider");
   }
   return context;
-}
+};

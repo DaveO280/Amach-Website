@@ -5,9 +5,9 @@ import { getMetricById } from "../../core/metricDefinitions";
 import { HealthDataByType, HealthDataPoint } from "../../types/healthData";
 import { Card, CardContent } from "../ui/card";
 
-// Update the interface to accept Record<string, any[]> as well
+// Update the interface to accept Record<string, unknown[]> as well
 interface MetricSummaryProps {
-  metricData: HealthDataByType | Record<string, any[]>;
+  metricData: HealthDataByType | Record<string, unknown[]>;
 }
 
 export const MetricSummary: React.FC<MetricSummaryProps> = ({ metricData }) => {
@@ -16,7 +16,7 @@ export const MetricSummary: React.FC<MetricSummaryProps> = ({ metricData }) => {
 
     try {
       return Object.entries(metricData)
-        .filter(([_, data]) => data && Array.isArray(data) && data.length > 0)
+        .filter(([, data]) => data && Array.isArray(data) && data.length > 0)
         .map(([metricId, data]) => {
           try {
             // Properly type the data as HealthDataPoint[]
@@ -34,7 +34,14 @@ export const MetricSummary: React.FC<MetricSummaryProps> = ({ metricData }) => {
             try {
               const numericValues = typedData
                 .filter((d) => d && d.value && typeof d.value === "string")
-                .map((d) => parseFloat(d.value))
+                .map((d) => {
+                  const value = parseFloat(d.value);
+                  // Convert respiratory rate from count/min to breaths/min
+                  if (metricId === "HKQuantityTypeIdentifierRespiratoryRate") {
+                    return value / 60; // Convert from count/min to breaths/min
+                  }
+                  return value;
+                })
                 .filter((v) => !isNaN(v));
 
               if (numericValues.length > 0) {
@@ -100,7 +107,7 @@ export const MetricSummary: React.FC<MetricSummaryProps> = ({ metricData }) => {
             return {
               id: metricId,
               name: metricId,
-              count: (data as any[]).length,
+              count: (data as unknown[]).length,
               avgValue: null,
               unit: "",
               firstDate: new Date(),

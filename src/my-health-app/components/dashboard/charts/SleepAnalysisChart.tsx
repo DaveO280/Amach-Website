@@ -1,414 +1,330 @@
 "use client";
 
-import React, { useMemo, useEffect } from 'react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, ResponsiveContainer, Legend, Cell 
-} from 'recharts';
-import { HealthData } from '../../../types/healthData';
-import { 
+import React, { useState } from "react";
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { HealthDataPoint } from "../../../types/healthData";
+import {
+  DailyProcessedSleepData,
   processSleepData,
-  SleepSession, 
-  SleepStage, 
-  formatSleepDuration 
-} from '../../../utils/sleepDataProcessor';
+} from "../../../utils/sleepDataProcessor";
 
 interface SleepAnalysisChartProps {
-  data: HealthData[];
+  data: HealthDataPoint[];
   height?: number;
 }
 
-const SleepAnalysisChart: React.FC<SleepAnalysisChartProps> = ({ 
-  data, 
-  height = 300 
-}) => {
-  // Process data using our enhanced processor with extra validation
-  const processedSessions = useMemo(() => {
-    // Add some debugging logs
-    console.log(`SleepAnalysisChart processing ${data.length} sleep data records`);
-    
-    const sessions = processSleepData(data);
-    
-    console.log(`Processed into ${sessions.length} sleep sessions`);
-    if (sessions.length > 0) {
-      console.log('Sample session:', sessions[0]);
-    }
-    
-    return sessions;
-  }, [data]);
+export const SleepAnalysisChart = ({
+  data,
+  height = 300,
+}: SleepAnalysisChartProps): React.ReactElement => {
+  const processedData = processSleepData(data);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  // Log any potential data issues
-  useEffect(() => {
-    if (processedSessions.length === 0) {
-      console.warn("No sleep sessions were processed from the data");
-      return;
-    }
+  // Helper function to format minutes as hours
+  const formatMinutesToHours = (minutes: number): string => {
+    const hours = Math.floor(minutes / 60);
+    const mins = Math.round(minutes % 60);
+    return `${hours}h ${mins}m`;
+  };
 
-    // Check for sessions with unusual values
-    const longSessions = processedSessions.filter(s => s.totalDuration > 720); // > 12 hours
-    if (longSessions.length > 0) {
-      console.warn(`Found ${longSessions.length} unusually long sleep sessions (>12 hours)`);
-    }
+  // Calculate average statistics
+  const calcAverageStats = (
+    processedData: DailyProcessedSleepData[],
+  ): {
+    avgTimeInBed: number;
+    avgSleepTime: number;
+    avgStages: {
+      core: number;
+      deep: number;
+      rem: number;
+      awake: number;
+    };
+    stagePercentages: {
+      core: number;
+      deep: number;
+      rem: number;
+      awake: number;
+    };
+  } | null => {
+    if (processedData.length === 0) return null;
 
-    const lowEfficiency = processedSessions.filter(s => s.metrics.sleepEfficiency < 30);
-    if (lowEfficiency.length > 0) {
-      console.warn(`Found ${lowEfficiency.length} sessions with very low efficiency (<30%)`);
-    }
-  }, [processedSessions]);
+    let totalTimeInBed = 0;
+    let totalSleepTime = 0;
+    let totalCore = 0;
+    let totalDeep = 0;
+    let totalRem = 0;
+    let totalAwake = 0;
 
-  // Convert the processed sessions to the format expected by recharts
-  const chartData = useMemo(() => {
-    // Group sessions by date
-    const dailyData: Record<string, {
-      inBedHours: number;
-      asleepHours: number;
-      deepSleepHours: number;
-      remSleepHours: number;
-      lightSleepHours: number;
-      sleepEfficiency: number;
-    }> = {};
-
-    processedSessions.forEach(session => {
-      const date = session.date;
-      
-      // Initialize the day's data if it doesn't exist
-      if (!dailyData[date]) {
-        dailyData[date] = {
-          inBedHours: 0,
-          asleepHours: 0,
-          deepSleepHours: 0,
-          remSleepHours: 0,
-          lightSleepHours: 0,
-          sleepEfficiency: 0
-        };
-      }
-      
-      // Ensure we have positive numbers before adding to prevent errors
-      const totalDuration = Math.max(0, session.totalDuration);
-      const sleepDuration = Math.max(0, session.sleepDuration);
-      const deepSleep = Math.max(0, session.stageData.deep);
-      const remSleep = Math.max(0, session.stageData.rem);
-      const lightSleep = Math.max(0, session.stageData.core);
-      
-      // Convert all durations from minutes to hours
-      dailyData[date].inBedHours += totalDuration / 60;
-      dailyData[date].asleepHours += sleepDuration / 60;
-      dailyData[date].deepSleepHours += deepSleep / 60;
-      dailyData[date].remSleepHours += remSleep / 60;
-      dailyData[date].lightSleepHours += lightSleep / 60;
-      
-      // Use the weighted average for efficiency if multiple sessions per day
-      const currentTotal = dailyData[date].asleepHours * 60 - sleepDuration;
-      let newAvgEfficiency = session.metrics.sleepEfficiency;
-      
-      if (currentTotal > 0) {
-        newAvgEfficiency = ((dailyData[date].sleepEfficiency * currentTotal) + 
-          (session.metrics.sleepEfficiency * sleepDuration)) / 
-          (currentTotal + sleepDuration);
-      }
-      
-      dailyData[date].sleepEfficiency = newAvgEfficiency;
+    processedData.forEach((day) => {
+      totalTimeInBed += day.totalDuration;
+      totalCore += day.stageData.core;
+      totalDeep += day.stageData.deep;
+      totalRem += day.stageData.rem;
+      totalAwake += day.stageData.awake;
     });
 
-    // Add validation to catch anomalies
-    Object.entries(dailyData).forEach(([date, data]) => {
-      // Check for unreasonable values
-      if (data.inBedHours > 24) {
-        console.warn(`Unreasonable inBed time for ${date}: ${data.inBedHours}h, capping at 24h`);
-        data.inBedHours = 24;
-      }
-      if (data.asleepHours > 24) {
-        console.warn(`Unreasonable sleep time for ${date}: ${data.asleepHours}h, capping at 24h`);
-        data.asleepHours = 24;
-      }
-      // Ensure sleep time doesn't exceed in-bed time
-      if (data.asleepHours > data.inBedHours) {
-        console.warn(`Sleep time exceeds in-bed time for ${date}, adjusting`);
-        data.asleepHours = data.inBedHours;
-      }
-      
-      // Validate sleep stage totals
-      const totalStageHours = data.deepSleepHours + data.remSleepHours + data.lightSleepHours;
-      if (totalStageHours > data.asleepHours * 1.1) { // Allow 10% margin for rounding errors
-        console.warn(`Sleep stages (${totalStageHours}h) exceed total sleep time (${data.asleepHours}h) for ${date}, normalizing`);
-        // Normalize stages proportionally
-        const factor = data.asleepHours / totalStageHours;
-        data.deepSleepHours *= factor;
-        data.remSleepHours *= factor;
-        data.lightSleepHours *= factor;
-      }
-      
-      // Ensure efficiency is within valid range
-      if (data.sleepEfficiency > 100) {
-        console.warn(`Sleep efficiency exceeds 100% for ${date}, capping`);
-        data.sleepEfficiency = 100;
-      } else if (data.sleepEfficiency < 0) {
-        console.warn(`Negative sleep efficiency for ${date}, setting to 0`);
-        data.sleepEfficiency = 0;
-      }
-    });
+    totalSleepTime = totalCore + totalDeep + totalRem;
 
-    // Format for chart
-    const formattedData = Object.entries(dailyData)
-      .map(([day, data]) => {
-        return {
-          day,
-          date: new Date(day),
-          inBedHours: Math.round(data.inBedHours * 10) / 10,
-          asleepHours: Math.round(data.asleepHours * 10) / 10,
-          deepSleepHours: Math.round(data.deepSleepHours * 10) / 10,
-          remSleepHours: Math.round(data.remSleepHours * 10) / 10,
-          lightSleepHours: Math.round(data.lightSleepHours * 10) / 10,
-          sleepEfficiency: Math.round(data.sleepEfficiency)
-        };
-      })
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
-  
-    console.log(`Generated ${formattedData.length} data points for sleep chart`);
-    
-    return formattedData;
-  }, [processedSessions]);
-
-  // Calculate overall stats
-  const stats = useMemo(() => {
-    if (chartData.length === 0) {
-      return { 
-        avgInBed: 0, 
-        avgAsleep: 0, 
-        avgEfficiency: 0,
-        avgDeep: 0,
-        avgRem: 0,
-        avgLight: 0
-      };
-    }
-    
-    const totalInBed = chartData.reduce((sum, day) => sum + day.inBedHours, 0);
-    const totalAsleep = chartData.reduce((sum, day) => sum + day.asleepHours, 0);
-    const totalDeep = chartData.reduce((sum, day) => sum + day.deepSleepHours, 0);
-    const totalRem = chartData.reduce((sum, day) => sum + day.remSleepHours, 0);
-    const totalLight = chartData.reduce((sum, day) => sum + day.lightSleepHours, 0);
-    const totalEfficiency = chartData.reduce((sum, day) => sum + day.sleepEfficiency, 0);
-    
     return {
-      avgInBed: Math.round((totalInBed / chartData.length) * 10) / 10,
-      avgAsleep: Math.round((totalAsleep / chartData.length) * 10) / 10,
-      avgDeep: Math.round((totalDeep / chartData.length) * 10) / 10,
-      avgRem: Math.round((totalRem / chartData.length) * 10) / 10,
-      avgLight: Math.round((totalLight / chartData.length) * 10) / 10,
-      avgEfficiency: Math.round(totalEfficiency / chartData.length)
+      avgTimeInBed: totalTimeInBed / processedData.length,
+      avgSleepTime: totalSleepTime / processedData.length,
+      avgStages: {
+        core: totalCore / processedData.length,
+        deep: totalDeep / processedData.length,
+        rem: totalRem / processedData.length,
+        awake: totalAwake / processedData.length,
+      },
+      stagePercentages: {
+        core: (totalCore / totalSleepTime) * 100,
+        deep: (totalDeep / totalSleepTime) * 100,
+        rem: (totalRem / totalSleepTime) * 100,
+        awake: (totalAwake / totalSleepTime) * 100,
+      },
     };
-  }, [chartData]);
+  };
 
-  // Sleep stage distribution
-  const sleepStages = useMemo(() => {
-    if (stats.avgAsleep === 0) return [];
-    
-    const deepPercent = Math.round((stats.avgDeep / stats.avgAsleep) * 100);
-    const remPercent = Math.round((stats.avgRem / stats.avgAsleep) * 100);
-    const lightPercent = Math.round((stats.avgLight / stats.avgAsleep) * 100);
-    
-    return [
-      { name: 'Deep Sleep', value: deepPercent, color: '#2e7d32' },
-      { name: 'REM Sleep', value: remPercent, color: '#90caf9' },
-      { name: 'Light Sleep', value: lightPercent, color: '#a5d6a7' }
-    ].filter(stage => stage.value > 0);
-  }, [stats]);
+  const averageStats = calcAverageStats(processedData);
 
-  // Summary of processed data
-  const summary = useMemo(() => {
-    if (processedSessions.length === 0) {
-      return { totalSessions: 0, overnightSessions: 0 };
-    }
-    
-    const overnightSessions = processedSessions.filter(s => s.isOvernight).length;
-    
-    return {
-      totalSessions: processedSessions.length,
-      overnightSessions,
-      daysWithData: chartData.length
-    };
-  }, [processedSessions, chartData]);
+  // Prepare data for chart
+  const chartData = processedData.map((day) => ({
+    date: day.date,
+    timeInBed: day.totalDuration,
+    totalSleep: day.stageData.core + day.stageData.deep + day.stageData.rem,
+    stages: {
+      core: day.stageData.core,
+      deep: day.stageData.deep,
+      rem: day.stageData.rem,
+      awake: day.stageData.awake,
+    },
+  }));
 
-  if (chartData.length === 0) {
-    return (
-      <div className="p-4 text-center">
-        <p className="text-gray-500">No sleep data available for the selected time period.</p>
-      </div>
-    );
-  }
+  // Get details for selected date
+  const selectedDayData = selectedDate
+    ? processedData.find((day) => day.date === selectedDate)
+    : null;
+
+  // Calculate sleep efficiency (total sleep / time in bed)
+  const calcSleepEfficiency = (day: (typeof chartData)[0]): number => {
+    return day.timeInBed > 0 ? (day.totalSleep / day.timeInBed) * 100 : 0;
+  };
 
   return (
-    <div className="w-full">
-      <div className="grid grid-cols-3 gap-4 mb-4">
-        <div className="p-3 bg-blue-50 rounded-lg">
-          <div className="text-sm text-gray-500">Avg. Sleep Duration</div>
-          <div className="text-xl font-bold">{stats.avgAsleep} hours</div>
-        </div>
-        <div className="p-3 bg-green-50 rounded-lg">
-          <div className="text-sm text-gray-500">Avg. Time in Bed</div>
-          <div className="text-xl font-bold">{stats.avgInBed} hours</div>
-        </div>
-        <div className="p-3 bg-purple-50 rounded-lg">
-          <div className="text-sm text-gray-500">Avg. Sleep Efficiency</div>
-          <div className="text-xl font-bold">{stats.avgEfficiency}%</div>
-        </div>
-      </div>
-      
-      <div style={{ width: '100%', height }}>
-        <ResponsiveContainer>
-          <BarChart
-            data={chartData}
-            margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis 
-              dataKey="day" 
-              type="category"
-              tickFormatter={(value) => {
-                const date = new Date(value);
-                return `${date.getMonth() + 1}/${date.getDate()}`;
-              }}
-            />
-            <YAxis 
-              label={{ value: 'Hours', angle: -90, position: 'insideLeft' }}
-            />
-            <Tooltip 
-              formatter={(value: number, name: string) => {
-                if (name === 'sleepEfficiency') return [`${value}%`, 'Sleep Efficiency'];
-                return [`${value} hours`, name.replace('Hours', '')];
-              }}
-              labelFormatter={(label) => {
-                const date = new Date(label);
-                return date.toLocaleDateString();
-              }}
-            />
-            <Legend />
-            <Bar 
-              dataKey="inBedHours" 
-              fill="#94a3b8" 
-              name="Time in Bed" 
-              stackId="a"
-            />
-            <Bar 
-              dataKey="asleepHours" 
-              fill="#3b82f6" 
-              name="Sleep Duration" 
-              stackId="b"
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-      
-      {sleepStages.length > 0 && (
-        <div className="mt-6">
-          <h4 className="text-lg font-medium mb-2">Sleep Stage Distribution</h4>
-          <div className="grid grid-cols-3 gap-4">
-            {sleepStages.map(stage => (
-              <div key={stage.name} className="p-3 rounded-lg" style={{ backgroundColor: `${stage.color}20` }}>
-                <div className="text-sm text-gray-500">{stage.name}</div>
-                <div className="text-xl font-bold">{stage.value}%</div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                  <div 
-                    className="h-2.5 rounded-full" 
-                    style={{ 
-                      width: `${stage.value}%`,
-                      backgroundColor: stage.color
-                    }}
-                  ></div>
+    <div className="space-y-4">
+      <ResponsiveContainer width="100%" height={height}>
+        <ComposedChart
+          data={chartData}
+          margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+          onClick={(data) => {
+            if (data && data.activePayload && data.activePayload[0]) {
+              const clickedDate = data.activePayload[0].payload.date;
+              setSelectedDate(
+                clickedDate === selectedDate ? null : clickedDate,
+              );
+            }
+          }}
+        >
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis
+            dataKey="date"
+            tickFormatter={(date) => {
+              const d = new Date(date);
+              return `${d.getMonth() + 1}/${d.getDate()}`;
+            }}
+          />
+          <YAxis
+            label={{
+              value: "Minutes",
+              angle: -90,
+              position: "insideLeft",
+            }}
+          />
+          <Tooltip
+            content={({
+              active,
+              payload,
+              label,
+            }: {
+              active?: boolean;
+              payload?: unknown[];
+              label?: string;
+            }) => {
+              if (active && Array.isArray(payload) && payload.length) {
+                const dayData = chartData.find((d) => d.date === label);
+                if (!dayData) return null;
+                return (
+                  <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-lg">
+                    <p className="font-semibold mb-2">
+                      {new Date(label as string).toLocaleDateString()}
+                    </p>
+                    <p>
+                      Time in Bed: {formatMinutesToHours(dayData.timeInBed)}
+                    </p>
+                    <p>
+                      Total Sleep: {formatMinutesToHours(dayData.totalSleep)}
+                    </p>
+                    <p>
+                      Core Sleep: {formatMinutesToHours(dayData.stages.core)}
+                    </p>
+                    <p>
+                      Deep Sleep: {formatMinutesToHours(dayData.stages.deep)}
+                    </p>
+                    <p>REM Sleep: {formatMinutesToHours(dayData.stages.rem)}</p>
+                    <p>Awake: {formatMinutesToHours(dayData.stages.awake)}</p>
+                    <p className="mt-2">
+                      Sleep Efficiency:{" "}
+                      {calcSleepEfficiency(dayData).toFixed(1)}%
+                    </p>
+                  </div>
+                );
+              }
+              return null;
+            }}
+          />
+          <Legend />
+          {/* Stacked bars for sleep stages */}
+          <Bar
+            dataKey="stages.core"
+            name="Core Sleep"
+            stackId="sleep"
+            fill="#4CAF50"
+          />
+          <Bar
+            dataKey="stages.deep"
+            name="Deep Sleep"
+            stackId="sleep"
+            fill="#2196F3"
+          />
+          <Bar
+            dataKey="stages.rem"
+            name="REM Sleep"
+            stackId="sleep"
+            fill="#9C27B0"
+          />
+          <Bar
+            dataKey="stages.awake"
+            name="Awake"
+            stackId="sleep"
+            fill="#FF9800"
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+
+      {/* Sleep session details for selected date */}
+      {selectedDayData && (
+        <div className="bg-gray-50 p-4 rounded-lg mt-4">
+          <h3 className="text-lg font-semibold mb-2">
+            Sleep Details for{" "}
+            {new Date(selectedDayData.date).toLocaleDateString()}
+          </h3>
+
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <p className="font-medium">
+                Time in Bed:{" "}
+                {formatMinutesToHours(selectedDayData.totalDuration)}
+              </p>
+              <p className="font-medium">
+                Total Sleep:{" "}
+                {formatMinutesToHours(
+                  selectedDayData.stageData.core +
+                    selectedDayData.stageData.deep +
+                    selectedDayData.stageData.rem,
+                )}
+              </p>
+            </div>
+            <div>
+              <p className="font-medium">
+                Sleep Efficiency:{" "}
+                {(
+                  ((selectedDayData.stageData.core +
+                    selectedDayData.stageData.deep +
+                    selectedDayData.stageData.rem) /
+                    selectedDayData.totalDuration) *
+                  100
+                ).toFixed(1)}
+                %
+              </p>
+              <p className="font-medium">
+                Sessions: {selectedDayData.sessions.length}
+              </p>
+            </div>
+          </div>
+
+          {selectedDayData.sessions.length > 1 && (
+            <div className="mt-4">
+              <h4 className="font-medium mb-2">Individual Sleep Sessions:</h4>
+              {selectedDayData.sessions.map((session, i) => (
+                <div key={i} className="bg-white p-3 rounded border mb-2">
+                  <p className="text-sm">
+                    {new Date(session.startTime).toLocaleTimeString()} to{" "}
+                    {new Date(session.endTime).toLocaleTimeString()}
+                  </p>
+                  <p className="text-sm">
+                    Duration: {formatMinutesToHours(session.timeInBed)}
+                  </p>
+                  {session.timeToFallAsleep > 0 && (
+                    <p className="text-sm">
+                      Time to fall asleep:{" "}
+                      {formatMinutesToHours(session.timeToFallAsleep)}
+                    </p>
+                  )}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sleep Stage Percentages */}
+      {averageStats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+          <div className="bg-emerald-50 p-4 rounded-lg">
+            <h3 className="text-emerald-800 font-semibold">Core Sleep</h3>
+            <p className="text-2xl font-bold text-emerald-600">
+              {averageStats.stagePercentages.core.toFixed(1)}%
+            </p>
+            <p className="text-sm text-emerald-700">
+              Average: {formatMinutesToHours(averageStats.avgStages.core)}
+            </p>
+          </div>
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h3 className="text-blue-800 font-semibold">Deep Sleep</h3>
+            <p className="text-2xl font-bold text-blue-600">
+              {averageStats.stagePercentages.deep.toFixed(1)}%
+            </p>
+            <p className="text-sm text-blue-700">
+              Average: {formatMinutesToHours(averageStats.avgStages.deep)}
+            </p>
+          </div>
+          <div className="bg-purple-50 p-4 rounded-lg">
+            <h3 className="text-purple-800 font-semibold">REM Sleep</h3>
+            <p className="text-2xl font-bold text-purple-600">
+              {averageStats.stagePercentages.rem.toFixed(1)}%
+            </p>
+            <p className="text-sm text-purple-700">
+              Average: {formatMinutesToHours(averageStats.avgStages.rem)}
+            </p>
+          </div>
+          <div className="bg-amber-50 p-4 rounded-lg">
+            <h3 className="text-amber-800 font-semibold">Awake</h3>
+            <p className="text-2xl font-bold text-amber-600">
+              {averageStats.stagePercentages.awake.toFixed(1)}%
+            </p>
+            <p className="text-sm text-amber-700">
+              Average: {formatMinutesToHours(averageStats.avgStages.awake)}
+            </p>
           </div>
         </div>
       )}
-      
-      <div className="mt-6">
-        <h4 className="text-lg font-medium mb-2">Sleep Efficiency</h4>
-        <div style={{ width: '100%', height: 200 }}>
-          <ResponsiveContainer>
-            <BarChart
-              data={chartData}
-              margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="day" 
-                type="category"
-                tickFormatter={(value) => {
-                  const date = new Date(value);
-                  return `${date.getMonth() + 1}/${date.getDate()}`;
-                }}
-              />
-              <YAxis 
-                domain={[0, 100]}
-                label={{ value: '%', angle: -90, position: 'insideLeft' }}
-              />
-              <Tooltip 
-                formatter={(value: number) => [`${value}%`, 'Sleep Efficiency']}
-                labelFormatter={(label) => {
-                  const date = new Date(label);
-                  return date.toLocaleDateString();
-                }}
-              />
-              <Legend />
-              <Bar dataKey="sleepEfficiency" name="Sleep Efficiency">
-                {chartData.map((entry, index) => (
-                  <Cell 
-                    key={`cell-${index}`} 
-                    fill={entry.sleepEfficiency >= 85 ? '#22c55e' : 
-                          entry.sleepEfficiency >= 70 ? '#eab308' : 
-                          '#ef4444'} 
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-      
-      {/* Sleep Stages Stacked Bar Chart */}
-      <div className="mt-6">
-        <h4 className="text-lg font-medium mb-2">Sleep Stages by Day</h4>
-        <div style={{ width: '100%', height: 250 }}>
-          <ResponsiveContainer>
-            <BarChart
-              data={chartData}
-              margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="day" 
-                type="category"
-                tickFormatter={(value) => {
-                  const date = new Date(value);
-                  return `${date.getMonth() + 1}/${date.getDate()}`;
-                }}
-              />
-              <YAxis 
-                label={{ value: 'Hours', angle: -90, position: 'insideLeft' }}
-              />
-              <Tooltip 
-                formatter={(value: number, name: string) => {
-                  return [`${value} hours`, name.replace('SleepHours', ' Sleep')];
-                }}
-                labelFormatter={(label) => {
-                  const date = new Date(label);
-                  return date.toLocaleDateString();
-                }}
-              />
-              <Legend />
-              <Bar dataKey="deepSleepHours" stackId="a" name="Deep Sleep" fill="#2e7d32" />
-              <Bar dataKey="remSleepHours" stackId="a" name="REM Sleep" fill="#90caf9" />
-              <Bar dataKey="lightSleepHours" stackId="a" name="Light Sleep" fill="#a5d6a7" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-      
-      {/* Data summary */}
-      <div className="text-sm text-gray-500 mt-4">
-        Analysis based on {summary.totalSessions} sleep sessions ({summary.overnightSessions} overnight) across {summary.daysWithData} days.
-      </div>
     </div>
   );
 };

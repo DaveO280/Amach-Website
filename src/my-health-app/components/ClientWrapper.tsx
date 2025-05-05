@@ -11,7 +11,7 @@ export default function ClientWrapper({
   children,
 }: {
   children: React.ReactNode;
-}) {
+}): JSX.Element {
   const pathname = usePathname();
 
   return (

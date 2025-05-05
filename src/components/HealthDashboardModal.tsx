@@ -34,10 +34,7 @@ interface HealthDashboardModalProps {
   onClose: () => void;
 }
 
-const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
-  isOpen,
-  onClose,
-}) => {
+const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
   const [isMobile, setIsMobile] = useState(false);
   const [activeTab, setActiveTab] = useState<"selector" | "dashboard">(
     "selector",
@@ -46,7 +43,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
 
   // Check viewport size to adjust UI accordingly
   useEffect(() => {
-    const handleResize = () => {
+    const handleResize = (): void => {
       setIsMobile(window.innerWidth < 768);
     };
 
@@ -57,11 +54,13 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
     window.addEventListener("resize", handleResize);
 
     // Clean up listener
-    return () => window.removeEventListener("resize", handleResize);
+    return (): void => {
+      window.removeEventListener("resize", handleResize);
+    };
   }, []);
 
   // Force close any dropdowns when tab changes
-  const handleTabChange = (tab: "selector" | "dashboard") => {
+  const handleTabChange = (tab: "selector" | "dashboard"): void => {
     setActiveTab(tab);
 
     // This will close any open Radix UI dropdowns by simulating a click outside
@@ -74,11 +73,11 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
   };
 
   // Prevent clicks on the modal from closing it
-  const handleModalClick = (e: React.MouseEvent) => {
+  const handleModalClick = (e: React.MouseEvent): void => {
     e.stopPropagation();
   };
 
-  if (!isOpen) return null;
+  if (!props.isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-sm flex justify-center items-center p-2">
@@ -103,7 +102,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
               Amach Health
             </h2>
             <button
-              onClick={onClose}
+              onClick={props.onClose}
               className="rounded-full p-2 text-amber-900 hover:text-emerald-600 hover:bg-emerald-50 transition-colors sm:hidden"
               aria-label="Close dashboard"
             >
@@ -138,7 +137,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = ({
               </button>
             </div>
             <button
-              onClick={onClose}
+              onClick={props.onClose}
               className="absolute right-3 top-2 rounded-full p-2 text-amber-900 hover:text-emerald-600 hover:bg-emerald-50 transition-colors hidden sm:block"
               aria-label="Close dashboard"
             >

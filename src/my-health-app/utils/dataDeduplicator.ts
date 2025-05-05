@@ -22,14 +22,6 @@ const CUMULATIVE_METRICS = [
   "HKQuantityTypeIdentifierAppleExerciseTime", // Added this line
 ];
 
-// Define debug metrics
-const DEBUG_METRICS = [
-  "HKQuantityTypeIdentifierStepCount",
-  "HKQuantityTypeIdentifierActiveEnergyBurned",
-  "HKQuantityTypeIdentifierAppleExerciseTime",
-  "HKCategoryTypeIdentifierSleepAnalysis",
-];
-
 /**
  * Extracts just the date part (YYYY-MM-DD) from a date string
  */
@@ -41,7 +33,6 @@ export const extractDatePart = (dateStr: string): string => {
     const day = date.getDate().toString().padStart(2, "0");
     return `${year}-${month}-${day}`;
   } catch (e) {
-    console.warn("Date parsing error:", e);
     const parts = dateStr.split(/[\s-/:T]/);
     if (parts.length >= 3) {
       let year, month, day;
@@ -57,7 +48,6 @@ export const extractDatePart = (dateStr: string): string => {
     if (dateStr.includes("-") && dateStr.length >= 10) {
       return dateStr.substring(0, 10);
     }
-    console.error("Could not parse date:", dateStr);
     return "unknown-date";
   }
 };
@@ -70,7 +60,6 @@ export const extractHour = (dateStr: string): number => {
     const date = new Date(dateStr);
     return date.getHours();
   } catch (e) {
-    console.warn("Error extracting hour from date:", dateStr);
     return 0;
   }
 };
@@ -120,15 +109,7 @@ export const deduplicateCumulativeData = (
   data: HealthDataPoint[],
   metricId: string = "",
 ): HealthDataPoint[] => {
-  const isDebugMetric = DEBUG_METRICS.includes(metricId);
   const shouldSum = isCumulativeMetric(metricId);
-
-  if (isDebugMetric) {
-    console.log(
-      `[DEBUG] deduplicateCumulativeData called with ${data.length} records for ${metricId}` +
-        `${shouldSum ? " (cumulative metric - will sum values)" : ""}`,
-    );
-  }
 
   // Group data by day and hour
   const timeBlocks: Record<
@@ -144,17 +125,11 @@ export const deduplicateCumulativeData = (
     try {
       // Skip records with missing or invalid date or value
       if (!record.startDate) {
-        if (isDebugMetric) {
-          console.log(`[DEBUG] Skipping record with no startDate:`, record);
-        }
         return;
       }
 
       const dateStr = record.startDate;
       if (record.value === undefined || record.value === null) {
-        if (isDebugMetric) {
-          console.log(`[DEBUG] Skipping record with no value:`, record);
-        }
         return;
       }
 
@@ -181,16 +156,14 @@ export const deduplicateCumulativeData = (
       } else {
         timeBlocks[blockKey].phone.push(record);
       }
-    } catch (err) {
-      console.error("Error processing record:", err);
-    }
+    } catch (err) {}
   });
 
   // Select the preferred data source for each time block
   const dedupedRecords: HealthDataPoint[] = [];
 
   // Process each time block
-  Object.entries(timeBlocks).forEach(([blockKey, blockData]) => {
+  Object.entries(timeBlocks).forEach(([, blockData]) => {
     // Decide whether to use watch or phone data
     const sourceData =
       blockData.watch.length > 0 ? blockData.watch : blockData.phone;
@@ -226,22 +199,6 @@ export const deduplicateCumulativeData = (
       }
     }
   });
-
-  if (isDebugMetric) {
-    console.log(
-      `[DEBUG] deduplicateCumulativeData reduced ${data.length} records to ${dedupedRecords.length} deduplicated records`,
-    );
-    if (dedupedRecords.length === 0 && data.length > 0) {
-      console.log(
-        `[DEBUG] WARNING: All records were removed during deduplication!`,
-      );
-      // For debugging purposes, return a small sample of the original data
-      console.log(
-        `[DEBUG] Returning small sample of original data for debugging`,
-      );
-      return data.slice(0, Math.min(10, data.length));
-    }
-  }
 
   return dedupedRecords;
 };
@@ -295,56 +252,17 @@ export function deduplicateData(
 ): HealthDataPoint[] {
   if (!data || data.length === 0) return [];
 
-  const isDebugMetric = DEBUG_METRICS.includes(metricId);
-
-  console.log(`Deduplicating ${data.length} records for ${metricId}...`);
-
   // Special processing for sleep data
   if (isSleepData(metricId)) {
-    console.log("Sleep data detected - applying special processing");
     const sleepSessions = processSleepData(data);
-    console.log(`Found ${sleepSessions.length} valid sleep sessions`);
 
     // TEMPORARY FIX: For debugging, if no sessions found, return raw data
     if (sleepSessions.length === 0 && data.length > 0) {
-      console.log(
-        "[DEBUG] WARNING: No sleep sessions processed but raw data exists!",
-      );
-      console.log("[DEBUG] Sample raw sleep data:", data.slice(0, 3));
-
-      // Enhanced logging to debug the issue
-      try {
-        const sampleRecord = data[0];
-        console.log("[DEBUG] Sleep Record Structure:", {
-          hasValue: "value" in sampleRecord,
-          value: sampleRecord.value,
-          startDate: sampleRecord.startDate,
-          endDate: sampleRecord.endDate,
-          source: sampleRecord.source,
-          device: sampleRecord.device,
-        });
-
-        // Try extracting some key patterns
-        if (typeof sampleRecord.value === "string") {
-          console.log(
-            "[DEBUG] Sleep value pattern:",
-            sampleRecord.value.substring(0, 30),
-          );
-        }
-      } catch (e) {
-        console.error("[DEBUG] Error inspecting sleep data:", e);
-      }
-
       return data;
     }
 
     // Standard behavior - return raw data for CSV export
     return data;
-  }
-
-  // TEMPORARY: For debug metrics, log sample data before deduplication
-  if (isDebugMetric && data.length > 0) {
-    console.log(`[DEBUG] ${metricId} sample before deduplication:`, data[0]);
   }
 
   // Different deduplication strategies based on metric type
@@ -355,27 +273,6 @@ export function deduplicateData(
   } else {
     // For step counts, energy, distance, etc. we use the hourly block strategy
     result = deduplicateCumulativeData(data, metricId);
-  }
-
-  // TEMPORARY: For debug metrics, log result count and sample
-  if (isDebugMetric) {
-    console.log(
-      `[DEBUG] ${metricId} after deduplication: ${result.length} records`,
-    );
-    if (result.length === 0 && data.length > 0) {
-      console.log(
-        `[DEBUG] WARNING: All ${metricId} records were removed during deduplication!`,
-      );
-
-      // TEMPORARY: For testing, return a sample of original data
-      console.log(
-        `[DEBUG] TESTING: Returning first 10 original records for ${metricId}`,
-      );
-      return data.slice(0, 10);
-    }
-    if (result.length > 0) {
-      console.log(`[DEBUG] ${metricId} sample after deduplication:`, result[0]);
-    }
   }
 
   return result;

@@ -4,21 +4,29 @@ import { HealthDataProvider } from "@/my-health-app/store/healthDataStore/provid
 import { SelectionProvider } from "@/my-health-app/store/selectionStore/provider";
 import React, { createContext, useContext, useState } from "react";
 
+interface HealthContextType {
+  isDashboardOpen: boolean;
+  setIsDashboardOpen: (value: boolean) => void;
+  isAiCompanionOpen: boolean;
+  setIsAiCompanionOpen: (value: boolean) => void;
+}
+
 // Create a context to track mounted state
-export const HealthContextState = createContext({
+export const HealthContextState = createContext<HealthContextType>({
   isDashboardOpen: false,
-  setIsDashboardOpen: (state: boolean) => {},
+  setIsDashboardOpen: () => {},
   isAiCompanionOpen: false,
-  setIsAiCompanionOpen: (state: boolean) => {},
+  setIsAiCompanionOpen: () => {},
 });
 
-export const useHealthContext = () => useContext(HealthContextState);
+export const useHealthContext = (): HealthContextType =>
+  useContext(HealthContextState);
 
 export default function HealthDataContextWrapper({
   children,
 }: {
   children: React.ReactNode;
-}) {
+}): JSX.Element {
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isAiCompanionOpen, setIsAiCompanionOpen] = useState(false);
 

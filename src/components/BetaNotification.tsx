@@ -15,7 +15,7 @@ const BetaNotification: React.FC<NotificationProps> = ({
   onClose,
   onConfirm,
 }) => {
-  const handleConfirm = () => {
+  const handleConfirm = (): void => {
     onClose();
     if (onConfirm) onConfirm();
   };

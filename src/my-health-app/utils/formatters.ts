@@ -1,4 +1,3 @@
-import { getMetricName } from "../core/metricDefinitions";
 import { HealthDataPoint } from "../types/healthData";
 
 /**
@@ -12,6 +11,10 @@ export const formatValue = (value: string, unit: string): string => {
   // Format based on unit
   switch (unit) {
     case "count/min":
+      // Check if this is a respiratory rate value
+      if (value.includes("HKQuantityTypeIdentifierRespiratoryRate")) {
+        return `${numValue.toFixed(0)} breaths/min`;
+      }
       return `${numValue.toFixed(0)} bpm`;
 
     case "count":
@@ -60,10 +63,7 @@ export const formatDateString = (dateString: string): string => {
  * Generate a CSV string from health data
  */
 // In formatters.ts
-export const generateCSV = (
-  metricId: string,
-  data: ReadonlyArray<HealthDataPoint>,
-): string => {
+export const generateCSV = (data: ReadonlyArray<HealthDataPoint>): string => {
   // Change this line
   const headers: ReadonlyArray<keyof HealthDataPoint> = [
     "startDate",
@@ -99,14 +99,12 @@ export const generateCSV = (
  * Create a download for a CSV file
  */
 export const downloadCSV = (
-  metricId: string,
+  metricName: string,
   data: ReadonlyArray<HealthDataPoint>,
 ): void => {
-  const csvContent = generateCSV(metricId, data);
+  const csvContent = generateCSV(data);
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
-
-  const metricName = getMetricName(metricId);
   const fileName = metricName.replace(/\s+/g, "_").toLowerCase() + ".csv";
 
   const link = document.createElement("a");

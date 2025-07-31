@@ -5,9 +5,8 @@ if (typeof window !== "undefined") {
   // Dynamic import to avoid server-side issues
   import("pdfjs-dist").then((pdfjsLib) => {
     getDocument = pdfjsLib.getDocument;
-    // Use a reliable CDN worker source
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.54/pdf.worker.min.js";
+    // Disable worker and use main thread for parsing
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "";
   });
 }
 
@@ -50,9 +49,8 @@ export async function parsePDF(file: File): Promise<PDFParseResult> {
     try {
       const pdfjsLib = await import("pdfjs-dist");
       getDocument = pdfjsLib.getDocument;
-      // Use a reliable CDN worker source
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.54/pdf.worker.min.js";
+      // Disable worker and use main thread for parsing
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "";
     } catch (error) {
       throw new Error(
         `Failed to load PDF.js library: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -187,9 +185,8 @@ export async function analyzePDF(file: File): Promise<PDFAnalysisResult> {
     try {
       const pdfjsLib = await import("pdfjs-dist");
       getDocument = pdfjsLib.getDocument;
-      // Use a reliable CDN worker source
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.54/pdf.worker.min.js";
+      // Disable worker and use main thread for parsing
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "";
     } catch (error) {
       throw new Error(
         `Failed to load PDF.js library: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -301,9 +298,8 @@ export async function getDetailedPDFAnalysis(file: File): Promise<{
     try {
       const pdfjsLib = await import("pdfjs-dist");
       getDocument = pdfjsLib.getDocument;
-      // Use a reliable CDN worker source
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.54/pdf.worker.min.js";
+      // Disable worker and use main thread for parsing
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "";
     } catch (error) {
       throw new Error(
         `Failed to load PDF.js library: ${error instanceof Error ? error.message : "Unknown error"}`,

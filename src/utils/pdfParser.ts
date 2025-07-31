@@ -1,13 +1,32 @@
 // Only import and use PDF.js on the client side
 let getDocument: typeof import("pdfjs-dist").getDocument | undefined;
+let pdfjsLib: typeof import("pdfjs-dist") | undefined;
 
-if (typeof window !== "undefined") {
-  // Dynamic import to avoid server-side issues
-  import("pdfjs-dist").then((pdfjsLib) => {
-    getDocument = pdfjsLib.getDocument;
-    // Use the worker from the npm package
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
-  });
+// Initialize PDF.js and configure worker
+async function initializePDFJS(): Promise<typeof import("pdfjs-dist")> {
+  if (typeof window === "undefined") {
+    throw new Error("PDF parsing is only available on the client side");
+  }
+
+  if (!pdfjsLib) {
+    try {
+      pdfjsLib = await import("pdfjs-dist");
+      getDocument = pdfjsLib.getDocument;
+      // Configure the worker
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
+      console.log(
+        "✅ PDF.js initialized with worker:",
+        pdfjsLib.GlobalWorkerOptions.workerSrc,
+      );
+    } catch (error) {
+      console.error("❌ Failed to initialize PDF.js:", error);
+      throw new Error(
+        `Failed to load PDF.js library: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    }
+  }
+
+  return pdfjsLib;
 }
 
 export interface PDFParseResult {
@@ -39,24 +58,8 @@ export interface PDFAnalysisResult {
  * Parse a PDF file and extract its text content
  */
 export async function parsePDF(file: File): Promise<PDFParseResult> {
-  // Ensure we're on the client side
-  if (typeof window === "undefined") {
-    throw new Error("PDF parsing is only available on the client side");
-  }
-
-  // Dynamically import PDF.js if not already loaded
-  if (!getDocument) {
-    try {
-      const pdfjsLib = await import("pdfjs-dist");
-      getDocument = pdfjsLib.getDocument;
-      // Use the worker from the npm package
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
-    } catch (error) {
-      throw new Error(
-        `Failed to load PDF.js library: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
-    }
-  }
+  // Initialize PDF.js and ensure worker is configured
+  await initializePDFJS();
 
   return new Promise((resolve, reject): void => {
     const reader = new FileReader();
@@ -175,24 +178,8 @@ export async function parsePDF(file: File): Promise<PDFParseResult> {
  * Analyze a PDF file to get basic information without full parsing
  */
 export async function analyzePDF(file: File): Promise<PDFAnalysisResult> {
-  // Ensure we're on the client side
-  if (typeof window === "undefined") {
-    throw new Error("PDF analysis is only available on the client side");
-  }
-
-  // Dynamically import PDF.js if not already loaded
-  if (!getDocument) {
-    try {
-      const pdfjsLib = await import("pdfjs-dist");
-      getDocument = pdfjsLib.getDocument;
-      // Use the worker from the npm package
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
-    } catch (error) {
-      throw new Error(
-        `Failed to load PDF.js library: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
-    }
-  }
+  // Initialize PDF.js and ensure worker is configured
+  await initializePDFJS();
 
   return new Promise((resolve, reject): void => {
     const reader = new FileReader();
@@ -288,24 +275,8 @@ export async function getDetailedPDFAnalysis(file: File): Promise<{
     errorPages: number;
   };
 }> {
-  // Ensure we're on the client side
-  if (typeof window === "undefined") {
-    throw new Error("PDF analysis is only available on the client side");
-  }
-
-  // Dynamically import PDF.js if not already loaded
-  if (!getDocument) {
-    try {
-      const pdfjsLib = await import("pdfjs-dist");
-      getDocument = pdfjsLib.getDocument;
-      // Use the worker from the npm package
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
-    } catch (error) {
-      throw new Error(
-        `Failed to load PDF.js library: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
-    }
-  }
+  // Initialize PDF.js and ensure worker is configured
+  await initializePDFJS();
 
   return new Promise((resolve, reject): void => {
     const reader = new FileReader();

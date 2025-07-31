@@ -92,6 +92,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     try {
       const fetchStartTime = Date.now();
+
+      // Add request size check for production
+      const requestSize = JSON.stringify(requestBody).length;
+      if (requestSize > 1000000) {
+        // 1MB limit
+        console.warn("[Venice API Route] Large request detected:", {
+          size: requestSize,
+          messageCount: requestBody.messages?.length || 0,
+        });
+      }
+
       // Forward the request to Venice API
       const response = await fetch(`${apiEndpoint}/chat/completions`, {
         method: "POST",
@@ -101,6 +112,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           Accept: "application/json",
         },
         body: JSON.stringify(requestBody),
+        // Add timeout for edge runtime
+        signal: AbortSignal.timeout(60000), // 60 second timeout
       });
 
       console.log("[Venice API Route] Venice API response received:", {

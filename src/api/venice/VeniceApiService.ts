@@ -29,7 +29,7 @@ export class VeniceApiService {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      timeout: 120000, // 120 second timeout to match serverless function
+      timeout: 70000, // 70 second timeout (slightly longer than server timeout)
     });
 
     // Request logging interceptor

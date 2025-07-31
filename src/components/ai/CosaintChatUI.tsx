@@ -45,6 +45,7 @@ const CosaintChatUI: React.FC = () => {
     }>
   >([]);
   const [showSavedFiles, setShowSavedFiles] = useState(false);
+  const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
 
   // Scroll to the bottom when messages change
   useEffect(() => {
@@ -61,10 +62,19 @@ const CosaintChatUI: React.FC = () => {
     loadSavedFiles();
   }, []);
 
+  // Reset loading time when loading state changes
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadingStartTime(null);
+    }
+  }, [isLoading]);
+
   const handleSendMessage = async (): Promise<void> => {
     if (input.trim() === "") return;
+    setLoadingStartTime(Date.now());
     await sendMessage(input);
     setInput("");
+    setLoadingStartTime(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent): void => {
@@ -598,7 +608,14 @@ const CosaintChatUI: React.FC = () => {
           disabled={isLoading || input.trim() === ""}
         >
           {isLoading ? (
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></div>
+            <div className="flex items-center gap-1">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></div>
+              <span className="text-xs">
+                {loadingStartTime
+                  ? `${Math.floor((Date.now() - loadingStartTime) / 1000)}s`
+                  : "AI"}
+              </span>
+            </div>
           ) : (
             <Send className="h-4 w-4" />
           )}

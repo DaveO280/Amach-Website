@@ -41,6 +41,8 @@ export class CosaintAiService {
       console.log(
         "[CosaintAiService] Generated prompt:",
         prompt.substring(0, 500) + "...",
+        "Total length:",
+        prompt.length,
       );
 
       // Generate a response using the Venice API

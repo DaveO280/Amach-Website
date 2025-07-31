@@ -94,7 +94,23 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         },
       ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      console.error("AI Chat Error:", err);
+      let errorMessage = "An error occurred while processing your message.";
+
+      if (err instanceof Error) {
+        if (err.message.includes("timeout")) {
+          errorMessage = "The request timed out. Please try again.";
+        } else if (err.message.includes("network")) {
+          errorMessage =
+            "Network error. Please check your connection and try again.";
+        } else if (err.message.includes("API")) {
+          errorMessage = "API service error. Please try again in a moment.";
+        } else {
+          errorMessage = err.message;
+        }
+      }
+
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }

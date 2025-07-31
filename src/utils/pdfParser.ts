@@ -4,6 +4,8 @@ let pdfjsLib: typeof import("pdfjs-dist") | undefined;
 
 // Initialize PDF.js and configure worker
 async function initializePDFJS(): Promise<typeof import("pdfjs-dist")> {
+  console.log("🔧 initializePDFJS called, pdfjsLib exists:", !!pdfjsLib);
+
   if (typeof window === "undefined") {
     throw new Error("PDF parsing is only available on the client side");
   }
@@ -12,12 +14,38 @@ async function initializePDFJS(): Promise<typeof import("pdfjs-dist")> {
     try {
       pdfjsLib = await import("pdfjs-dist");
       getDocument = pdfjsLib.getDocument;
-      // Configure the worker
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
+
+      // Try to configure the worker, with fallback
+      try {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
+        console.log("✅ Worker configured successfully");
+      } catch (workerError) {
+        console.warn(
+          "⚠️ Worker configuration failed, using fallback:",
+          workerError,
+        );
+        // Fallback: disable worker and use main thread
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+      }
       console.log(
         "✅ PDF.js initialized with worker:",
         pdfjsLib.GlobalWorkerOptions.workerSrc,
       );
+      console.log("🔧 Worker configuration set:", {
+        workerSrc: pdfjsLib.GlobalWorkerOptions.workerSrc,
+        version: pdfjsLib.version,
+        getDocumentExists: !!getDocument,
+      });
+
+      // Additional debugging for production
+      console.log("🔧 Environment check:", {
+        isProduction: process.env.NODE_ENV === "production",
+        isClient: typeof window !== "undefined",
+        userAgent:
+          typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
+        location:
+          typeof window !== "undefined" ? window.location.href : "unknown",
+      });
     } catch (error) {
       console.error("❌ Failed to initialize PDF.js:", error);
       throw new Error(
@@ -58,20 +86,35 @@ export interface PDFAnalysisResult {
  * Parse a PDF file and extract its text content
  */
 export async function parsePDF(file: File): Promise<PDFParseResult> {
+  console.log("🔍 parsePDF called, initializing PDF.js...");
+
   // Initialize PDF.js and ensure worker is configured
   await initializePDFJS();
+
+  console.log("✅ PDF.js initialized, starting file processing...");
 
   return new Promise((resolve, reject): void => {
     const reader = new FileReader();
 
     reader.onload = async (e): Promise<void> => {
+      console.log("📄 FileReader onload triggered, processing PDF...");
       try {
         const arrayBuffer = e.target?.result as ArrayBuffer;
+        console.log("📄 ArrayBuffer size:", arrayBuffer.byteLength);
 
         // Load the PDF document
         if (!getDocument) {
+          console.error("❌ getDocument is undefined!");
           throw new Error("PDF.js not loaded");
         }
+
+        console.log("✅ getDocument is available, creating loading task...");
+
+        console.log("🔧 About to call getDocument with options:", {
+          dataSize: arrayBuffer.byteLength,
+          verbosity: 0,
+          useSystemFonts: true,
+        });
 
         const loadingTask = getDocument({
           data: arrayBuffer,
@@ -79,6 +122,8 @@ export async function parsePDF(file: File): Promise<PDFParseResult> {
           verbosity: 0,
           useSystemFonts: true,
         });
+
+        console.log("✅ Loading task created, waiting for promise...");
 
         const pdf = await loadingTask.promise;
 
@@ -178,8 +223,14 @@ export async function parsePDF(file: File): Promise<PDFParseResult> {
  * Analyze a PDF file to get basic information without full parsing
  */
 export async function analyzePDF(file: File): Promise<PDFAnalysisResult> {
+  console.log("🔍 analyzePDF called, initializing PDF.js...");
+
   // Initialize PDF.js and ensure worker is configured
   await initializePDFJS();
+
+  console.log(
+    "✅ PDF.js initialized for analysis, starting file processing...",
+  );
 
   return new Promise((resolve, reject): void => {
     const reader = new FileReader();
@@ -275,8 +326,14 @@ export async function getDetailedPDFAnalysis(file: File): Promise<{
     errorPages: number;
   };
 }> {
+  console.log("🔍 getDetailedPDFAnalysis called, initializing PDF.js...");
+
   // Initialize PDF.js and ensure worker is configured
   await initializePDFJS();
+
+  console.log(
+    "✅ PDF.js initialized for detailed analysis, starting file processing...",
+  );
 
   return new Promise((resolve, reject): void => {
     const reader = new FileReader();

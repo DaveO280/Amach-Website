@@ -1,3 +1,5 @@
+import path from "path";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Enable Edge Runtime for API routes
@@ -11,6 +13,21 @@ const nextConfig = {
       process.env.VENICE_API_ENDPOINT || "https://api.venice.ai/api/v1",
     VENICE_MODEL_NAME: process.env.VENICE_MODEL_NAME || "llama-3.1-405b",
   },
+  // Add webpack config to include my-health-app
+  webpack: (config, { isServer }) => {
+    // Add my-health-app to the modules included in the build
+    config.resolve.modules.push(path.resolve(__dirname, "./my-health-app"));
+
+    // Also make sure the resolve paths include my-health-app/src
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "health-app": path.resolve(__dirname, "./my-health-app/src"),
+    };
+
+    return config;
+  },
+  // Make sure Next.js knows to transpile my-health-app
+  transpilePackages: ["my-health-app"],
   // Add headers for CORS
   async headers() {
     return [

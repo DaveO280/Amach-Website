@@ -1,41 +1,60 @@
 "use client";
 
+import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useHealthScoreCalculator } from "@/utils/healthScoreCalculator";
-import { Activity, Heart, Moon, Scale, Star, Zap } from "lucide-react";
+import type { HealthScore } from "@/types/HealthContext";
+import {
+  getScoreTrends,
+  type ScoreTrends,
+} from "@/utils/dailyHealthScoreCalculator";
+import {
+  Activity,
+  Heart,
+  Minus,
+  Moon,
+  Scale,
+  Star,
+  TrendingDown,
+  TrendingUp,
+  Zap,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-interface ProfileData {
-  sex: "male" | "female";
-  age: number;
-  height: number;
-  weight: number;
-}
+export function HealthScoreCards(): JSX.Element {
+  const { healthScores } = useHealthDataContext();
+  const [scoreTrends, setScoreTrends] = useState<ScoreTrends | null>(null);
+  const [loadingTrends, setLoadingTrends] = useState(false);
 
-interface HealthScores {
-  overall: number;
-  activity: number;
-  sleep: number;
-  heart: number;
-  energy: number;
-}
-
-interface HealthScoreCardsProps {
-  profileData: ProfileData;
-}
-
-export function HealthScoreCards({
-  profileData,
-}: HealthScoreCardsProps): JSX.Element {
-  const healthScores = useHealthScoreCalculator(profileData);
-  const [selectedMetric, setSelectedMetric] = useState<
-    keyof HealthScores | null
-  >(null);
+  const healthScoresObj = healthScores?.reduce(
+    (acc: Record<string, number>, s: HealthScore) => {
+      acc[s.type] = s.value;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
+  const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
   const [showTooltip, setShowTooltip] = useState(false);
   const hoverTimeout = useRef<NodeJS.Timeout>();
   const tooltipRef = useRef<HTMLDivElement>(null);
 
-  const getScoreIcon = (scoreType: keyof HealthScores): JSX.Element => {
+  // Fetch trend data when component mounts
+  useEffect(() => {
+    const fetchTrends = async (): Promise<void> => {
+      setLoadingTrends(true);
+      try {
+        const trends = await getScoreTrends();
+        setScoreTrends(trends);
+      } catch (error) {
+        console.error("Failed to fetch score trends:", error);
+      } finally {
+        setLoadingTrends(false);
+      }
+    };
+
+    fetchTrends();
+  }, []);
+
+  const getScoreIcon = (scoreType: string): JSX.Element => {
     switch (scoreType) {
       case "activity":
         return <Activity className="h-5 w-5 text-emerald-600" />;
@@ -58,7 +77,7 @@ export function HealthScoreCards({
     return "Needs Improvement";
   };
 
-  const getMetricFormula = (metric: keyof HealthScores): string => {
+  const getMetricFormula = (metric: string): string => {
     switch (metric) {
       case "overall":
         return "Weighted average of all component scores:\n(Activity × 0.3) + (Sleep × 0.3) + (Heart × 0.2) + (Energy × 0.2)";
@@ -75,7 +94,7 @@ export function HealthScoreCards({
     }
   };
 
-  const handleMetricHover = (metric: keyof HealthScores): void => {
+  const handleMetricHover = (metric: string): void => {
     if (hoverTimeout.current) {
       clearTimeout(hoverTimeout.current);
     }
@@ -97,11 +116,89 @@ export function HealthScoreCards({
     };
   }, []);
 
-  if (!healthScores) {
+  if (!healthScoresObj) {
     return <span />;
   }
 
-  const { overall, ...componentScores } = healthScores;
+  const { overall, ...componentScores } = healthScoresObj;
+
+  // Trend display component with better styling
+  const TrendDisplay = ({
+    scoreType,
+  }: {
+    scoreType: string;
+  }): JSX.Element | null => {
+    if (!scoreTrends || loadingTrends) {
+      return (
+        <div className="text-xs text-gray-400 mt-2">
+          {loadingTrends ? "Loading trends..." : "No trend data"}
+        </div>
+      );
+    }
+
+    const trends = scoreTrends[scoreType as keyof ScoreTrends];
+    if (!trends) return null;
+
+    const getTrendIcon = (trend: number): JSX.Element => {
+      const overallScore = healthScoresObj.overall;
+      // Handle missing or invalid values
+      if (
+        typeof trend !== "number" ||
+        typeof overallScore !== "number" ||
+        isNaN(trend) ||
+        isNaN(overallScore)
+      ) {
+        return <Minus className="h-3 w-3 text-gray-400" />;
+      }
+      const roundedTrend = Math.round(trend);
+      const roundedOverall = Math.round(overallScore);
+      if (roundedTrend > roundedOverall) {
+        return <TrendingUp className="h-3 w-3 text-green-500" />;
+      }
+      if (roundedTrend < roundedOverall) {
+        return <TrendingDown className="h-3 w-3 text-red-500" />;
+      }
+      return <Minus className="h-3 w-3 text-gray-400" />;
+    };
+
+    return (
+      <div className="mt-3 space-y-1">
+        <div className="text-xs text-gray-600 font-medium mb-1">Trends:</div>
+        <div className="grid grid-cols-4 gap-2 text-xs">
+          {" "}
+          {/* Changed from 3 to 4 columns */}
+          <div className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded">
+            <span className="text-gray-600">7d</span>
+            <div className="flex items-center gap-1">
+              {getTrendIcon(trends.last7Days)}
+              <span className="font-medium">{trends.last7Days}</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded">
+            <span className="text-gray-600">30d</span>
+            <div className="flex items-center gap-1">
+              {getTrendIcon(trends.last30Days)}
+              <span className="font-medium">{trends.last30Days}</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded">
+            <span className="text-gray-600">3m</span>
+            <div className="flex items-center gap-1">
+              {getTrendIcon(trends.last3Months)}
+              <span className="font-medium">{trends.last3Months}</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded">
+            <span className="text-gray-600">6m</span>
+            <div className="flex items-center gap-1">
+              {getTrendIcon(trends.last6Months)}
+              <span className="font-medium">{trends.last6Months}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex gap-4">
@@ -123,6 +220,7 @@ export function HealthScoreCards({
             <p className="text-sm text-muted-foreground mt-2">
               {getScoreLabel(overall)}
             </p>
+            <TrendDisplay scoreType="overall" />
           </CardContent>
         </Card>
         {showTooltip && selectedMetric === "overall" && (
@@ -150,31 +248,30 @@ export function HealthScoreCards({
           <div key={key} className="relative">
             <Card
               className="hover:shadow-lg transition-shadow"
-              onMouseEnter={() => handleMetricHover(key as keyof HealthScores)}
+              onMouseEnter={() => handleMetricHover(key)}
               onMouseLeave={handleMetricLeave}
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium capitalize text-emerald-800">
                   {key}
                 </CardTitle>
-                {getScoreIcon(key as keyof HealthScores)}
+                {getScoreIcon(key)}
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-center text-emerald-800">
-                  {value}
+                  {typeof value === "number" ? value : 0}
                 </div>
                 <p className="text-xs text-muted-foreground text-center mt-2">
-                  {getScoreLabel(value as number)}
+                  {getScoreLabel(Number(value))}
                 </p>
+                <TrendDisplay scoreType={key} />
               </CardContent>
             </Card>
             {showTooltip && selectedMetric === key && (
               <div
                 ref={tooltipRef}
                 className="absolute top-0 left-0 w-full h-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200"
-                onMouseEnter={() =>
-                  handleMetricHover(key as keyof HealthScores)
-                }
+                onMouseEnter={() => handleMetricHover(key)}
                 onMouseLeave={handleMetricLeave}
               >
                 <div className="bg-white p-4 rounded-lg shadow-lg max-w-md transform transition-all duration-200 ease-in-out">

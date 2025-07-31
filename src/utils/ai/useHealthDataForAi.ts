@@ -1,6 +1,7 @@
 // src/utils/ai/useHealthDataForAi.ts
-import { useHealthData } from "../../my-health-app/store/healthDataStore";
-import { useSelection } from "../../my-health-app/store/selectionStore";
+import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
+import { useSelection } from "../../store/selectionStore";
+import { HealthDataPoint } from "../../types/healthData";
 
 interface HealthMetricSummary {
   metricName: string;
@@ -15,26 +16,24 @@ export function useHealthDataForAi(): {
   hasHealthData: boolean;
   getMetricsSummary: () => HealthMetricSummary[];
 } {
-  const healthData = useHealthData();
+  const { metricData } = useHealthDataContext();
   const selection = useSelection();
 
   const getMetricsSummary = (): HealthMetricSummary[] => {
     const summaries: HealthMetricSummary[] = [];
 
-    // This assumes your health data store has methods to access the data
-    // You'll need to adjust this based on your actual store structure
-    selection.selectedMetrics.forEach((metricId) => {
-      const data = healthData.metricData[metricId];
+    selection.selectedMetrics.forEach((metricId: string) => {
+      const data: HealthDataPoint[] = metricData[metricId] || [];
 
       if (data && data.length > 0) {
         // Calculate average
         const numericValues = data
-          .map((item) => parseFloat(item.value))
-          .filter((val) => !isNaN(val));
+          .map((item: HealthDataPoint) => parseFloat(item.value))
+          .filter((val: number) => !isNaN(val));
 
         const average =
           numericValues.length > 0
-            ? numericValues.reduce((sum, val) => sum + val, 0) /
+            ? numericValues.reduce((sum: number, val: number) => sum + val, 0) /
               numericValues.length
             : null;
 
@@ -52,9 +51,11 @@ export function useHealthDataForAi(): {
           );
 
           const firstAvg =
-            firstHalf.reduce((sum, val) => sum + val, 0) / firstHalf.length;
+            firstHalf.reduce((sum: number, val: number) => sum + val, 0) /
+            firstHalf.length;
           const secondAvg =
-            secondHalf.reduce((sum, val) => sum + val, 0) / secondHalf.length;
+            secondHalf.reduce((sum: number, val: number) => sum + val, 0) /
+            secondHalf.length;
 
           const percentChange = ((secondAvg - firstAvg) / firstAvg) * 100;
 

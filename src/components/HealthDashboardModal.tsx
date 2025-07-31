@@ -5,29 +5,23 @@ import dynamic from "next/dynamic";
 import React, { useEffect, useRef, useState } from "react";
 
 // Import the actual components directly to avoid chunk loading errors
-const HealthDataSelector = dynamic(
-  () => import("../my-health-app/components/HealthDataSelector"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex justify-center items-center min-h-[200px]">
-        <div className="animate-pulse-slow rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-600"></div>
-      </div>
-    ),
-  },
-);
+const HealthDataSelector = dynamic(() => import("./HealthDataSelector"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex justify-center items-center min-h-[200px]">
+      <div className="animate-pulse-slow rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-600"></div>
+    </div>
+  ),
+});
 
-const HealthDashboard = dynamic(
-  () => import("../my-health-app/components/dashboard/HealthDashboard"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex justify-center items-center min-h-[400px]">
-        <div className="animate-pulse-slow rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-600"></div>
-      </div>
-    ),
-  },
-);
+const HealthDashboard = dynamic(() => import("./dashboard/HealthDashboard"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex justify-center items-center min-h-[400px]">
+      <div className="animate-pulse-slow rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-600"></div>
+    </div>
+  ),
+});
 
 interface HealthDashboardModalProps {
   isOpen: boolean;

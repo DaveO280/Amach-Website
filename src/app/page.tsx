@@ -3,15 +3,9 @@
 import AiCompanionModal from "@/components/AiCompanionModal";
 import BetaNotification from "@/components/BetaNotification"; // Import the new component
 import HealthDashboardModal from "@/components/HealthDashboardModal";
-import { useHealthContext } from "@/components/HealthDataContextWrapper";
+import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Activity,
   Bot,
@@ -35,7 +29,7 @@ const MainPage: React.FC = (): JSX.Element => {
     setIsDashboardOpen,
     isAiCompanionOpen,
     setIsAiCompanionOpen,
-  } = useHealthContext();
+  } = useHealthDataContext();
 
   // Keep the beta notification state local
   const [showBetaNotification, setShowBetaNotification] = useState(false);
@@ -167,23 +161,21 @@ const MainPage: React.FC = (): JSX.Element => {
                   ))}
                 </div>
 
-                {/* Using Radix UI Dropdown Menu instead of custom implementation */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="text-amber-900 hover:text-emerald-600"
-                    >
-                      <Wallet className="h-4 w-4 mr-2" />
-                      Connect Wallet
-                      <ChevronDown className="h-4 w-4 ml-2" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
+                {/* Using simple CSS dropdown instead of Radix UI for testing */}
+                <div className="relative group">
+                  <Button
+                    variant="outline"
+                    className="text-amber-900 hover:text-emerald-600"
+                  >
+                    <Wallet className="h-4 w-4 mr-2" />
+                    Connect Wallet
+                    <ChevronDown className="h-4 w-4 ml-2" />
+                  </Button>
+                  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                     {dropdownItems.map((item) => {
                       const Icon = item.icon;
                       return (
-                        <DropdownMenuItem
+                        <button
                           key={item.label}
                           onClick={() => {
                             if (item.action) {
@@ -192,15 +184,15 @@ const MainPage: React.FC = (): JSX.Element => {
                               window.location.href = item.href;
                             }
                           }}
-                          className="flex items-center cursor-pointer text-sm py-2"
+                          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
                         >
                           <Icon className="h-4 w-4 mr-2" />
                           {item.label}
-                        </DropdownMenuItem>
+                        </button>
                       );
                     })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  </div>
+                </div>
               </div>
             </nav>
 

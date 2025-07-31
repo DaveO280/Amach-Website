@@ -1,4 +1,4 @@
-import { randomChoice } from "../../my-health-app/utils/utils";
+import { randomChoice } from "@/utils/utils";
 import { AgentCharacteristics, HealthAgentCharacteristics } from "./types";
 
 class CharacteristicsLoader {

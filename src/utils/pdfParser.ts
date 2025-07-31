@@ -5,8 +5,8 @@ if (typeof window !== "undefined") {
   // Dynamic import to avoid server-side issues
   import("pdfjs-dist").then((pdfjsLib) => {
     getDocument = pdfjsLib.getDocument;
-    // Disable worker and use main thread for parsing
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+    // Use the worker from the npm package
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
   });
 }
 
@@ -49,8 +49,8 @@ export async function parsePDF(file: File): Promise<PDFParseResult> {
     try {
       const pdfjsLib = await import("pdfjs-dist");
       getDocument = pdfjsLib.getDocument;
-      // Disable worker and use main thread for parsing
-      pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+      // Use the worker from the npm package
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
     } catch (error) {
       throw new Error(
         `Failed to load PDF.js library: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -185,8 +185,8 @@ export async function analyzePDF(file: File): Promise<PDFAnalysisResult> {
     try {
       const pdfjsLib = await import("pdfjs-dist");
       getDocument = pdfjsLib.getDocument;
-      // Disable worker and use main thread for parsing
-      pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+      // Use the worker from the npm package
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
     } catch (error) {
       throw new Error(
         `Failed to load PDF.js library: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -298,8 +298,8 @@ export async function getDetailedPDFAnalysis(file: File): Promise<{
     try {
       const pdfjsLib = await import("pdfjs-dist");
       getDocument = pdfjsLib.getDocument;
-      // Disable worker and use main thread for parsing
-      pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+      // Use the worker from the npm package
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
     } catch (error) {
       throw new Error(
         `Failed to load PDF.js library: ${error instanceof Error ? error.message : "Unknown error"}`,

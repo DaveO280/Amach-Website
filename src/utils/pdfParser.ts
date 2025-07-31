@@ -7,7 +7,7 @@ if (typeof window !== "undefined") {
     getDocument = pdfjsLib.getDocument;
     // Use a reliable CDN worker source
     pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.54/pdf.worker.min.js";
   });
 }
 
@@ -52,7 +52,7 @@ export async function parsePDF(file: File): Promise<PDFParseResult> {
       getDocument = pdfjsLib.getDocument;
       // Use a reliable CDN worker source
       pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.54/pdf.worker.min.js";
     } catch (error) {
       throw new Error(
         `Failed to load PDF.js library: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -189,7 +189,7 @@ export async function analyzePDF(file: File): Promise<PDFAnalysisResult> {
       getDocument = pdfjsLib.getDocument;
       // Use a reliable CDN worker source
       pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.54/pdf.worker.min.js";
     } catch (error) {
       throw new Error(
         `Failed to load PDF.js library: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -303,7 +303,7 @@ export async function getDetailedPDFAnalysis(file: File): Promise<{
       getDocument = pdfjsLib.getDocument;
       // Use a reliable CDN worker source
       pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.54/pdf.worker.min.js";
     } catch (error) {
       throw new Error(
         `Failed to load PDF.js library: ${error instanceof Error ? error.message : "Unknown error"}`,

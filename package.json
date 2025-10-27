@@ -8,7 +8,7 @@
     "build": "pnpm lint && pnpm type-check && next build",
     "start": "next start",
     "lint": "next lint",
-    "prepare": "husky install",
+    "prepare": "husky install || true",
     "type-check": "tsc --noEmit",
     "test": "jest",
     "clean": "rimraf .next && rimraf node_modules/.cache",

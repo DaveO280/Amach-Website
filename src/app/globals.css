@@ -112,6 +112,17 @@
       transform: scale(1);
     }
   }
+
+  /* Onboarding Modal Animations */
+  @keyframes pulse-slow {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
 }
 
 @layer base {
@@ -136,6 +147,11 @@
 
   .integrate {
     animation: integrate 2s forwards;
+  }
+
+  /* Onboarding Modal Classes */
+  .animate-pulse-slow {
+    animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 }
 

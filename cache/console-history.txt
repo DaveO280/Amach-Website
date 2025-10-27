@@ -1,0 +1,11 @@
+exit
+npx hardhat run scripts/deploy-fresh-system.js --network zksyncSepolia
+process.cwd()
+Get-Location
+npx hardhat run ../scripts/deploy-fresh-system.js --network zksyncSepolia
+npx hardhat run scripts/deploy-fresh-system.js --network zksyncSepolia
+cd ..
+cd .. && pwd
+exit
+cd ..
+cd ..; Remove-Item -Force admin-app/admin-data/whitelist-tracking.db

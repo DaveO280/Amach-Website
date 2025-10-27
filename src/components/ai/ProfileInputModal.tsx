@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { useZkSyncSsoWallet } from "@/hooks/useZkSyncSsoWallet";
 import { X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface ProfileInputModalProps {
   isOpen: boolean;
@@ -28,6 +29,81 @@ export const ProfileInputModal: React.FC<ProfileInputModalProps> = ({
   const [feet, setFeet] = useState<string>("");
   const [inches, setInches] = useState<string>("");
   const [weight, setWeight] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Get wallet data
+  const { isConnected, getDecryptedProfile, loadProfileFromBlockchain } =
+    useZkSyncSsoWallet();
+
+  // Auto-populate form when modal opens and wallet is connected
+  useEffect(() => {
+    const populateFromWallet = async (): Promise<void> => {
+      if (!isOpen || !isConnected) return;
+
+      setIsLoading(true);
+      try {
+        // First try to load fresh data from blockchain
+        await loadProfileFromBlockchain();
+
+        // Get decrypted profile data
+        const walletProfile = await getDecryptedProfile();
+
+        if (
+          walletProfile &&
+          walletProfile.birthDate &&
+          walletProfile.height &&
+          walletProfile.weight &&
+          walletProfile.sex
+        ) {
+          // Calculate age from birth date
+          const birthDate = new Date(walletProfile.birthDate);
+          const today = new Date();
+          const ageYears = today.getFullYear() - birthDate.getFullYear();
+          const monthDiff = today.getMonth() - birthDate.getMonth();
+          const age =
+            monthDiff < 0 ||
+            (monthDiff === 0 && today.getDate() < birthDate.getDate())
+              ? ageYears - 1
+              : ageYears;
+
+          // Convert height from inches to feet and inches
+          const totalInches = walletProfile.height;
+          const feet = Math.floor(totalInches / 12);
+          const inches = totalInches % 12;
+
+          // Map sex values
+          const sexMapping: Record<string, "male" | "female"> = {
+            M: "male",
+            F: "female",
+            Male: "male",
+            Female: "female",
+            male: "male",
+            female: "female",
+          };
+
+          // Populate form fields
+          setAge(age.toString());
+          setSex(sexMapping[walletProfile.sex] || "male");
+          setFeet(feet.toString());
+          setInches(inches.toString());
+          setWeight(walletProfile.weight.toString());
+
+          console.log("✅ Auto-populated profile form from wallet data:", {
+            age,
+            sex: sexMapping[walletProfile.sex] || "male",
+            height: `${feet}'${inches}"`,
+            weight: walletProfile.weight,
+          });
+        }
+      } catch (error) {
+        console.error("❌ Failed to populate form from wallet:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    populateFromWallet();
+  }, [isOpen, isConnected, getDecryptedProfile, loadProfileFromBlockchain]);
 
   const handleSubmit = (): void => {
     // Validate inputs
@@ -74,8 +150,20 @@ export const ProfileInputModal: React.FC<ProfileInputModalProps> = ({
         </button>
 
         <h2 className="text-xl font-semibold mb-4 text-emerald-800">
-          Enter Your Profile Information
+          {isConnected
+            ? "Your Profile Information"
+            : "Enter Your Profile Information"}
         </h2>
+
+        {isConnected && (
+          <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
+            <p className="text-green-800 text-sm">
+              {isLoading
+                ? "Loading your profile from blockchain..."
+                : "✅ Profile loaded from your wallet"}
+            </p>
+          </div>
+        )}
 
         <div className="space-y-4">
           <div className="space-y-2">
@@ -163,9 +251,13 @@ export const ProfileInputModal: React.FC<ProfileInputModalProps> = ({
           <Button
             onClick={handleSubmit}
             className="w-full bg-emerald-600 hover:bg-emerald-700"
-            disabled={!age || !feet || !inches || !weight}
+            disabled={!age || !feet || !inches || !weight || isLoading}
           >
-            Submit
+            {isLoading
+              ? "Loading..."
+              : isConnected
+                ? "Use Wallet Data"
+                : "Submit"}
           </Button>
         </div>
       </div>

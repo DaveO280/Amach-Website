@@ -1,5 +1,7 @@
+import GlobalWalletStatus from "@/components/GlobalWalletStatus";
 import HealthDataContextWrapper from "@/components/HealthDataContextWrapper";
 import QueryProvider from "@/components/QueryProvider";
+import { ZkSyncSsoWalletButton } from "@/components/ZkSyncSsoWalletButton";
 import { SelectionProvider } from "@/store/selectionStore/provider";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
@@ -30,7 +32,14 @@ export default function RootLayout({
       <body className={inter.className}>
         <QueryProvider>
           <HealthDataContextWrapper>
-            <SelectionProvider>{children}</SelectionProvider>
+            <SelectionProvider>
+              {/* Keep wallet connection logic mounted globally; hidden to avoid duplicate UI */}
+              <div className="hidden">
+                <ZkSyncSsoWalletButton />
+              </div>
+              <GlobalWalletStatus />
+              {children}
+            </SelectionProvider>
           </HealthDataContextWrapper>
         </QueryProvider>
       </body>

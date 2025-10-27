@@ -3,6 +3,9 @@
 import { X } from "lucide-react";
 import dynamic from "next/dynamic";
 import React, { useEffect, useRef, useState } from "react";
+import { useZkSyncSsoWallet } from "../hooks/useZkSyncSsoWallet";
+import { Badge } from "./ui/badge";
+import { Shield, Wallet } from "lucide-react";
 
 // Import the actual components directly to avoid chunk loading errors
 const HealthDataSelector = dynamic(() => import("./HealthDataSelector"), {
@@ -23,6 +26,40 @@ const HealthDashboard = dynamic(() => import("./dashboard/HealthDashboard"), {
   ),
 });
 
+// Error boundary component for dynamic imports
+const ErrorBoundary: React.FC<{
+  children: React.ReactNode;
+  fallback?: React.ReactNode;
+}> = ({
+  children,
+  fallback = (
+    <div className="flex justify-center items-center min-h-[200px] p-4">
+      <div className="text-center">
+        <div className="text-red-600 mb-2">⚠️ Component failed to load</div>
+        <div className="text-sm text-gray-600">
+          Please refresh the page to try again
+        </div>
+      </div>
+    </div>
+  ),
+}): JSX.Element => {
+  const [hasError, setHasError] = React.useState(false);
+
+  React.useEffect((): (() => void) => {
+    const handleError = (): void => setHasError(true);
+    window.addEventListener("error", handleError);
+    return (): void => {
+      window.removeEventListener("error", handleError);
+    };
+  }, []);
+
+  if (hasError) {
+    return <div>{fallback}</div>;
+  }
+
+  return <div>{children}</div>;
+};
+
 interface HealthDashboardModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -34,6 +71,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
     "selector",
   );
   const modalRef = useRef<HTMLDivElement>(null);
+  const { isConnected, healthProfile } = useZkSyncSsoWallet();
 
   // Check viewport size to adjust UI accordingly
   useEffect(() => {
@@ -92,9 +130,29 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
         <header className="sticky top-0 z-10 w-full bg-white/90 border-b border-amber-100 backdrop-blur-sm">
           {/* Title row */}
           <div className="px-3 py-2 flex items-center justify-between">
-            <h2 className="text-base sm:text-xl font-black text-emerald-900">
-              Amach Health
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-base sm:text-xl font-black text-emerald-900">
+                Amach Health
+              </h2>
+              {isConnected && (
+                <Badge
+                  variant="default"
+                  className="bg-emerald-100 text-emerald-700"
+                >
+                  <Wallet className="h-3 w-3 mr-1" />
+                  Connected
+                </Badge>
+              )}
+              {healthProfile && (
+                <Badge
+                  variant="default"
+                  className="bg-amber-100 text-amber-800"
+                >
+                  <Shield className="h-3 w-3 mr-1" />
+                  Profile On-Chain
+                </Badge>
+              )}
+            </div>
             <button
               onClick={props.onClose}
               className="rounded-full p-2 text-amber-900 hover:text-emerald-600 hover:bg-emerald-50 transition-colors sm:hidden"
@@ -145,11 +203,15 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
           style={{ maxHeight: "calc(90vh - 110px)" }}
           onClick={(e) => e.stopPropagation()} // Prevent clicks from closing the modal
         >
-          {/* Removed the providers since they're now at a higher level */}
+          {/* Dashboard modal shows only data tabs (no wallet components) */}
           {activeTab === "selector" ? (
-            <HealthDataSelector />
+            <ErrorBoundary>
+              <HealthDataSelector />
+            </ErrorBoundary>
           ) : (
-            <HealthDashboard />
+            <ErrorBoundary>
+              <HealthDashboard />
+            </ErrorBoundary>
           )}
         </div>
       </div>

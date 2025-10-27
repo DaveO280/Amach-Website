@@ -67,3 +67,10 @@ desktop.ini
 *.swp
 *.swo
 my-health-app-backup/
+
+certificates
+
+# Admin app database and data (local only)
+admin-app/admin-data/*.db
+admin-app/admin-data/*.db-*
+tracking-data.json

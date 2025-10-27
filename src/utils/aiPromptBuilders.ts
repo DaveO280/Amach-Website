@@ -31,7 +31,7 @@ export function buildHealthAnalysisPrompt(
 ): string {
   const hasProfile = !!userProfile;
   const weightLbs = hasProfile
-    ? Math.round(userProfile!.weight * 2.20462)
+    ? Math.round(userProfile!.weight) // Weight is already in pounds
     : "N/A";
   const formatHeight = (heightInFeet: number): string => {
     const feet = Math.floor(heightInFeet);
@@ -39,7 +39,7 @@ export function buildHealthAnalysisPrompt(
     return `${feet}'${inches}"`;
   };
   const formattedHeight = hasProfile
-    ? formatHeight(userProfile!.height / 30.48)
+    ? formatHeight(userProfile!.height) // Height is already in feet
     : "N/A";
 
   const sectionPrompts: Record<HealthScoreKey, string> = {

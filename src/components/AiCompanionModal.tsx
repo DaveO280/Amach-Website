@@ -3,6 +3,7 @@
 import HealthStatCards from "@/components/ai/HealthStatCards";
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { Button } from "@/components/ui/button";
+import { useZkSyncSsoWallet } from "@/hooks/useZkSyncSsoWallet";
 import AiProvider from "@/store/aiStore";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
@@ -33,8 +34,89 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
   // Access the health data provider to check for available data
   const { metricData, userProfile, setUserProfile } = useHealthDataContext();
 
+  // Get wallet data
+  const { isConnected, getDecryptedProfile, loadProfileFromBlockchain } =
+    useZkSyncSsoWallet();
+
   // Check if health data is available
   const hasHealthData = Object.keys(metricData).length > 0;
+
+  // Auto-populate profile from wallet when modal opens
+  useEffect(() => {
+    const populateProfileFromWallet = async (): Promise<void> => {
+      if (!props.isOpen || !isConnected || isProfileComplete(userProfile))
+        return;
+
+      try {
+        // Load fresh data from blockchain
+        await loadProfileFromBlockchain();
+
+        // Get decrypted profile data
+        const walletProfile = await getDecryptedProfile();
+
+        if (
+          walletProfile &&
+          walletProfile.birthDate &&
+          walletProfile.height &&
+          walletProfile.weight &&
+          walletProfile.sex
+        ) {
+          // Calculate age from birth date
+          const birthDate = new Date(walletProfile.birthDate);
+          const today = new Date();
+          const ageYears = today.getFullYear() - birthDate.getFullYear();
+          const monthDiff = today.getMonth() - birthDate.getMonth();
+          const age =
+            monthDiff < 0 ||
+            (monthDiff === 0 && today.getDate() < birthDate.getDate())
+              ? ageYears - 1
+              : ageYears;
+
+          // Convert height from inches to feet (for the profile format)
+          const totalInches = walletProfile.height;
+          const heightInFeet = totalInches / 12;
+
+          // Map sex values
+          const sexMapping: Record<string, "male" | "female"> = {
+            M: "male",
+            F: "female",
+            Male: "male",
+            Female: "female",
+            male: "male",
+            female: "female",
+          };
+
+          // Create profile data in the expected format
+          // Note: The AI prompt expects height in feet and weight in pounds
+          const profileData: ProfileData = {
+            age,
+            sex: sexMapping[walletProfile.sex] || "male",
+            height: heightInFeet, // Already in feet (66 inches = 5.5 feet)
+            weight: walletProfile.weight, // Already in pounds
+          };
+
+          // Set the profile in the health context
+          setUserProfile(profileData);
+
+          console.log(
+            "✅ Auto-populated AI companion profile from wallet:",
+            profileData,
+          );
+        }
+      } catch (error) {
+        console.error("❌ Failed to populate profile from wallet:", error);
+      }
+    };
+
+    populateProfileFromWallet();
+  }, [
+    props.isOpen,
+    isConnected,
+    userProfile,
+    getDecryptedProfile,
+    loadProfileFromBlockchain,
+    setUserProfile,
+  ]);
 
   // Check viewport size to adjust UI accordingly
   useEffect(() => {
@@ -184,20 +266,33 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                 {/* Health Report Section */}
                 {hasHealthData ? (
                   isProfileComplete(userProfile) ? (
-                    <HealthReport />
+                    <div className="space-y-4">
+                      {isConnected && (
+                        <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                          <p className="text-green-800 text-sm">
+                            ✅ Using profile data from your wallet
+                          </p>
+                        </div>
+                      )}
+                      <HealthReport />
+                    </div>
                   ) : (
                     <div className="flex flex-col space-y-4">
                       <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
                         <p className="text-amber-800">
-                          Please enter your profile information to generate a
-                          personalized health report.
+                          {isConnected
+                            ? "Loading your profile from blockchain..."
+                            : "Please enter your profile information to generate a personalized health report."}
                         </p>
                       </div>
                       <Button
                         onClick={() => setShowProfileModal(true)}
                         className="bg-emerald-600 hover:bg-emerald-700 text-white w-fit"
+                        disabled={isConnected}
                       >
-                        Generate Health Report
+                        {isConnected
+                          ? "Loading Profile..."
+                          : "Generate Health Report"}
                       </Button>
                     </div>
                   )

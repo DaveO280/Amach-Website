@@ -3,8 +3,9 @@
 import Papa from "papaparse";
 import { useState } from "react";
 import { DailyScoresDebugger } from "../../components/DailyScoresDebugger";
-import { FileUploadDebugger } from "../../components/FileUploadDebugger";
 import { HealthDashboard } from "../../components/dashboard/HealthDashboard";
+import { FileUploadDebugger } from "../../components/FileUploadDebugger";
+import { OnChainProfileDisplay } from "../../components/OnChainProfileDisplay";
 import { SelectionProvider } from "../../store/selectionStore/provider";
 import { HealthContext, UploadedFileSummary } from "../../types/HealthContext";
 import { exportCompleteBackup, importCompleteBackup } from "../../utils/utils";
@@ -62,8 +63,14 @@ export default function DashboardPage(): JSX.Element {
   return (
     <SelectionProvider>
       <div className="container mx-auto px-4 py-8">
-        <div className="mt-8">
+        {/* Dashboard page now shows only data selector and visualizations */}
+        <div>
           <HealthDashboard />
+        </div>
+
+        {/* On-Chain Profile Section */}
+        <div className="mt-8">
+          <OnChainProfileDisplay userAddress="0x1177909D90D96b787d5e5A8ac613f88231650524" />
         </div>
 
         {/* Debug Controls */}

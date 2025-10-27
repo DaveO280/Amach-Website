@@ -1,0 +1,194 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 142.1 76.2% 36.3%;
+    --primary-foreground: 355.7 100% 97.3%;
+    --secondary: 210 40% 98%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 98%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 98%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 142.1 76.2% 36.3%;
+    --radius: 0.5rem;
+    --indigo-900: 224 71% 4%;
+    --indigo-600: 226 70% 55.5%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 142.1 70.6% 45.3%;
+    --primary-foreground: 144.9 80.4% 10%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 142.1 70.6% 45.3%;
+  }
+
+  @keyframes circuit-glow {
+    0%,
+    100% {
+      opacity: 0.4;
+    }
+    50% {
+      opacity: 0.8;
+    }
+  }
+
+  @keyframes branch-grow {
+    from {
+      stroke-dashoffset: 1000;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @keyframes disintegrate {
+    0% {
+      opacity: 1;
+      filter: blur(0px);
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      filter: blur(8px);
+      transform: scale(0.95);
+    }
+  }
+
+  @keyframes integrate {
+    0% {
+      opacity: 0;
+      filter: blur(8px);
+      transform: scale(1.05);
+    }
+    100% {
+      opacity: 1;
+      filter: blur(0px);
+      transform: scale(1);
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-gradient-to-br from-amber-50 via-white to-emerald-50 text-foreground;
+  }
+}
+
+@layer components {
+  .circuit-path {
+    stroke-dasharray: 1000;
+    stroke-dashoffset: 1000;
+    animation: branch-grow 3s ease forwards;
+  }
+
+  .disintegrate {
+    animation: disintegrate 2s forwards;
+  }
+
+  .integrate {
+    animation: integrate 2s forwards;
+  }
+
+  .admin-card {
+    @apply bg-white/90 border-none shadow-lg backdrop-blur-sm transition-all duration-300 hover:shadow-xl hover:scale-105;
+  }
+
+  .admin-gradient {
+    @apply bg-gradient-to-br from-emerald-600 to-emerald-700;
+  }
+
+  .admin-text-primary {
+    @apply text-emerald-900;
+  }
+
+  .admin-text-secondary {
+    @apply text-amber-800/80;
+  }
+
+  .admin-button-primary {
+    @apply bg-emerald-600 hover:bg-emerald-700 text-white transition-all duration-300 hover:scale-105;
+  }
+
+  .admin-button-outline {
+    @apply border-emerald-600 text-emerald-600 hover:bg-emerald-50 transition-all duration-300;
+  }
+
+  .admin-header {
+    @apply border-b border-amber-100 bg-white/80 backdrop-blur-sm;
+  }
+
+  .admin-nav-item {
+    @apply text-amber-900 hover:text-emerald-600 transition-colors duration-300;
+  }
+
+  .admin-section-title {
+    @apply text-sm font-semibold text-emerald-600 tracking-wide uppercase mb-4;
+  }
+
+  .admin-stat-card {
+    @apply admin-card p-6 rounded-lg border border-emerald-100;
+  }
+
+  .admin-input {
+    @apply border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500 transition-colors duration-300;
+  }
+
+  .admin-table {
+    @apply bg-white/90 border border-emerald-100 rounded-lg overflow-hidden;
+  }
+
+  .admin-table th {
+    @apply bg-emerald-50 text-emerald-900 font-semibold px-4 py-3 text-left;
+  }
+
+  .admin-table td {
+    @apply px-4 py-3 border-b border-emerald-100 text-amber-800;
+  }
+
+  .admin-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .admin-badge-success {
+    @apply admin-badge bg-emerald-100 text-emerald-800;
+  }
+
+  .admin-badge-warning {
+    @apply admin-badge bg-amber-100 text-amber-800;
+  }
+
+  .admin-badge-error {
+    @apply admin-badge bg-red-100 text-red-800;
+  }
+}

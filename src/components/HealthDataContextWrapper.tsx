@@ -18,6 +18,7 @@ import {
 import { extractDatePart } from "@/utils/dataDeduplicator";
 import { processSleepData } from "@/utils/sleepDataProcessor";
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { useWalletConnection } from "../hooks/useWalletConnection";
 
 // Profile type
 interface ProfileData {
@@ -129,6 +130,9 @@ export default function HealthDataContextWrapper({
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isAiCompanionOpen, setIsAiCompanionOpen] = useState(false);
 
+  // Get wallet connection data
+  const { isConnected, profile: walletProfile } = useWalletConnection();
+
   // Optionally, update processingState based on query status
   useEffect(() => {
     if (isPending) {
@@ -154,6 +158,29 @@ export default function HealthDataContextWrapper({
       }));
     }
   }, [isPending, error]);
+
+  // Update user profile from wallet data when available
+  useEffect(() => {
+    if (isConnected && walletProfile) {
+      const walletProfileData = {
+        age: walletProfile.age || 30,
+        sex:
+          (walletProfile.biologicalSex?.toLowerCase() as "male" | "female") ||
+          "male",
+        height: walletProfile.height || 175,
+        weight: walletProfile.weight || 70,
+      };
+
+      setHealthContext((prev) => ({
+        ...prev,
+        userProfile: walletProfileData,
+      }));
+
+      setProfile(walletProfileData);
+
+      console.log("Updated user profile from wallet:", walletProfileData);
+    }
+  }, [isConnected, walletProfile]);
 
   // --- PORTED: Compute metrics, trends, and healthScores from metricData ---
   useEffect((): void => {
@@ -492,7 +519,7 @@ export default function HealthDataContextWrapper({
     });
 
     setHealthContext((prev) => ({ ...prev, metrics, trends }));
-  }, [metricData]);
+  }, [metricData, healthContext.userProfile]);
 
   // --- Compute healthScores as averages of daily scores for each metric ---
   useEffect(() => {
@@ -617,7 +644,7 @@ export default function HealthDataContextWrapper({
       }));
     }
     updateHealthScoresFromDaily();
-  }, [metricData]);
+  }, [metricData, healthContext.userProfile]);
 
   // Calculate and store daily health scores
   useEffect(() => {

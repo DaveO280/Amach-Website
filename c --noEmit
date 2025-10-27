@@ -1,5 +1,0 @@
-[33m57953a3[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m 🔧 Fix PDF.js worker and update dependencies
-[33m6122009[m 🔧 Fix PDF.js worker file extension
-[33md85cd39[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m 🔧 Fix PDF.js worker issues by disabling worker
-[33m9070208[m 🔧 Fix PDF.js version mismatch error
-[33m25034a2[m 🔒 Security updates: Fix critical and high vulnerabilities

@@ -4,19 +4,13 @@ import AiCompanionModal from "@/components/AiCompanionModal";
 import BetaNotification from "@/components/BetaNotification"; // Import the new component
 import HealthDashboardModal from "@/components/HealthDashboardModal";
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
+import { OnboardingModal } from "@/components/OnboardingModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Activity,
-  Bot,
-  Brain,
-  ChevronDown,
-  Leaf,
-  Lock,
-  Menu,
-  Wallet,
-  X,
-} from "lucide-react";
+import { WalletSetupWizard } from "@/components/WalletSetupWizard";
+import { ZkSyncSsoWalletButton } from "@/components/ZkSyncSsoWalletButton";
+import { Brain, Leaf, Lock, Menu, Sparkles, X } from "lucide-react";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 
 const MainPage: React.FC = (): JSX.Element => {
@@ -33,6 +27,24 @@ const MainPage: React.FC = (): JSX.Element => {
 
   // Keep the beta notification state local
   const [showBetaNotification, setShowBetaNotification] = useState(false);
+
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Wallet wizard state
+  const [showWalletWizard, setShowWalletWizard] = useState(false);
+
+  // Check if user has seen onboarding
+  useEffect(() => {
+    const hasSeenOnboarding = localStorage.getItem("amach-onboarding-complete");
+    if (!hasSeenOnboarding) {
+      // Show onboarding after a brief delay for better UX
+      const timer = setTimeout(() => {
+        setShowOnboarding(true);
+      }, 500);
+      return (): void => clearTimeout(timer);
+    }
+  }, []);
 
   useEffect(() => {
     const handleResize = (): void => {
@@ -75,9 +87,15 @@ const MainPage: React.FC = (): JSX.Element => {
   }, [cards.length]);
 
   const navItems = [
+    { label: "How it Works", href: "/how-it-works" },
     { label: "Mission", href: "/mission" },
     { label: "Whitepaper", href: "/whitepaper" },
   ];
+
+  // Allow users to restart the tour
+  const restartOnboarding = (): void => {
+    setShowOnboarding(true);
+  };
 
   // Handler to show notification instead of directly opening dashboard
   const handleDashboardClick = (): void => {
@@ -96,24 +114,56 @@ const MainPage: React.FC = (): JSX.Element => {
     setIsDashboardOpen(true);
   };
 
-  const dropdownItems = [
-    {
-      label: "Dashboard",
-      // Updated to show notification instead of directly opening dashboard
-      action: handleDashboardClick,
-      icon: Activity,
-      href: "#",
-    },
-    {
-      label: "AI Agent",
-      action: (): void => setIsAiCompanionOpen(true),
-      href: "#",
-      icon: Bot,
-    },
-  ];
+  // Handle onboarding close
+  const handleOnboardingClose = (): void => {
+    setShowOnboarding(false);
+    localStorage.setItem("amach-onboarding-complete", "true");
+  };
+
+  // Onboarding action handlers
+  const handleOnboardingConnectWallet = (): void => {
+    // Close onboarding and open the wallet setup wizard
+    handleOnboardingClose();
+    setShowWalletWizard(true);
+  };
+
+  const handleOnboardingUploadData = (): void => {
+    handleOnboardingClose();
+    handleDashboardClick();
+  };
+
+  const handleOnboardingOpenAI = (): void => {
+    handleOnboardingClose();
+    setIsAiCompanionOpen(true);
+  };
+
+  // Wizard completion handler
+  const handleWizardComplete = (): void => {
+    setShowWalletWizard(false);
+    // Show celebration by opening dashboard
+    setIsDashboardOpen(true);
+    // Store completion in localStorage
+    localStorage.setItem("amach-wallet-setup-complete", "true");
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-emerald-50">
+      {/* Onboarding modal for first-time users */}
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onClose={handleOnboardingClose}
+        onConnectWallet={handleOnboardingConnectWallet}
+        onUploadData={handleOnboardingUploadData}
+        onOpenAI={handleOnboardingOpenAI}
+      />
+
+      {/* Wallet Setup Wizard */}
+      <WalletSetupWizard
+        isOpen={showWalletWizard}
+        onClose={() => setShowWalletWizard(false)}
+        onComplete={handleWizardComplete}
+      />
+
       {/* Health dashboard modal */}
       <HealthDashboardModal
         isOpen={isDashboardOpen}
@@ -137,13 +187,26 @@ const MainPage: React.FC = (): JSX.Element => {
         <div className="container mx-auto py-4">
           <div className="flex justify-between items-center max-w-7xl mx-auto">
             <div className="flex items-center">
-              <div className="flex items-center space-x-3">
-                <h1 className="text-2xl font-black text-emerald-900">
-                  Amach Health
-                </h1>
-                <span className="text-2xl font-normal italic text-emerald-900 hidden sm:inline-block">
-                  - &quot;Driven by Data, Guided by Nature&quot;
-                </span>
+              <div className="flex flex-col">
+                <div className="flex items-center space-x-3">
+                  <h1 className="text-2xl font-black text-emerald-900">
+                    Amach Health
+                  </h1>
+                  <span className="text-2xl font-normal italic text-emerald-900 hidden sm:inline-block">
+                    - &quot;Driven by Data, Guided by Nature&quot;
+                  </span>
+                </div>
+                {/* Powered by Venice */}
+                <div className="flex items-center gap-1.5 mt-1 text-xs text-amber-800/60">
+                  <span>Powered by</span>
+                  <Image
+                    src="/venice-logo/Venice Lockup SVG/venice-logo-lockup-black.svg"
+                    alt="Venice AI"
+                    width={60}
+                    height={15}
+                    className="opacity-60 hover:opacity-100 transition-opacity"
+                  />
+                </div>
               </div>
             </div>
 
@@ -161,38 +224,11 @@ const MainPage: React.FC = (): JSX.Element => {
                   ))}
                 </div>
 
-                {/* Using simple CSS dropdown instead of Radix UI for testing */}
-                <div className="relative group">
-                  <Button
-                    variant="outline"
-                    className="text-amber-900 hover:text-emerald-600"
-                  >
-                    <Wallet className="h-4 w-4 mr-2" />
-                    Connect Wallet
-                    <ChevronDown className="h-4 w-4 ml-2" />
-                  </Button>
-                  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                    {dropdownItems.map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <button
-                          key={item.label}
-                          onClick={() => {
-                            if (item.action) {
-                              item.action();
-                            } else if (item.href && item.href !== "#") {
-                              window.location.href = item.href;
-                            }
-                          }}
-                          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
-                        >
-                          <Icon className="h-4 w-4 mr-2" />
-                          {item.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                {/* ZKsync SSO Wallet Connection Component */}
+                <ZkSyncSsoWalletButton
+                  onDashboardClick={handleDashboardClick}
+                  onAiCompanionClick={() => setIsAiCompanionOpen(true)}
+                />
               </div>
             </nav>
 
@@ -229,36 +265,15 @@ const MainPage: React.FC = (): JSX.Element => {
               </a>
             ))}
 
-            {/* Mobile Connect Wallet button - no dropdown */}
+            {/* Mobile ZKsync SSO Wallet Connection */}
             <div className="space-y-2">
-              <div className="text-lg text-amber-900 py-2">Connect Wallet</div>
-
-              {/* Direct links instead of dropdown for mobile */}
-              {dropdownItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.label}
-                    onClick={() => {
-                      // Close mobile menu first
-                      setIsMobileMenuOpen(false);
-
-                      // Then perform the action
-                      if (item.action) {
-                        setTimeout(() => {
-                          item.action();
-                        }, 300); // Short delay to allow menu close animation
-                      } else if (item.href && item.href !== "#") {
-                        window.location.href = item.href;
-                      }
-                    }}
-                    className="flex items-center text-sm py-2 pl-4 w-full text-left text-amber-800 hover:text-emerald-600"
-                  >
-                    <Icon className="h-4 w-4 mr-2" />
-                    {item.label}
-                  </button>
-                );
-              })}
+              <div className="text-lg text-amber-900 py-2">
+                Connect ZKsync SSO Wallet
+              </div>
+              <ZkSyncSsoWalletButton
+                onDashboardClick={handleDashboardClick}
+                onAiCompanionClick={() => setIsAiCompanionOpen(true)}
+              />
             </div>
           </div>
         </div>
@@ -277,10 +292,10 @@ const MainPage: React.FC = (): JSX.Element => {
                 transformation.
               </h2>
               <p className="text-xl text-amber-800/80 leading-relaxed">
-                By capturing insights from medical diagnostics, wearable
-                technologies, and traditional wellness metrics, we&apos;re
-                building a future where health decisions are backed by both
-                clinical evidence and generational wisdom.
+                Your health data is scattered across a dizzying number of
+                systems. Amach Health brings it together, encrypts it with keys
+                only you control, and lets AI reveal insights that clinical
+                evidence alone misses.
               </p>
               <div className="flex flex-col items-center mt-8 space-y-4">
                 <div className="flex flex-col sm:flex-row gap-4">
@@ -298,9 +313,22 @@ const MainPage: React.FC = (): JSX.Element => {
                         "mailto:amachhealth@gmail.com?subject=Early Protocol Access")
                     }
                   >
-                    Join Protocol
+                    Join Whitelist
                   </Button>
                 </div>
+
+                {/* New User Button */}
+                <div className="pt-4 border-t border-amber-100/50 w-full max-w-md">
+                  <Button
+                    variant="outline"
+                    className="w-full px-6 py-4 text-base bg-gradient-to-r from-amber-50 to-emerald-50 hover:from-amber-100 hover:to-emerald-100 border-2 border-emerald-300 text-emerald-700 hover:text-emerald-800 transition-all duration-300 hover:shadow-md group"
+                    onClick={restartOnboarding}
+                  >
+                    <Sparkles className="h-5 w-5 mr-2 group-hover:rotate-12 transition-transform" />
+                    New User? Start Your Journey Here
+                  </Button>
+                </div>
+
                 <p className="text-sm text-amber-800/80 max-w-md text-center">
                   Join our early access list to be among the first to experience
                   the future of health data sovereignty.

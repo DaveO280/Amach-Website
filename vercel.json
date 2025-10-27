@@ -1,4 +1,5 @@
 {
+  "buildCommand": "next build",
   "functions": {
     "src/app/api/venice/route.ts": {
       "maxDuration": 60

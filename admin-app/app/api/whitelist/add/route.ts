@@ -1,3 +1,4 @@
+import { validateApiKey } from "@/lib/apiAuth";
 import {
   adminQueries,
   hashEmail,
@@ -5,9 +6,8 @@ import {
   type WhitelistProof,
 } from "@/lib/database";
 import { ZKProofGenerator } from "@/lib/zk-proofs";
-import { NextRequest, NextResponse } from "next/server";
-import { validateApiKey } from "@/lib/apiAuth";
 import { ethers } from "ethers";
+import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 

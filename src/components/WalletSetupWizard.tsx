@@ -696,7 +696,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
             </p>
           </DialogHeader>
 
-          <div className="grid lg:grid-cols-3 gap-6">
+          <div className="flex flex-col-reverse lg:grid lg:grid-cols-3 gap-6">
             {/* Left: Progress Steps */}
             <div className="lg:col-span-1 space-y-3">
               <div className="mb-4">

@@ -754,25 +754,24 @@ export class ZkSyncSsoWalletService {
       const { secureHealthProfileAbi, SECURE_HEALTH_PROFILE_CONTRACT } =
         await import("../lib/zksync-sso-config");
 
-      // Check if profile exists first
+      // Check if profile exists first using the public hasProfile mapping
       const { readContract } = await import("@wagmi/core");
-      let hasProfile = false;
-      try {
-        await readContract(wagmiConfig, {
-          address: SECURE_HEALTH_PROFILE_CONTRACT,
-          abi: secureHealthProfileAbi,
-          functionName: "getProfileMetadata",
-          args: [this.account.address],
-        });
-        hasProfile = true;
-      } catch (error) {
-        hasProfile = false;
-      }
+      const profileExists = await readContract(wagmiConfig, {
+        address: SECURE_HEALTH_PROFILE_CONTRACT,
+        abi: secureHealthProfileAbi,
+        functionName: "hasProfile",
+        args: [this.account.address],
+      });
+
+      console.log(
+        `🔍 Profile exists check: ${profileExists ? "YES" : "NO"} for ${this.account.address}`,
+      );
 
       // Prepare transaction data - SecureHealthProfile stores full encrypted strings
-      const functionName = hasProfile
+      const functionName = profileExists
         ? "updateSecureProfile"
         : "createSecureProfile";
+      console.log(`📝 Using function: ${functionName}`);
       const nonce = "0x" + Math.random().toString(16).substr(2, 16); // Generate random nonce
 
       const args: readonly [
@@ -802,7 +801,28 @@ export class ZkSyncSsoWalletService {
       });
 
       console.log("📝 Transaction submitted:", hash);
-      return { success: true, txHash: hash };
+
+      // Wait for transaction confirmation
+      const { waitForTransactionReceipt } = await import("@wagmi/core");
+      console.log("⏳ Waiting for transaction confirmation...");
+
+      const receipt = await waitForTransactionReceipt(wagmiConfig, {
+        hash,
+        confirmations: 1,
+      });
+
+      // Check if transaction was successful
+      if (receipt.status === "success") {
+        console.log("✅ Transaction confirmed successfully!");
+        return { success: true, txHash: hash };
+      } else {
+        console.error("❌ Transaction reverted on-chain");
+        return {
+          success: false,
+          error:
+            "Transaction reverted - profile may already exist or data is invalid",
+        };
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";

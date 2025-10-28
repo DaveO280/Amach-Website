@@ -131,6 +131,13 @@ const secureHealthProfileAbi = [
     stateMutability: "view",
     type: "function",
   },
+  {
+    inputs: [{ name: "user", type: "address" }],
+    name: "hasProfile",
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function",
+  },
 ] as const;
 
 // Profile Verification contract ABI for verification operations

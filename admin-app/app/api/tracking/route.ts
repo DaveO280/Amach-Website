@@ -7,11 +7,15 @@ import {
   hashSource,
 } from "@/lib/database";
 import { ZKProofGenerator, ZKProofVerifier } from "@/lib/zk-proofs";
+import { validateApiKey } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 
 // GET - Get user tracking analytics (privacy-preserving)
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  // Validate API key
+  const authError = validateApiKey(request);
+  if (authError) return authError;
   try {
     type AnalyticsData = {
       total_whitelisted: number;
@@ -94,6 +98,10 @@ export async function GET(): Promise<NextResponse> {
 
 // POST - Update user tracking with ZK-proofs
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  // Validate API key
+  const authError = validateApiKey(request);
+  if (authError) return authError;
+
   try {
     const {
       email,

@@ -1,10 +1,15 @@
 import { whitelistQueries, type WhitelistProof } from "@/lib/database";
 import { NextRequest, NextResponse } from "next/server";
+import { validateApiKey } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 
 // POST - Check if email is whitelisted
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  // Validate API key
+  const authError = validateApiKey(request);
+  if (authError) return authError;
+
   try {
     const { email } = await request.json();
 

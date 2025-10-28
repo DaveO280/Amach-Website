@@ -6,11 +6,16 @@ import {
 } from "@/lib/database";
 import { ZKProofGenerator } from "@/lib/zk-proofs";
 import { NextRequest, NextResponse } from "next/server";
+import { validateApiKey } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 
 // POST - Add email to whitelist
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  // Validate API key
+  const authError = validateApiKey(request);
+  if (authError) return authError;
+
   try {
     const { email, addedBy = "admin@amachhealth.com" } = await request.json();
 

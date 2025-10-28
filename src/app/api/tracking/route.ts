@@ -11,10 +11,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Proxy to the admin tracking API
     const adminApiUrl =
       process.env.ADMIN_API_URL || "http://localhost:3001/api";
+    const apiKey = process.env.ADMIN_API_KEY;
+
+    if (!apiKey) {
+      console.error("❌ ADMIN_API_KEY not configured");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 },
+      );
+    }
+
     const response = await fetch(`${adminApiUrl}/tracking`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-api-key": apiKey,
       },
       body: JSON.stringify(body),
     });

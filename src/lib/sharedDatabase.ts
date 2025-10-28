@@ -6,10 +6,18 @@ export async function isEmailWhitelisted(email: string): Promise<boolean> {
   try {
     const adminApiUrl =
       process.env.ADMIN_API_URL || "http://localhost:3001/api";
+    const apiKey = process.env.ADMIN_API_KEY;
+
+    if (!apiKey) {
+      console.error("❌ ADMIN_API_KEY not configured");
+      return false;
+    }
+
     const response = await fetch(`${adminApiUrl}/whitelist/check`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-api-key": apiKey,
       },
       body: JSON.stringify({ email }),
     });
@@ -45,7 +53,18 @@ export async function getWhitelistedEmails(): Promise<
   try {
     const adminApiUrl =
       process.env.ADMIN_API_URL || "http://localhost:3001/api";
-    const response = await fetch(`${adminApiUrl}/whitelist`);
+    const apiKey = process.env.ADMIN_API_KEY;
+
+    if (!apiKey) {
+      console.error("❌ ADMIN_API_KEY not configured");
+      return [];
+    }
+
+    const response = await fetch(`${adminApiUrl}/whitelist`, {
+      headers: {
+        "x-api-key": apiKey,
+      },
+    });
 
     if (!response.ok) {
       console.error("Admin app API not available:", response.status);
@@ -68,10 +87,18 @@ export async function addEmailToWhitelist(
   try {
     const adminApiUrl =
       process.env.ADMIN_API_URL || "http://localhost:3001/api";
+    const apiKey = process.env.ADMIN_API_KEY;
+
+    if (!apiKey) {
+      console.error("❌ ADMIN_API_KEY not configured");
+      return false;
+    }
+
     const response = await fetch(`${adminApiUrl}/whitelist/add`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-api-key": apiKey,
       },
       body: JSON.stringify({ email, addedBy }),
     });
@@ -96,10 +123,18 @@ export async function removeEmailFromWhitelist(
   try {
     const adminApiUrl =
       process.env.ADMIN_API_URL || "http://localhost:3001/api";
+    const apiKey = process.env.ADMIN_API_KEY;
+
+    if (!apiKey) {
+      console.error("❌ ADMIN_API_KEY not configured");
+      return false;
+    }
+
     const response = await fetch(`${adminApiUrl}/whitelist/remove`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-api-key": apiKey,
       },
       body: JSON.stringify({ email }),
     });
@@ -125,10 +160,18 @@ export async function updateEmailStatus(
   try {
     const adminApiUrl =
       process.env.ADMIN_API_URL || "http://localhost:3001/api";
+    const apiKey = process.env.ADMIN_API_KEY;
+
+    if (!apiKey) {
+      console.error("❌ ADMIN_API_KEY not configured");
+      return false;
+    }
+
     const response = await fetch(`${adminApiUrl}/whitelist/update-status`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-api-key": apiKey,
       },
       body: JSON.stringify({ email, status }),
     });

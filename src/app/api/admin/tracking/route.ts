@@ -9,11 +9,21 @@ export async function GET(): Promise<NextResponse> {
   try {
     console.log("🔄 Proxying tracking data request to admin app...");
 
+    const apiKey = process.env.ADMIN_API_KEY;
+    if (!apiKey) {
+      console.error("❌ ADMIN_API_KEY not configured");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 },
+      );
+    }
+
     // Proxy the request to the admin app
     const response = await fetch(`${ADMIN_API_BASE}/tracking`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
+        "x-api-key": apiKey,
       },
     });
 
@@ -42,11 +52,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     console.log("🔄 Proxying tracking action to admin app:", action);
 
+    const apiKey = process.env.ADMIN_API_KEY;
+    if (!apiKey) {
+      console.error("❌ ADMIN_API_KEY not configured");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 },
+      );
+    }
+
     // Proxy the request to the admin app
     const response = await fetch(`${ADMIN_API_BASE}/tracking`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-api-key": apiKey,
       },
       body: JSON.stringify(body),
     });

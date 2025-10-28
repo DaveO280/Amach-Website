@@ -6,11 +6,16 @@ import {
 } from "@/lib/database";
 import { ZKProofGenerator } from "@/lib/zk-proofs";
 import { NextRequest, NextResponse } from "next/server";
+import { validateApiKey } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 
 // GET - List all whitelisted emails (privacy-preserving)
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  // Validate API key
+  const authError = validateApiKey(request);
+  if (authError) return authError;
+
   try {
     type WhitelistItem = {
       email: string;
@@ -49,6 +54,10 @@ export async function GET(): Promise<NextResponse> {
 
 // POST - Add or remove emails from whitelist
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  // Validate API key
+  const authError = validateApiKey(request);
+  if (authError) return authError;
+
   try {
     const { email, action, adminEmail } = await request.json();
 
@@ -146,6 +155,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 // PUT - Bulk operations
 export async function PUT(request: NextRequest): Promise<NextResponse> {
+  // Validate API key
+  const authError = validateApiKey(request);
+  if (authError) return authError;
+
   try {
     const { emails, action, adminEmail } = await request.json();
 

@@ -5,10 +5,10 @@ export const runtime = "nodejs";
 
 import { ethers } from "ethers";
 
-// Contract configuration (Fresh Deployment - January 2025 - Final)
+// Contract configuration (Fresh Deployment - Oct 28 2025)
 const PROFILE_VERIFICATION_CONTRACT =
   process.env.PROFILE_VERIFICATION_CONTRACT ||
-  "0x87B69bDBa7e9E15E7e8e3337D76c62A2b6A78356";
+  "0x07CB4d29fB08F7817914ADAFAc53E2857461bE7C";
 const RPC_URL = process.env.ZKSYNC_RPC_URL || "https://sepolia.era.zksync.dev";
 const PRIVATE_KEY = process.env.ADMIN_PRIVATE_KEY || "";
 

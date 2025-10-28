@@ -5,10 +5,10 @@ export const runtime = "nodejs";
 
 import { ethers } from "ethers";
 
-// Contract configuration (Fresh Deployment - October 2025)
+// Contract configuration (Fresh Deployment - Oct 28 2025)
 const PROFILE_VERIFICATION_CONTRACT =
   process.env.PROFILE_VERIFICATION_CONTRACT ||
-  "0x3212DA87f72690a0833B7cBe01ecE792b296260f";
+  "0x07CB4d29fB08F7817914ADAFAc53E2857461bE7C";
 const RPC_URL = process.env.ZKSYNC_RPC_URL || "https://sepolia.era.zksync.dev";
 
 // Contract ABI

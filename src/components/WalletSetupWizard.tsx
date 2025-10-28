@@ -173,19 +173,21 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     [steps, updateStepStatus],
   );
 
-  // Email verification functions
+  // Email verification functions - checks blockchain directly
   const checkEmailWhitelist = async (email: string): Promise<boolean> => {
     try {
-      const response = await fetch("/api/verification/check-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
+      console.log("🔍 Checking email whitelist on blockchain...");
 
-      const data = await response.json();
-      return data.canProceed || false;
+      // Import the blockchain-based whitelist checker
+      const { isEmailWhitelisted } = await import("@/lib/sharedDatabase");
+
+      // Query blockchain directly (no API needed!)
+      const isWhitelisted = await isEmailWhitelisted(email);
+
+      console.log(`✅ Email ${email} whitelist status:`, isWhitelisted);
+      return isWhitelisted;
     } catch (error) {
-      console.error("Failed to check email whitelist:", error);
+      console.error("❌ Failed to check email whitelist:", error);
       return false;
     }
   };

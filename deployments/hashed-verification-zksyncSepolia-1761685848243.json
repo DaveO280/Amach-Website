@@ -1,0 +1,19 @@
+{
+  "network": "zksyncSepolia",
+  "deployer": "0xC9fFD981932FA4F91A0f31184264Ce079d196c48",
+  "timestamp": "2025-10-28T21:10:48.243Z",
+  "contracts": {
+    "healthToken": "0x7363964fE96455D2246111EdaF8ae793e73c766C",
+    "profileVerification": "0x07CB4d29fB08F7817914ADAFAc53E2857461bE7C",
+    "secureHealthProfile": "0x754213E1d203f2Dffa154E263d5Db074ad2d0BfD"
+  },
+  "features": {
+    "hashedEmails": true,
+    "emailPrivacy": "Hash-based whitelist (keccak256)",
+    "allocationConfig": {
+      "maxAllocations": 5000,
+      "allocationPerUser": "1000 AHP",
+      "totalAllocated": "5,000,000 AHP"
+    }
+  }
+}

@@ -377,11 +377,20 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         throw new Error(result.error || "Failed to create profile");
       }
 
+      console.log("✅ Profile created! Transaction:", result.txHash);
+      console.log("⏳ Waiting for blockchain confirmation (5 seconds)...");
+
       updateStepStatus("create-profile", "complete");
+
+      // Wait for blockchain transaction to be confirmed (5 seconds)
+      // This ensures the profile exists on-chain before verification
       setTimeout(() => {
+        console.log(
+          "✅ Blockchain confirmation complete - moving to verification",
+        );
         moveToNextStep();
         void handleVerifyProfile();
-      }, 1000);
+      }, 5000); // Increased from 1000ms to 5000ms
     } catch (err) {
       console.error("Profile creation error:", err);
       setError(
@@ -411,11 +420,14 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       }
 
       console.log("✅ Profile verification successful:", verifyResult.txHash);
+      console.log("⏳ Waiting for blockchain confirmation (5 seconds)...");
 
-      // Wait for transaction to be processed
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Wait for transaction to be confirmed on blockchain
+      await new Promise((resolve) => setTimeout(resolve, 5000));
 
+      console.log("✅ Verification confirmed - moving to token claim");
       updateStepStatus("verify-profile", "complete");
+
       setTimeout(() => {
         moveToNextStep();
         void handleClaimTokens();

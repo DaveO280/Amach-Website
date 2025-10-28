@@ -41,7 +41,7 @@ contract ProfileVerification is Ownable, ReentrancyGuard {
     }
 
     // State variables
-    mapping(string => bool) public emailWhitelist;
+    mapping(bytes32 => bool) public emailHashWhitelist; // Hash-based whitelist for privacy
     mapping(address => string) public walletToEmail;
     mapping(string => address) public emailToWallet;
     mapping(address => UserVerification) public userVerifications;
@@ -57,8 +57,37 @@ contract ProfileVerification is Ownable, ReentrancyGuard {
     
     // Modifiers
     modifier onlyWhitelistedEmail(string memory email) {
-        require(emailWhitelist[email], "Email not whitelisted");
+        bytes32 emailHash = _hashEmail(email);
+        require(emailHashWhitelist[emailHash], "Email not whitelisted");
         _;
+    }
+    
+    /**
+     * @dev Internal function to hash email consistently
+     * @param email Email address to hash
+     * @return Hash of the lowercased email
+     */
+    function _hashEmail(string memory email) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(_toLower(email)));
+    }
+    
+    /**
+     * @dev Internal function to convert string to lowercase
+     * @param str String to convert
+     * @return Lowercase version of the string
+     */
+    function _toLower(string memory str) internal pure returns (string memory) {
+        bytes memory bStr = bytes(str);
+        bytes memory bLower = new bytes(bStr.length);
+        for (uint i = 0; i < bStr.length; i++) {
+            // Uppercase character check
+            if ((uint8(bStr[i]) >= 65) && (uint8(bStr[i]) <= 90)) {
+                bLower[i] = bytes1(uint8(bStr[i]) + 32);
+            } else {
+                bLower[i] = bStr[i];
+            }
+        }
+        return string(bLower);
     }
     
     modifier onlyUnusedEmail(string memory email) {
@@ -88,22 +117,24 @@ contract ProfileVerification is Ownable, ReentrancyGuard {
 
     /**
      * @dev Add email to whitelist (only owner)
-     * @param email Email address to whitelist
+     * @param email Email address to whitelist (hash will be stored)
      */
     function addEmailToWhitelist(string memory email) external onlyOwner {
-        require(!emailWhitelist[email], "Email already whitelisted");
-        emailWhitelist[email] = true;
+        bytes32 emailHash = _hashEmail(email);
+        require(!emailHashWhitelist[emailHash], "Email already whitelisted");
+        emailHashWhitelist[emailHash] = true;
         emit EmailWhitelisted(email, msg.sender, block.timestamp);
     }
 
     /**
      * @dev Add multiple emails to whitelist (only owner)
-     * @param emails Array of email addresses to whitelist
+     * @param emails Array of email addresses to whitelist (hashes will be stored)
      */
     function addEmailsToWhitelist(string[] memory emails) external onlyOwner {
         for (uint256 i = 0; i < emails.length; i++) {
-            if (!emailWhitelist[emails[i]]) {
-                emailWhitelist[emails[i]] = true;
+            bytes32 emailHash = _hashEmail(emails[i]);
+            if (!emailHashWhitelist[emailHash]) {
+                emailHashWhitelist[emailHash] = true;
                 emit EmailWhitelisted(emails[i], msg.sender, block.timestamp);
             }
         }
@@ -114,8 +145,9 @@ contract ProfileVerification is Ownable, ReentrancyGuard {
      * @param email Email address to remove from whitelist
      */
     function removeEmailFromWhitelist(string memory email) external onlyOwner {
-        require(emailWhitelist[email], "Email not in whitelist");
-        emailWhitelist[email] = false;
+        bytes32 emailHash = _hashEmail(email);
+        require(emailHashWhitelist[emailHash], "Email not in whitelist");
+        emailHashWhitelist[emailHash] = false;
         emit EmailRemovedFromWhitelist(email, msg.sender, block.timestamp);
     }
 
@@ -239,12 +271,22 @@ contract ProfileVerification is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Check if email is whitelisted
+     * @dev Check if email is whitelisted (checks hash)
      * @param email Email address to check
      * @return isWhitelisted Whether the email is whitelisted
      */
     function isEmailWhitelisted(string memory email) external view returns (bool isWhitelisted) {
-        return emailWhitelist[email];
+        bytes32 emailHash = _hashEmail(email);
+        return emailHashWhitelist[emailHash];
+    }
+    
+    /**
+     * @dev Check if email hash is whitelisted (for frontend use)
+     * @param emailHash Hash of the email address
+     * @return isWhitelisted Whether the email hash is whitelisted
+     */
+    function isEmailHashWhitelisted(bytes32 emailHash) external view returns (bool isWhitelisted) {
+        return emailHashWhitelist[emailHash];
     }
 
     /**

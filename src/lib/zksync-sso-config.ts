@@ -315,11 +315,11 @@ const healthProfileAbi = [
 // Contract addresses (Fresh deployment - October 2025)
 // Complete system redeployment with clean slate for beta testing
 const HEALTH_PROFILE_CONTRACT = "0x6C7e52F1FfBCc0Bf001BB9458B64D85d7D7eC9F8"; // Legacy (deprecated)
-const HEALTH_TOKEN_CONTRACT = "0x34f947904bb4fdb9CD9bA42168Dd457EeD00cf6A"; // Fresh deployment Oct 2025
+const HEALTH_TOKEN_CONTRACT = "0x9159A27bA39faAD8030fA6a2E68BD1dCE84F775E"; // Hashed Email System - Oct 28 2025
 const SECURE_HEALTH_PROFILE_CONTRACT =
-  "0xa71CE608264b96bf3D7ca480180eE528B7733fdc"; // With getEncryptedProfile getter
+  "0x7e4E329977Bd2e3B0d70128153B46E1E5FDEe2de"; // Hashed Email System - Oct 28 2025
 const PROFILE_VERIFICATION_CONTRACT =
-  "0x3212DA87f72690a0833B7cBe01ecE792b296260f"; // Fresh deployment Oct 2025
+  "0x915f200D15906b70D0047BB72076eEDc4d1944E4"; // Hashed Email System - Oct 28 2025
 
 // Export the ABIs and contract addresses
 export {

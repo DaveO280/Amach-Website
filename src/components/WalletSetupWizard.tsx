@@ -70,6 +70,10 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     weight: 0,
     email: "",
   });
+  // Imperial unit inputs (feet/inches for height, lbs for weight)
+  const [heightFeet, setHeightFeet] = useState("");
+  const [heightInches, setHeightInches] = useState("");
+  const [weightLbs, setWeightLbs] = useState("");
   const { isConnected, address, connect, updateHealthProfile } =
     useZkSyncSsoWallet();
 
@@ -342,17 +346,26 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       if (
         !profileData.birthDate ||
         !profileData.sex ||
-        !profileData.height ||
-        !profileData.weight
+        !heightFeet ||
+        !heightInches ||
+        !weightLbs
       ) {
         throw new Error("Please fill in all profile fields");
       }
 
+      // Convert imperial to total inches for height
+      const feet = parseInt(heightFeet);
+      const inches = parseInt(heightInches);
+      const totalInches = feet * 12 + inches;
+
+      // Convert lbs to integer
+      const weightInLbs = parseInt(weightLbs);
+
       const healthData = {
         birthDate: profileData.birthDate,
         sex: profileData.sex,
-        height: profileData.height,
-        weight: profileData.weight,
+        height: totalInches, // Store height in total inches
+        weight: weightInLbs, // Store weight in pounds
         email: profileData.email,
         isActive: true,
         version: 1,
@@ -604,57 +617,61 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label
-                  htmlFor="height"
-                  className="text-sm font-semibold text-emerald-900"
-                >
-                  Height (cm)
-                </Label>
-                <Input
-                  id="height"
-                  type="number"
-                  value={profileData.height || ""}
-                  onChange={(e) =>
-                    setProfileData((prev) => ({
-                      ...prev,
-                      height: parseInt(e.target.value) || 0,
-                    }))
-                  }
-                  placeholder="170"
-                  className="mt-2"
-                />
+            <div>
+              <Label className="text-sm font-semibold text-emerald-900 mb-2 block">
+                Height
+              </Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Input
+                    id="height-feet"
+                    type="number"
+                    min="4"
+                    max="8"
+                    value={heightFeet}
+                    onChange={(e) => setHeightFeet(e.target.value)}
+                    placeholder="Feet"
+                  />
+                </div>
+                <div>
+                  <Input
+                    id="height-inches"
+                    type="number"
+                    min="0"
+                    max="11"
+                    value={heightInches}
+                    onChange={(e) => setHeightInches(e.target.value)}
+                    placeholder="Inches"
+                  />
+                </div>
               </div>
-              <div>
-                <Label
-                  htmlFor="weight"
-                  className="text-sm font-semibold text-emerald-900"
-                >
-                  Weight (kg)
-                </Label>
-                <Input
-                  id="weight"
-                  type="number"
-                  value={profileData.weight || ""}
-                  onChange={(e) =>
-                    setProfileData((prev) => ({
-                      ...prev,
-                      weight: parseInt(e.target.value) || 0,
-                    }))
-                  }
-                  placeholder="70"
-                  className="mt-2"
-                />
-              </div>
+            </div>
+            <div>
+              <Label
+                htmlFor="weight"
+                className="text-sm font-semibold text-emerald-900"
+              >
+                Weight (lbs)
+              </Label>
+              <Input
+                id="weight"
+                type="number"
+                min="50"
+                max="500"
+                value={weightLbs}
+                onChange={(e) => setWeightLbs(e.target.value)}
+                placeholder="e.g., 180"
+                className="mt-2"
+              />
             </div>
             <Button
               onClick={() => void handleCreateProfile()}
               disabled={
                 !profileData.birthDate ||
                 !profileData.sex ||
-                !profileData.height ||
-                !profileData.weight
+                !heightFeet ||
+                !heightInches ||
+                !weightLbs
               }
               className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg disabled:opacity-50"
             >

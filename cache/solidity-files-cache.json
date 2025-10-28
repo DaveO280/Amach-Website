@@ -122,8 +122,8 @@
       "artifacts": ["Context"]
     },
     "C:\\Users\\ogara\\AmachHealth(S)\\Amach-Website\\contracts\\ProfileVerification.sol": {
-      "lastModificationDate": 1760147711081,
-      "contentHash": "b977adca530ec68cc5d125598aadce07",
+      "lastModificationDate": 1761672746983,
+      "contentHash": "1bab7decb284d1ef9d238d164d77d5f3",
       "sourceName": "contracts/ProfileVerification.sol",
       "solcConfig": {
         "version": "0.8.20",

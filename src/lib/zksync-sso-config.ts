@@ -336,92 +336,99 @@ export {
 const HEALTH_TOKEN_DECIMALS = 18;
 
 // ZKsync SSO Connector with health-specific session configuration
+// 🔒 SECURITY CONFIGURATION FOR MAINNET READINESS
 export const ssoConnector = zksyncSsoConnector({
   // Use ZKsync hosted auth server (default)
   // No authServerUrl needed - uses ZKsync's hosted service
 
   // Session configuration for health data operations
   session: {
-    // Session expires in 7 days (extended for better timing flexibility)
-    expiry: "7 days",
+    // 🔐 Session expires in 1 day (reduced from 7 days for security)
+    // User will need to reconnect daily, balancing security with UX
+    expiry: "1 day",
 
-    // Allow up to 0.1 ETH to be spent in gas fees for health operations
-    feeLimit: parseEther("0.1"),
+    // 🔐 Allow up to 0.05 ETH in gas fees per session (reduced from 0.1 ETH)
+    // Limits damage if session key is compromised
+    feeLimit: parseEther("0.05"),
 
-    // Allow ETH transfers for health-related payments
+    // 🔐 Allow ETH transfers for health-related payments
     transfers: [
       {
-        // Allow transfers to health data contract
+        // Allow transfers to legacy health profile contract
         to: HEALTH_PROFILE_CONTRACT,
-        valueLimit: parseEther("0.05"),
+        valueLimit: parseEther("0.01"), // Max 0.01 ETH per transfer (reduced from 0.05 ETH)
       },
       // Add more health-related addresses as needed
     ],
 
-    // Allow calling health profile and verification smart contracts
+    // 🔐 Smart contracts enforce one-time operations at the contract level:
+    //   - claimAllocation: Only once per wallet (contract enforces)
+    //   - createProfile/createSecureProfile: Only once per wallet (contract enforces)
+    //   - verifyProfile: Only once per wallet (contract enforces)
+    // SSO session provides UX (no explicit signatures), contracts provide security
     contractCalls: [
       // Profile verification (with signature)
+      // Contract enforces: One verification per wallet
       callPolicy({
         address: PROFILE_VERIFICATION_CONTRACT,
         abi: profileVerificationAbi,
         functionName: "verifyProfile",
-        constraints: [],
       }),
-      // Profile verification (ZKsync SSO - no signature required)
+      // Profile verification (ZKsync SSO - no signature)
+      // Contract enforces: One verification per wallet
       callPolicy({
         address: PROFILE_VERIFICATION_CONTRACT,
         abi: profileVerificationAbi,
         functionName: "verifyProfileZKsync",
-        constraints: [],
       }),
-      // Health profile creation
+      // Health profile creation (legacy)
+      // Contract enforces: One profile per wallet
       callPolicy({
         address: HEALTH_PROFILE_CONTRACT,
         abi: healthProfileAbi,
         functionName: "createProfile",
-        constraints: [],
       }),
-      // Health profile updates
+      // Health profile updates (legacy)
+      // Unlimited updates allowed (frequent operation)
       callPolicy({
         address: HEALTH_PROFILE_CONTRACT,
         abi: healthProfileAbi,
         functionName: "updateProfile",
-        constraints: [],
       }),
-      // Weight updates (most frequent operation)
+      // Weight updates (legacy)
+      // Unlimited updates allowed (daily tracking)
       callPolicy({
         address: HEALTH_PROFILE_CONTRACT,
         abi: healthProfileAbi,
         functionName: "updateWeight",
-        constraints: [],
       }),
-      // Token allocation claiming
+      // 🚨 CRITICAL: Token allocation claiming
+      // Contract enforces: One claim per wallet (prevents token drainage)
       callPolicy({
         address: PROFILE_VERIFICATION_CONTRACT,
         abi: profileVerificationAbi,
         functionName: "claimAllocation",
-        constraints: [],
       }),
       // Secure profile creation (encrypted data)
+      // Contract enforces: One profile per wallet
       callPolicy({
         address: SECURE_HEALTH_PROFILE_CONTRACT,
         abi: secureHealthProfileAbi,
         functionName: "createSecureProfile",
-        constraints: [],
       }),
       // Secure profile updates (encrypted data)
+      // Unlimited updates allowed (frequent operation)
       callPolicy({
         address: SECURE_HEALTH_PROFILE_CONTRACT,
         abi: secureHealthProfileAbi,
         functionName: "updateSecureProfile",
-        constraints: [],
       }),
       // ZK-proof submission
+      // Unlimited submissions allowed (future proofs)
       callPolicy({
         address: SECURE_HEALTH_PROFILE_CONTRACT,
         abi: secureHealthProfileAbi,
         functionName: "submitZKProof",
-        constraints: [],
       }),
     ],
   },

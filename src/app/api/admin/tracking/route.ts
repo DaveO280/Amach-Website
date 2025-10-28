@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Since better-sqlite3 has native binding issues in the main app,
 // we'll proxy requests to the admin app's API instead
-const ADMIN_API_BASE = "http://localhost:3001/api";
+const ADMIN_API_BASE = process.env.ADMIN_API_URL || "http://localhost:3001/api";
 
 // GET - Retrieve tracking data
 export async function GET(): Promise<NextResponse> {

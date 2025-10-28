@@ -4,7 +4,9 @@
 // Check if email is whitelisted by calling admin app API
 export async function isEmailWhitelisted(email: string): Promise<boolean> {
   try {
-    const response = await fetch("http://localhost:3001/api/whitelist/check", {
+    const adminApiUrl =
+      process.env.ADMIN_API_URL || "http://localhost:3001/api";
+    const response = await fetch(`${adminApiUrl}/whitelist/check`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -41,7 +43,9 @@ export async function getWhitelistedEmails(): Promise<
   }>
 > {
   try {
-    const response = await fetch("http://localhost:3001/api/whitelist");
+    const adminApiUrl =
+      process.env.ADMIN_API_URL || "http://localhost:3001/api";
+    const response = await fetch(`${adminApiUrl}/whitelist`);
 
     if (!response.ok) {
       console.error("Admin app API not available:", response.status);
@@ -62,7 +66,9 @@ export async function addEmailToWhitelist(
   addedBy: string = "admin@amachhealth.com",
 ): Promise<boolean> {
   try {
-    const response = await fetch("http://localhost:3001/api/whitelist/add", {
+    const adminApiUrl =
+      process.env.ADMIN_API_URL || "http://localhost:3001/api";
+    const response = await fetch(`${adminApiUrl}/whitelist/add`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -88,7 +94,9 @@ export async function removeEmailFromWhitelist(
   email: string,
 ): Promise<boolean> {
   try {
-    const response = await fetch("http://localhost:3001/api/whitelist/remove", {
+    const adminApiUrl =
+      process.env.ADMIN_API_URL || "http://localhost:3001/api";
+    const response = await fetch(`${adminApiUrl}/whitelist/remove`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -115,16 +123,15 @@ export async function updateEmailStatus(
   status: "active" | "inactive" | "suspended",
 ): Promise<boolean> {
   try {
-    const response = await fetch(
-      "http://localhost:3001/api/whitelist/update-status",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, status }),
+    const adminApiUrl =
+      process.env.ADMIN_API_URL || "http://localhost:3001/api";
+    const response = await fetch(`${adminApiUrl}/whitelist/update-status`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({ email, status }),
+    });
 
     if (!response.ok) {
       console.error("Failed to update email status:", response.status);

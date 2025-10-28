@@ -9,7 +9,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.log("📊 Main app tracking API received:", body);
 
     // Proxy to the admin tracking API
-    const response = await fetch("http://localhost:3001/api/tracking", {
+    const adminApiUrl =
+      process.env.ADMIN_API_URL || "http://localhost:3001/api";
+    const response = await fetch(`${adminApiUrl}/tracking`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

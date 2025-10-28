@@ -435,26 +435,44 @@ export const UnifiedAdminDashboard: React.FC = () => {
 
   const addEmailToWhitelist = async (email: string): Promise<void> => {
     try {
-      console.log("📧 Adding email to whitelist:", email);
+      console.log(
+        "📧 Adding email to whitelist (database + blockchain):",
+        email,
+      );
 
-      const response = await fetch("/api/whitelist", {
+      const response = await fetch("/api/whitelist/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
-          action: "add",
-          adminEmail: "admin@amachhealth.com", // TODO: Get from auth
+          addedBy: "admin@amachhealth.com", // Updated parameter name
         }),
       });
 
       if (response.ok) {
         const result = await response.json();
         console.log("✅ Email added successfully:", result);
+
+        // Show blockchain status to admin
+        if (result.blockchainAdded) {
+          console.log("🔗 Blockchain TX:", result.blockchainTxHash);
+          alert(
+            `✅ Email added successfully!\n\n📧 Email: ${email}\n🔗 Blockchain: Added\n📝 TX: ${result.blockchainTxHash?.substring(0, 10)}...`,
+          );
+        } else if (result.blockchainError) {
+          console.warn("⚠️ Blockchain write failed:", result.blockchainError);
+          alert(
+            `⚠️ ${result.message}\n\nError: ${result.blockchainError}\n\nEmail is in database but NOT on blockchain. Users won't be able to verify yet.`,
+          );
+        }
+
         await loadDashboardData();
         setNewEmail("");
 
         // Send welcome email to the newly whitelisted user
-        await sendWalletCreationEmail([email]);
+        if (result.blockchainAdded) {
+          await sendWalletCreationEmail([email]);
+        }
       } else {
         const error = await response.json();
         console.error("❌ Failed to add email:", error);

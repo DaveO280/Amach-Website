@@ -193,23 +193,43 @@ const MainPage: React.FC = (): JSX.Element => {
             <div className="flex items-center gap-3">
               <div className="flex flex-col">
                 <div className="flex items-center space-x-3">
-                  <h1 className="text-2xl font-black text-emerald-900">
+                  <h1 className="text-2xl font-black text-emerald-900 whitespace-nowrap">
                     Amach Health
                   </h1>
-                  <span className="text-2xl font-normal italic text-emerald-900 hidden sm:inline-block">
+                  <span className="text-base md:text-lg lg:text-xl font-normal italic text-emerald-900 hidden sm:inline-block">
                     - &quot;Driven by Data, Guided by Nature&quot;
                   </span>
                 </div>
                 {/* Powered by Venice */}
                 <div className="flex items-center gap-1.5 mt-1 text-xs text-amber-800/60">
                   <span>Powered by</span>
-                  <Image
-                    src="/venice-logo/Venice Lockup SVG/venice-logo-lockup-black.svg"
-                    alt="Venice AI"
-                    width={60}
-                    height={15}
-                    className="opacity-60 hover:opacity-100 transition-opacity"
-                  />
+                  <a
+                    href="https://venice.ai/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Visit Venice AI website"
+                    className="inline-flex cursor-pointer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      try {
+                        window.open(
+                          "https://venice.ai/",
+                          "_blank",
+                          "noopener,noreferrer",
+                        );
+                      } catch {
+                        window.location.href = "https://venice.ai/";
+                      }
+                    }}
+                  >
+                    <Image
+                      src="/venice-logo/Venice Lockup SVG/venice-logo-lockup-black.svg"
+                      alt="Venice AI"
+                      width={60}
+                      height={15}
+                      className="opacity-60 hover:opacity-100 transition-opacity"
+                    />
+                  </a>
                 </div>
               </div>
               {/* Wallet Status - Compact inline display */}

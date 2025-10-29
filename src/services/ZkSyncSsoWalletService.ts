@@ -523,6 +523,7 @@ export class ZkSyncSsoWalletService {
 
         console.log("✅ Health profile loaded and synced to localStorage");
       } catch (error) {
+        console.error("❌ Failed to load profile from blockchain:", error);
         console.log("ℹ️ No health profile found on blockchain");
         this.healthProfile = null;
       }

@@ -232,12 +232,18 @@ const MainPage: React.FC = (): JSX.Element => {
                   </a>
                 </div>
               </div>
-              {/* Wallet Status - Compact inline display */}
-              <GlobalWalletStatus />
+              {/* Wallet Status - show inline only on mobile */}
+              <div className="md:hidden">
+                <GlobalWalletStatus />
+              </div>
             </div>
 
             <nav className="hidden md:flex items-center justify-end w-1/2">
-              <div className="flex items-center justify-between w-full">
+              <div className="flex flex-col items-end w-full">
+                {/* Desktop wallet status above nav links */}
+                <div className="hidden md:block mb-1">
+                  <GlobalWalletStatus />
+                </div>
                 <div className="flex items-center space-x-16 ml-auto mr-16">
                   {navItems.map((item) => (
                     <a

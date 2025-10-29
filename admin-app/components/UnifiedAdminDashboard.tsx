@@ -414,7 +414,7 @@ export const UnifiedAdminDashboard: React.FC = () => {
       setStats((prevStats) => ({
         totalWhitelisted: prevStats?.totalWhitelisted || 0,
         totalVerified: Number(totalVerifiedUsers),
-        totalAllocated: prevStats?.totalAllocated || 0,
+        totalAllocated: claimedEventsCount, // Use actual claimed events from blockchain
         conversionRate: prevStats?.conversionRate || 0,
         isVerificationActive: prevStats?.isVerificationActive || true,
       }));

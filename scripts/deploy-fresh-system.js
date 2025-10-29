@@ -67,18 +67,9 @@ async function main() {
     "AHP tokens for distribution",
   );
 
-  // 5. Add some initial whitelisted emails
-  console.log("\n📧 Adding initial whitelisted emails...");
-  const initialEmails = [
-    "admin@amachhealth.com",
-    "test@amachhealth.com",
-    "beta@amachhealth.com",
-  ];
-
-  for (const email of initialEmails) {
-    await profileVerification.addEmailToWhitelist(email);
-    console.log(`✅ Added ${email} to whitelist`);
-  }
+  // 5. Skip initial email whitelisting - complete fresh start
+  console.log("\n📧 Skipping initial email whitelisting (clean slate)");
+  const initialEmails = []; // Empty for fresh start
 
   // 6. Verify deployments
   console.log("\n🔍 Verifying deployments...");

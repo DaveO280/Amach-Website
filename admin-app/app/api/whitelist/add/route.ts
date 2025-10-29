@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 
 // Contract addresses (should match main app)
 const PROFILE_VERIFICATION_CONTRACT =
-  "0xfeDa5D6c52ba8a3a412c1De6747B516c42F46377";
+  "0xA2D3b1b8080895C5bE335d8352D867e4b6e51ab3";
 
 // ProfileVerification ABI (only the functions we need)
 const PROFILE_VERIFICATION_ABI = [

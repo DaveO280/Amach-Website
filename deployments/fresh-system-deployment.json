@@ -1,17 +1,17 @@
 {
   "network": "zksync-sepolia",
-  "timestamp": "2025-10-29T00:14:50.008Z",
+  "timestamp": "2025-10-29T15:38:16.533Z",
   "deployer": "0xC9fFD981932FA4F91A0f31184264Ce079d196c48",
   "contracts": {
     "healthToken": {
-      "address": "0x267c8cC9fe06c83400fE9F6602b374B9529De5A1",
+      "address": "0x057df807987f284b55ba6A9ab89d089fd8398B99",
       "name": "AmachHealth Protocol",
       "symbol": "AHP",
       "totalSupply": "500000000",
       "distributionAmount": "10000000"
     },
     "secureHealthProfile": {
-      "address": "0x6A79161c668c4E4023Ff0e2463Baa46700F00081",
+      "address": "0xb1e41c4913D52E20aAaF4728c0449Bc6320a45A3",
       "version": "2.0",
       "features": [
         "AES-256-GCM encryption",
@@ -21,7 +21,7 @@
       ]
     },
     "profileVerification": {
-      "address": "0xfeDa5D6c52ba8a3a412c1De6747B516c42F46377",
+      "address": "0xA2D3b1b8080895C5bE335d8352D867e4b6e51ab3",
       "features": [
         "Email whitelist management",
         "Token allocation",
@@ -32,11 +32,7 @@
   },
   "configuration": {
     "authorizedProtocols": ["0xC9fFD981932FA4F91A0f31184264Ce079d196c48"],
-    "initialWhitelistedEmails": [
-      "admin@amachhealth.com",
-      "test@amachhealth.com",
-      "beta@amachhealth.com"
-    ],
+    "initialWhitelistedEmails": [],
     "tokenAllocationAmount": "1000",
     "distributionTokens": "10000000.0"
   },

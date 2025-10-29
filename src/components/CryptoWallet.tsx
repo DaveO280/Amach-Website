@@ -186,7 +186,7 @@ export const CryptoWallet: React.FC = () => {
       const { formatUnits } = await import("viem");
 
       const balance = await readContract(wagmiConfig, {
-        address: "0x267c8cC9fe06c83400fE9F6602b374B9529De5A1", // HealthToken address (Oct 29 2025)
+        address: "0x057df807987f284b55ba6A9ab89d089fd8398B99", // HealthToken address (Clean Slate)
         abi: [
           {
             inputs: [{ name: "account", type: "address" }],

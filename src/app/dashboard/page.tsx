@@ -1,20 +1,20 @@
 "use client";
 
+import { Brain, Home, LogOut, Menu, Wallet, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import Papa from "papaparse";
 import { useState } from "react";
+import AiCompanionModal from "../../components/AiCompanionModal";
 import { DailyScoresDebugger } from "../../components/DailyScoresDebugger";
 import { HealthDashboard } from "../../components/dashboard/HealthDashboard";
 import { FileUploadDebugger } from "../../components/FileUploadDebugger";
+import { useHealthDataContext } from "../../components/HealthDataContextWrapper";
 import { OnChainProfileDisplay } from "../../components/OnChainProfileDisplay";
+import { Button } from "../../components/ui/button";
+import { useZkSyncSsoWallet } from "../../hooks/useZkSyncSsoWallet";
 import { SelectionProvider } from "../../store/selectionStore/provider";
 import { HealthContext, UploadedFileSummary } from "../../types/HealthContext";
 import { exportCompleteBackup, importCompleteBackup } from "../../utils/utils";
-import { useZkSyncSsoWallet } from "../../hooks/useZkSyncSsoWallet";
-import { useHealthDataContext } from "../../components/HealthDataContextWrapper";
-import AiCompanionModal from "../../components/AiCompanionModal";
-import { Button } from "../../components/ui/button";
-import { Home, Wallet, Brain, LogOut, Menu, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 
 declare global {
   interface Window {

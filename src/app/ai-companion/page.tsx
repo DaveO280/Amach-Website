@@ -155,10 +155,12 @@ export default function AICompanionPage(): JSX.Element {
         </div>
       </nav>
 
-      {/* AI Companion Content - Always open on this page */}
-      <div className="relative min-h-screen">
-        <AiCompanionModal isOpen={true} onClose={() => router.push("/")} />
-      </div>
+      {/* AI Companion Content - Always open on this page (full-page mode) */}
+      <AiCompanionModal
+        isOpen={true}
+        onClose={() => router.push("/")}
+        isFullPage={true}
+      />
 
       {/* Modals */}
       <HealthDashboardModal

@@ -1,11 +1,14 @@
 "use client";
 
-import { X } from "lucide-react";
+import { X, Home, Wallet, Brain, LogOut, Menu } from "lucide-react";
 import dynamic from "next/dynamic";
 import React, { useEffect, useRef, useState } from "react";
 import { useZkSyncSsoWallet } from "../hooks/useZkSyncSsoWallet";
+import { useHealthDataContext } from "./HealthDataContextWrapper";
 import { Badge } from "./ui/badge";
-import { Shield, Wallet } from "lucide-react";
+import { Button } from "./ui/button";
+import { Wallet as WalletIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 // Import the actual components directly to avoid chunk loading errors
 const HealthDataSelector = dynamic(() => import("./HealthDataSelector"), {
@@ -70,8 +73,11 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
   const [activeTab, setActiveTab] = useState<"selector" | "dashboard">(
     "selector",
   );
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
-  const { isConnected, healthProfile } = useZkSyncSsoWallet();
+  const { isConnected, disconnect } = useZkSyncSsoWallet();
+  const { setIsAiCompanionOpen } = useHealthDataContext();
+  const router = useRouter();
 
   // Check viewport size to adjust UI accordingly
   useEffect(() => {
@@ -128,38 +134,147 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
       >
         {/* Adaptive header structure for both mobile and desktop */}
         <header className="sticky top-0 z-10 w-full bg-white/90 border-b border-amber-100 backdrop-blur-sm">
-          {/* Title row */}
-          <div className="px-3 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h2 className="text-base sm:text-xl font-black text-emerald-900">
-                Amach Health
-              </h2>
-              {isConnected && (
-                <Badge
-                  variant="default"
-                  className="bg-emerald-100 text-emerald-700"
+          {/* Title row with navigation */}
+          <div className="px-3 py-2">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                {/* Mobile Nav Button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="md:hidden p-1"
+                  onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
                 >
-                  <Wallet className="h-3 w-3 mr-1" />
-                  Connected
-                </Badge>
-              )}
-              {healthProfile && (
-                <Badge
-                  variant="default"
-                  className="bg-amber-100 text-amber-800"
+                  <Menu className="h-4 w-4" />
+                </Button>
+                <h2 className="text-base sm:text-xl font-black text-emerald-900 truncate">
+                  Dashboard
+                </h2>
+                {isConnected && (
+                  <Badge
+                    variant="default"
+                    className="bg-emerald-100 text-emerald-700 hidden sm:flex"
+                  >
+                    <WalletIcon className="h-3 w-3 mr-1" />
+                    Connected
+                  </Badge>
+                )}
+              </div>
+              {/* Desktop Navigation */}
+              <div className="hidden md:flex items-center gap-1 flex-shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    props.onClose();
+                    router.push("/");
+                  }}
+                  className="text-emerald-700 hover:bg-emerald-50 h-7 px-2"
                 >
-                  <Shield className="h-3 w-3 mr-1" />
-                  Profile On-Chain
-                </Badge>
-              )}
+                  <Home className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    props.onClose();
+                    router.push("/wallet");
+                  }}
+                  className="text-emerald-700 hover:bg-emerald-50 h-7 px-2"
+                >
+                  <Wallet className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    props.onClose();
+                    setIsAiCompanionOpen(true);
+                  }}
+                  className="text-emerald-700 hover:bg-emerald-50 h-7 px-2"
+                >
+                  <Brain className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    disconnect();
+                    props.onClose();
+                    router.push("/");
+                  }}
+                  className="text-red-600 border-red-300 hover:bg-red-50 h-7 px-2 ml-1"
+                >
+                  <LogOut className="h-3 w-3" />
+                </Button>
+              </div>
+              <button
+                onClick={props.onClose}
+                className="rounded-full p-2 text-amber-900 hover:text-emerald-600 hover:bg-emerald-50 transition-colors sm:hidden ml-2"
+                aria-label="Close dashboard"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-            <button
-              onClick={props.onClose}
-              className="rounded-full p-2 text-amber-900 hover:text-emerald-600 hover:bg-emerald-50 transition-colors sm:hidden"
-              aria-label="Close dashboard"
-            >
-              <X className="h-5 w-5" />
-            </button>
+
+            {/* Mobile Navigation Dropdown */}
+            {isMobileNavOpen && (
+              <div className="md:hidden py-2 border-t border-amber-100 space-y-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    props.onClose();
+                    router.push("/");
+                    setIsMobileNavOpen(false);
+                  }}
+                  className="w-full justify-start text-emerald-700 hover:bg-emerald-50"
+                >
+                  <Home className="h-4 w-4 mr-2" />
+                  Home
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    props.onClose();
+                    router.push("/wallet");
+                    setIsMobileNavOpen(false);
+                  }}
+                  className="w-full justify-start text-emerald-700 hover:bg-emerald-50"
+                >
+                  <Wallet className="h-4 w-4 mr-2" />
+                  Wallet
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    props.onClose();
+                    setIsAiCompanionOpen(true);
+                    setIsMobileNavOpen(false);
+                  }}
+                  className="w-full justify-start text-emerald-700 hover:bg-emerald-50"
+                >
+                  <Brain className="h-4 w-4 mr-2" />
+                  AI Companion
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    disconnect();
+                    props.onClose();
+                    router.push("/");
+                    setIsMobileNavOpen(false);
+                  }}
+                  className="w-full justify-start text-red-600 border-red-300 hover:bg-red-50"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Disconnect
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Tabs in a separate div with improved desktop layout */}

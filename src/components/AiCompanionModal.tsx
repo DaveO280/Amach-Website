@@ -162,6 +162,37 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
     return false;
   }
 
+  // Lock background scroll and ensure viewport starts at top when open
+  useEffect(() => {
+    if (props.isOpen) {
+      try {
+        document.body.style.overflow = "hidden";
+      } catch {}
+      try {
+        window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+      } catch {
+        window.scrollTo(0, 0);
+      }
+      // Best-effort: close any open dropdowns by simulating outside click
+      try {
+        const evt = new MouseEvent("mousedown", {
+          bubbles: true,
+          cancelable: true,
+        });
+        document.body.dispatchEvent(evt);
+      } catch {}
+    } else {
+      try {
+        document.body.style.overflow = "";
+      } catch {}
+    }
+    return (): void => {
+      try {
+        document.body.style.overflow = "";
+      } catch {}
+    };
+  }, [props.isOpen]);
+
   if (!props.isOpen) return null;
 
   return (

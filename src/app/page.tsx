@@ -30,6 +30,7 @@ const MainPage: React.FC = (): JSX.Element => {
 
   // Onboarding state
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingInitialStep, setOnboardingInitialStep] = useState(0);
 
   // Wallet wizard state
   const [showWalletWizard, setShowWalletWizard] = useState(false);
@@ -140,8 +141,9 @@ const MainPage: React.FC = (): JSX.Element => {
   // Wizard completion handler
   const handleWizardComplete = (): void => {
     setShowWalletWizard(false);
-    // Show celebration by opening dashboard
-    setIsDashboardOpen(true);
+    // After completing wizard, show onboarding modal at step 3 (Upload Health Data)
+    setShowOnboarding(true);
+    setOnboardingInitialStep(2); // Step 3 is index 2
     // Store completion in localStorage
     localStorage.setItem("amach-wallet-setup-complete", "true");
   };
@@ -153,6 +155,7 @@ const MainPage: React.FC = (): JSX.Element => {
         isOpen={showOnboarding}
         onClose={handleOnboardingClose}
         onConnectWallet={handleOnboardingConnectWallet}
+        initialStep={onboardingInitialStep}
         onUploadData={handleOnboardingUploadData}
         onOpenAI={handleOnboardingOpenAI}
       />

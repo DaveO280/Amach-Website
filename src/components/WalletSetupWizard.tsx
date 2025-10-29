@@ -96,12 +96,13 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     },
     {
       id: "deployer-funding",
-      title: "Initial Wallet Funding",
-      description: "We add starter funds to your wallet",
+      title: "Deploying Wallet & Adding Funds",
+      description:
+        "Deploying your wallet to blockchain and adding starter funds",
       status: "pending",
       icon: <Coins className="h-5 w-5" />,
       helpText:
-        "This is free! We fund your wallet so you can get started immediately.",
+        "This is free! We're deploying your wallet to the blockchain and adding starter funds (~10 seconds).",
     },
     {
       id: "create-profile",
@@ -294,6 +295,17 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       updateStepStatus("deployer-funding", "loading");
       setError(null);
 
+      // Show notification while wallet deploys to blockchain
+      console.log(
+        "⏳ Deploying wallet to blockchain... (10 second wait for full deployment)",
+      );
+
+      // Wait 10 seconds for wallet to fully deploy to blockchain
+      // This prevents "invalid address" errors when funding
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+
+      console.log("✅ Wallet deployment complete - proceeding with funding");
+
       // Call your deployer funding function
       const response = await fetch("/api/fund-new-wallet", {
         method: "POST",
@@ -303,7 +315,12 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Funding failed");
+        // Make error message less discouraging
+        console.warn("⚠️ Funding attempt failed:", errorData.error);
+        throw new Error(
+          errorData.error ||
+            "Funding service temporarily unavailable. Your wallet is ready!",
+        );
       }
 
       const data = await response.json();

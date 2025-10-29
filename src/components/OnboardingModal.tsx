@@ -15,7 +15,7 @@ import {
   Upload,
   Wallet,
 } from "lucide-react";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 interface OnboardingStep {
   id: string;
@@ -33,6 +33,7 @@ interface OnboardingModalProps {
   onConnectWallet: () => void;
   onUploadData: () => void;
   onOpenAI: () => void;
+  initialStep?: number; // Optional: Start at a specific step
 }
 
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({
@@ -41,6 +42,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   onConnectWallet,
   onUploadData,
   onOpenAI,
+  initialStep = 0,
 }) => {
   const steps: OnboardingStep[] = [
     {
@@ -105,7 +107,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     },
   ];
 
-  const [activeStep, setActiveStep] = useState(0);
+  const [activeStep, setActiveStep] = useState(initialStep);
+
+  // Update active step when initialStep changes
+  useEffect(() => {
+    setActiveStep(initialStep);
+  }, [initialStep]);
 
   const handleNext = (): void => {
     // Execute action based on step

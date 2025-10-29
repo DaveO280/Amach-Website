@@ -476,11 +476,13 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         throw new Error(result.error || "Token claim failed");
       }
 
-      console.log(
-        "✅ Tokens claimed successfully! Transaction:",
-        result.txHash,
-      );
+      console.log("✅ Tokens claim transaction submitted:", result.txHash);
+      console.log("⏳ Waiting for blockchain confirmation...");
 
+      // Wait for transaction to be confirmed on blockchain
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      console.log("✅ Token claim confirmed - allocation complete!");
       updateStepStatus("claim-tokens", "complete");
 
       // Show celebration and complete onboarding

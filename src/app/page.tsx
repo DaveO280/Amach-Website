@@ -2,7 +2,6 @@
 
 import AiCompanionModal from "@/components/AiCompanionModal";
 import BetaNotification from "@/components/BetaNotification"; // Import the new component
-import GlobalWalletStatus from "@/components/GlobalWalletStatus";
 import HealthDashboardModal from "@/components/HealthDashboardModal";
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { OnboardingModal } from "@/components/OnboardingModal";
@@ -232,18 +231,11 @@ const MainPage: React.FC = (): JSX.Element => {
                   </a>
                 </div>
               </div>
-              {/* Wallet Status - show inline only on mobile */}
-              <div className="md:hidden">
-                <GlobalWalletStatus />
-              </div>
+              {/* Removed wallet status indicator on main page */}
             </div>
 
             <nav className="hidden md:flex items-center justify-end w-1/2">
-              <div className="flex flex-col items-end w-full">
-                {/* Desktop wallet status above nav links */}
-                <div className="hidden md:block mb-1">
-                  <GlobalWalletStatus />
-                </div>
+              <div className="flex items-center justify-between w-full">
                 <div className="flex items-center space-x-16 ml-auto mr-16">
                   {navItems.map((item) => (
                     <a

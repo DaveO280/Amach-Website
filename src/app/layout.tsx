@@ -1,4 +1,3 @@
-import GlobalWalletStatus from "@/components/GlobalWalletStatus";
 import HealthDataContextWrapper from "@/components/HealthDataContextWrapper";
 import QueryProvider from "@/components/QueryProvider";
 import { ZkSyncSsoWalletButton } from "@/components/ZkSyncSsoWalletButton";
@@ -37,7 +36,6 @@ export default function RootLayout({
               <div className="hidden">
                 <ZkSyncSsoWalletButton />
               </div>
-              <GlobalWalletStatus />
               {children}
             </SelectionProvider>
           </HealthDataContextWrapper>

@@ -2,6 +2,7 @@
 
 import AiCompanionModal from "@/components/AiCompanionModal";
 import BetaNotification from "@/components/BetaNotification"; // Import the new component
+import GlobalWalletStatus from "@/components/GlobalWalletStatus";
 import HealthDashboardModal from "@/components/HealthDashboardModal";
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { OnboardingModal } from "@/components/OnboardingModal";
@@ -189,7 +190,7 @@ const MainPage: React.FC = (): JSX.Element => {
       <header className="border-b border-amber-100 relative">
         <div className="container mx-auto py-4">
           <div className="flex justify-between items-center max-w-7xl mx-auto">
-            <div className="flex items-center">
+            <div className="flex items-center gap-3">
               <div className="flex flex-col">
                 <div className="flex items-center space-x-3">
                   <h1 className="text-2xl font-black text-emerald-900">
@@ -211,6 +212,8 @@ const MainPage: React.FC = (): JSX.Element => {
                   />
                 </div>
               </div>
+              {/* Wallet Status - Compact inline display */}
+              <GlobalWalletStatus />
             </div>
 
             <nav className="hidden md:flex items-center justify-end w-1/2">

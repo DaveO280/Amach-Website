@@ -8,7 +8,7 @@ import { ethers } from "ethers";
 // Contract configuration (Fresh Deployment - Oct 28 2025)
 const PROFILE_VERIFICATION_CONTRACT =
   process.env.PROFILE_VERIFICATION_CONTRACT ||
-  "0x07CB4d29fB08F7817914ADAFAc53E2857461bE7C";
+  "0xfeDa5D6c52ba8a3a412c1De6747B516c42F46377";
 const RPC_URL = process.env.ZKSYNC_RPC_URL || "https://sepolia.era.zksync.dev";
 
 // Contract ABI

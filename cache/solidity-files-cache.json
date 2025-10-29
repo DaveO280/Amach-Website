@@ -407,8 +407,8 @@
       "artifacts": ["HealthToken"]
     },
     "C:\\Users\\ogara\\AmachHealth(S)\\Amach-Website\\contracts\\SecureHealthProfile.sol": {
-      "lastModificationDate": 1761578508840,
-      "contentHash": "c9b4576a66025bb26409ba3933ffa1bb",
+      "lastModificationDate": 1761696783187,
+      "contentHash": "eb3e60387668198c3d69cc0ba3883573",
       "sourceName": "contracts/SecureHealthProfile.sol",
       "solcConfig": {
         "version": "0.8.20",

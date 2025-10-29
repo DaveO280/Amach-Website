@@ -209,10 +209,8 @@ contract SecureHealthProfile is Ownable, ReentrancyGuard {
         profileExists(user) 
         returns (EncryptedProfile memory) 
     {
-        require(
-            msg.sender == user || protocolAccess[msg.sender] || msg.sender == owner(),
-            "Not authorized to read this profile"
-        );
+        // No authorization check needed - data is encrypted on-chain
+        // Anyone can read the encrypted data, but only the owner has the decryption key
         return profiles[user];
     }
 

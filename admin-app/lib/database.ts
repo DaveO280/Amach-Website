@@ -65,6 +65,9 @@ export const db = new Database(DB_PATH);
 // Enable foreign keys
 db.pragma("foreign_keys = ON");
 
+// 🚨 CRITICAL: Initialize tables BEFORE preparing queries!
+// This must run before any db.prepare() calls below
+
 // Initialize database schema
 export function initializeDatabase(): void {
   console.log("🗄️ Initializing privacy-preserving tracking database...");
@@ -152,6 +155,9 @@ export function initializeDatabase(): void {
 
   console.log("✅ Database initialized successfully");
 }
+
+// Call initialization immediately (before query preparations)
+initializeDatabase();
 
 // Utility functions for hashing (privacy-preserving)
 export function hashEmail(email: string): string {
@@ -358,8 +364,5 @@ export const adminQueries = {
     LIMIT 100
   `),
 };
-
-// Initialize database on import
-initializeDatabase();
 
 export default db;

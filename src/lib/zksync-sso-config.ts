@@ -322,11 +322,11 @@ const healthProfileAbi = [
 // Contract addresses (Fresh deployment - October 2025)
 // Complete system redeployment with clean slate for beta testing
 const HEALTH_PROFILE_CONTRACT = "0x6C7e52F1FfBCc0Bf001BB9458B64D85d7D7eC9F8"; // Legacy (deprecated)
-const HEALTH_TOKEN_CONTRACT = "0x7363964fE96455D2246111EdaF8ae793e73c766C"; // Fresh Deployment - Oct 28 2025
+const HEALTH_TOKEN_CONTRACT = "0x267c8cC9fe06c83400fE9F6602b374B9529De5A1"; // Fresh Deployment - Oct 29 2025
 const SECURE_HEALTH_PROFILE_CONTRACT =
-  "0x754213E1d203f2Dffa154E263d5Db074ad2d0BfD"; // Fresh Deployment - Oct 28 2025
+  "0x6A79161c668c4E4023Ff0e2463Baa46700F00081"; // Fresh Deployment - Oct 29 2025
 const PROFILE_VERIFICATION_CONTRACT =
-  "0x07CB4d29fB08F7817914ADAFAc53E2857461bE7C"; // Fresh Deployment - Oct 28 2025
+  "0xfeDa5D6c52ba8a3a412c1De6747B516c42F46377"; // Fresh Deployment - Oct 29 2025
 
 // Export the ABIs and contract addresses
 export {

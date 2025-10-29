@@ -263,9 +263,9 @@ export const UnifiedAdminDashboard: React.FC = () => {
 
       // Contract addresses (Fresh deployment - October 2025)
       const HEALTH_TOKEN_CONTRACT =
-        "0x7363964fE96455D2246111EdaF8ae793e73c766C";
+        "0x267c8cC9fe06c83400fE9F6602b374B9529De5A1";
       const PROFILE_VERIFICATION_CONTRACT =
-        "0x07CB4d29fB08F7817914ADAFAc53E2857461bE7C";
+        "0xfeDa5D6c52ba8a3a412c1De6747B516c42F46377";
 
       // ABIs
       const tokenAbi = parseAbi([

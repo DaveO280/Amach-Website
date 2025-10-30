@@ -146,8 +146,8 @@ export class XMLStreamParser {
     });
 
     try {
-      // Process the file in chunks to avoid memory issues
-      const chunkSize = 10 * 1024 * 1024; // 10MB chunks
+      // Process the file in smaller chunks to improve mobile performance
+      const chunkSize = 2 * 1024 * 1024; // 2MB chunks
       const fileSize = file.size;
       let processedSize = 0;
       let currentBuffer = "";
@@ -254,7 +254,28 @@ export class XMLStreamParser {
         const nextEnd = Math.min(processedSize + chunkSize, fileSize);
 
         const chunkData = await readChunk(processedSize, nextEnd);
-        currentBuffer += chunkData;
+
+        // Fast path: if currentBuffer + chunkData has no <Record, avoid heavy scanning
+        let scanTarget = currentBuffer + chunkData;
+        if (scanTarget.indexOf("<Record ") === -1) {
+          // Keep only a small tail to catch split tags across boundaries
+          currentBuffer = scanTarget.slice(-256);
+          processedSize = nextEnd;
+          this.options.onProgress({
+            progress: Math.round((processedSize / fileSize) * 100),
+            recordCount: this.recordCount,
+            metricCounts: { ...this.metricCounts },
+            // @ts-expect-error diagnostics for UI
+            diagnostics: {
+              totalRecordsSeen: this.totalRecordsSeen,
+              skippedByMetric: this.skippedByMetric,
+              skippedByDate: this.skippedByDate,
+            },
+          });
+          continue;
+        }
+
+        currentBuffer = scanTarget;
 
         // Find complete <Record> elements (support self-closing and open/close forms)
         let recordStartIndex = currentBuffer.indexOf("<Record ");

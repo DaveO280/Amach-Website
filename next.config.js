@@ -4,12 +4,6 @@ const path = require("path");
 const nextConfig = {
   // Use Node.js runtime for blockchain interactions
   serverExternalPackages: ["ethers"],
-  env: {
-    VENICE_API_KEY: process.env.VENICE_API_KEY,
-    VENICE_API_ENDPOINT:
-      process.env.VENICE_API_ENDPOINT || "https://api.venice.ai/api/v1",
-    VENICE_MODEL_NAME: process.env.VENICE_MODEL_NAME || "llama-3.1-405b",
-  },
   // Add webpack config to include my-health-app and fix ethers.js issues
   webpack: (config, { isServer }) => {
     // Add my-health-app to the modules included in the build

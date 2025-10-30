@@ -87,6 +87,9 @@ export class XMLStreamParser {
   private metricCounts: Record<string, number> = {};
   private dateRange: { startDate: Date; endDate: Date };
   private lastEndDates: Record<string, Record<string, Date>> = {};
+  private totalRecordsSeen = 0;
+  private skippedByMetric = 0;
+  private skippedByDate = 0;
 
   constructor(options: XMLParserOptions) {
     this.options = options;
@@ -132,6 +135,9 @@ export class XMLStreamParser {
   // Main method to parse the file
   async parseFile(file: File): Promise<XMLParserResults> {
     this.recordCount = 0;
+    this.totalRecordsSeen = 0;
+    this.skippedByMetric = 0;
+    this.skippedByDate = 0;
     const results: XMLParserResults = {};
 
     // Initialize result arrays for each selected metric
@@ -155,7 +161,11 @@ export class XMLStreamParser {
           if (!typeMatch) return;
 
           const type = typeMatch[1];
-          if (!this.options.selectedMetrics.includes(type)) return;
+          this.totalRecordsSeen++;
+          if (!this.options.selectedMetrics.includes(type)) {
+            this.skippedByMetric++;
+            return;
+          }
 
           const startDateMatch = recordStr.match(/startDate="([^"]+)"/);
           if (!startDateMatch) return;
@@ -171,6 +181,7 @@ export class XMLStreamParser {
               this.dateRange.endDate,
             )
           ) {
+            this.skippedByDate++;
             return;
           }
 
@@ -308,11 +319,17 @@ export class XMLStreamParser {
 
         processedSize = nextEnd;
 
-        // Update progress
+        // Update progress (per chunk)
         this.options.onProgress({
           progress: Math.round((processedSize / fileSize) * 100),
           recordCount: this.recordCount,
           metricCounts: { ...this.metricCounts },
+          // @ts-expect-error: extra diagnostics for UI (ignored by callers not expecting them)
+          diagnostics: {
+            totalRecordsSeen: this.totalRecordsSeen,
+            skippedByMetric: this.skippedByMetric,
+            skippedByDate: this.skippedByDate,
+          },
         });
       }
 

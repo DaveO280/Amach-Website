@@ -18,22 +18,68 @@ export type XMLParserResults = Record<string, HealthDataPoint[]>;
 
 // Validate the file is likely a Health Export file
 export const validateHealthExportFile = (file: File): boolean => {
-  // Basic validation - checking name, size, and type
-  if (!file.name.toLowerCase().includes("export")) {
+  // Be tolerant of iOS pickers: name should include export and likely end with .xml
+  const lowerName = file.name.toLowerCase();
+  if (!lowerName.includes("export") || !lowerName.endsWith(".xml")) {
     return false;
   }
 
-  if (file.type !== "text/xml" && !file.type.includes("xml")) {
+  // iOS often provides empty type; accept empty or xml-like types
+  if (file.type && !(file.type === "text/xml" || file.type.includes("xml"))) {
     return false;
   }
 
-  // Simple size check to ensure it's not empty or too small to be valid
+  // Basic size sanity check
   if (file.size < 1000) {
     return false;
   }
 
   return true;
 };
+
+// Lightweight pre-scan to detect common pitfalls and surface quick insights before full parse
+export async function preScanHealthExport(
+  file: File,
+  bytesToRead: number = 2 * 1024 * 1024,
+): Promise<{
+  isZip: boolean;
+  isCDA: boolean;
+  hasHealthDataTag: boolean;
+  recordCountEstimate: number;
+  sampleTypes: string[];
+}> {
+  const slice = file.slice(0, Math.min(file.size, bytesToRead));
+  const text = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e: ProgressEvent<FileReader>): void =>
+      resolve((e.target?.result as string) || "");
+    reader.onerror = (e: ProgressEvent<FileReader>): void => reject(e);
+    reader.readAsText(slice);
+  });
+
+  // Detect zip via magic header (when provided as text this may not match, but helps with some pickers)
+  const isZip = file.name.toLowerCase().endsWith(".zip");
+
+  const isCDA = /<ClinicalDocument[\s>]/.test(text);
+  const hasHealthDataTag = /<HealthData[\s>]/.test(text);
+  const recordMatches = text.match(/<Record\b/g) || [];
+  const typeMatches = text.match(/type="([^"]+)"/g) || [];
+  const sampleTypes = Array.from(
+    new Set(
+      typeMatches
+        .map((m) => m.match(/type="([^"]+)"/)?.[1])
+        .filter((x): x is string => Boolean(x)),
+    ),
+  ).slice(0, 20);
+
+  return {
+    isZip,
+    isCDA,
+    hasHealthDataTag,
+    recordCountEstimate: recordMatches.length,
+    sampleTypes,
+  };
+}
 
 export class XMLStreamParser {
   private options: XMLParserOptions;
@@ -199,15 +245,31 @@ export class XMLStreamParser {
         const chunkData = await readChunk(processedSize, nextEnd);
         currentBuffer += chunkData;
 
-        // Find complete <Record> elements
+        // Find complete <Record> elements (support self-closing and open/close forms)
         let recordStartIndex = currentBuffer.indexOf("<Record ");
         while (recordStartIndex !== -1) {
-          const recordEndIndex = currentBuffer.indexOf("/>", recordStartIndex);
+          const selfCloseIdx = currentBuffer.indexOf("/>", recordStartIndex);
+          const openCloseStart = currentBuffer.indexOf(">", recordStartIndex);
+          const closeTagIdx =
+            openCloseStart !== -1
+              ? currentBuffer.indexOf("</Record>", openCloseStart)
+              : -1;
+
+          let recordEndIndex = -1;
+          if (
+            selfCloseIdx !== -1 &&
+            (closeTagIdx === -1 || selfCloseIdx < closeTagIdx)
+          ) {
+            recordEndIndex = selfCloseIdx + 2;
+          } else if (closeTagIdx !== -1) {
+            recordEndIndex = closeTagIdx + "</Record>".length;
+          }
+
           if (recordEndIndex === -1) break; // Incomplete record, wait for next chunk
 
           const recordString = currentBuffer.substring(
             recordStartIndex,
-            recordEndIndex + 2,
+            recordEndIndex,
           );
           processRecordElement(recordString);
 
@@ -226,11 +288,20 @@ export class XMLStreamParser {
 
         // Keep any partial record at the end for the next chunk
         const lastRecordStart = currentBuffer.lastIndexOf("<Record ");
-        if (
-          lastRecordStart !== -1 &&
-          currentBuffer.indexOf("/>", lastRecordStart) === -1
-        ) {
-          currentBuffer = currentBuffer.substring(lastRecordStart);
+        if (lastRecordStart !== -1) {
+          const selfCloseAfter = currentBuffer.indexOf("/>", lastRecordStart);
+          const gtAfter = currentBuffer.indexOf(">", lastRecordStart);
+          const closeAfter =
+            gtAfter !== -1 ? currentBuffer.indexOf("</Record>", gtAfter) : -1;
+          const hasCompleteSelf =
+            selfCloseAfter !== -1 && selfCloseAfter > lastRecordStart;
+          const hasCompleteOpenClose =
+            closeAfter !== -1 && closeAfter > lastRecordStart;
+          if (!hasCompleteSelf && !hasCompleteOpenClose) {
+            currentBuffer = currentBuffer.substring(lastRecordStart);
+          } else {
+            currentBuffer = "";
+          }
         } else {
           currentBuffer = "";
         }

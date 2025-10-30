@@ -18,18 +18,16 @@ export type XMLParserResults = Record<string, HealthDataPoint[]>;
 
 // Validate the file is likely a Health Export file
 export const validateHealthExportFile = (file: File): boolean => {
-  // Be tolerant of iOS pickers: name should include export and likely end with .xml
-  const lowerName = file.name.toLowerCase();
-  if (!lowerName.includes("export") || !lowerName.endsWith(".xml")) {
+  // Basic validation - checking name, size, and type
+  if (!file.name.toLowerCase().includes("export")) {
     return false;
   }
 
-  // iOS often provides empty type; accept empty or xml-like types
-  if (file.type && !(file.type === "text/xml" || file.type.includes("xml"))) {
+  if (file.type !== "text/xml" && !file.type.includes("xml")) {
     return false;
   }
 
-  // Basic size sanity check
+  // Simple size check to ensure it's not empty or too small to be valid
   if (file.size < 1000) {
     return false;
   }
@@ -37,59 +35,12 @@ export const validateHealthExportFile = (file: File): boolean => {
   return true;
 };
 
-// Lightweight pre-scan to detect common pitfalls and surface quick insights before full parse
-export async function preScanHealthExport(
-  file: File,
-  bytesToRead: number = 2 * 1024 * 1024,
-): Promise<{
-  isZip: boolean;
-  isCDA: boolean;
-  hasHealthDataTag: boolean;
-  recordCountEstimate: number;
-  sampleTypes: string[];
-}> {
-  const slice = file.slice(0, Math.min(file.size, bytesToRead));
-  const text = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e: ProgressEvent<FileReader>): void =>
-      resolve((e.target?.result as string) || "");
-    reader.onerror = (e: ProgressEvent<FileReader>): void => reject(e);
-    reader.readAsText(slice);
-  });
-
-  // Detect zip via magic header (when provided as text this may not match, but helps with some pickers)
-  const isZip = file.name.toLowerCase().endsWith(".zip");
-
-  const isCDA = /<ClinicalDocument[\s>]/.test(text);
-  const hasHealthDataTag = /<HealthData[\s>]/.test(text);
-  const recordMatches = text.match(/<Record\b/g) || [];
-  const typeMatches = text.match(/type="([^"]+)"/g) || [];
-  const sampleTypes = Array.from(
-    new Set(
-      typeMatches
-        .map((m) => m.match(/type="([^"]+)"/)?.[1])
-        .filter((x): x is string => Boolean(x)),
-    ),
-  ).slice(0, 20);
-
-  return {
-    isZip,
-    isCDA,
-    hasHealthDataTag,
-    recordCountEstimate: recordMatches.length,
-    sampleTypes,
-  };
-}
-
 export class XMLStreamParser {
   private options: XMLParserOptions;
   private recordCount = 0;
   private metricCounts: Record<string, number> = {};
   private dateRange: { startDate: Date; endDate: Date };
   private lastEndDates: Record<string, Record<string, Date>> = {};
-  private totalRecordsSeen = 0;
-  private skippedByMetric = 0;
-  private skippedByDate = 0;
 
   constructor(options: XMLParserOptions) {
     this.options = options;
@@ -135,9 +86,6 @@ export class XMLStreamParser {
   // Main method to parse the file
   async parseFile(file: File): Promise<XMLParserResults> {
     this.recordCount = 0;
-    this.totalRecordsSeen = 0;
-    this.skippedByMetric = 0;
-    this.skippedByDate = 0;
     const results: XMLParserResults = {};
 
     // Initialize result arrays for each selected metric
@@ -146,8 +94,8 @@ export class XMLStreamParser {
     });
 
     try {
-      // Process the file in smaller chunks to improve mobile performance
-      const chunkSize = 2 * 1024 * 1024; // 2MB chunks
+      // Process the file in chunks to avoid memory issues
+      const chunkSize = 10 * 1024 * 1024; // 10MB chunks
       const fileSize = file.size;
       let processedSize = 0;
       let currentBuffer = "";
@@ -161,11 +109,7 @@ export class XMLStreamParser {
           if (!typeMatch) return;
 
           const type = typeMatch[1];
-          this.totalRecordsSeen++;
-          if (!this.options.selectedMetrics.includes(type)) {
-            this.skippedByMetric++;
-            return;
-          }
+          if (!this.options.selectedMetrics.includes(type)) return;
 
           const startDateMatch = recordStr.match(/startDate="([^"]+)"/);
           if (!startDateMatch) return;
@@ -181,7 +125,6 @@ export class XMLStreamParser {
               this.dateRange.endDate,
             )
           ) {
-            this.skippedByDate++;
             return;
           }
 
@@ -254,54 +197,17 @@ export class XMLStreamParser {
         const nextEnd = Math.min(processedSize + chunkSize, fileSize);
 
         const chunkData = await readChunk(processedSize, nextEnd);
+        currentBuffer += chunkData;
 
-        // Fast path: if currentBuffer + chunkData has no <Record, avoid heavy scanning
-        let scanTarget = currentBuffer + chunkData;
-        if (scanTarget.indexOf("<Record ") === -1) {
-          // Keep only a small tail to catch split tags across boundaries
-          currentBuffer = scanTarget.slice(-256);
-          processedSize = nextEnd;
-          this.options.onProgress({
-            progress: Math.round((processedSize / fileSize) * 100),
-            recordCount: this.recordCount,
-            metricCounts: { ...this.metricCounts },
-            // @ts-expect-error diagnostics for UI
-            diagnostics: {
-              totalRecordsSeen: this.totalRecordsSeen,
-              skippedByMetric: this.skippedByMetric,
-              skippedByDate: this.skippedByDate,
-            },
-          });
-          continue;
-        }
-
-        currentBuffer = scanTarget;
-
-        // Find complete <Record> elements (support self-closing and open/close forms)
+        // Find complete <Record> elements
         let recordStartIndex = currentBuffer.indexOf("<Record ");
         while (recordStartIndex !== -1) {
-          const selfCloseIdx = currentBuffer.indexOf("/>", recordStartIndex);
-          const openCloseStart = currentBuffer.indexOf(">", recordStartIndex);
-          const closeTagIdx =
-            openCloseStart !== -1
-              ? currentBuffer.indexOf("</Record>", openCloseStart)
-              : -1;
-
-          let recordEndIndex = -1;
-          if (
-            selfCloseIdx !== -1 &&
-            (closeTagIdx === -1 || selfCloseIdx < closeTagIdx)
-          ) {
-            recordEndIndex = selfCloseIdx + 2;
-          } else if (closeTagIdx !== -1) {
-            recordEndIndex = closeTagIdx + "</Record>".length;
-          }
-
+          const recordEndIndex = currentBuffer.indexOf("/>", recordStartIndex);
           if (recordEndIndex === -1) break; // Incomplete record, wait for next chunk
 
           const recordString = currentBuffer.substring(
             recordStartIndex,
-            recordEndIndex,
+            recordEndIndex + 2,
           );
           processRecordElement(recordString);
 
@@ -320,37 +226,22 @@ export class XMLStreamParser {
 
         // Keep any partial record at the end for the next chunk
         const lastRecordStart = currentBuffer.lastIndexOf("<Record ");
-        if (lastRecordStart !== -1) {
-          const selfCloseAfter = currentBuffer.indexOf("/>", lastRecordStart);
-          const gtAfter = currentBuffer.indexOf(">", lastRecordStart);
-          const closeAfter =
-            gtAfter !== -1 ? currentBuffer.indexOf("</Record>", gtAfter) : -1;
-          const hasCompleteSelf =
-            selfCloseAfter !== -1 && selfCloseAfter > lastRecordStart;
-          const hasCompleteOpenClose =
-            closeAfter !== -1 && closeAfter > lastRecordStart;
-          if (!hasCompleteSelf && !hasCompleteOpenClose) {
-            currentBuffer = currentBuffer.substring(lastRecordStart);
-          } else {
-            currentBuffer = "";
-          }
+        if (
+          lastRecordStart !== -1 &&
+          currentBuffer.indexOf("/>", lastRecordStart) === -1
+        ) {
+          currentBuffer = currentBuffer.substring(lastRecordStart);
         } else {
           currentBuffer = "";
         }
 
         processedSize = nextEnd;
 
-        // Update progress (per chunk)
+        // Update progress
         this.options.onProgress({
           progress: Math.round((processedSize / fileSize) * 100),
           recordCount: this.recordCount,
           metricCounts: { ...this.metricCounts },
-          // @ts-expect-error: extra diagnostics for UI (ignored by callers not expecting them)
-          diagnostics: {
-            totalRecordsSeen: this.totalRecordsSeen,
-            skippedByMetric: this.skippedByMetric,
-            skippedByDate: this.skippedByDate,
-          },
         });
       }
 

@@ -11,7 +11,6 @@ import { coreMetrics, timeFrameOptions } from "../core/metricDefinitions";
 import {
   validateHealthExportFile,
   XMLStreamParser,
-  preScanHealthExport,
 } from "../data/parsers/XMLStreamParser";
 import {
   ActiveEnergyMetric,
@@ -52,9 +51,9 @@ const HealthDataSelector: () => React.ReactElement = () => {
   const { mutate: saveHealthData } = useSaveHealthDataMutation();
   const { mutate: clearHealthDataMutation } = useClearHealthDataMutation();
 
-  const handleFileSelect = async (
+  const handleFileSelect = (
     event: React.ChangeEvent<HTMLInputElement>,
-  ): Promise<void> => {
+  ): void => {
     const file = event.target.files?.[0];
     if (!file) {
       setProcessingError("No file selected");
@@ -70,41 +69,8 @@ const HealthDataSelector: () => React.ReactElement = () => {
       return;
     }
 
-    // Quick pre-scan for better UX on mobile (detect CDA/ZIP/empty records)
-    try {
-      const scan = await preScanHealthExport(file);
-      if (scan.isZip) {
-        setProcessingError(
-          "This appears to be a zipped export. Please extract and select export.xml",
-        );
-        setUploadedFile(null);
-        return;
-      }
-      if (scan.isCDA) {
-        setProcessingError(
-          "This looks like export_cda.xml (clinical document). Please select export.xml",
-        );
-        setUploadedFile(null);
-        return;
-      }
-      if (!scan.hasHealthDataTag || scan.recordCountEstimate === 0) {
-        setProcessingError(
-          "No <Record> entries found. Confirm this is export.xml from Apple Health",
-        );
-        setUploadedFile(null);
-        return;
-      }
-      setUploadedFile(file);
-      updateProcessingProgress(
-        0,
-        `File selected: ${file.name} · ~${scan.recordCountEstimate} records · sample types: ${scan.sampleTypes.join(", ")}`,
-      );
-    } catch (e) {
-      // If pre-scan fails, still allow selection but warn
-      console.warn("Pre-scan failed", e);
-      setUploadedFile(file);
-      updateProcessingProgress(0, `File selected: ${file.name}`);
-    }
+    setUploadedFile(file);
+    updateProcessingProgress(0, `File selected: ${file.name}`);
   };
 
   const convertToSleepStage = (rawValue: string): SleepStage => {

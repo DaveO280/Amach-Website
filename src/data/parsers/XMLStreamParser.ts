@@ -200,14 +200,36 @@ export class XMLStreamParser {
         currentBuffer += chunkData;
 
         // Find complete <Record> elements
+        // FIXED: Handle both self-closing (<Record ... />) and regular closing (<Record ...></Record>) tags
         let recordStartIndex = currentBuffer.indexOf("<Record ");
         while (recordStartIndex !== -1) {
-          const recordEndIndex = currentBuffer.indexOf("/>", recordStartIndex);
+          // Look for BOTH types of endings
+          const selfClosingEnd = currentBuffer.indexOf("/>", recordStartIndex);
+          const regularClosingEnd = currentBuffer.indexOf(
+            "</Record>",
+            recordStartIndex,
+          );
+
+          let recordEndIndex = -1;
+          let endLength = 0;
+
+          // Determine which ending comes first (if any)
+          if (
+            selfClosingEnd !== -1 &&
+            (regularClosingEnd === -1 || selfClosingEnd < regularClosingEnd)
+          ) {
+            recordEndIndex = selfClosingEnd;
+            endLength = 2; // length of "/>"
+          } else if (regularClosingEnd !== -1) {
+            recordEndIndex = regularClosingEnd;
+            endLength = 9; // length of "</Record>"
+          }
+
           if (recordEndIndex === -1) break; // Incomplete record, wait for next chunk
 
           const recordString = currentBuffer.substring(
             recordStartIndex,
-            recordEndIndex + 2,
+            recordEndIndex + endLength,
           );
           processRecordElement(recordString);
 
@@ -226,11 +248,18 @@ export class XMLStreamParser {
 
         // Keep any partial record at the end for the next chunk
         const lastRecordStart = currentBuffer.lastIndexOf("<Record ");
-        if (
-          lastRecordStart !== -1 &&
-          currentBuffer.indexOf("/>", lastRecordStart) === -1
-        ) {
-          currentBuffer = currentBuffer.substring(lastRecordStart);
+        if (lastRecordStart !== -1) {
+          // Check if this record is incomplete (neither self-closing nor regular closing found)
+          const remainingBuffer = currentBuffer.substring(lastRecordStart);
+          const hasSelfClosing = remainingBuffer.indexOf("/>") !== -1;
+          const hasRegularClosing = remainingBuffer.indexOf("</Record>") !== -1;
+
+          if (!hasSelfClosing && !hasRegularClosing) {
+            // Incomplete record - keep it for next chunk
+            currentBuffer = remainingBuffer;
+          } else {
+            currentBuffer = "";
+          }
         } else {
           currentBuffer = "";
         }
@@ -258,11 +287,74 @@ export class XMLStreamParser {
       results[metric] = [];
     });
 
-    // Regex to match all <Record ... /> elements, robust to whitespace/line breaks
-    const recordRegex = /<Record\s+([^>]*)\/>/g;
+    // Regex to match all <Record> elements (both self-closing and regular closing)
+    // Pattern 1: Self-closing <Record ... />
+    const selfClosingRegex = /<Record\s+([^>]*)\/>/g;
+    // Pattern 2: Regular closing <Record ...></Record>
+    const regularClosingRegex = /<Record\s+([^>]*)>.*?<\/Record>/gs;
+
+    // Process self-closing records
     let match;
-    while ((match = recordRegex.exec(xml)) !== null) {
+    while ((match = selfClosingRegex.exec(xml)) !== null) {
       const recordStr = `<Record ${match[1]}/>`;
+      // Use the same logic as processRecordElement
+      try {
+        const typeMatch = recordStr.match(/type="([^"]+)"/);
+        if (!typeMatch) continue;
+        const type = typeMatch[1];
+        if (!this.options.selectedMetrics.includes(type)) continue;
+        const startDateMatch = recordStr.match(/startDate="([^"]+)"/);
+        if (!startDateMatch) continue;
+        const startDate = startDateMatch[1];
+        const recordDate = new Date(startDate);
+        if (
+          !this.isDateInRange(
+            recordDate,
+            this.dateRange.startDate,
+            this.dateRange.endDate,
+          )
+        )
+          continue;
+        const endDateMatch = recordStr.match(/endDate="([^"]+)"/);
+        const endDate = endDateMatch ? endDateMatch[1] : startDate;
+        const valueMatch = recordStr.match(/value="([^"]+)"/);
+        const value = valueMatch ? valueMatch[1] : "";
+        const unitMatch = recordStr.match(/unit="([^"]+)"/);
+        const rawUnit = unitMatch ? unitMatch[1] : "";
+        const standardizedUnit = this.standardizeUnit(type, rawUnit);
+        const sourceNameMatch = recordStr.match(/sourceName="([^"]+)"/);
+        const sourceName = sourceNameMatch ? sourceNameMatch[1] : "";
+        const deviceMatch = recordStr.match(/device="([^"]+)"/);
+        const device = deviceMatch ? deviceMatch[1] : "";
+        // Skip Pillow app data
+        if (
+          sourceName.toLowerCase().includes("pillow") ||
+          device.toLowerCase().includes("pillow")
+        )
+          continue;
+        // Overlap prevention: skip if startDate <= last endDate for this metric+device
+        const lastEnd = this.lastEndDates[type]?.[device || "unknown"];
+        if (lastEnd && new Date(startDate) <= lastEnd) continue;
+        // Create data point with standardized unit
+        const dataPoint: HealthDataPoint = {
+          startDate,
+          endDate,
+          value,
+          unit: standardizedUnit,
+          source: sourceName,
+          device,
+          type,
+        };
+        results[type].push(dataPoint);
+      } catch (err) {}
+    }
+
+    // Process regular closing records (<Record ...></Record>)
+    regularClosingRegex.lastIndex = 0; // Reset regex
+    while ((match = regularClosingRegex.exec(xml)) !== null) {
+      // Extract attributes from the opening tag
+      const attributes = match[1];
+      const recordStr = `<Record ${attributes}/>`;
       // Use the same logic as processRecordElement
       try {
         const typeMatch = recordStr.match(/type="([^"]+)"/);

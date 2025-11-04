@@ -28,6 +28,9 @@ import {
 } from "../data/types/healthMetrics";
 import { useSelection } from "../store/selectionStore";
 import { TimeFrame } from "../types/healthData";
+import { RegexCompatibilityTest } from "./debug/RegexCompatibilityTest";
+import { EncodingTest } from "./debug/EncodingTest";
+import { FileReaderTest } from "./debug/FileReaderTest";
 
 const HealthDataSelector: () => React.ReactElement = () => {
   const {
@@ -39,6 +42,8 @@ const HealthDataSelector: () => React.ReactElement = () => {
     uploadedFile,
     setUploadedFile,
   } = useSelection();
+
+  const [showDebugTests, setShowDebugTests] = React.useState(false);
 
   const {
     processingState,
@@ -397,6 +402,29 @@ const HealthDataSelector: () => React.ReactElement = () => {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Debug Tests Section */}
+        <div className="border-t border-amber-50/20 pt-6 mt-8">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl font-semibold text-emerald-700">
+              Debug Tests (Eruda)
+            </h3>
+            <button
+              onClick={() => setShowDebugTests(!showDebugTests)}
+              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm"
+            >
+              {showDebugTests ? "Hide" : "Show"} Debug Tests
+            </button>
+          </div>
+
+          {showDebugTests && (
+            <div className="space-y-4">
+              <RegexCompatibilityTest />
+              <EncodingTest file={uploadedFile} />
+              <FileReaderTest file={uploadedFile} />
+            </div>
+          )}
         </div>
       </div>
     </div>

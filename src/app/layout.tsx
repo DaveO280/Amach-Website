@@ -7,6 +7,7 @@ import { Inter } from "next/font/google";
 import React from "react";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
+import ErudaLoader from "@/components/ErudaLoader";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -30,6 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
+        <ErudaLoader />
         <QueryProvider>
           <HealthDataContextWrapper>
             <SelectionProvider>

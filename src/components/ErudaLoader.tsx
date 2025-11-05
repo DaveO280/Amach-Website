@@ -30,9 +30,19 @@ export default function ErudaLoader(): null {
     if (typeof window === "undefined") return;
 
     const urlParams = new URLSearchParams(window.location.search);
-    const isEnabled =
-      urlParams.get("eruda") === "true" ||
-      localStorage.getItem("eruda-enabled") === "true";
+    const isProd = process.env.NODE_ENV === "production";
+    const allowLocalStorageInProd =
+      process.env.NEXT_PUBLIC_ENABLE_ERUDA_IN_PROD === "true";
+
+    // In production: only enable via URL (?eruda=true) by default.
+    // Optionally allow localStorage toggle in prod with NEXT_PUBLIC_ENABLE_ERUDA_IN_PROD=true
+    const enabledViaUrl = urlParams.get("eruda") === "true";
+    const enabledViaLocalStorage =
+      !isProd || allowLocalStorageInProd
+        ? localStorage.getItem("eruda-enabled") === "true"
+        : false;
+
+    const isEnabled = enabledViaUrl || enabledViaLocalStorage;
 
     if (!isEnabled) return;
 

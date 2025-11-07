@@ -175,6 +175,17 @@ export class XMLStreamParser {
           results[type].push(dataPoint);
           this.metricCounts[type]++;
           this.recordCount++;
+
+          // Update lastEndDates so subsequent records in this run can detect overlaps
+          const deviceKey = device || "unknown";
+          const endDateObj = new Date(endDate);
+          if (!this.lastEndDates[type]) {
+            this.lastEndDates[type] = {};
+          }
+          const lastEndForDevice = this.lastEndDates[type][deviceKey];
+          if (!lastEndForDevice || endDateObj > lastEndForDevice) {
+            this.lastEndDates[type][deviceKey] = endDateObj;
+          }
         } catch (err) {}
       };
 
@@ -200,41 +211,37 @@ export class XMLStreamParser {
         currentBuffer += chunkData;
 
         // Find complete <Record> elements
-        // FIXED: Handle both self-closing (<Record ... />) and regular closing (<Record ...></Record>) tags
         let recordStartIndex = currentBuffer.indexOf("<Record ");
         while (recordStartIndex !== -1) {
-          // Look for BOTH types of endings
-          const selfClosingEnd = currentBuffer.indexOf("/>", recordStartIndex);
-          const regularClosingEnd = currentBuffer.indexOf(
-            "</Record>",
-            recordStartIndex,
-          );
-
-          let recordEndIndex = -1;
-          let endLength = 0;
-
-          // Determine which ending comes first (if any)
-          if (
-            selfClosingEnd !== -1 &&
-            (regularClosingEnd === -1 || selfClosingEnd < regularClosingEnd)
-          ) {
-            recordEndIndex = selfClosingEnd;
-            endLength = 2; // length of "/>"
-          } else if (regularClosingEnd !== -1) {
-            recordEndIndex = regularClosingEnd;
-            endLength = 9; // length of "</Record>"
+          const openTagEnd = currentBuffer.indexOf(">", recordStartIndex);
+          if (openTagEnd === -1) {
+            // Incomplete opening tag – wait for next chunk
+            break;
           }
 
-          if (recordEndIndex === -1) break; // Incomplete record, wait for next chunk
+          const isSelfClosing = currentBuffer[openTagEnd - 1] === "/";
 
-          const recordString = currentBuffer.substring(
+          let recordBoundary = -1;
+
+          if (isSelfClosing) {
+            recordBoundary = openTagEnd + 1; // Include the closing '>'
+          } else {
+            const closingTagIndex = currentBuffer.indexOf(
+              "</Record>",
+              openTagEnd,
+            );
+            if (closingTagIndex === -1) {
+              // Incomplete record – wait for next chunk
+              break;
+            }
+            recordBoundary = closingTagIndex + "</Record>".length;
+          }
+
+          const recordString = currentBuffer.slice(
             recordStartIndex,
-            recordEndIndex + endLength,
+            recordBoundary,
           );
           processRecordElement(recordString);
-
-          // Move past this record
-          recordStartIndex = currentBuffer.indexOf("<Record ", recordEndIndex);
 
           // Update progress based on processed records
           if (this.recordCount % 1000 === 0) {
@@ -244,25 +251,13 @@ export class XMLStreamParser {
               metricCounts: { ...this.metricCounts },
             });
           }
+
+          // Remove the processed record from the buffer
+          currentBuffer = currentBuffer.slice(recordBoundary);
+          recordStartIndex = currentBuffer.indexOf("<Record ");
         }
 
-        // Keep any partial record at the end for the next chunk
-        const lastRecordStart = currentBuffer.lastIndexOf("<Record ");
-        if (lastRecordStart !== -1) {
-          // Check if this record is incomplete (neither self-closing nor regular closing found)
-          const remainingBuffer = currentBuffer.substring(lastRecordStart);
-          const hasSelfClosing = remainingBuffer.indexOf("/>") !== -1;
-          const hasRegularClosing = remainingBuffer.indexOf("</Record>") !== -1;
-
-          if (!hasSelfClosing && !hasRegularClosing) {
-            // Incomplete record - keep it for next chunk
-            currentBuffer = remainingBuffer;
-          } else {
-            currentBuffer = "";
-          }
-        } else {
-          currentBuffer = "";
-        }
+        // currentBuffer now contains only the leftover (possibly incomplete) data
 
         processedSize = nextEnd;
 

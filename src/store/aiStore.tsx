@@ -122,7 +122,9 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
       const sanitizedResponse = sanitizeAssistantResponse(response);
       const finalResponse =
-        sanitizedResponse.length > 0 ? sanitizedResponse : response;
+        sanitizedResponse.trim().length > 0
+          ? sanitizedResponse
+          : "I’m still digesting that. Could you try asking it a little differently so I can give you something useful?";
 
       // Add the response to the messages
       setMessages((prev) => [

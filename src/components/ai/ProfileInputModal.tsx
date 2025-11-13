@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useZkSyncSsoWallet } from "@/hooks/useZkSyncSsoWallet";
+import type { NormalizedUserProfile } from "@/utils/userProfileUtils";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -14,38 +15,38 @@ interface ProfileInputModalProps {
   onSubmit: (data: {
     age: number;
     sex: "male" | "female";
-    height: number;
+    birthDate: string;
+    heightFeet: number;
+    heightInches: number;
     weight: number;
   }) => void;
+  initialProfile?: NormalizedUserProfile | null;
 }
 
 export const ProfileInputModal: React.FC<ProfileInputModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  initialProfile,
 }) => {
   const [age, setAge] = useState<string>("");
   const [sex, setSex] = useState<"male" | "female">("male");
   const [feet, setFeet] = useState<string>("");
   const [inches, setInches] = useState<string>("");
   const [weight, setWeight] = useState<string>("");
+  const [birthDate, setBirthDate] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Get wallet data
   const { isConnected, getDecryptedProfile, loadProfileFromBlockchain } =
     useZkSyncSsoWallet();
 
-  // Auto-populate form when modal opens and wallet is connected
   useEffect(() => {
     const populateFromWallet = async (): Promise<void> => {
       if (!isOpen || !isConnected) return;
 
       setIsLoading(true);
       try {
-        // First try to load fresh data from blockchain
         await loadProfileFromBlockchain();
-
-        // Get decrypted profile data
         const walletProfile = await getDecryptedProfile();
 
         if (
@@ -55,23 +56,20 @@ export const ProfileInputModal: React.FC<ProfileInputModalProps> = ({
           walletProfile.weight &&
           walletProfile.sex
         ) {
-          // Calculate age from birth date
-          const birthDate = new Date(walletProfile.birthDate);
+          const birthDateValue = new Date(walletProfile.birthDate);
           const today = new Date();
-          const ageYears = today.getFullYear() - birthDate.getFullYear();
-          const monthDiff = today.getMonth() - birthDate.getMonth();
-          const age =
+          const ageYears = today.getFullYear() - birthDateValue.getFullYear();
+          const monthDiff = today.getMonth() - birthDateValue.getMonth();
+          const derivedAge =
             monthDiff < 0 ||
-            (monthDiff === 0 && today.getDate() < birthDate.getDate())
+            (monthDiff === 0 && today.getDate() < birthDateValue.getDate())
               ? ageYears - 1
               : ageYears;
 
-          // Convert height from inches to feet and inches
           const totalInches = walletProfile.height;
-          const feet = Math.floor(totalInches / 12);
-          const inches = totalInches % 12;
+          const derivedFeet = Math.floor(totalInches / 12);
+          const derivedInches = totalInches % 12;
 
-          // Map sex values
           const sexMapping: Record<string, "male" | "female"> = {
             M: "male",
             F: "female",
@@ -81,18 +79,19 @@ export const ProfileInputModal: React.FC<ProfileInputModalProps> = ({
             female: "female",
           };
 
-          // Populate form fields
-          setAge(age.toString());
+          setAge(derivedAge.toString());
           setSex(sexMapping[walletProfile.sex] || "male");
-          setFeet(feet.toString());
-          setInches(inches.toString());
+          setFeet(derivedFeet.toString());
+          setInches(derivedInches.toString());
           setWeight(walletProfile.weight.toString());
+          setBirthDate(walletProfile.birthDate);
 
           console.log("✅ Auto-populated profile form from wallet data:", {
-            age,
+            age: derivedAge,
             sex: sexMapping[walletProfile.sex] || "male",
-            height: `${feet}'${inches}"`,
+            height: `${derivedFeet}'${derivedInches}"`,
             weight: walletProfile.weight,
+            birthDate: walletProfile.birthDate,
           });
         }
       } catch (error) {
@@ -105,33 +104,69 @@ export const ProfileInputModal: React.FC<ProfileInputModalProps> = ({
     populateFromWallet();
   }, [isOpen, isConnected, getDecryptedProfile, loadProfileFromBlockchain]);
 
-  const handleSubmit = (): void => {
-    // Validate inputs
-    if (!age || !feet || !inches || !weight) {
+  useEffect(() => {
+    if (!isOpen || isConnected || !initialProfile) {
       return;
     }
 
-    const ageNum = parseInt(age);
-    const feetNum = parseInt(feet);
-    const inchesNum = parseInt(inches);
+    if (initialProfile.age !== undefined) {
+      setAge(Math.round(initialProfile.age).toString());
+    }
+    if (initialProfile.sex === "female") {
+      setSex("female");
+    } else if (initialProfile.sex === "male") {
+      setSex("male");
+    }
+    if (typeof initialProfile.heightIn === "number") {
+      const totalInches = initialProfile.heightIn;
+      const initFeet = Math.floor(totalInches / 12);
+      const initInches = Math.round(totalInches % 12);
+      setFeet(initFeet.toString());
+      setInches(initInches.toString());
+    } else if (typeof initialProfile.heightCm === "number") {
+      const totalInches = initialProfile.heightCm / 2.54;
+      const initFeet = Math.floor(totalInches / 12);
+      const initInches = Math.round(totalInches % 12);
+      setFeet(initFeet.toString());
+      setInches(initInches.toString());
+    }
+    if (typeof initialProfile.weightLbs === "number") {
+      setWeight(Math.round(initialProfile.weightLbs).toString());
+    } else if (typeof initialProfile.weightKg === "number") {
+      setWeight(Math.round(initialProfile.weightKg * 2.20462).toString());
+    }
+    if (initialProfile.birthDate) {
+      setBirthDate(initialProfile.birthDate);
+    }
+  }, [initialProfile, isOpen, isConnected]);
+
+  const handleSubmit = (): void => {
+    if (!age || !feet || !inches || !weight || !birthDate) {
+      return;
+    }
+
+    const ageNum = parseInt(age, 10);
+    const feetNum = parseInt(feet, 10);
+    const inchesNum = parseInt(inches, 10);
     const weightNum = parseFloat(weight);
+    const birthDateValue = new Date(birthDate);
 
     if (
-      isNaN(ageNum) ||
-      isNaN(feetNum) ||
-      isNaN(inchesNum) ||
-      isNaN(weightNum)
+      Number.isNaN(ageNum) ||
+      Number.isNaN(feetNum) ||
+      Number.isNaN(inchesNum) ||
+      Number.isNaN(weightNum) ||
+      Number.isNaN(birthDateValue.getTime())
     ) {
       return;
     }
 
-    // Convert feet and inches to total height in feet
-    const totalHeight = feetNum + inchesNum / 12;
-
     onSubmit({
       age: ageNum,
       sex,
-      height: totalHeight,
+      birthDate,
+      heightFeet: feetNum,
+      heightInches: inchesNum,
       weight: weightNum,
     });
   };
@@ -166,6 +201,18 @@ export const ProfileInputModal: React.FC<ProfileInputModalProps> = ({
         )}
 
         <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="birthDate">Birth Date</Label>
+            <Input
+              id="birthDate"
+              type="date"
+              value={birthDate}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setBirthDate(e.target.value)
+              }
+            />
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="age">Age</Label>
             <Input
@@ -251,7 +298,9 @@ export const ProfileInputModal: React.FC<ProfileInputModalProps> = ({
           <Button
             onClick={handleSubmit}
             className="w-full bg-emerald-600 hover:bg-emerald-700"
-            disabled={!age || !feet || !inches || !weight || isLoading}
+            disabled={
+              !age || !feet || !inches || !weight || !birthDate || isLoading
+            }
           >
             {isLoading
               ? "Loading..."

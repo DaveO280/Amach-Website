@@ -10,11 +10,14 @@ export interface HealthScore {
   date: string;
 }
 
+import type { ParsedReportSummary } from "./reportData";
+
 export interface UploadedFileSummary {
   type: string; // e.g., "cgm", "dexa", "blood"
   summary: string;
   date: string;
   rawData?: Record<string, unknown>; // Optional: for future use, use Record<string, unknown> for type safety
+  parsedReports?: ParsedReportSummary[];
 }
 
 export interface UserFeedback {
@@ -69,13 +72,20 @@ export interface HealthContext {
   userProfile: {
     name?: string;
     age?: number;
-    // ...add more as needed
+    birthDate?: string;
+    sex?: string;
+    heightCm?: number;
+    heightIn?: number;
+    weightKg?: number;
+    weightLbs?: number;
+    bmi?: number;
   };
   chatHistory: ChatMessage[];
   healthScores: HealthScore[];
   uploadedFiles: UploadedFileSummary[];
   userFeedback: UserFeedback[];
   goals: HealthGoal[];
+  reports?: ParsedReportSummary[];
   metrics?: {
     steps: HealthMetricsSummary;
     exercise: HealthMetricsSummary;

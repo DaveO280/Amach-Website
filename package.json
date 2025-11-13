@@ -19,7 +19,13 @@
     "build:prod": "rimraf .next && pnpm install --prod && pnpm build",
     "start:clean": "rimraf .next && pnpm build && pnpm start",
     "clean:windows": "rimraf --no-glob .next && rimraf --no-glob node_modules/.cache && pnpm rebuild",
-    "pre-commit": "lint-staged && pnpm type-check"
+    "pre-commit": "lint-staged && pnpm type-check",
+    "agent:test": "cross-env RUN_AGENT_TESTS=true VENICE_API_BASE_URL=http://127.0.0.1:3000 pnpm exec tsx tests/agents/agentQualityTest.ts",
+    "sleep:csv": "cross-env VENICE_API_BASE_URL=http://127.0.0.1:3000 pnpm exec tsx scripts/analyzeSleepFromCsv.ts",
+    "activity:csv": "cross-env VENICE_API_BASE_URL=http://127.0.0.1:3000 pnpm exec tsx scripts/analyzeActivityFromCsv.ts",
+    "cardio:csv": "cross-env VENICE_API_BASE_URL=http://127.0.0.1:3000 pnpm exec tsx scripts/analyzeCardioFromCsv.ts",
+    "recovery:csv": "cross-env VENICE_API_BASE_URL=http://127.0.0.1:3000 pnpm exec tsx scripts/analyzeRecoveryFromCsv.ts",
+    "coordinator:csv": "cross-env VENICE_API_BASE_URL=http://127.0.0.1:3000 pnpm exec tsx scripts/analyzeCoordinatorFromCsv.ts"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.0.5",
@@ -106,6 +112,7 @@
     "autoprefixer": "^10.0.1",
     "beasties": "^0.2.0",
     "beasties-webpack-plugin": "^0.2.0",
+    "cross-env": "^10.1.0",
     "dotenv": "^17.2.2",
     "eslint": "^8",
     "eslint-config-next": "15.1.7",
@@ -122,6 +129,7 @@
     "rimraf": "^5.0.10",
     "tailwindcss": "3.3.0",
     "ts-jest": "^29.3.1",
+    "tsx": "^4.20.6",
     "typescript": "^5.5.4"
   },
   "pnpm": {

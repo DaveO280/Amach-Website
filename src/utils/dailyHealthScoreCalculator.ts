@@ -3,6 +3,10 @@ import type { HealthScore } from "@/types/HealthContext";
 import { healthDataStore } from "../data/store/healthDataStore";
 import { extractDatePart } from "./dataDeduplicator";
 import { processSleepData } from "./sleepDataProcessor";
+import {
+  calculateAgeFromBirthDate,
+  type NormalizedUserProfile,
+} from "./userProfileUtils";
 
 export interface DailyHealthScores {
   date: string;
@@ -28,21 +32,30 @@ export interface DailyMetrics {
  */
 export function calculateDailyHealthScores(
   healthData: HealthDataResults,
-  userProfile: {
-    age?: number;
-    sex?: "male" | "female";
-    weight?: number;
-    height?: number;
-  } = {},
+  userProfile: NormalizedUserProfile = {},
 ): DailyHealthScores[] {
   if (!healthData || Object.keys(healthData).length === 0) {
     return [];
   }
 
-  const age = userProfile.age ?? 40;
-  const sex: "male" | "female" = userProfile.sex ?? "male";
-  const height = userProfile.height ?? 170; // cm
-  const weight = userProfile.weight ?? 70; // kg
+  const age =
+    userProfile.age ??
+    calculateAgeFromBirthDate(userProfile.birthDate ?? undefined) ??
+    40;
+  const sex: "male" | "female" =
+    userProfile.sex === "female" ? "female" : "male";
+  const heightCm =
+    userProfile.heightCm ??
+    (typeof userProfile.heightIn === "number"
+      ? userProfile.heightIn * 2.54
+      : undefined) ??
+    170;
+  const weightKg =
+    userProfile.weightKg ??
+    (typeof userProfile.weightLbs === "number"
+      ? userProfile.weightLbs / 2.20462
+      : undefined) ??
+    70;
 
   // Process sleep data using the same function as regular health score calculation
   const sleepData = healthData["HKCategoryTypeIdentifierSleepAnalysis"] || [];
@@ -155,8 +168,8 @@ export function calculateDailyHealthScores(
       const scores = calculateScoresForDay(metrics, {
         age,
         sex,
-        height,
-        weight,
+        height: heightCm,
+        weight: weightKg,
       });
 
       return {
@@ -487,12 +500,7 @@ export async function getDailyHealthScores(): Promise<
  */
 export async function calculateAndStoreDailyHealthScores(
   healthData: HealthDataResults,
-  userProfile: {
-    age?: number;
-    sex?: "male" | "female";
-    height?: number;
-    weight?: number;
-  } = {},
+  userProfile: NormalizedUserProfile = {},
 ): Promise<DailyHealthScores[]> {
   try {
     const dailyScores = calculateDailyHealthScores(healthData, userProfile);

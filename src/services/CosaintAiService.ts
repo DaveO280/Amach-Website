@@ -1,11 +1,35 @@
 // src/services/CosaintAiService.ts
 import { randomChoice } from "@/utils/utils";
 import { VeniceApiService } from "../api/venice/VeniceApiService";
+import { runCoordinatorAnalysis } from "./CoordinatorService";
 import CharacteristicsLoader from "../components/ai/characteristicsLoader";
 import cosaintCharacteristics from "../components/ai/cosaint";
 import type { HealthContextMetrics } from "../types/HealthContext";
+import type { HealthDataByType } from "../types/healthData";
 import { logger } from "../utils/logger";
+import type { CoordinatorResult } from "@/agents/CoordinatorAgent";
+import {
+  calculateAgeFromBirthDate,
+  type NormalizedUserProfile,
+} from "@/utils/userProfileUtils";
+import type { ParsedReportSummary } from "@/types/reportData";
 
+const RESPONSE_FORMAT_GUIDELINES = `
+
+Response Framework:
+1. Open with a warm, one-sentence acknowledgement that thanks the user for investing in their health.
+2. Include a "Profile Snapshot:" line that lists age, sex, height, weight, and BMI (or clearly state when a value is unavailable).
+3. Provide "Key Health Signals:" as 3-4 concise bullets, each referencing specific metrics (averages, ranges, or trends) and their implications.
+4. Provide "Next Steps:" as 2-3 prioritized action bullets that explain the expected impact on other metrics or systems.
+5. Close with one encouraging sentence that reinforces partnership and progress.
+
+Tone requirements:
+- Address the user directly (use "you/your").
+- Be data-forward, neutral, and specific—no filler or generic advice.
+- Reference multi-agent insights when available (e.g., sleep, cardiovascular, recovery correlations).
+- Highlight missing data or assumptions explicitly.
+- Avoid external citations, numbered references, or clinical alarmism.
+`;
 export class CosaintAiService {
   private veniceApi: VeniceApiService;
   private characteristics: CharacteristicsLoader;
@@ -77,12 +101,10 @@ export class CosaintAiService {
       summary: string;
       rawData?: Record<string, unknown>;
     }>,
-    userProfile?: {
-      age?: number;
-      sex?: string;
-      height?: number;
-      weight?: number;
-    },
+    userProfile?: NormalizedUserProfile,
+    metricData?: HealthDataByType,
+    useMultiAgent: boolean = true,
+    reports?: ParsedReportSummary[],
   ): Promise<string> {
     try {
       // Log health data and file status
@@ -95,15 +117,39 @@ export class CosaintAiService {
           hasRawData: !!f.rawData,
         })),
         userProfile,
+        structuredReportCount: reports?.length ?? 0,
       });
 
-      // Create the prompt using the character's characteristics and file context
+      let coordinatorResult: CoordinatorResult | null = null;
+      if (
+        useMultiAgent &&
+        ((metricData && Object.keys(metricData).length > 0) || reports?.length)
+      ) {
+        try {
+          coordinatorResult = await runCoordinatorAnalysis({
+            metricData,
+            profile: userProfile,
+            reports,
+            conversationHistory,
+            veniceService: this.veniceApi,
+          });
+        } catch (coordinatorError) {
+          console.warn(
+            "[CosaintAiService] Coordinator analysis failed:",
+            coordinatorError,
+          );
+        }
+      }
+
+      // Create the prompt using the character's characteristics and context
       const prompt = this.createPromptWithFiles(
         userMessage,
         conversationHistory,
         healthData,
         uploadedFiles,
         userProfile,
+        coordinatorResult,
+        reports,
       );
 
       // Log the prompt for debugging (you can remove this in production)
@@ -143,9 +189,10 @@ export class CosaintAiService {
     userMessage: string,
     conversationHistory: Array<{ role: "user" | "assistant"; content: string }>,
     healthData?: HealthContextMetrics,
+    userProfile?: NormalizedUserProfile,
   ): string {
     // Build the system message including character background and health data context
-    const systemMessage = this.buildSystemMessage(healthData);
+    const systemMessage = this.buildSystemMessage(healthData, userProfile);
 
     // Format the conversation history
     const formattedHistory =
@@ -172,15 +219,80 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
       summary: string;
       rawData?: Record<string, unknown>;
     }>,
-    userProfile?: {
-      age?: number;
-      sex?: string;
-      height?: number;
-      weight?: number;
-    },
+    userProfile?: NormalizedUserProfile,
+    coordinatorResult?: CoordinatorResult | null,
+    reports?: ParsedReportSummary[],
   ): string {
     // Build the system message including character background, health data, file context, and user profile
     let systemMessage = this.buildSystemMessage(healthData, userProfile);
+    systemMessage +=
+      "\n\nFollow-up instruction: Always address the user's latest question or concern first, use the conversation history to avoid repeating full introductions or already acknowledged profile details, and consolidate duplicate findings instead of listing the same metric multiple times.";
+
+    if (coordinatorResult?.combinedSummary) {
+      const summary = coordinatorResult.combinedSummary;
+      systemMessage +=
+        "\n\nLatest multi-agent synthesis (do not repeat profile details already mentioned in the summary):";
+      systemMessage += `\nSummary: ${summary.summary}`;
+      systemMessage += `\nKey Findings:\n${summary.keyFindings
+        .map((finding) => `- ${finding}`)
+        .join("\n")}`;
+      if (summary.priorityActions?.length) {
+        systemMessage += `\nPriority Actions:\n${summary.priorityActions
+          .map((action) => `- ${action}`)
+          .join("\n")}`;
+      }
+      if (summary.watchItems?.length) {
+        systemMessage += `\nWatch Items:\n${summary.watchItems
+          .map((item) => `- ${item}`)
+          .join("\n")}`;
+      }
+    }
+
+    if (coordinatorResult?.agentInsights) {
+      const agentDetails = Object.entries(coordinatorResult.agentInsights)
+        .map(([agentId, insight]) => {
+          const topFinding = insight.findings?.[0]?.observation;
+          const trend = insight.trends?.[0]?.pattern;
+          return `• ${agentId}: finding=${topFinding ?? "n/a"}, trend=${trend ?? "n/a"}`;
+        })
+        .join("\n");
+      if (agentDetails) {
+        systemMessage += `\n\nSpecialist notes:\n${agentDetails}`;
+      }
+    }
+
+    if (reports && reports.length > 0) {
+      const reportLines = reports.slice(0, 5).map((summary) => {
+        const report = summary.report;
+        if (report.type === "dexa") {
+          return `- DEXA (${summary.extractedAt}): Total fat ${report.totalBodyFatPercent ?? "n/a"}%, visceral rating ${report.visceralFatRating ?? "n/a"}, regions captured: ${report.regions
+            .map((r) => r.region)
+            .slice(0, 5)
+            .join(", ")}`;
+        }
+        if (report.type === "bloodwork") {
+          const highFlags = report.metrics.filter(
+            (metric) => metric.flag && metric.flag !== "normal",
+          );
+          return `- Bloodwork (${summary.extractedAt}): ${report.metrics.length} metrics, notable flags: ${
+            highFlags.length
+              ? highFlags
+                  .slice(0, 4)
+                  .map(
+                    (metric) =>
+                      `${metric.name}${metric.flag ? ` (${metric.flag})` : ""}`,
+                  )
+                  .join(", ")
+              : "none"
+          }`;
+        }
+        return `- Report (${summary.extractedAt})`;
+      });
+      systemMessage += `\n\nStructured reports available:\n${reportLines.join("\n")}`;
+      if (reports.length > 5) {
+        systemMessage += `\n- ...and ${reports.length - 5} more reports`;
+      }
+    }
 
     // Add uploaded file summaries if present
     if (uploadedFiles && uploadedFiles.length > 0) {
@@ -239,12 +351,7 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
    */
   private buildSystemMessage(
     healthData?: HealthContextMetrics,
-    userProfile?: {
-      age?: number;
-      sex?: string;
-      height?: number;
-      weight?: number;
-    },
+    userProfile?: NormalizedUserProfile,
   ): string {
     // Start with the character's core identity
     let systemMessage = `You are Cosaint, a holistic health AI companion developed by Amach Health.\n\n${this.characteristics.getBio()}\n\nYour personality is:\n- Empathetic: You genuinely care about the user's wellbeing\n- Evidence-informed: You provide helpful health insights based on research\n- Holistic: You consider the interconnectedness of health factors\n- Practical: You offer actionable suggestions that are realistic to implement
@@ -254,19 +361,46 @@ IMPORTANT: Do not include references, citations, or numbered lists at the end of
 SPECIAL INSTRUCTION FOR HEALTH REPORTS: When analyzing any health report (blood tests, lab results, medical reports, etc.), provide a comprehensive analysis of ALL metrics and values found in the report, not just a summary. List each metric with its value and normal range, and explain what each metric means for the user's health.`;
 
     // Add user profile context if available
-    if (
-      userProfile &&
-      userProfile.age &&
-      userProfile.sex &&
-      userProfile.height &&
-      userProfile.weight
-    ) {
-      // Convert height from cm to ft/in
-      const heightFeet = userProfile.height / 30.48;
-      const heightDisplay = `${Math.floor(heightFeet)}'${Math.round((heightFeet - Math.floor(heightFeet)) * 12)}"`;
-      // Convert weight from kg to lbs
-      const weightLbs = Math.round(userProfile.weight * 2.20462);
-      systemMessage += `\n\nUser Profile:\n- Age: ${userProfile.age}\n- Sex: ${userProfile.sex}\n- Height: ${heightDisplay}\n- Weight: ${weightLbs} lbs`;
+    if (userProfile) {
+      const derivedAge =
+        userProfile.age ??
+        calculateAgeFromBirthDate(userProfile.birthDate ?? undefined);
+      const heightInches =
+        userProfile.heightIn ??
+        (userProfile.heightCm ? userProfile.heightCm / 2.54 : undefined);
+      const heightDisplay =
+        typeof heightInches === "number"
+          ? `${Math.floor(heightInches / 12)}'${Math.round(heightInches % 12)}"`
+          : undefined;
+      const weightLbs =
+        userProfile.weightLbs ??
+        (userProfile.weightKg ? userProfile.weightKg * 2.20462 : undefined);
+
+      systemMessage += `\n\nUser Profile:`;
+      if (derivedAge !== undefined) {
+        systemMessage += `\n- Age: ${Math.round(derivedAge)} years`;
+      }
+      if (userProfile.birthDate) {
+        systemMessage += `\n- Birth date: ${userProfile.birthDate}`;
+      }
+      if (userProfile.sex) {
+        systemMessage += `\n- Sex: ${userProfile.sex}`;
+      }
+      if (heightDisplay) {
+        systemMessage += `\n- Height: ${heightDisplay}`;
+      }
+      if (typeof userProfile.heightCm === "number") {
+        systemMessage += ` (${userProfile.heightCm.toFixed(1)} cm)`;
+      }
+      if (weightLbs !== undefined) {
+        systemMessage += `\n- Weight: ${Math.round(weightLbs)} lbs`;
+      }
+      if (typeof userProfile.weightKg === "number") {
+        systemMessage += ` (${userProfile.weightKg.toFixed(1)} kg)`;
+      }
+      if (typeof userProfile.bmi === "number") {
+        systemMessage += `\n- BMI: ${userProfile.bmi.toFixed(1)}`;
+      }
     }
 
     // Add health data context if available
@@ -338,6 +472,7 @@ SPECIAL INSTRUCTION FOR HEALTH REPORTS: When analyzing any health report (blood 
       }
       systemMessage += `\n\nWhen making recommendations or setting goals, use the user\'s average, high, and low values for each metric to personalize your advice. Suggest realistic improvements based on their current range.`;
     }
+    systemMessage += RESPONSE_FORMAT_GUIDELINES;
     return systemMessage;
   }
 

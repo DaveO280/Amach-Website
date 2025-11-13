@@ -20,6 +20,7 @@ import {
   HeartRateMetric,
   HRVMetric,
   MetricType,
+  VO2MaxMetric,
   RespiratoryRateMetric,
   RestingHeartRateMetric,
   SleepAnalysisMetric,
@@ -199,6 +200,11 @@ const HealthDataSelector: () => React.ReactElement = () => {
               return { ...baseMetric, unit: "min" } as ExerciseTimeMetric;
             case "HKQuantityTypeIdentifierRestingHeartRate":
               return { ...baseMetric, unit: "bpm" } as RestingHeartRateMetric;
+            case "HKQuantityTypeIdentifierVO2Max":
+              return {
+                ...baseMetric,
+                unit: "ml/(kg*min)",
+              } as VO2MaxMetric;
             case "HKQuantityTypeIdentifierActiveEnergyBurned":
               return { ...baseMetric, unit: "kcal" } as ActiveEnergyMetric;
             case "HKCategoryTypeIdentifierSleepAnalysis":

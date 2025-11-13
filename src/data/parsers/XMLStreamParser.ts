@@ -156,8 +156,13 @@ export class XMLStreamParser {
           }
 
           // Overlap prevention: skip if startDate <= last endDate for this metric+device
-          const lastEnd = this.lastEndDates[type]?.[device || "unknown"];
-          if (lastEnd && new Date(startDate) <= lastEnd) {
+          const deviceKey = device || "unknown";
+          const lastEnd = this.lastEndDates[type]?.[deviceKey];
+          if (
+            this.options.existingData &&
+            lastEnd &&
+            new Date(startDate) <= lastEnd
+          ) {
             return;
           }
 
@@ -177,7 +182,6 @@ export class XMLStreamParser {
           this.recordCount++;
 
           // Update lastEndDates so subsequent records in this run can detect overlaps
-          const deviceKey = device || "unknown";
           const endDateObj = new Date(endDate);
           if (!this.lastEndDates[type]) {
             this.lastEndDates[type] = {};

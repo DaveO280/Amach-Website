@@ -19,14 +19,15 @@ import { extractDatePart } from "@/utils/dataDeduplicator";
 import { processSleepData } from "@/utils/sleepDataProcessor";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useWalletConnection } from "../hooks/useWalletConnection";
+import {
+  normalizeUserProfile,
+  type NormalizedUserProfile,
+  type RawUserProfileInput,
+} from "@/utils/userProfileUtils";
+import type { ParsedReportSummary } from "@/types/reportData";
 
 // Profile type
-interface ProfileData {
-  age: number;
-  sex: "male" | "female";
-  height: number;
-  weight: number;
-}
+interface ProfileData extends NormalizedUserProfile {}
 
 // Locally define MetricTrendSummary since it's not exported from types
 interface MetricTrendSummary {
@@ -65,10 +66,14 @@ interface HealthDataContextType {
   addUploadedFile: (file: UploadedFileSummary) => void;
   removeUploadedFile: (index: number) => void;
   clearUploadedFiles: () => void;
+  reports: ParsedReportSummary[];
+  addParsedReports: (reports: ParsedReportSummary[]) => void;
+  clearReports: () => void;
   userProfile: HealthContext["userProfile"];
   setUserProfile: (profile: HealthContext["userProfile"]) => void;
   chatHistory: ChatMessage[];
   addChatMessage: (msg: ChatMessage) => void;
+  clearChatHistory: () => void;
   setHealthContext: React.Dispatch<React.SetStateAction<HealthContext>>;
   // Profile
   profile: ProfileData | null;
@@ -95,6 +100,7 @@ const defaultContext: HealthContext = {
   uploadedFiles: [],
   userFeedback: [],
   goals: [],
+  reports: [],
 };
 
 const HealthDataContext = createContext<HealthDataContextType | undefined>(
@@ -162,23 +168,29 @@ export default function HealthDataContextWrapper({
   // Update user profile from wallet data when available
   useEffect(() => {
     if (isConnected && walletProfile) {
-      const walletProfileData = {
-        age: walletProfile.age || 30,
-        sex:
-          (walletProfile.biologicalSex?.toLowerCase() as "male" | "female") ||
-          "male",
-        height: walletProfile.height || 175,
-        weight: walletProfile.weight || 70,
+      const rawProfile: RawUserProfileInput = {
+        age: walletProfile.age,
+        birthDate: (walletProfile as { birthDate?: string }).birthDate,
+        sex: walletProfile.biologicalSex,
+        height: walletProfile.height,
+        heightCm: (walletProfile as { heightCm?: number }).heightCm,
+        heightIn: (walletProfile as { heightIn?: number }).heightIn,
+        weight: walletProfile.weight,
+        weightKg: (walletProfile as { weightKg?: number }).weightKg,
+        weightLbs: (walletProfile as { weightLbs?: number }).weightLbs,
+        name: (walletProfile as { name?: string }).name,
       };
+
+      const normalizedProfile = normalizeUserProfile(rawProfile);
 
       setHealthContext((prev) => ({
         ...prev,
-        userProfile: walletProfileData,
+        userProfile: normalizedProfile,
       }));
 
-      setProfile(walletProfileData);
+      setProfile(normalizedProfile);
 
-      console.log("Updated user profile from wallet:", walletProfileData);
+      console.log("Updated user profile from wallet:", normalizedProfile);
     }
   }, [isConnected, walletProfile]);
 
@@ -750,19 +762,43 @@ export default function HealthDataContextWrapper({
     setHealthContext((prev) => ({ ...prev, goals: [] }));
   };
   const addUploadedFile = (file: UploadedFileSummary): void => {
-    setHealthContext((prev) => ({
-      ...prev,
-      uploadedFiles: [...prev.uploadedFiles, file],
-    }));
+    setHealthContext((prev) => {
+      const updatedFiles = [...prev.uploadedFiles, file];
+      const aggregatedReports = updatedFiles.flatMap(
+        (entry) => entry.parsedReports ?? [],
+      );
+      return {
+        ...prev,
+        uploadedFiles: updatedFiles,
+        reports: aggregatedReports,
+      };
+    });
   };
   const removeUploadedFile = (index: number): void => {
-    setHealthContext((prev) => ({
-      ...prev,
-      uploadedFiles: prev.uploadedFiles.filter((_, i) => i !== index),
-    }));
+    setHealthContext((prev) => {
+      const updatedFiles = prev.uploadedFiles.filter((_, i) => i !== index);
+      const aggregatedReports = updatedFiles.flatMap(
+        (entry) => entry.parsedReports ?? [],
+      );
+      return {
+        ...prev,
+        uploadedFiles: updatedFiles,
+        reports: aggregatedReports,
+      };
+    });
   };
   const clearUploadedFiles = (): void => {
-    setHealthContext((prev) => ({ ...prev, uploadedFiles: [] }));
+    setHealthContext((prev) => ({ ...prev, uploadedFiles: [], reports: [] }));
+  };
+  const addParsedReports = (reports: ParsedReportSummary[]): void => {
+    if (!reports.length) return;
+    setHealthContext((prev) => ({
+      ...prev,
+      reports: [...(prev.reports ?? []), ...reports],
+    }));
+  };
+  const clearReports = (): void => {
+    setHealthContext((prev) => ({ ...prev, reports: [] }));
   };
   const setUserProfile = (profile: HealthContext["userProfile"]): void => {
     setHealthContext((prev) => ({ ...prev, userProfile: profile }));
@@ -772,6 +808,9 @@ export default function HealthDataContextWrapper({
       ...prev,
       chatHistory: [...prev.chatHistory, msg],
     }));
+  };
+  const clearChatHistory = (): void => {
+    setHealthContext((prev) => ({ ...prev, chatHistory: [] }));
   };
 
   return (
@@ -797,10 +836,14 @@ export default function HealthDataContextWrapper({
         addUploadedFile,
         removeUploadedFile,
         clearUploadedFiles,
+        reports: healthContext.reports ?? [],
+        addParsedReports,
+        clearReports,
         userProfile: healthContext.userProfile,
         setUserProfile,
         chatHistory: healthContext.chatHistory,
         addChatMessage,
+        clearChatHistory,
         setHealthContext,
         profile,
         setProfile,

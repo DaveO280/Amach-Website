@@ -14,7 +14,8 @@ export type MetricUnit =
   | "kcal"
   | "min"
   | "hr"
-  | "count/min";
+  | "count/min"
+  | "ml/(kg*min)";
 
 // Data source types
 export type DataSource = "watch" | "phone" | "pillow" | "other";
@@ -66,6 +67,12 @@ export const SOURCE_PRIORITIES: Record<
     other: { priority: 4, allowed: true },
   },
   HKQuantityTypeIdentifierActiveEnergyBurned: {
+    watch: { priority: 1, allowed: true },
+    phone: { priority: 2, allowed: true },
+    pillow: { priority: 3, allowed: false },
+    other: { priority: 4, allowed: true },
+  },
+  HKQuantityTypeIdentifierVO2Max: {
     watch: { priority: 1, allowed: true },
     phone: { priority: 2, allowed: true },
     pillow: { priority: 3, allowed: false },
@@ -129,6 +136,11 @@ export interface RestingHeartRateMetric extends BaseHealthMetric {
   unit: "bpm";
 }
 
+export interface VO2MaxMetric extends BaseHealthMetric {
+  type: "HKQuantityTypeIdentifierVO2Max";
+  unit: "ml/(kg*min)";
+}
+
 export interface ActiveEnergyMetric extends BaseHealthMetric {
   type: "HKQuantityTypeIdentifierActiveEnergyBurned";
   unit: "kcal";
@@ -151,6 +163,7 @@ export type HealthMetric =
   | HRVMetric
   | RespiratoryRateMetric
   | ExerciseTimeMetric
+  | VO2MaxMetric
   | RestingHeartRateMetric
   | ActiveEnergyMetric
   | SleepAnalysisMetric;
@@ -214,6 +227,13 @@ export const SUPPORTED_METRICS: Record<MetricType, MetricConfig> = {
     displayName: "Resting Heart Rate",
     description: "Resting heart rate in beats per minute",
     unit: "bpm",
+    category: "cardio",
+  },
+  HKQuantityTypeIdentifierVO2Max: {
+    type: "HKQuantityTypeIdentifierVO2Max",
+    displayName: "VO2 Max",
+    description: "Maximal oxygen uptake per kilogram per minute",
+    unit: "ml/(kg*min)",
     category: "cardio",
   },
   HKQuantityTypeIdentifierActiveEnergyBurned: {

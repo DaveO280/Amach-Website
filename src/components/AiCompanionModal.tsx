@@ -5,19 +5,17 @@ import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { Button } from "@/components/ui/button";
 import { useZkSyncSsoWallet } from "@/hooks/useZkSyncSsoWallet";
 import AiProvider from "@/store/aiStore";
+import {
+  normalizeUserProfile,
+  type NormalizedUserProfile,
+  type RawUserProfileInput,
+} from "@/utils/userProfileUtils";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import CosaintChatUI from "./ai/CosaintChatUI";
 import GoalsTab from "./ai/GoalsTab";
 import HealthReport from "./ai/HealthReport";
 import ProfileInputModal from "./ai/ProfileInputModal";
-
-interface ProfileData {
-  age: number;
-  sex: "male" | "female";
-  height: number;
-  weight: number;
-}
 
 interface AiCompanionModalProps {
   isOpen: boolean;
@@ -32,7 +30,8 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
   const [activeTab, setActiveTab] = useState<"chat" | "goals">("chat");
 
   // Access the health data provider to check for available data
-  const { metricData, userProfile, setUserProfile } = useHealthDataContext();
+  const { metricData, userProfile, setUserProfile, setProfile } =
+    useHealthDataContext();
 
   // Get wallet data
   const { isConnected, getDecryptedProfile, loadProfileFromBlockchain } =
@@ -54,53 +53,28 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
         // Get decrypted profile data
         const walletProfile = await getDecryptedProfile();
 
-        if (
-          walletProfile &&
-          walletProfile.birthDate &&
-          walletProfile.height &&
-          walletProfile.weight &&
-          walletProfile.sex
-        ) {
-          // Calculate age from birth date
-          const birthDate = new Date(walletProfile.birthDate);
-          const today = new Date();
-          const ageYears = today.getFullYear() - birthDate.getFullYear();
-          const monthDiff = today.getMonth() - birthDate.getMonth();
-          const age =
-            monthDiff < 0 ||
-            (monthDiff === 0 && today.getDate() < birthDate.getDate())
-              ? ageYears - 1
-              : ageYears;
-
-          // Convert height from inches to feet (for the profile format)
-          const totalInches = walletProfile.height;
-          const heightInFeet = totalInches / 12;
-
-          // Map sex values
-          const sexMapping: Record<string, "male" | "female"> = {
-            M: "male",
-            F: "female",
-            Male: "male",
-            Female: "female",
-            male: "male",
-            female: "female",
+        if (walletProfile) {
+          const rawProfile: RawUserProfileInput = {
+            birthDate: walletProfile.birthDate,
+            sex: walletProfile.sex,
+            height: walletProfile.height,
+            heightIn: (walletProfile as { heightIn?: number }).heightIn,
+            heightCm: (walletProfile as { heightCm?: number }).heightCm,
+            weight: walletProfile.weight,
+            weightKg: (walletProfile as { weightKg?: number }).weightKg,
+            weightLbs: (walletProfile as { weightLbs?: number }).weightLbs,
+            age: (walletProfile as { age?: number }).age,
+            name: (walletProfile as { name?: string }).name,
           };
 
-          // Create profile data in the expected format
-          // Note: The AI prompt expects height in feet and weight in pounds
-          const profileData: ProfileData = {
-            age,
-            sex: sexMapping[walletProfile.sex] || "male",
-            height: heightInFeet, // Already in feet (66 inches = 5.5 feet)
-            weight: walletProfile.weight, // Already in pounds
-          };
+          const normalized = normalizeUserProfile(rawProfile);
 
-          // Set the profile in the health context
-          setUserProfile(profileData);
+          setUserProfile(normalized);
+          setProfile(normalized);
 
           console.log(
             "✅ Auto-populated AI companion profile from wallet:",
-            profileData,
+            normalized,
           );
         }
       } catch (error) {
@@ -142,24 +116,27 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
   };
 
   // Helper to check if userProfile is complete
-  function isProfileComplete(profile: unknown): profile is ProfileData {
-    if (
-      typeof profile === "object" &&
-      profile !== null &&
-      "age" in profile &&
-      "sex" in profile &&
-      "height" in profile &&
-      "weight" in profile
-    ) {
-      const obj = profile as { [key: string]: unknown };
-      return (
-        typeof obj.age === "number" &&
-        typeof obj.sex === "string" &&
-        typeof obj.height === "number" &&
-        typeof obj.weight === "number"
-      );
+  function isProfileComplete(
+    profile: unknown,
+  ): profile is NormalizedUserProfile {
+    if (typeof profile !== "object" || profile === null) {
+      return false;
     }
-    return false;
+    const obj = profile as NormalizedUserProfile;
+    const hasHeight =
+      (typeof obj.heightIn === "number" && obj.heightIn > 0) ||
+      (typeof obj.heightCm === "number" && obj.heightCm > 0);
+    const hasWeight =
+      (typeof obj.weightLbs === "number" && obj.weightLbs > 0) ||
+      (typeof obj.weightKg === "number" && obj.weightKg > 0);
+    return (
+      hasHeight &&
+      hasWeight &&
+      typeof obj.sex === "string" &&
+      obj.sex.length > 0 &&
+      (typeof obj.birthDate === "string" ||
+        (typeof obj.age === "number" && obj.age > 0))
+    );
   }
 
   // Lock background scroll and ensure viewport starts at top when open
@@ -355,18 +332,24 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
         isOpen={showProfileModal}
         onClose={() => setShowProfileModal(false)}
         onSubmit={(data) => {
-          // Convert imperial to metric for storage/calculation
-          const heightCm = Math.round(data.height * 30.48 * 100) / 100; // feet to cm
-          const weightKg = Math.round(data.weight * 0.453592 * 100) / 100; // lbs to kg
-          setUserProfile({
-            ...(userProfile || {}),
+          const totalInches = data.heightFeet * 12 + data.heightInches;
+          const rawProfile: RawUserProfileInput = {
             age: data.age,
+            birthDate: data.birthDate,
             sex: data.sex,
-            height: heightCm,
-            weight: weightKg,
-          } as typeof userProfile);
+            heightIn: totalInches,
+            weightLbs: data.weight,
+          };
+          const normalized = normalizeUserProfile(rawProfile);
+          const mergedProfile: NormalizedUserProfile = {
+            ...(userProfile ?? {}),
+            ...normalized,
+          };
+          setUserProfile(mergedProfile);
+          setProfile(mergedProfile);
           setShowProfileModal(false);
         }}
+        initialProfile={userProfile as NormalizedUserProfile | null}
       />
     </div>
   );

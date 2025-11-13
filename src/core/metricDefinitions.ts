@@ -41,6 +41,12 @@ export const coreMetrics: ReadonlyArray<Metric> = [
     category: "vitals",
   },
   {
+    id: "HKQuantityTypeIdentifierVO2Max",
+    name: "VO₂ Max",
+    unit: "ml/(kg·min)",
+    category: "vitals",
+  },
+  {
     id: "HKQuantityTypeIdentifierActiveEnergyBurned",
     name: "Active Energy",
     unit: "kcal",

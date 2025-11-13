@@ -13,23 +13,52 @@ interface RateLimitInfo {
   retryAfter: number;
 }
 
+const DEFAULT_ENDPOINT_PATH = "/api/venice";
+const DEFAULT_BASE_URL = "http://127.0.0.1:3000";
+const DEFAULT_CLIENT_TIMEOUT_MS = Number(
+  process.env.NEXT_PUBLIC_VENICE_CLIENT_TIMEOUT_MS ?? "130000",
+);
+
 export class VeniceApiService {
   private client: AxiosInstance;
   public modelName: string;
   private debugMode: boolean;
+  private endpointPath: string;
 
   constructor(modelName: string, debugMode: boolean = false) {
     this.modelName = modelName;
     this.debugMode = debugMode;
 
+    const rawBaseUrl = process.env.VENICE_API_BASE_URL ?? DEFAULT_BASE_URL;
+    const trimmedBaseUrl = rawBaseUrl.replace(/\/$/, "");
+    const rawEndpoint =
+      process.env.VENICE_API_ENDPOINT ?? DEFAULT_ENDPOINT_PATH;
+
+    // Ensure endpoint always starts with a single leading slash
+    this.endpointPath = `/${rawEndpoint.replace(/^\/?/, "")}`;
+
+    const baseURL =
+      trimmedBaseUrl === ""
+        ? ""
+        : this.endpointPath !== DEFAULT_ENDPOINT_PATH &&
+            trimmedBaseUrl.endsWith(this.endpointPath)
+          ? trimmedBaseUrl.slice(0, -this.endpointPath.length) || ""
+          : trimmedBaseUrl;
+
+    // Add better clarity to logs when hitting the proxy vs direct endpoint
+    const targetInfo = baseURL || "(relative: /api/venice)";
+    if (this.debugMode) {
+      logger.info(`VeniceApiService configured with baseURL: ${targetInfo}`);
+    }
+
     // For client-side usage, point to our API route
     this.client = axios.create({
-      baseURL: "", // Remove baseURL to use absolute path
+      baseURL,
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      timeout: 70000, // 70 second timeout (slightly longer than server timeout)
+      timeout: DEFAULT_CLIENT_TIMEOUT_MS,
     });
 
     // Request logging interceptor
@@ -89,20 +118,42 @@ export class VeniceApiService {
     prompt: string,
     maxTokens: number = 2000,
   ): Promise<string | null> {
+    const response = await this.generateCompletion({
+      userPrompt: prompt,
+      maxTokens,
+    });
+    return response ?? null;
+  }
+
+  async generateCompletion({
+    systemPrompt,
+    userPrompt,
+    temperature = 0.7,
+    maxTokens = 2000,
+  }: {
+    systemPrompt?: string;
+    userPrompt: string;
+    temperature?: number;
+    maxTokens?: number;
+  }): Promise<string> {
     const requestId = Date.now().toString();
     const startTime = Date.now();
 
     try {
-      // Send the request through our proxy endpoint
+      const messages = [];
+      if (systemPrompt) {
+        messages.push({ role: "system", content: systemPrompt });
+      }
+      messages.push({ role: "user", content: userPrompt });
+
       const requestBody = {
-        messages: [{ role: "user", content: prompt }],
+        messages,
         max_tokens: maxTokens,
-        temperature: 0.7,
+        temperature,
         model: this.modelName,
         stream: false,
       };
 
-      // Add timeout handling
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {
           reject(
@@ -114,7 +165,7 @@ export class VeniceApiService {
       });
 
       const responsePromise = this.retryOperation(() =>
-        this.client.post("/api/venice", requestBody),
+        this.client.post(this.endpointPath, requestBody),
       );
 
       const response = (await Promise.race<AxiosResponse>([
@@ -122,14 +173,13 @@ export class VeniceApiService {
         timeoutPromise,
       ])) as AxiosResponse;
 
-      // Process response
       if (response.data?.choices?.[0]?.message?.content) {
         return response.data.choices[0].message.content;
-      } else if (response.data?.error) {
-        throw new Error(String(response.data.error));
-      } else {
-        throw new Error("Invalid response format from Venice API");
       }
+      if (response.data?.error) {
+        throw new Error(String(response.data.error));
+      }
+      throw new Error("Invalid response format from Venice API");
     } catch (error) {
       console.error(`[VeniceApiService] Request failed [${requestId}]`, {
         timestamp: new Date().toISOString(),

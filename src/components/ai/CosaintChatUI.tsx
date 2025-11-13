@@ -3,12 +3,12 @@
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { Button } from "@/components/ui/button";
 import { useAi } from "@/store/aiStore";
-import type { UploadedFileSummary } from "@/types/HealthContext";
 import { Send, X } from "lucide-react";
 import Papa from "papaparse";
 import React, { useEffect, useRef, useState } from "react";
 import { healthDataStore } from "../../data/store/healthDataStore";
 import { parsePDF } from "../../utils/pdfParser";
+import { parseHealthReport } from "@/utils/reportParsers";
 
 // Define types for our message interface
 interface MessageType {
@@ -19,12 +19,26 @@ interface MessageType {
 }
 
 const CosaintChatUI: React.FC = () => {
-  const { messages, sendMessage, isLoading, error, clearMessages } = useAi();
+  const {
+    messages,
+    sendMessage,
+    isLoading,
+    error,
+    clearMessages,
+    useMultiAgent,
+    setUseMultiAgent,
+  } = useAi();
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { metrics, uploadedFiles, addUploadedFile, removeUploadedFile } =
-    useHealthDataContext();
+  const {
+    metrics,
+    uploadedFiles,
+    addUploadedFile,
+    removeUploadedFile,
+    addParsedReports,
+    clearChatHistory,
+  } = useHealthDataContext();
 
   // Add state for upload form
   const [showUploadForm, setShowUploadForm] = useState(false);
@@ -46,6 +60,29 @@ const CosaintChatUI: React.FC = () => {
   >([]);
   const [showSavedFiles, setShowSavedFiles] = useState(false);
   const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [autoExpandOnSend, setAutoExpandOnSend] = useState(true);
+
+  const AUTO_EXPAND_STORAGE_KEY = "cosaintAutoExpandOnSend";
+
+  const inferReportType = (
+    fileName: string,
+  ): "dexa" | "bloodwork" | undefined => {
+    const lower = fileName.toLowerCase();
+    if (lower.includes("dexa") || lower.includes("dxa")) {
+      return "dexa";
+    }
+    if (
+      lower.includes("lab") ||
+      lower.includes("blood") ||
+      lower.includes("panel") ||
+      lower.includes("lipid") ||
+      lower.includes("hormone")
+    ) {
+      return "bloodwork";
+    }
+    return undefined;
+  };
 
   // Scroll to the bottom when messages change
   useEffect(() => {
@@ -69,9 +106,53 @@ const CosaintChatUI: React.FC = () => {
     }
   }, [isLoading]);
 
+  useEffect((): (() => void) | void => {
+    if (!isExpanded) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return (): void => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isExpanded]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      const storedValue = window.localStorage.getItem(AUTO_EXPAND_STORAGE_KEY);
+      if (storedValue !== null) {
+        setAutoExpandOnSend(storedValue === "true");
+      }
+    } catch (error) {
+      console.warn("Failed to read auto-expand preference:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.setItem(
+        AUTO_EXPAND_STORAGE_KEY,
+        String(autoExpandOnSend),
+      );
+    } catch (error) {
+      console.warn("Failed to persist auto-expand preference:", error);
+    }
+  }, [autoExpandOnSend]);
+
   const handleSendMessage = async (): Promise<void> => {
     if (input.trim() === "") return;
     setLoadingStartTime(Date.now());
+    if (autoExpandOnSend && !isExpanded) {
+      setIsExpanded(true);
+    }
     await sendMessage(input);
     setInput("");
     setLoadingStartTime(null);
@@ -108,6 +189,17 @@ const CosaintChatUI: React.FC = () => {
     try {
       const file = await healthDataStore.getUploadedFile(fileId);
       if (file) {
+        const parsedReports =
+          file.parsedContent && typeof file.parsedContent === "string"
+            ? parseHealthReport(file.parsedContent, {
+                sourceName: file.fileName,
+              })
+            : [];
+
+        if (parsedReports.length) {
+          addParsedReports(parsedReports);
+        }
+
         addUploadedFile({
           type: file.fileType.includes("pdf")
             ? "pdf"
@@ -129,6 +221,7 @@ const CosaintChatUI: React.FC = () => {
             pageCount: file.pageCount,
             metadata: file.metadata,
           },
+          parsedReports,
         });
         console.log(`✅ Loaded saved file into context: ${file.fileName}`);
       }
@@ -275,6 +368,18 @@ const CosaintChatUI: React.FC = () => {
       }
 
       // Add the parsed file to context
+      const parsedReports =
+        parsedContent.type === "pdf" || parsedContent.type === "text"
+          ? parseHealthReport(parsedContent.content, {
+              inferredType: inferReportType(file.name),
+              sourceName: file.name,
+            })
+          : [];
+
+      if (parsedReports.length) {
+        addParsedReports(parsedReports);
+      }
+
       addUploadedFile({
         type: parsedContent.type,
         summary: `${file.name} (${parsedContent.type.toUpperCase()}) - ${file.size} bytes`,
@@ -294,6 +399,7 @@ const CosaintChatUI: React.FC = () => {
           pageCount: parsedContent.pageCount || undefined,
           metadata: parsedContent.metadata || undefined,
         },
+        parsedReports,
       });
 
       // Save the parsed file to IndexedDB for persistence
@@ -325,71 +431,138 @@ const CosaintChatUI: React.FC = () => {
     }
   };
 
-  return (
-    <div className="flex flex-col h-[75vh] max-h-[800px] min-h-[400px]">
-      {/* Chat UI content only, no tabs */}
-      {/* Generate Health Analysis Button (if present in parent, this is a placeholder for alignment) */}
-      {/* Move Add Context Button under Generate Health Analysis */}
-      <div className="mb-2 flex flex-col items-start gap-2">
-        {/* Add Context Button */}
-        <Button
-          size="sm"
-          className="bg-emerald-600 hover:bg-emerald-700 text-white w-fit"
-          onClick={() => setShowUploadForm((v) => !v)}
-        >
-          {showUploadForm ? "Cancel" : "Upload File to Context"}
-        </Button>
-        {/* Upload Form */}
-        {showUploadForm && (
-          <form
-            onSubmit={handleUploadSubmit}
-            className="mt-2 mb-4 bg-emerald-50 p-3 rounded-lg border border-emerald-100 w-full max-w-md"
-          >
-            <div className="mb-2">
-              <label className="block text-xs font-semibold mb-1">File</label>
-              <input
-                type="file"
-                className="w-full border rounded p-2 text-sm"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    setUploadRawData(
-                      JSON.stringify({
-                        fileName: file.name,
-                        size: file.size,
-                        type: file.type,
-                      }),
-                    );
-                  } else {
-                    setUploadRawData("");
-                  }
-                }}
-                accept=".csv,.xml,.json,.txt,.pdf,text/csv,text/xml,application/json,text/plain,application/pdf"
-                required
-              />
-              {uploadRawData && (
-                <div className="text-xs text-gray-600 mt-1">
-                  File selected: {JSON.parse(uploadRawData).fileName}
-                </div>
-              )}
-            </div>
-            {uploadError && (
-              <div className="text-xs text-red-600 mb-2">{uploadError}</div>
-            )}
-            <div className="flex justify-end">
-              <Button
-                type="submit"
-                size="sm"
-                disabled={isProcessingFile}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              >
-                {isProcessingFile ? "Processing..." : "Upload"}
-              </Button>
-            </div>
-          </form>
-        )}
+  const containerClasses = isExpanded
+    ? "flex h-full flex-col gap-4 overflow-hidden"
+    : "flex flex-col min-h-[75vh] max-h-[90vh] lg:h-[calc(100vh-220px)]";
 
-        {/* Saved Files Section */}
+  const chatHistoryClasses = isExpanded
+    ? "flex-1 overflow-y-auto rounded-3xl border border-emerald-100 bg-white p-6 shadow-lg"
+    : "mb-4 flex-1 overflow-y-auto rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm";
+
+  const chatLayout = (
+    <div className={containerClasses}>
+      <div className="flex flex-col gap-3">
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+              Analysis mode
+            </span>
+            <div className="flex flex-col gap-1">
+              <div className="inline-flex rounded-lg border border-emerald-200 bg-white shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setUseMultiAgent(false)}
+                  className={`px-3 py-1 text-xs font-medium transition-colors ${
+                    !useMultiAgent
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "text-emerald-700 hover:bg-emerald-50"
+                  }`}
+                >
+                  Standard (faster)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUseMultiAgent(true)}
+                  className={`px-3 py-1 text-xs font-medium transition-colors ${
+                    useMultiAgent
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "text-emerald-700 hover:bg-emerald-50"
+                  }`}
+                >
+                  Deep multi-agent (slower)
+                </button>
+              </div>
+              <span className="text-[11px] text-amber-700">
+                Multi-agent runs all specialists before Cosaint replies and may
+                take a few extra seconds.
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 self-end sm:self-auto">
+            <label className="flex items-center gap-2 rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-emerald-700 shadow-sm">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 accent-emerald-600"
+                checked={autoExpandOnSend}
+                onChange={(event) => setAutoExpandOnSend(event.target.checked)}
+              />
+              Auto expand on send
+            </label>
+            <Button
+              size="sm"
+              variant="outline"
+              className="whitespace-nowrap"
+              onClick={() => setIsExpanded((prev) => !prev)}
+            >
+              {isExpanded ? "Exit expanded view" : "Expand view"}
+            </Button>
+          </div>
+        </div>
+
+        {!isExpanded && (
+          <div className="flex flex-col items-start gap-2">
+            <Button
+              size="sm"
+              className="w-fit bg-emerald-600 text-white hover:bg-emerald-700"
+              onClick={() => setShowUploadForm((v) => !v)}
+            >
+              {showUploadForm ? "Cancel" : "Upload File to Context"}
+            </Button>
+            {showUploadForm && (
+              <form
+                onSubmit={handleUploadSubmit}
+                className="w-full max-w-md rounded-lg border border-emerald-100 bg-emerald-50 p-3"
+              >
+                <div className="mb-2">
+                  <label className="mb-1 block text-xs font-semibold">
+                    File
+                  </label>
+                  <input
+                    type="file"
+                    className="w-full rounded border p-2 text-sm"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setUploadRawData(
+                          JSON.stringify({
+                            fileName: file.name,
+                            size: file.size,
+                            type: file.type,
+                          }),
+                        );
+                      } else {
+                        setUploadRawData("");
+                      }
+                    }}
+                    accept=".csv,.xml,.json,.txt,.pdf,text/csv,text/xml,application/json,text/plain,application/pdf"
+                    required
+                  />
+                  {uploadRawData && (
+                    <div className="mt-1 text-xs text-gray-600">
+                      File selected: {JSON.parse(uploadRawData).fileName}
+                    </div>
+                  )}
+                </div>
+                {uploadError && (
+                  <div className="mb-2 text-xs text-red-600">{uploadError}</div>
+                )}
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={isProcessingFile}
+                    className="bg-emerald-600 text-white hover:bg-emerald-700"
+                  >
+                    {isProcessingFile ? "Processing..." : "Upload"}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+      </div>
+
+      {!isExpanded && (
         <div className="w-full max-w-md">
           <Button
             size="sm"
@@ -406,19 +579,19 @@ const CosaintChatUI: React.FC = () => {
           </Button>
 
           {showSavedFiles && (
-            <div className="mt-2 bg-blue-50 p-3 rounded-lg border border-blue-100">
-              <h3 className="text-sm font-semibold mb-2">Saved Files</h3>
+            <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-3">
+              <h3 className="mb-2 text-sm font-semibold">Saved Files</h3>
               {savedFiles.length === 0 ? (
                 <p className="text-xs text-gray-600">No saved files found.</p>
               ) : (
-                <div className="space-y-2 max-h-40 overflow-y-auto">
+                <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
                   {savedFiles.map((file) => (
                     <div
                       key={file.id}
-                      className="flex items-center justify-between p-2 bg-white rounded border text-xs"
+                      className="flex items-center justify-between rounded border bg-white p-2 text-xs"
                     >
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">
                           {file.fileName}
                         </div>
                         <div className="text-gray-500">
@@ -429,7 +602,7 @@ const CosaintChatUI: React.FC = () => {
                           {new Date(file.uploadedAt).toLocaleDateString()}
                         </div>
                       </div>
-                      <div className="flex gap-1 ml-2">
+                      <div className="ml-2 flex gap-1">
                         <Button
                           size="sm"
                           variant="outline"
@@ -452,14 +625,14 @@ const CosaintChatUI: React.FC = () => {
             </div>
           )}
         </div>
-      </div>
-      {/* Uploaded Files & Summaries Section */}
-      {uploadedFiles.length > 0 && !uploadsHidden && (
+      )}
+
+      {!isExpanded && uploadedFiles.length > 0 && !uploadsHidden && (
         <div className="mb-4">
-          <h4 className="font-semibold text-emerald-800 mb-2">
+          <h4 className="mb-2 font-semibold text-emerald-800">
             Uploaded Files
           </h4>
-          <div className="flex justify-end mb-2">
+          <div className="mb-2 flex justify-end">
             <Button
               size="sm"
               variant="secondary"
@@ -469,30 +642,30 @@ const CosaintChatUI: React.FC = () => {
             </Button>
           </div>
           <ul className="flex flex-row flex-wrap gap-2">
-            {uploadedFiles.map((file: UploadedFileSummary, idx: number) => (
+            {uploadedFiles.map((file, idx) => (
               <li
                 key={idx}
-                className="bg-emerald-50 px-2 py-1 rounded-full flex items-center text-xs min-w-0 max-w-[160px]"
+                className="flex min-w-0 max-w-[200px] items-center rounded-full bg-emerald-50 px-2 py-1 text-xs"
                 style={{ lineHeight: 1.2 }}
               >
-                <span className="truncate max-w-[110px] font-medium text-emerald-900">
+                <span className="max-w-[140px] truncate font-medium text-emerald-900">
                   {file.summary}
                 </span>
                 <button
                   type="button"
-                  className="ml-1 p-1 rounded hover:bg-emerald-200 text-emerald-700"
+                  className="ml-1 rounded p-1 text-emerald-700 hover:bg-emerald-200"
                   aria-label="Remove file"
                   onClick={() => removeUploadedFile(idx)}
                 >
-                  <X className="w-3 h-3" />
+                  <X className="h-3 w-3" />
                 </button>
               </li>
             ))}
           </ul>
         </div>
       )}
-      {/* Show Uploads Button */}
-      {uploadedFiles.length > 0 && uploadsHidden && (
+
+      {!isExpanded && uploadedFiles.length > 0 && uploadsHidden && (
         <div className="mb-4 flex justify-end">
           <Button
             size="sm"
@@ -503,36 +676,37 @@ const CosaintChatUI: React.FC = () => {
           </Button>
         </div>
       )}
-      {/* Health Data Status */}
-      <div className="mb-2 text-sm text-emerald-800">
-        Available Metrics:{" "}
-        {metrics
-          ? Object.keys(metrics)
-              .map((key) => {
-                // Special case for HRV
-                if (key === "hrv") return "HRV";
-                // Special case for RestingHR
-                if (key === "restingHR") return "Resting HR";
-                // Default case
-                return (
-                  key.charAt(0).toUpperCase() +
-                  key
-                    .slice(1)
-                    .split(/(?=[A-Z])/)
-                    .join(" ")
-                );
-              })
-              .join(", ")
-          : "None"}
-      </div>
 
-      {/* Clear Chat Button */}
+      {!isExpanded && (
+        <div className="mb-2 text-sm text-emerald-800">
+          Available Metrics:{" "}
+          {metrics
+            ? Object.keys(metrics)
+                .map((key) => {
+                  if (key === "hrv") return "HRV";
+                  if (key === "restingHR") return "Resting HR";
+                  return (
+                    key.charAt(0).toUpperCase() +
+                    key
+                      .slice(1)
+                      .split(/(?=[A-Z])/)
+                      .join(" ")
+                  );
+                })
+                .join(", ")
+            : "None"}
+        </div>
+      )}
+
       {messages.length > 0 && (
         <div className="mb-2 flex justify-end">
           <Button
             size="sm"
             variant="secondary"
-            onClick={clearMessages}
+            onClick={() => {
+              clearMessages();
+              clearChatHistory();
+            }}
             disabled={isLoading}
           >
             Clear Chat
@@ -540,17 +714,16 @@ const CosaintChatUI: React.FC = () => {
         </div>
       )}
 
-      {/* Chat History */}
-      <div className="flex-1 overflow-y-auto p-4 bg-white/30 rounded-lg mb-4 border border-emerald-100">
+      <div className={chatHistoryClasses}>
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center text-gray-500">
-            <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+          <div className="flex h-full flex-col items-center justify-center text-center text-gray-500">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
               <span className="text-2xl">🌿</span>
             </div>
-            <h3 className="text-lg font-semibold mb-2 text-emerald-700">
+            <h3 className="mb-2 text-lg font-semibold text-emerald-700">
               Welcome to Cosaint AI Health Companion
             </h3>
-            <p className="text-sm max-w-md">
+            <p className="max-w-md text-sm">
               I&apos;m here to provide holistic health insights combining
               traditional wisdom with modern science. How can I help you today?
             </p>
@@ -565,10 +738,10 @@ const CosaintChatUI: React.FC = () => {
                 }`}
               >
                 <div
-                  className={`max-w-[80%] p-3 rounded-lg ${
+                  className={`max-w-[80%] break-words rounded-xl px-4 py-3 text-sm leading-relaxed whitespace-pre-line shadow-sm ${
                     message.role === "user"
                       ? "bg-emerald-600 text-white"
-                      : "bg-amber-50 text-amber-900 border border-amber-100"
+                      : "border border-amber-100 bg-amber-50 text-amber-900"
                   }`}
                 >
                   {message.content}
@@ -580,14 +753,12 @@ const CosaintChatUI: React.FC = () => {
         )}
       </div>
 
-      {/* Error Message */}
       {error && (
-        <div className="mb-2 p-2 bg-red-50 text-red-600 rounded text-sm">
+        <div className="mb-2 rounded bg-red-50 p-2 text-sm text-red-600">
           {error}
         </div>
       )}
 
-      {/* Input Area */}
       <div className="relative">
         <textarea
           ref={textareaRef}
@@ -597,12 +768,12 @@ const CosaintChatUI: React.FC = () => {
           }
           onKeyDown={handleKeyDown}
           placeholder="Ask Cosaint about your health..."
-          className="w-full pr-12 min-h-[60px] resize-none rounded-md border border-gray-300 p-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+          className="min-h-[60px] w-full resize-none rounded-md border border-gray-300 p-3 pr-12 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500"
           maxLength={500}
           disabled={isLoading}
         />
         <Button
-          className="absolute right-2 bottom-2"
+          className="absolute bottom-2 right-2"
           size="sm"
           onClick={handleSendMessage}
           disabled={isLoading || input.trim() === ""}
@@ -622,11 +793,27 @@ const CosaintChatUI: React.FC = () => {
         </Button>
       </div>
 
-      {/* Character limit counter */}
-      <div className="text-xs text-right mt-1 text-gray-500">
+      <div className="mt-1 text-right text-xs text-gray-500">
         {input.length}/500
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {isExpanded && (
+        <div className="fixed inset-0 z-40 bg-emerald-950/40 backdrop-blur-sm transition-opacity" />
+      )}
+      {isExpanded ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+          <div className="flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/60 to-white p-6 shadow-2xl">
+            {chatLayout}
+          </div>
+        </div>
+      ) : (
+        chatLayout
+      )}
+    </>
   );
 };
 

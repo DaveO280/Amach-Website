@@ -20,17 +20,41 @@ interface AiContextType {
   isLoading: boolean;
   error: string | null;
   clearMessages: () => void;
+  useMultiAgent: boolean;
+  setUseMultiAgent: (value: boolean) => void;
 }
 
 // Create context with a default value that matches the interface
 const AiContext = createContext<AiContextType | null>(null);
 
+const sanitizeAssistantResponse = (raw: string): string => {
+  if (!raw) {
+    return raw;
+  }
+
+  let withoutThink = raw.replace(/<think>[\s\S]*?<\/think>/gi, "");
+  // Handle any unmatched <think> tags just in case
+  withoutThink = withoutThink.replace(/<think>[\s\S]*$/gi, "");
+  withoutThink = withoutThink.replace(/<\/?think>/gi, "");
+
+  return withoutThink.trimStart();
+};
+
 const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { metrics, uploadedFiles, userProfile } = useHealthDataContext();
+  const {
+    metricData,
+    metrics,
+    uploadedFiles,
+    userProfile,
+    chatHistory,
+    addChatMessage,
+    reports,
+  } = useHealthDataContext();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [aiService, setAiService] = useState<CosaintAiService | null>(null);
+  const [useMultiAgent, setUseMultiAgent] = useState<boolean>(true);
 
   // Initialize the AI service
   const getAIService = async (): Promise<CosaintAiService> => {
@@ -58,13 +82,18 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
       // Add the message to the list
       setMessages((prev) => [...prev, newMessage]);
+      addChatMessage({
+        role: "user",
+        content: message,
+        timestamp: new Date().toISOString(),
+      });
 
       // Get the AI service
       const service = await getAIService();
 
       // Prepare the context with health data
       const context = {
-        messages: messages.map((msg) => ({
+        messages: [...messages, newMessage].map((msg) => ({
           role: msg.role,
           content: msg.content,
         })),
@@ -74,25 +103,42 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         userProfile,
       };
 
+      const conversationHistoryToSend = [
+        ...chatHistory.map(({ role, content }) => ({ role, content })),
+        { role: "user" as const, content: message },
+      ];
+
       // Send the message to the AI
       const response = await service.generateResponseWithFiles(
         message,
-        context.messages,
+        conversationHistoryToSend,
         context.healthData,
         context.uploadedFiles,
-        context.userProfile,
+        userProfile,
+        metricData,
+        useMultiAgent,
+        reports,
       );
+
+      const sanitizedResponse = sanitizeAssistantResponse(response);
+      const finalResponse =
+        sanitizedResponse.length > 0 ? sanitizedResponse : response;
 
       // Add the response to the messages
       setMessages((prev) => [
         ...prev,
         {
           id: uuidv4(),
-          content: response,
+          content: finalResponse,
           role: "assistant",
           timestamp: new Date(),
         },
       ]);
+      addChatMessage({
+        role: "assistant",
+        content: finalResponse,
+        timestamp: new Date().toISOString(),
+      });
     } catch (err) {
       console.error("AI Chat Error:", err);
       let errorMessage = "An error occurred while processing your message.";
@@ -128,6 +174,8 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     isLoading,
     error,
     clearMessages,
+    useMultiAgent,
+    setUseMultiAgent,
   };
 
   return <AiContext.Provider value={value}>{children}</AiContext.Provider>;

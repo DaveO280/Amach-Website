@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 // Add Edge Runtime configuration
 export const runtime = "edge";
 
+const REQUEST_TIMEOUT_MS = Number(
+  process.env.VENICE_REQUEST_TIMEOUT_MS ?? "120000",
+);
+
 export async function OPTIONS(): Promise<NextResponse> {
   return NextResponse.json(
     {},
@@ -104,6 +108,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       // Forward the request to Venice API
+      const timeoutSignal = AbortSignal.timeout(
+        Math.max(1000, Math.min(REQUEST_TIMEOUT_MS, 240000)),
+      );
+
       const response = await fetch(`${apiEndpoint}/chat/completions`, {
         method: "POST",
         headers: {
@@ -113,7 +121,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         },
         body: JSON.stringify(requestBody),
         // Add timeout for edge runtime
-        signal: AbortSignal.timeout(60000), // 60 second timeout
+        signal: timeoutSignal,
       });
 
       console.log("[Venice API Route] Venice API response received:", {
@@ -169,16 +177,45 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
       return NextResponse.json(data);
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      const name = error instanceof Error ? error.name : "UnknownError";
+      const domTimeout =
+        typeof DOMException !== "undefined" &&
+        error instanceof DOMException &&
+        error.name === "TimeoutError";
+      const lowerMessage = message.toLowerCase();
+      const isTimeout =
+        domTimeout ||
+        name === "TimeoutError" ||
+        name === "AbortError" ||
+        lowerMessage.includes("aborted") ||
+        lowerMessage.includes("timeout");
+
       console.error("[Venice API Route] Error:", {
         timestamp: new Date().toISOString(),
         elapsedMs: Date.now() - startTime,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: message,
+        name,
         stack: error instanceof Error ? error.stack : undefined,
+        isTimeout,
       });
+
+      if (isTimeout) {
+        return NextResponse.json(
+          {
+            error: "Venice API request timed out",
+            details: `No response within ${Math.round(
+              Math.min(REQUEST_TIMEOUT_MS, 240000) / 1000,
+            )} seconds.`,
+          },
+          { status: 504 },
+        );
+      }
+
       return NextResponse.json(
         {
           error: "Failed to connect to Venice API",
-          details: error instanceof Error ? error.message : "Unknown error",
+          details: message,
         },
         { status: 500 },
       );

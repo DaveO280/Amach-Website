@@ -52,6 +52,7 @@ const HealthReport: React.FC = () => {
 
   const hasHealthData = !!metrics;
   const hasProfile = isProfileComplete(userProfile);
+  const canGenerateAnalysis = Boolean(hasHealthData && healthScoresObj);
 
   // Set up a useVeniceAI instance for each section (explicitly, not in a loop)
   const overallAI = useVeniceAI();
@@ -70,7 +71,10 @@ const HealthReport: React.FC = () => {
 
   // Handler to trigger all queries
   const handleGenerateAnalysis = (): void => {
-    if (!metrics || !healthScoresObj || !hasProfile) return;
+    if (!metrics || !healthScoresObj) {
+      return;
+    }
+
     sectionQueries.forEach(({ section, mutate }) => {
       const prompt = buildHealthAnalysisPrompt(
         section,
@@ -103,7 +107,8 @@ const HealthReport: React.FC = () => {
           <HealthScoreCards />
           <Button
             onClick={handleGenerateAnalysis}
-            className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white w-fit"
+            className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white w-fit disabled:cursor-not-allowed disabled:bg-emerald-300"
+            disabled={!canGenerateAnalysis}
           >
             Generate Health Analysis
           </Button>
@@ -132,7 +137,7 @@ const HealthReport: React.FC = () => {
         </div>
       )}
 
-      {hasHealthData && !userProfile && (
+      {hasHealthData && !hasProfile && (
         <div className="flex flex-col space-y-4">
           <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
             <p className="text-amber-800">

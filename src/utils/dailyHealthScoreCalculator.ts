@@ -198,7 +198,6 @@ function calculateScoresForDay(
   const { age, sex, height, weight } = profile;
 
   // Sleep Quality Score (SQS) - FIXED to match regular calculation
-  // Sleep Quality Score (SQS) - FIXED to match regular calculation
   const sleepDurationScore = 0.7 * (metrics.sleep.duration / 8); // duration is already in hours, divide by 8 for target ratio
   const sleepEfficiencyScore = 0.3 * (metrics.sleep.efficiency / 100); // Convert percentage to decimal
   const sleepQualityScore =
@@ -590,93 +589,10 @@ function calculateTrendAverages(
 
   // Clean up: Remove all previous debug logging
 
-  // Debug utility: Print activity score stats
-  if (scoreType === "activity") {
-    const allValues = sortedScores.map((s) => s.value);
-    const allDates = sortedScores.map((s) => s.date);
-    const last6mValues = last6MonthsScores.map((s) => s.value);
-    const last6mDates = last6MonthsScores.map((s) => s.date);
-    const last3mValues = last3MonthsScores.map((s) => s.value);
-    const last3mDates = last3MonthsScores.map((s) => s.date);
-    const last30dValues = last30DaysScores.map((s) => s.value);
-    const last30dDates = last30DaysScores.map((s) => s.date);
-    const last7dValues = last7DaysScores.map((s) => s.value);
-    const last7dDates = last7DaysScores.map((s) => s.date);
-    const avgAll =
-      allValues.length > 0
-        ? Math.round(allValues.reduce((a, b) => a + b, 0) / allValues.length)
-        : 0;
-    const avg6m =
-      last6mValues.length > 0
-        ? Math.round(
-            last6mValues.reduce((a, b) => a + b, 0) / last6mValues.length,
-          )
-        : 0;
-    const avg3m =
-      last3mValues.length > 0
-        ? Math.round(
-            last3mValues.reduce((a, b) => a + b, 0) / last3mValues.length,
-          )
-        : 0;
-    const avg30d =
-      last30dValues.length > 0
-        ? Math.round(
-            last30dValues.reduce((a, b) => a + b, 0) / last30dValues.length,
-          )
-        : 0;
-    const avg7d =
-      last7dValues.length > 0
-        ? Math.round(
-            last7dValues.reduce((a, b) => a + b, 0) / last7dValues.length,
-          )
-        : 0;
-    console.log("[Activity Debug] --- FULL LIST (index, date, value) ---");
-    allValues.forEach((v, i) => {
-      console.log(`[${i}] ${allDates[i]}: ${v}`);
-    });
-    console.log("[Activity Debug] --- 7d window indices/values ---");
-    last7dValues.forEach((v, i) => {
-      console.log(`[${i}] ${last7dDates[i]}: ${v}`);
-    });
-    console.log("[Activity Debug] --- 30d window indices/values ---");
-    last30dValues.forEach((v, i) => {
-      console.log(`[${i}] ${last30dDates[i]}: ${v}`);
-    });
-    console.log("[Activity Debug] --- 3m window indices/values ---");
-    last3mValues.forEach((v, i) => {
-      console.log(`[${i}] ${last3mDates[i]}: ${v}`);
-    });
-    console.log("[Activity Debug] --- 6m window indices/values ---");
-    last6mValues.forEach((v, i) => {
-      console.log(`[${i}] ${last6mDates[i]}: ${v}`);
-    });
-    console.log("[Activity Debug] Total days:", allValues.length);
-    console.log(
-      "[Activity Debug] Last 7d days:",
-      last7dValues.length,
-      "Avg:",
-      avg7d,
-    );
-    console.log(
-      "[Activity Debug] Last 30d days:",
-      last30dValues.length,
-      "Avg:",
-      avg30d,
-    );
-    console.log(
-      "[Activity Debug] Last 3m days:",
-      last3mValues.length,
-      "Avg:",
-      avg3m,
-    );
-    console.log(
-      "[Activity Debug] Last 6m days:",
-      last6mValues.length,
-      "Avg:",
-      avg6m,
-    );
-    console.log("[Activity Debug] Avg (all):", avgAll);
-  }
+  // Debug utility: Print activity score stats - Commented out to reduce console noise
+  // if (scoreType === "activity") {
+  //   ... debug code removed for cleaner console output
+  // }
 
   // Calculate averages based on available data
   const calculateAverage = (scores: typeof sortedScores): number => {

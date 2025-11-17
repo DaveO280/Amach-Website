@@ -162,9 +162,12 @@ const HealthDataSelector: () => React.ReactElement = () => {
       const healthDataResults: Partial<Record<MetricType, HealthMetric[]>> = {};
       let rowCount = 0;
       let lastProgressUpdate = Date.now();
+      const uniqueMetrics = new Set<string>();
 
       Papa.parse<{
         Date?: string;
+        "Start Date"?: string;
+        "End Date"?: string;
         Metric?: string;
         Value?: string;
         Unit?: string;
@@ -190,6 +193,8 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
             const data = row.data as {
               Date?: string;
+              "Start Date"?: string;
+              "End Date"?: string;
               Metric?: string;
               Value?: string;
               Unit?: string;
@@ -198,13 +203,18 @@ const HealthDataSelector: () => React.ReactElement = () => {
             };
 
             const metricType = data.Metric?.trim() as MetricType;
-            const dateStr = data.Date?.trim();
+            // Support both old format (Date) and new format (Start Date/End Date)
+            const startDateStr = (data["Start Date"] || data.Date)?.trim();
+            const endDateStr = (data["End Date"] || data.Date)?.trim();
             const valueStr = data.Value?.trim();
             const unit = data.Unit?.trim() || "";
             const source = (data.Source?.trim() || "CSV Import") as DataSource;
             const device = data.Device?.trim() || "";
 
-            if (!metricType || !dateStr || !valueStr) return;
+            if (!metricType || !startDateStr || !valueStr) return;
+
+            // Track unique metric types
+            uniqueMetrics.add(metricType);
 
             // Initialize array for this metric type if not exists
             if (!healthDataResults[metricType]) {
@@ -213,8 +223,8 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
             const baseMetric = {
               type: metricType,
-              startDate: dateStr,
-              endDate: dateStr,
+              startDate: startDateStr,
+              endDate: endDateStr,
               value: valueStr,
               source,
               device,
@@ -396,11 +406,20 @@ const HealthDataSelector: () => React.ReactElement = () => {
       saveHealthData(healthDataResults as Record<MetricType, HealthMetric[]>);
 
       // Convert to CSV format
-      const headers = ["Date", "Metric", "Value", "Unit", "Source", "Device"];
+      const headers = [
+        "Start Date",
+        "End Date",
+        "Metric",
+        "Value",
+        "Unit",
+        "Source",
+        "Device",
+      ];
       const rows = Object.entries(healthDataResults).flatMap(
         ([metricType, metrics]) => {
           return metrics.map((metric) => [
             metric.startDate,
+            metric.endDate,
             metricType,
             metric.value,
             metric.unit || "",
@@ -548,7 +567,8 @@ const HealthDataSelector: () => React.ReactElement = () => {
                   </li>
                   <li>
                     <strong>CSV files:</strong> Fast and mobile-friendly. Upload
-                    previously exported CSVs for quick loading.
+                    CSVs exported from this app (includes start/end dates for
+                    sleep).
                   </li>
                 </ul>
               </div>

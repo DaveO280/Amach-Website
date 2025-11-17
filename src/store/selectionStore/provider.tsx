@@ -74,12 +74,13 @@ export function SelectionProvider({
 
   // Add diagnostic logging and provider mounting flag
   useEffect(() => {
-    console.log("[SelectionProvider] Current selections:", {
-      timeFrame,
-      selectedMetricsCount: selectedMetrics.length,
-      selectedMetrics: selectedMetrics,
-      hasUploadedFile: uploadedFile !== null,
-    });
+    // Commented out to reduce console noise
+    // console.log("[SelectionProvider] Current selections:", {
+    //   timeFrame,
+    //   selectedMetricsCount: selectedMetrics.length,
+    //   selectedMetrics: selectedMetrics,
+    //   hasUploadedFile: uploadedFile !== null,
+    // });
 
     window.__selectionProviderMounted = true;
     return (): void => {

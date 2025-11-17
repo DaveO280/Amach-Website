@@ -4,6 +4,7 @@ import { connect, disconnect, getAccount } from "@wagmi/core";
 import { parseEther, type Address } from "viem";
 import { ssoConnector, wagmiConfig } from "../lib/zksync-sso-config";
 import { trackingService } from "../utils/trackingService";
+import type { WalletContextVault } from "@/types/contextVault";
 
 // ZKsync Sepolia Testnet chain ID
 const ZKSYNC_SEPOLIA_CHAIN_ID = 300;
@@ -1433,6 +1434,96 @@ export class ZkSyncSsoWalletService {
     console.log(
       "💾 Stored encrypted profile in local storage (wallet-derived encryption)",
     );
+  }
+
+  private getContextVaultStorageKey(): string | null {
+    if (!this.account?.address) {
+      return null;
+    }
+    return `context_vault_${this.account.address}`;
+  }
+
+  async saveContextVault(
+    vault: WalletContextVault,
+  ): Promise<{ success: boolean; error?: string }> {
+    const storageKey = this.getContextVaultStorageKey();
+    if (!storageKey) {
+      return { success: false, error: "No wallet connected" };
+    }
+
+    try {
+      const walletEncryptionKey = await this.getWalletDerivedEncryptionKey();
+      const { encryptWithWalletKey } = await import(
+        "../utils/walletEncryption"
+      );
+
+      const payload = JSON.stringify(vault);
+      const envelope = {
+        version: vault.version ?? 1,
+        savedAt: vault.savedAt,
+        encryptedPayload: encryptWithWalletKey(payload, walletEncryptionKey),
+      };
+
+      localStorage.setItem(storageKey, JSON.stringify(envelope));
+      console.log("💾 Context vault saved locally (wallet-encrypted)");
+
+      // TODO: Push encrypted vault payload to zkSync smart contract or IPFS reference.
+
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.error("❌ Failed to save context vault:", message);
+      return { success: false, error: message };
+    }
+  }
+
+  async loadContextVault(): Promise<WalletContextVault | null> {
+    const storageKey = this.getContextVaultStorageKey();
+    if (!storageKey) {
+      return null;
+    }
+
+    const stored = localStorage.getItem(storageKey);
+    if (!stored) {
+      return null;
+    }
+
+    try {
+      const walletEncryptionKey = await this.getWalletDerivedEncryptionKey();
+      const { decryptWithWalletKey } = await import(
+        "../utils/walletEncryption"
+      );
+
+      const envelope = JSON.parse(stored) as {
+        encryptedPayload: string;
+      };
+
+      if (!envelope?.encryptedPayload) {
+        console.warn("⚠️ Context vault envelope missing encrypted payload");
+        return null;
+      }
+
+      const decrypted = decryptWithWalletKey(
+        envelope.encryptedPayload,
+        walletEncryptionKey,
+      );
+      const vault = JSON.parse(decrypted) as WalletContextVault;
+
+      return vault;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.error("❌ Failed to load context vault:", message);
+      return null;
+    }
+  }
+
+  async clearContextVault(): Promise<void> {
+    const storageKey = this.getContextVaultStorageKey();
+    if (!storageKey) {
+      return;
+    }
+    localStorage.removeItem(storageKey);
+    console.log("🗑️ Cleared local context vault cache");
   }
 
   /**

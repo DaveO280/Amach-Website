@@ -25,6 +25,14 @@ import {
   type RawUserProfileInput,
 } from "@/utils/userProfileUtils";
 import type { ParsedReportSummary } from "@/types/reportData";
+import type {
+  MonthlyScoreSnapshot,
+  VaultOffchainReference,
+  VaultPinnedInsight,
+  WalletContextVault,
+} from "@/types/contextVault";
+import { buildContextVaultSnapshot } from "@/utils/contextVault";
+import { zkSyncSsoWalletService } from "@/services/ZkSyncSsoWalletService";
 
 // Profile type
 interface ProfileData extends NormalizedUserProfile {}
@@ -75,6 +83,21 @@ interface HealthDataContextType {
   addChatMessage: (msg: ChatMessage) => void;
   clearChatHistory: () => void;
   setHealthContext: React.Dispatch<React.SetStateAction<HealthContext>>;
+  buildContextVault: (options?: {
+    monthlyScores?: MonthlyScoreSnapshot[];
+    pinnedInsights?: VaultPinnedInsight[];
+    offchainReferences?: VaultOffchainReference[];
+    recentMessagesLimit?: number;
+    metadata?: Record<string, unknown>;
+  }) => WalletContextVault;
+  saveContextVault: (options?: {
+    monthlyScores?: MonthlyScoreSnapshot[];
+    pinnedInsights?: VaultPinnedInsight[];
+    offchainReferences?: VaultOffchainReference[];
+    recentMessagesLimit?: number;
+    metadata?: Record<string, unknown>;
+  }) => Promise<{ success: boolean; error?: string }>;
+  loadContextVault: () => Promise<WalletContextVault | null>;
   // Profile
   profile: ProfileData | null;
   setProfile: (profile: ProfileData) => void;
@@ -590,7 +613,7 @@ export default function HealthDataContextWrapper({
                   )
                   .filter(
                     (v: number | undefined): v is number =>
-                      typeof v === "number" && !isNaN(v),
+                      typeof v === "number" && !isNaN(v) && v > 0, // ✅ Exclude days with no data (score = 0)
                   );
                 averages[metric] =
                   values.length > 0
@@ -636,7 +659,7 @@ export default function HealthDataContextWrapper({
           )
           .filter(
             (v: number | undefined): v is number =>
-              typeof v === "number" && !isNaN(v),
+              typeof v === "number" && !isNaN(v) && v > 0, // ✅ Exclude days with no data (score = 0)
           );
         averages[metric] =
           values.length > 0
@@ -851,6 +874,27 @@ export default function HealthDataContextWrapper({
         setIsDashboardOpen,
         isAiCompanionOpen,
         setIsAiCompanionOpen,
+        buildContextVault: (options) =>
+          buildContextVaultSnapshot({
+            healthContext,
+            monthlyScores: options?.monthlyScores,
+            pinnedInsights: options?.pinnedInsights,
+            offchainReferences: options?.offchainReferences,
+            recentMessagesLimit: options?.recentMessagesLimit,
+            metadata: options?.metadata,
+          }),
+        saveContextVault: async (options) => {
+          const vault = buildContextVaultSnapshot({
+            healthContext,
+            monthlyScores: options?.monthlyScores,
+            pinnedInsights: options?.pinnedInsights,
+            offchainReferences: options?.offchainReferences,
+            recentMessagesLimit: options?.recentMessagesLimit,
+            metadata: options?.metadata,
+          });
+          return zkSyncSsoWalletService.saveContextVault(vault);
+        },
+        loadContextVault: () => zkSyncSsoWalletService.loadContextVault(),
       }}
     >
       {children}

@@ -445,11 +445,15 @@ function calculateScoresForDay(
   );
 
   // Overall Health Score (OHS) - EXACTLY matches regular calculation
-  const overallHealthScore =
-    0.25 * physicalActivityScore +
-    0.25 * sleepQualityScore +
-    0.25 * heartHealthScore +
-    0.25 * energyBalanceScore;
+  // Only calculate overall score if we have sleep data (duration > 0)
+  // This prevents days with missing sleep from dragging down the overall average
+  const hasCompleteSleepData = metrics.sleep.duration > 0;
+  const overallHealthScore = hasCompleteSleepData
+    ? 0.25 * physicalActivityScore +
+      0.25 * sleepQualityScore +
+      0.25 * heartHealthScore +
+      0.25 * energyBalanceScore
+    : 0;
 
   return [
     {

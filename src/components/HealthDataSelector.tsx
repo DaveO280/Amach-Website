@@ -405,58 +405,72 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
       saveHealthData(healthDataResults as Record<MetricType, HealthMetric[]>);
 
-      // Convert to CSV format
-      const headers = [
-        "Start Date",
-        "End Date",
-        "Metric",
-        "Value",
-        "Unit",
-        "Source",
-        "Device",
-      ];
-      const rows = Object.entries(healthDataResults).flatMap(
-        ([metricType, metrics]) => {
-          return metrics.map((metric) => [
-            metric.startDate,
-            metric.endDate,
-            metricType,
-            metric.value,
-            metric.unit || "",
-            metric.source || "",
-            metric.device || "",
-          ]);
-        },
+      // Only export CSV on desktop (not mobile) to avoid interrupting the app
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      if (!isMobile && !isCSV) {
+        // Convert to CSV format (only for XML uploads on desktop)
+        const headers = [
+          "Start Date",
+          "End Date",
+          "Metric",
+          "Value",
+          "Unit",
+          "Source",
+          "Device",
+        ];
+        const rows = Object.entries(healthDataResults).flatMap(
+          ([metricType, metrics]) => {
+            return metrics.map((metric) => [
+              metric.startDate,
+              metric.endDate,
+              metricType,
+              metric.value,
+              metric.unit || "",
+              metric.source || "",
+              metric.device || "",
+            ]);
+          },
+        );
+
+        const csvContent = [
+          headers.join(","),
+          ...rows.map((row) =>
+            row
+              .map((field) => {
+                const fieldStr = String(field);
+                return fieldStr.includes(",") ||
+                  fieldStr.includes('"') ||
+                  fieldStr.includes("\n")
+                  ? `"${fieldStr.replace(/"/g, '""')}"`
+                  : fieldStr;
+              })
+              .join(","),
+          ),
+        ].join("\n");
+
+        // Create and download CSV file
+        const blob = new Blob([csvContent], {
+          type: "text/csv;charset=utf-8;",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `HealthData(${new Date().toISOString().split("T")[0]}).csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      updateProcessingProgress(
+        100,
+        isCSV
+          ? "CSV imported successfully!"
+          : isMobile
+            ? "Data imported successfully!"
+            : "Processing complete - CSV exported",
       );
-
-      const csvContent = [
-        headers.join(","),
-        ...rows.map((row) =>
-          row
-            .map((field) => {
-              const fieldStr = String(field);
-              return fieldStr.includes(",") ||
-                fieldStr.includes('"') ||
-                fieldStr.includes("\n")
-                ? `"${fieldStr.replace(/"/g, '""')}"`
-                : fieldStr;
-            })
-            .join(","),
-        ),
-      ].join("\n");
-
-      // Create and download CSV file
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `HealthData(${new Date().toISOString().split("T")[0]}).csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      updateProcessingProgress(100, "Processing complete");
     } catch (error) {
       setProcessingError(
         error instanceof Error ? error.message : "Error processing file",

@@ -90,6 +90,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
     getDecryptedProfile,
     loadProfileFromBlockchain,
     setUserProfile,
+    setProfile,
   ]);
 
   // Check viewport size to adjust UI accordingly
@@ -173,7 +174,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
   if (!props.isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-sm flex justify-center items-center p-2">
+    <div className="fixed inset-0 z-[100] overflow-hidden bg-black/40 backdrop-blur-sm flex justify-center items-center p-2">
       <div
         ref={modalRef}
         className={`relative w-full rounded-lg shadow-xl overflow-hidden animate-in fade-in duration-300 ${

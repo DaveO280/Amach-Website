@@ -1,11 +1,10 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Shield, Wallet, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import React, { useEffect, useRef, useState } from "react";
 import { useZkSyncSsoWallet } from "../hooks/useZkSyncSsoWallet";
 import { Badge } from "./ui/badge";
-import { Shield, Wallet } from "lucide-react";
 
 // Import the actual components directly to avoid chunk loading errors
 const HealthDataSelector = dynamic(() => import("./HealthDataSelector"), {
@@ -112,7 +111,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
   if (!props.isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-sm flex justify-center items-center p-2">
+    <div className="fixed inset-0 z-[100] overflow-hidden bg-black/40 backdrop-blur-sm flex justify-center items-center p-2">
       <div
         ref={modalRef}
         className={`relative w-full rounded-lg shadow-xl overflow-hidden animate-in fade-in duration-300 ${

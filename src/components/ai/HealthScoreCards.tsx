@@ -162,37 +162,43 @@ export function HealthScoreCards(): JSX.Element {
     };
 
     return (
-      <div className="mt-3 space-y-1">
+      <div className="mt-2 sm:mt-3 space-y-1">
         <div className="text-xs text-gray-600 font-medium mb-1">Trends:</div>
-        <div className="grid grid-cols-4 gap-2 text-xs">
-          {" "}
-          {/* Changed from 3 to 4 columns */}
-          <div className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded">
-            <span className="text-gray-600">7d</span>
-            <div className="flex items-center gap-1">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 text-xs">
+          <div className="flex items-center justify-between bg-gray-50 px-1.5 sm:px-2 py-1.5 sm:py-1 rounded">
+            <span className="text-gray-600 text-[10px] sm:text-xs">7d</span>
+            <div className="flex items-center gap-0.5 sm:gap-1">
               {getTrendIcon(trends.last7Days)}
-              <span className="font-medium">{trends.last7Days}</span>
+              <span className="font-medium text-[10px] sm:text-xs">
+                {trends.last7Days}
+              </span>
             </div>
           </div>
-          <div className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded">
-            <span className="text-gray-600">30d</span>
-            <div className="flex items-center gap-1">
+          <div className="flex items-center justify-between bg-gray-50 px-1.5 sm:px-2 py-1.5 sm:py-1 rounded">
+            <span className="text-gray-600 text-[10px] sm:text-xs">30d</span>
+            <div className="flex items-center gap-0.5 sm:gap-1">
               {getTrendIcon(trends.last30Days)}
-              <span className="font-medium">{trends.last30Days}</span>
+              <span className="font-medium text-[10px] sm:text-xs">
+                {trends.last30Days}
+              </span>
             </div>
           </div>
-          <div className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded">
-            <span className="text-gray-600">3m</span>
-            <div className="flex items-center gap-1">
+          <div className="flex items-center justify-between bg-gray-50 px-1.5 sm:px-2 py-1.5 sm:py-1 rounded">
+            <span className="text-gray-600 text-[10px] sm:text-xs">3m</span>
+            <div className="flex items-center gap-0.5 sm:gap-1">
               {getTrendIcon(trends.last3Months)}
-              <span className="font-medium">{trends.last3Months}</span>
+              <span className="font-medium text-[10px] sm:text-xs">
+                {trends.last3Months}
+              </span>
             </div>
           </div>
-          <div className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded">
-            <span className="text-gray-600">6m</span>
-            <div className="flex items-center gap-1">
+          <div className="flex items-center justify-between bg-gray-50 px-1.5 sm:px-2 py-1.5 sm:py-1 rounded">
+            <span className="text-gray-600 text-[10px] sm:text-xs">6m</span>
+            <div className="flex items-center gap-0.5 sm:gap-1">
               {getTrendIcon(trends.last6Months)}
-              <span className="font-medium">{trends.last6Months}</span>
+              <span className="font-medium text-[10px] sm:text-xs">
+                {trends.last6Months}
+              </span>
             </div>
           </div>
         </div>
@@ -201,23 +207,25 @@ export function HealthScoreCards(): JSX.Element {
   };
 
   return (
-    <div className="flex gap-4">
+    <div className="flex flex-col md:flex-row gap-4">
       {/* Overall Score Card */}
-      <div className="relative flex-1">
+      <div className="relative flex-1 min-w-0">
         <Card
           className="hover:shadow-lg transition-shadow"
           onMouseEnter={() => handleMetricHover("overall")}
           onMouseLeave={handleMetricLeave}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-lg font-medium text-emerald-800">
+            <CardTitle className="text-base sm:text-lg font-medium text-emerald-800">
               Overall Health Score
             </CardTitle>
-            <Scale className="h-6 w-6 text-emerald-800" />
+            <Scale className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-800" />
           </CardHeader>
           <CardContent className="flex flex-col items-center justify-center h-full">
-            <div className="text-7xl font-bold text-emerald-800">{overall}</div>
-            <p className="text-sm text-muted-foreground mt-2">
+            <div className="text-5xl sm:text-6xl md:text-7xl font-bold text-emerald-800">
+              {overall}
+            </div>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-2">
               {getScoreLabel(overall)}
             </p>
             <TrendDisplay scoreType="overall" />
@@ -243,7 +251,7 @@ export function HealthScoreCards(): JSX.Element {
       </div>
 
       {/* Component Scores Grid */}
-      <div className="grid grid-cols-2 gap-4 w-1/2">
+      <div className="grid grid-cols-2 gap-4 w-full md:w-1/2">
         {Object.entries(componentScores).map(([key, value]) => (
           <div key={key} className="relative">
             <Card
@@ -252,16 +260,16 @@ export function HealthScoreCards(): JSX.Element {
               onMouseLeave={handleMetricLeave}
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium capitalize text-emerald-800">
+                <CardTitle className="text-xs sm:text-sm font-medium capitalize text-emerald-800">
                   {key}
                 </CardTitle>
                 {getScoreIcon(key)}
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-center text-emerald-800">
+                <div className="text-2xl sm:text-3xl font-bold text-center text-emerald-800">
                   {typeof value === "number" ? value : 0}
                 </div>
-                <p className="text-xs text-muted-foreground text-center mt-2">
+                <p className="text-xs text-muted-foreground text-center mt-1 sm:mt-2">
                   {getScoreLabel(Number(value))}
                 </p>
                 <TrendDisplay scoreType={key} />

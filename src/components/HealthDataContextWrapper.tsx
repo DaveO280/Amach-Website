@@ -14,6 +14,7 @@ import {
   calculateAndStoreDailyHealthScores,
   calculateDailyHealthScores,
   getDailyHealthScores,
+  clearDailyHealthScores,
 } from "@/utils/dailyHealthScoreCalculator";
 import { extractDatePart } from "@/utils/dataDeduplicator";
 import { processSleepData } from "@/utils/sleepDataProcessor";
@@ -705,11 +706,18 @@ export default function HealthDataContextWrapper({
         // Get user profile
         const profile = healthContext.userProfile || {};
 
-        // Use the async function that handles both calculation and storage
-        calculateAndStoreDailyHealthScores(
-          healthDataResults as HealthDataResults,
-          profile,
-        )
+        // Clear old daily scores first, then recalculate with new weights/logic
+        clearDailyHealthScores()
+          .then(() => {
+            console.log(
+              "🔄 [Daily Scores] Cleared old scores, recalculating...",
+            );
+            // Use the async function that handles both calculation and storage
+            return calculateAndStoreDailyHealthScores(
+              healthDataResults as HealthDataResults,
+              profile,
+            );
+          })
           .then((dailyScores: unknown[]) => {
             console.log(
               "✅ [Daily Scores] Daily health scores calculated and stored successfully:",

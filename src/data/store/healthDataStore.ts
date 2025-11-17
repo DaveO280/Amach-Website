@@ -228,6 +228,31 @@ class HealthDataStoreService {
     });
   }
 
+  async clearDailyHealthScores(): Promise<void> {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+    const db = await this.initDB();
+
+    return new Promise<void>((resolve, reject): void => {
+      const transaction = db.transaction([DAILY_SCORES_STORE], "readwrite");
+      const store = transaction.objectStore(DAILY_SCORES_STORE);
+      const request = store.delete("current");
+
+      request.onsuccess = (): void => {
+        console.log("✅ [IndexedDB] Daily health scores cleared");
+        resolve();
+      };
+      request.onerror = (): void => {
+        console.error(
+          "❌ [IndexedDB] Error clearing daily health scores:",
+          request.error,
+        );
+        reject(request.error);
+      };
+    });
+  }
+
   async updateMetricData(
     metricType: MetricType,
     data: HealthMetric[],

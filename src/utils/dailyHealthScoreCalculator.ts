@@ -444,15 +444,15 @@ function calculateScoresForDay(
     ),
   );
 
-  // Overall Health Score (OHS) - EXACTLY matches regular calculation
+  // Overall Health Score (OHS) - 30% sleep, 30% activity, 20% energy, 20% heart
   // Only calculate overall score if we have sleep data (duration > 0)
   // This prevents days with missing sleep from dragging down the overall average
   const hasCompleteSleepData = metrics.sleep.duration > 0;
   const overallHealthScore = hasCompleteSleepData
-    ? 0.25 * physicalActivityScore +
-      0.25 * sleepQualityScore +
-      0.25 * heartHealthScore +
-      0.25 * energyBalanceScore
+    ? 0.3 * physicalActivityScore +
+      0.3 * sleepQualityScore +
+      0.2 * heartHealthScore +
+      0.2 * energyBalanceScore
     : 0;
 
   return [
@@ -495,6 +495,20 @@ export async function getDailyHealthScores(): Promise<
   } catch (error) {
     console.error("Failed to retrieve daily health scores:", error);
     return null;
+  }
+}
+
+/**
+ * Clear all stored daily health scores
+ * This will force a recalculation on next data load
+ */
+export async function clearDailyHealthScores(): Promise<void> {
+  try {
+    await healthDataStore.clearDailyHealthScores();
+    console.log("✅ Daily health scores cleared successfully");
+  } catch (error) {
+    console.error("❌ Failed to clear daily health scores:", error);
+    throw error;
   }
 }
 

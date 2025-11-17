@@ -108,12 +108,16 @@ const HealthDataSelector: () => React.ReactElement = () => {
       HKCategoryValueSleepAnalysisAsleepDeep: "deep",
       HKCategoryValueSleepAnalysisAsleepREM: "rem",
       HKCategoryValueSleepAnalysisAwake: "awake",
+      HKCategoryValueSleepAnalysisAsleepUnspecified: "core", // Unspecified sleep maps to core
+      HKCategoryValueSleepAnalysisAsleep: "core", // Generic asleep maps to core
       // Handle short format values
       inBed: "inBed",
       core: "core",
       deep: "deep",
       rem: "rem",
       awake: "awake",
+      asleep: "core",
+      unspecified: "core",
       // Handle numeric values
       "0": "inBed",
       "1": "core",
@@ -125,7 +129,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
     const stage = sleepStageMap[rawValue];
     if (!stage) {
       console.warn(`Unknown sleep stage value: ${rawValue}`);
-      return "inBed"; // Default to inBed for unknown values
+      return "core"; // Default to core for unknown sleep values
     }
     return stage;
   };
@@ -155,6 +159,10 @@ const HealthDataSelector: () => React.ReactElement = () => {
     file: File,
   ): Promise<Partial<Record<MetricType, HealthMetric[]>>> => {
     return new Promise((resolve, reject) => {
+      const healthDataResults: Partial<Record<MetricType, HealthMetric[]>> = {};
+      let rowCount = 0;
+      let lastProgressUpdate = Date.now();
+
       Papa.parse<{
         Date?: string;
         Metric?: string;
@@ -165,113 +173,130 @@ const HealthDataSelector: () => React.ReactElement = () => {
       }>(file, {
         header: true,
         skipEmptyLines: true,
-        complete: (results) => {
+        step: (row) => {
           try {
-            const healthDataResults: Partial<
-              Record<MetricType, HealthMetric[]>
-            > = {};
+            rowCount++;
 
-            results.data.forEach((row) => {
-              const metricType = row.Metric?.trim() as MetricType;
-              const dateStr = row.Date?.trim();
-              const valueStr = row.Value?.trim();
-              const unit = row.Unit?.trim() || "";
-              const source = (row.Source?.trim() || "CSV Import") as DataSource;
-              const device = row.Device?.trim() || "";
+            // Update progress every 1000 rows or every 500ms
+            const now = Date.now();
+            if (rowCount % 1000 === 0 || now - lastProgressUpdate > 500) {
+              const progress = 25 + Math.min(50, (rowCount / 10000) * 50); // Progress from 25% to 75%
+              updateProcessingProgress(
+                Math.round(progress),
+                `Loading CSV data... (${rowCount.toLocaleString()} rows processed)`,
+              );
+              lastProgressUpdate = now;
+            }
 
-              if (!metricType || !dateStr || !valueStr) return;
+            const data = row.data as {
+              Date?: string;
+              Metric?: string;
+              Value?: string;
+              Unit?: string;
+              Source?: string;
+              Device?: string;
+            };
 
-              // Initialize array for this metric type if not exists
-              if (!healthDataResults[metricType]) {
-                healthDataResults[metricType] = [];
-              }
+            const metricType = data.Metric?.trim() as MetricType;
+            const dateStr = data.Date?.trim();
+            const valueStr = data.Value?.trim();
+            const unit = data.Unit?.trim() || "";
+            const source = (data.Source?.trim() || "CSV Import") as DataSource;
+            const device = data.Device?.trim() || "";
 
-              const baseMetric = {
-                type: metricType,
-                startDate: dateStr,
-                endDate: dateStr,
-                value: valueStr,
-                source,
-                device,
-              };
+            if (!metricType || !dateStr || !valueStr) return;
 
-              // Parse value based on metric type
-              let metric: HealthMetric;
+            // Initialize array for this metric type if not exists
+            if (!healthDataResults[metricType]) {
+              healthDataResults[metricType] = [];
+            }
 
-              switch (metricType) {
-                case "HKQuantityTypeIdentifierStepCount":
-                  metric = {
-                    ...baseMetric,
-                    unit: "count",
-                  } as StepCountMetric;
-                  break;
-                case "HKQuantityTypeIdentifierHeartRate":
-                  metric = {
-                    ...baseMetric,
-                    unit: "bpm",
-                  } as HeartRateMetric;
-                  break;
-                case "HKQuantityTypeIdentifierHeartRateVariabilitySDNN":
-                  metric = {
-                    ...baseMetric,
-                    unit: "ms",
-                  } as HRVMetric;
-                  break;
-                case "HKQuantityTypeIdentifierRespiratoryRate":
-                  metric = {
-                    ...baseMetric,
-                    unit: "count/min",
-                  } as RespiratoryRateMetric;
-                  break;
-                case "HKQuantityTypeIdentifierAppleExerciseTime":
-                  metric = {
-                    ...baseMetric,
-                    unit: "min",
-                  } as ExerciseTimeMetric;
-                  break;
-                case "HKQuantityTypeIdentifierRestingHeartRate":
-                  metric = {
-                    ...baseMetric,
-                    unit: "bpm",
-                  } as RestingHeartRateMetric;
-                  break;
-                case "HKQuantityTypeIdentifierVO2Max":
-                  metric = {
-                    ...baseMetric,
-                    unit: "ml/(kg*min)",
-                  } as VO2MaxMetric;
-                  break;
-                case "HKQuantityTypeIdentifierActiveEnergyBurned":
-                  metric = {
-                    ...baseMetric,
-                    unit: "kcal",
-                  } as ActiveEnergyMetric;
-                  break;
-                case "HKCategoryTypeIdentifierSleepAnalysis":
-                  metric = {
-                    ...baseMetric,
-                    value: convertToSleepStage(valueStr),
-                    unit: "hr",
-                  } as SleepAnalysisMetric;
-                  break;
-                default:
-                  metric = {
-                    ...baseMetric,
-                    unit,
-                  } as HealthMetric;
-              }
+            const baseMetric = {
+              type: metricType,
+              startDate: dateStr,
+              endDate: dateStr,
+              value: valueStr,
+              source,
+              device,
+            };
 
-              healthDataResults[metricType]!.push(metric);
-            });
+            // Parse value based on metric type
+            let metric: HealthMetric;
 
-            resolve(healthDataResults);
+            switch (metricType) {
+              case "HKQuantityTypeIdentifierStepCount":
+                metric = {
+                  ...baseMetric,
+                  unit: "count",
+                } as StepCountMetric;
+                break;
+              case "HKQuantityTypeIdentifierHeartRate":
+                metric = {
+                  ...baseMetric,
+                  unit: "bpm",
+                } as HeartRateMetric;
+                break;
+              case "HKQuantityTypeIdentifierHeartRateVariabilitySDNN":
+                metric = {
+                  ...baseMetric,
+                  unit: "ms",
+                } as HRVMetric;
+                break;
+              case "HKQuantityTypeIdentifierRespiratoryRate":
+                metric = {
+                  ...baseMetric,
+                  unit: "count/min",
+                } as RespiratoryRateMetric;
+                break;
+              case "HKQuantityTypeIdentifierAppleExerciseTime":
+                metric = {
+                  ...baseMetric,
+                  unit: "min",
+                } as ExerciseTimeMetric;
+                break;
+              case "HKQuantityTypeIdentifierRestingHeartRate":
+                metric = {
+                  ...baseMetric,
+                  unit: "bpm",
+                } as RestingHeartRateMetric;
+                break;
+              case "HKQuantityTypeIdentifierVO2Max":
+                metric = {
+                  ...baseMetric,
+                  unit: "ml/(kg*min)",
+                } as VO2MaxMetric;
+                break;
+              case "HKQuantityTypeIdentifierActiveEnergyBurned":
+                metric = {
+                  ...baseMetric,
+                  unit: "kcal",
+                } as ActiveEnergyMetric;
+                break;
+              case "HKCategoryTypeIdentifierSleepAnalysis":
+                metric = {
+                  ...baseMetric,
+                  value: convertToSleepStage(valueStr),
+                  unit: "hr",
+                } as SleepAnalysisMetric;
+                break;
+              default:
+                metric = {
+                  ...baseMetric,
+                  unit,
+                } as HealthMetric;
+            }
+
+            healthDataResults[metricType]!.push(metric);
           } catch (error) {
-            reject(
-              new Error(
-                `Failed to parse CSV: ${error instanceof Error ? error.message : "Unknown error"}`,
-              ),
-            );
+            console.error("Error processing CSV row:", error);
           }
+        },
+        complete: () => {
+          updateProcessingProgress(
+            75,
+            `CSV loaded successfully (${rowCount.toLocaleString()} rows)`,
+          );
+          resolve(healthDataResults);
         },
         error: (error) => {
           reject(new Error(`CSV parse error: ${error.message}`));
@@ -295,9 +320,8 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
       if (isCSV) {
         // Parse CSV file
-        updateProcessingProgress(25, "Parsing CSV file...");
+        updateProcessingProgress(25, "Reading CSV file...");
         healthDataResults = await parseCSVFile(uploadedFile);
-        updateProcessingProgress(75, "CSV parsed successfully");
       } else {
         // Parse XML file
         const parser = new XMLStreamParser({
@@ -390,11 +414,14 @@ const HealthDataSelector: () => React.ReactElement = () => {
         headers.join(","),
         ...rows.map((row) =>
           row
-            .map((field) =>
-              field.includes(",") || field.includes('"') || field.includes("\n")
-                ? `"${String(field).replace(/"/g, '""')}"`
-                : field,
-            )
+            .map((field) => {
+              const fieldStr = String(field);
+              return fieldStr.includes(",") ||
+                fieldStr.includes('"') ||
+                fieldStr.includes("\n")
+                ? `"${fieldStr.replace(/"/g, '""')}"`
+                : fieldStr;
+            })
             .join(","),
         ),
       ].join("\n");

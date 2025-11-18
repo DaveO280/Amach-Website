@@ -173,12 +173,40 @@ export class VeniceApiService {
         timeoutPromise,
       ])) as AxiosResponse;
 
+      // Enhanced debugging for response structure
+      console.log(`[VeniceApiService] Response received [${requestId}]`, {
+        timestamp: new Date().toISOString(),
+        elapsedMs: Date.now() - startTime,
+        status: response.status,
+        hasData: Boolean(response.data),
+        hasChoices: Boolean(response.data?.choices),
+        choicesLength: response.data?.choices?.length,
+        hasFirstChoice: Boolean(response.data?.choices?.[0]),
+        hasMessage: Boolean(response.data?.choices?.[0]?.message),
+        hasContent: Boolean(response.data?.choices?.[0]?.message?.content),
+        contentLength:
+          response.data?.choices?.[0]?.message?.content?.length || 0,
+        contentPreview:
+          response.data?.choices?.[0]?.message?.content?.substring(0, 100),
+        rawResponse: JSON.stringify(response.data).substring(0, 500),
+      });
+
       if (response.data?.choices?.[0]?.message?.content) {
         return response.data.choices[0].message.content;
       }
       if (response.data?.error) {
+        console.error(
+          `[VeniceApiService] API returned error [${requestId}]`,
+          response.data.error,
+        );
         throw new Error(String(response.data.error));
       }
+      console.error(
+        `[VeniceApiService] Invalid response format [${requestId}]`,
+        {
+          data: response.data,
+        },
+      );
       throw new Error("Invalid response format from Venice API");
     } catch (error) {
       console.error(`[VeniceApiService] Request failed [${requestId}]`, {

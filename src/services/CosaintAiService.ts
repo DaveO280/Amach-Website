@@ -162,10 +162,22 @@ export class CosaintAiService {
       const hasHealthReport = uploadedFiles && uploadedFiles.length > 0;
 
       // Generate a response using the Venice API
+      console.log("[CosaintAiService] Calling Venice API", {
+        promptLength: prompt.length,
+        maxTokens: hasHealthReport ? 3000 : 1000,
+        userMessage: userMessage.substring(0, 100),
+      });
+
       const response = await this.veniceApi.generateVeniceResponse(
         prompt,
         hasHealthReport ? 3000 : 1000, // Higher token limit for health report analysis
       );
+
+      console.log("[CosaintAiService] Venice API response received", {
+        hasResponse: Boolean(response),
+        responseLength: response?.length || 0,
+        responsePreview: response?.substring(0, 200),
+      });
 
       if (!response) {
         logger.warn("Empty response from Venice API", { userMessage });

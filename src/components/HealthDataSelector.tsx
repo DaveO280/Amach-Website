@@ -155,6 +155,30 @@ const HealthDataSelector: () => React.ReactElement = () => {
   };
 
   // Parse CSV file and convert to health data structure
+  // Normalize date string to iOS-compatible ISO 8601 format
+  const normalizeDate = (dateStr: string): string => {
+    // iOS Safari is strict about date formats
+    // Convert "2025-08-17 17:38:00 -0400" to "2025-08-17T17:38:00-04:00"
+    try {
+      // Replace first space with T
+      let normalized = dateStr.replace(" ", "T");
+
+      // Fix timezone format: -0400 -> -04:00
+      normalized = normalized.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+
+      // Test if it parses correctly
+      const testDate = new Date(normalized);
+      if (!isNaN(testDate.getTime())) {
+        return normalized;
+      }
+
+      // If that didn't work, return original
+      return dateStr;
+    } catch {
+      return dateStr;
+    }
+  };
+
   const parseCSVFile = async (
     file: File,
   ): Promise<Partial<Record<MetricType, HealthMetric[]>>> => {
@@ -213,6 +237,19 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
             if (!metricType || !startDateStr || !valueStr) return;
 
+            // Normalize dates for iOS compatibility
+            const normalizedStartDate = normalizeDate(startDateStr);
+            const normalizedEndDate = normalizeDate(endDateStr || startDateStr);
+
+            // Debug: Log first normalized date to verify iOS compatibility
+            if (rowCount === 1) {
+              console.log("📅 [Date Debug] Normalization example:", {
+                original: startDateStr,
+                normalized: normalizedStartDate,
+                parsedOk: !isNaN(new Date(normalizedStartDate).getTime()),
+              });
+            }
+
             // Track unique metric types
             uniqueMetrics.add(metricType);
 
@@ -223,8 +260,8 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
             const baseMetric = {
               type: metricType,
-              startDate: startDateStr,
-              endDate: endDateStr,
+              startDate: normalizedStartDate,
+              endDate: normalizedEndDate,
               value: valueStr,
               source,
               device,

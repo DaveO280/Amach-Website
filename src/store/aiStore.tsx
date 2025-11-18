@@ -32,10 +32,41 @@ const sanitizeAssistantResponse = (raw: string): string => {
     return raw;
   }
 
+  // First, try to strip <think> tags and keep content outside them
   let withoutThink = raw.replace(/<think>[\s\S]*?<\/think>/gi, "");
   // Handle any unmatched <think> tags just in case
   withoutThink = withoutThink.replace(/<think>[\s\S]*$/gi, "");
   withoutThink = withoutThink.replace(/<\/?think>/gi, "");
+
+  // If stripping <think> leaves nothing, extract content FROM <think> tags
+  // (Qwen sometimes puts entire response in <think> tags)
+  if (withoutThink.trim().length === 0 && raw.includes("<think>")) {
+    console.log(
+      "[aiStore] Response is ALL <think> tags - extracting content from within",
+    );
+    console.log("[aiStore] Full raw response:", raw);
+    console.log("[aiStore] Has closing tag?", raw.includes("</think>"));
+
+    const thinkMatch = raw.match(/<think>([\s\S]*?)<\/think>/i);
+    console.log("[aiStore] Regex match result:", {
+      matched: Boolean(thinkMatch),
+      contentLength: thinkMatch?.[1]?.length || 0,
+      contentPreview: thinkMatch?.[1]?.substring(0, 200),
+    });
+
+    if (thinkMatch && thinkMatch[1]) {
+      // Extract the content from the first <think> block
+      const extracted = thinkMatch[1].trim();
+      console.log("[aiStore] Extracted content length:", extracted.length);
+      return extracted;
+    }
+
+    console.warn(
+      "[aiStore] Failed to extract from <think> tags - returning raw",
+    );
+    // If we can't extract, just return the raw content (better than nothing)
+    return raw.replace(/<\/?think>/gi, "").trim();
+  }
 
   return withoutThink.trimStart();
 };
@@ -89,7 +120,9 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       });
 
       // Get the AI service
+      console.log("[aiStore] Getting AI service...");
       const service = await getAIService();
+      console.log("[aiStore] AI service obtained");
 
       // Prepare the context with health data
       const context = {
@@ -109,6 +142,12 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       ];
 
       // Send the message to the AI
+      console.log("[aiStore] Calling service.generateResponseWithFiles...", {
+        messageLength: message.length,
+        hasHealthData: Boolean(context.healthData),
+        useMultiAgent,
+      });
+
       const response = await service.generateResponseWithFiles(
         message,
         conversationHistoryToSend,
@@ -120,11 +159,37 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         reports,
       );
 
+      console.log("[aiStore] Response received from service:", {
+        hasResponse: Boolean(response),
+        responseLength: response?.length || 0,
+      });
+
+      console.log("[aiStore] Raw response from CosaintAiService:", {
+        responseLength: response.length,
+        responsePreview: response.substring(0, 500),
+        hasThinkTags: response.includes("<think>"),
+      });
+
       const sanitizedResponse = sanitizeAssistantResponse(response);
+
+      console.log("[aiStore] After sanitization:", {
+        sanitizedLength: sanitizedResponse.length,
+        sanitizedPreview: sanitizedResponse.substring(0, 500),
+        isEmpty: sanitizedResponse.trim().length === 0,
+      });
+
       const finalResponse =
         sanitizedResponse.trim().length > 0
           ? sanitizedResponse
-          : "I’m still digesting that. Could you try asking it a little differently so I can give you something useful?";
+          : "I'm still digesting that. Could you try asking it a little differently so I can give you something useful?";
+
+      if (finalResponse === sanitizedResponse) {
+        console.log("✅ [aiStore] Using actual AI response");
+      } else {
+        console.warn(
+          "⚠️ [aiStore] Using fallback response - sanitized response was empty!",
+        );
+      }
 
       // Add the response to the messages
       setMessages((prev) => [
@@ -142,7 +207,11 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
-      console.error("AI Chat Error:", err);
+      console.error("❌ [aiStore] AI Chat Error:", err);
+      console.error("❌ [aiStore] Error details:", {
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
       let errorMessage = "An error occurred while processing your message.";
 
       if (err instanceof Error) {

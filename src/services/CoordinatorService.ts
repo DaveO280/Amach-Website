@@ -1,5 +1,5 @@
-import { CoordinatorAgent } from "@/agents/CoordinatorAgent";
 import type { CoordinatorResult } from "@/agents/CoordinatorAgent";
+import { CoordinatorAgent } from "@/agents/CoordinatorAgent";
 import type {
   AgentExecutionContext,
   AgentProfile,
@@ -9,6 +9,7 @@ import type {
 import type { VeniceApiService } from "@/api/venice/VeniceApiService";
 import type { HealthDataByType } from "@/types/healthData";
 import type { ParsedReportSummary } from "@/types/reportData";
+import { processSleepData } from "@/utils/sleepDataProcessor";
 
 interface RunCoordinatorOptions {
   metricData?: HealthDataByType;
@@ -88,6 +89,65 @@ function transformMetricData(metricData: HealthDataByType): TransformResult {
 
   for (const [metricId, points] of Object.entries(metricData)) {
     if (!SUPPORTED_METRICS.has(metricId)) {
+      continue;
+    }
+
+    // Special handling for sleep data: convert raw stages to aggregated durations
+    if (metricId === "HKCategoryTypeIdentifierSleepAnalysis") {
+      console.log(
+        `[CoordinatorService] Processing ${points.length} raw sleep stage records`,
+      );
+
+      // Process raw sleep stages into daily aggregated data
+      const processedSleepData = processSleepData(points);
+      console.log(
+        `[CoordinatorService] Processed into ${processedSleepData.length} daily sleep summaries`,
+      );
+
+      // Limit to most recent 60 days to prevent overwhelming Venice AI with too much context
+      const recentSleepData = processedSleepData.slice(-60);
+      console.log(
+        `[CoordinatorService] Limiting to ${recentSleepData.length} most recent days (from ${processedSleepData.length} total)`,
+      );
+
+      // Convert processed daily data into MetricSample format for agents
+      const sleepSamples: MetricSample[] = [];
+      for (const dayData of recentSleepData) {
+        const timestamp = new Date(dayData.date);
+        if (Number.isNaN(timestamp.getTime())) {
+          continue;
+        }
+
+        // Sleep duration in seconds (agents expect numeric values)
+        const durationSeconds = dayData.sleepDuration * 60; // Convert minutes to seconds
+
+        sleepSamples.push({
+          timestamp,
+          value: durationSeconds,
+          unit: "s",
+          metadata: {
+            efficiency: dayData.metrics.sleepEfficiency,
+            totalDuration: dayData.totalDuration,
+            stages: dayData.stageData,
+            date: dayData.date,
+          },
+        });
+
+        const timeValue = timestamp.getTime();
+        if (earliest === null || timeValue < earliest) {
+          earliest = timeValue;
+        }
+        if (latest === null || timeValue > latest) {
+          latest = timeValue;
+        }
+      }
+
+      if (sleepSamples.length > 0) {
+        appleHealth[metricId] = sleepSamples;
+        console.log(
+          `[CoordinatorService] Added ${sleepSamples.length} aggregated sleep duration samples for agents`,
+        );
+      }
       continue;
     }
 

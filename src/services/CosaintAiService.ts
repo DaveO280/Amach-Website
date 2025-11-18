@@ -1,34 +1,22 @@
 // src/services/CosaintAiService.ts
+import type { CoordinatorResult } from "@/agents/CoordinatorAgent";
+import type { ParsedReportSummary } from "@/types/reportData";
+import {
+  calculateAgeFromBirthDate,
+  type NormalizedUserProfile,
+} from "@/utils/userProfileUtils";
 import { randomChoice } from "@/utils/utils";
 import { VeniceApiService } from "../api/venice/VeniceApiService";
-import { runCoordinatorAnalysis } from "./CoordinatorService";
 import CharacteristicsLoader from "../components/ai/characteristicsLoader";
 import cosaintCharacteristics from "../components/ai/cosaint";
 import type { HealthContextMetrics } from "../types/HealthContext";
 import type { HealthDataByType } from "../types/healthData";
 import { logger } from "../utils/logger";
-import type { CoordinatorResult } from "@/agents/CoordinatorAgent";
-import {
-  calculateAgeFromBirthDate,
-  type NormalizedUserProfile,
-} from "@/utils/userProfileUtils";
-import type { ParsedReportSummary } from "@/types/reportData";
+import { runCoordinatorAnalysis } from "./CoordinatorService";
 
 const RESPONSE_FORMAT_GUIDELINES = `
 
-Response Framework:
-1. Open with a warm, one-sentence acknowledgement that thanks the user for investing in their health.
-2. Include a "Profile Snapshot:" line that lists age, sex, height, weight, and BMI (or clearly state when a value is unavailable).
-3. Provide "Key Health Signals:" as 3-4 concise bullets, each referencing specific metrics (averages, ranges, or trends) and their implications.
-4. Provide "Next Steps:" as 2-3 prioritized action bullets that explain the expected impact on other metrics or systems.
-5. Close with one encouraging sentence that reinforces partnership and progress.
-
-Tone requirements:
-- Address the user directly (use "you/your").
-- Be data-forward, neutral, and specific—no filler or generic advice.
-- Reference multi-agent insights when available (e.g., sleep, cardiovascular, recovery correlations).
-- Highlight missing data or assumptions explicitly.
-- Avoid external citations, numbered references, or clinical alarmism.
+Be informative and analytical. Weave metrics into flowing, detailed sentences that explain context and significance. Compare their numbers to age/sex norms to show what's working well or needs attention. Connect how different metrics influence each other. Stay measured and grounded in the data—let the numbers speak for themselves without excessive enthusiasm.
 `;
 export class CosaintAiService {
   private veniceApi: VeniceApiService;
@@ -154,38 +142,51 @@ export class CosaintAiService {
 
       // Log the prompt for debugging (you can remove this in production)
       console.log(
-        "[CosaintAiService] Generated prompt:",
+        "[CosaintAiService] Generated prompt (first 500 chars):",
         prompt.substring(0, 500) + "...",
       );
-
-      // Always use higher token limit for comprehensive health report analysis
-      const hasHealthReport = uploadedFiles && uploadedFiles.length > 0;
+      console.log("[CosaintAiService] FULL PROMPT LENGTH:", prompt.length);
+      console.log("[CosaintAiService] FULL PROMPT:", prompt);
 
       // Generate a response using the Venice API
+      // Note: Qwen models use more tokens for internal reasoning, so we need higher limits
       console.log("[CosaintAiService] Calling Venice API", {
         promptLength: prompt.length,
-        maxTokens: hasHealthReport ? 3000 : 1000,
+        maxTokens: 4000,
         userMessage: userMessage.substring(0, 100),
       });
 
       const response = await this.veniceApi.generateVeniceResponse(
         prompt,
-        hasHealthReport ? 3000 : 1000, // Higher token limit for health report analysis
+        4000, // High token limit for Qwen's thinking + response with multi-agent context
       );
 
       console.log("[CosaintAiService] Venice API response received", {
         hasResponse: Boolean(response),
         responseLength: response?.length || 0,
         responsePreview: response?.substring(0, 200),
+        isEmptyString: response === "",
+        isNull: response === null,
+        isUndefined: response === undefined,
       });
 
       if (!response) {
+        console.warn(
+          "⚠️ [CosaintAiService] Empty response from Venice API - returning fallback",
+          { userMessage: userMessage.substring(0, 100) },
+        );
         logger.warn("Empty response from Venice API", { userMessage });
         return this.getFallbackResponse(userMessage);
       }
 
+      console.log("✅ [CosaintAiService] Returning successful response");
       return response;
     } catch (error) {
+      console.error("❌ [CosaintAiService] Error generating AI response:", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        userMessage: userMessage.substring(0, 100),
+      });
       logger.error("Error generating AI response", {
         error: error instanceof Error ? error.message : String(error),
         userMessage,
@@ -368,9 +369,7 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
     // Start with the character's core identity
     let systemMessage = `You are Cosaint, a holistic health AI companion developed by Amach Health.\n\n${this.characteristics.getBio()}\n\nYour personality is:\n- Empathetic: You genuinely care about the user's wellbeing\n- Evidence-informed: You provide helpful health insights based on research\n- Holistic: You consider the interconnectedness of health factors\n- Practical: You offer actionable suggestions that are realistic to implement
 
-IMPORTANT: Do not include references, citations, or numbered lists at the end of your responses. Keep your responses conversational and natural. If you want to mention research, do so naturally within the conversation without formal citations.
-
-SPECIAL INSTRUCTION FOR HEALTH REPORTS: When analyzing any health report (blood tests, lab results, medical reports, etc.), provide a comprehensive analysis of ALL metrics and values found in the report, not just a summary. List each metric with its value and normal range, and explain what each metric means for the user's health.`;
+Keep responses conversational and natural. If you mention research, weave it into the conversation without formal citations. When health reports or data are available, provide thoughtful analysis of the notable findings.`;
 
     // Add user profile context if available
     if (userProfile) {

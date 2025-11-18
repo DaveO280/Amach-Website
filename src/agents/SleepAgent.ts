@@ -36,10 +36,19 @@ You analyze sleep data with clinical rigor, identifying patterns that impact hea
   ): SleepAgentData {
     const appleHealth = context.availableData.appleHealth ?? {};
 
+    // Limit sleep data to most recent 60 days to prevent overwhelming Venice AI
+    // (even with prompt limiting to 30 days display, 690 days was causing issues)
+    const allSleepSamples = this.normalizeSamples(
+      appleHealth.HKCategoryTypeIdentifierSleepAnalysis,
+    );
+    const recentSleepSamples = allSleepSamples.slice(-60);
+
+    console.log(
+      `[Sleep Agent] Limiting sleep data: ${allSleepSamples.length} total → ${recentSleepSamples.length} recent days`,
+    );
+
     return {
-      sleepAnalysis: this.normalizeSamples(
-        appleHealth.HKCategoryTypeIdentifierSleepAnalysis,
-      ),
+      sleepAnalysis: recentSleepSamples,
       heartRate: this.normalizeSamples(
         appleHealth.HKQuantityTypeIdentifierHeartRate,
       ),
@@ -125,6 +134,10 @@ You analyze sleep data with clinical rigor, identifying patterns that impact hea
     const sections: string[] = [];
 
     if (data.sleepAnalysis.length > 0) {
+      console.log(
+        `[Sleep Agent] formatDataForAnalysis received ${data.sleepAnalysis.length} sleep samples`,
+      );
+
       sections.push("SLEEP DURATION DATA:");
       const durations = data.sleepAnalysis.map((sample) => {
         const timestamp = sample.timestamp ?? new Date();
@@ -202,7 +215,11 @@ You analyze sleep data with clinical rigor, identifying patterns that impact hea
       sections.push("No structured sleep data available for analysis.");
     }
 
-    return sections.join("\n");
+    const formattedData = sections.join("\n");
+    console.log(
+      `[Sleep Agent] Formatted data length: ${formattedData.length} chars (${sections.length} sections)`,
+    );
+    return formattedData;
   }
 
   protected buildDetailedPrompt(

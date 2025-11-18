@@ -114,6 +114,15 @@ OUTPUT STRUCTURE:
     );
 
     try {
+      console.log(`🔍 [${this.name}] Calling Venice API`, {
+        promptLength: prompt.length,
+        systemPromptLength: this.getEnhancedSystemPrompt().length,
+        totalPromptLength:
+          this.getEnhancedSystemPrompt().length + prompt.length,
+        dataQuality: dataQuality.score,
+        hasData: Boolean(relevantData),
+      });
+
       const response = await this.veniceService.generateCompletion({
         systemPrompt: this.getEnhancedSystemPrompt(),
         userPrompt: prompt,
@@ -121,7 +130,17 @@ OUTPUT STRUCTURE:
         maxTokens: 4000,
       });
 
+      console.log(`✅ [${this.name}] Venice API response received`, {
+        responseLength: response.length,
+        hasResponse: Boolean(response),
+      });
+
       const insight = this.parseEnhancedResponse(response);
+      console.log(`✅ [${this.name}] Response parsed successfully`, {
+        findingsCount: insight.findings?.length || 0,
+        confidence: insight.confidence,
+      });
+
       return this.postProcessInsight(
         insight,
         relevantData,
@@ -129,6 +148,11 @@ OUTPUT STRUCTURE:
         context,
       );
     } catch (error) {
+      console.error(`❌ [${this.name}] Venice completion failed:`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack:
+          error instanceof Error ? error.stack?.substring(0, 500) : undefined,
+      });
       logger.error(`[${this.name}] Venice completion failed`, {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -186,7 +210,49 @@ Be thorough but precise. Quality over quantity.`;
 
   protected parseEnhancedResponse(response: string): AgentInsight {
     try {
-      const parsed = JSON.parse(response);
+      // Strip <think> blocks that Venice AI sometimes includes
+      let cleanedResponse = response;
+
+      // Check if there are <think> blocks (don't use test() as it consumes the match)
+      if (cleanedResponse.includes("<think>")) {
+        console.log(`[${this.name}] Found <think> blocks, stripping them out`);
+        console.log(
+          `[${this.name}] Before stripping (first 500 chars):`,
+          cleanedResponse.substring(0, 500),
+        );
+
+        // Remove all <think>...</think> blocks (including nested or multiple)
+        cleanedResponse = cleanedResponse
+          .replace(/<think>[\s\S]*?<\/think>/gi, "")
+          .trim();
+
+        console.log(
+          `[${this.name}] After stripping (first 500 chars):`,
+          cleanedResponse.substring(0, 500),
+        );
+        console.log(
+          `[${this.name}] Still contains <think>?`,
+          cleanedResponse.includes("<think>"),
+        );
+      }
+
+      // Also try to extract JSON if response has extra text before/after
+      const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanedResponse = jsonMatch[0];
+      }
+
+      console.log(
+        `[${this.name}] Attempting to parse JSON (length: ${cleanedResponse.length})`,
+      );
+
+      // Log first 1000 chars of what we're trying to parse
+      console.log(
+        `[${this.name}] JSON to parse:`,
+        cleanedResponse.substring(0, 1000),
+      );
+
+      const parsed = JSON.parse(cleanedResponse);
       return {
         agentId: this.id,
         relevance: parsed.relevanceToQuery ?? 0.5,
@@ -236,6 +302,105 @@ Be thorough but precise. Quality over quantity.`;
         rawResponse: response,
       };
     } catch (error) {
+      console.error(`❌ [${this.name}] Failed to parse response:`, {
+        error: error instanceof Error ? error.message : String(error),
+        originalResponsePreview: response.substring(0, 500),
+      });
+
+      // Try to fix common JSON issues
+      console.log(`[${this.name}] Attempting to fix malformed JSON...`);
+      try {
+        let fixedResponse = response;
+
+        // Strip <think> blocks
+        if (fixedResponse.includes("<think>")) {
+          fixedResponse = fixedResponse
+            .replace(/<think>[\s\S]*?<\/think>/gi, "")
+            .trim();
+        }
+
+        // Extract JSON
+        const jsonMatch = fixedResponse.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          fixedResponse = jsonMatch[0];
+        }
+
+        // Try to fix trailing commas in arrays/objects
+        fixedResponse = fixedResponse.replace(/,(\s*[}\]])/g, "$1");
+
+        console.log(
+          `[${this.name}] Attempting to parse fixed JSON (length: ${fixedResponse.length})`,
+        );
+        const parsed = JSON.parse(fixedResponse);
+
+        console.log(`✅ [${this.name}] Successfully parsed after fixes!`);
+        return {
+          agentId: this.id,
+          relevance: parsed.relevanceToQuery ?? 0.5,
+          confidence: parsed.overallConfidence ?? 0.5,
+          findings: (parsed.findings ?? []).map(
+            (finding: Record<string, unknown>) => ({
+              observation: String(
+                finding.observation ?? "Unspecified observation",
+              ),
+              evidence: String(finding.evidence ?? "Evidence not provided"),
+              significance: String(
+                finding.significance ?? "Significance not provided",
+              ),
+              confidence: Number(finding.confidence ?? 0.5),
+            }),
+          ),
+          trends: (parsed.trends ?? []).map(
+            (trend: Record<string, unknown>) => ({
+              pattern: String(trend.pattern ?? "Pattern not specified"),
+              timeframe: String(trend.timeframe ?? "Timeframe not provided"),
+              direction: String(trend.direction ?? "stable"),
+              magnitude: String(trend.magnitude ?? "Not quantified"),
+              confidence: Number(trend.confidence ?? 0.5),
+            }),
+          ),
+          concerns: (parsed.concerns ?? []).map(
+            (concern: Record<string, unknown>) => ({
+              issue: String(concern.issue ?? "Issue not specified"),
+              severity: String(concern.severity ?? "low"),
+              evidence: String(concern.evidence ?? "No evidence provided"),
+              recommendation: String(
+                concern.recommendation ?? "No recommendation provided",
+              ),
+            }),
+          ),
+          correlations: (parsed.correlations ?? []).map(
+            (correlation: Record<string, unknown>) => ({
+              metric1: String(correlation.metric1 ?? "Unknown"),
+              metric2: String(correlation.metric2 ?? "Unknown"),
+              relationship: String(correlation.relationship ?? "Not specified"),
+              strength: String(correlation.strength ?? "unknown"),
+              confidence: Number(correlation.confidence ?? 0.5),
+            }),
+          ),
+          recommendations: (parsed.recommendations ?? []).map(
+            (recommendation: Record<string, unknown>) => ({
+              action: String(recommendation.action ?? "Action not specified"),
+              priority: String(recommendation.priority ?? "medium"),
+              rationale: String(
+                recommendation.rationale ?? "No rationale provided",
+              ),
+              timeframe: String(recommendation.timeframe ?? "Not specified"),
+            }),
+          ),
+          dataLimitations: parsed.dataLimitations ?? [],
+          dataPoints: this.extractMentionedMetrics(fixedResponse),
+          rawResponse: response,
+        };
+      } catch (retryError) {
+        console.error(`❌ [${this.name}] Still failed after fixes:`, {
+          error:
+            retryError instanceof Error
+              ? retryError.message
+              : String(retryError),
+        });
+      }
+
       logger.error(`Failed to parse ${this.id} response`, {
         error: error instanceof Error ? error.message : String(error),
       });

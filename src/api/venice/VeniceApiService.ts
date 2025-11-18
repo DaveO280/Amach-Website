@@ -154,6 +154,17 @@ export class VeniceApiService {
         stream: false,
       };
 
+      // Log request size to debug mobile Status 0 errors
+      const requestSize = JSON.stringify(requestBody).length;
+      console.log(
+        `[VeniceApiService] Request size: ${requestSize} bytes (${(requestSize / 1024).toFixed(2)} KB)`,
+      );
+      if (requestSize > 500000) {
+        console.warn(
+          `[VeniceApiService] ⚠️ Large request detected (${(requestSize / 1024).toFixed(2)} KB) - may fail on mobile`,
+        );
+      }
+
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {
           reject(

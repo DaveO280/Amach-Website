@@ -149,9 +149,15 @@ You analyze sleep data with clinical rigor, identifying patterns that impact hea
           1,
         )}h - ${maxSleep.toFixed(1)}h`,
       );
+      sections.push(`Total days: ${durations.length}`);
       sections.push("");
-      sections.push("Daily Sleep Duration:");
-      durations.forEach((entry) => {
+
+      // Limit daily detail to most recent 30 days to prevent prompt overflow
+      const recentDurations = durations.slice(-30);
+      sections.push(
+        `Daily Sleep Duration (most recent ${recentDurations.length} days):`,
+      );
+      recentDurations.forEach((entry) => {
         sections.push(
           `  ${entry.date} (${entry.dayOfWeek}): ${entry.hours.toFixed(1)}h`,
         );

@@ -160,11 +160,14 @@ const HealthDataSelector: () => React.ReactElement = () => {
     // iOS Safari is strict about date formats
     // Convert "2025-08-17 17:38:00 -0400" to "2025-08-17T17:38:00-04:00"
     try {
-      // Replace first space with T
-      let normalized = dateStr.replace(" ", "T");
+      let normalized = dateStr;
 
-      // Fix timezone format: -0400 -> -04:00
-      normalized = normalized.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+      // Replace first space with T (date and time separator)
+      normalized = normalized.replace(" ", "T");
+
+      // Fix timezone format: " -0400" -> "-04:00"
+      // Handle space before timezone and add colon
+      normalized = normalized.replace(/ ([+-])(\d{2})(\d{2})$/, "$1$2:$3");
 
       // Test if it parses correctly
       const testDate = new Date(normalized);

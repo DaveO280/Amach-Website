@@ -113,12 +113,21 @@ class HealthDataStoreService {
   }
 
   async saveHealthData(data: HealthDataResults): Promise<void> {
+    console.log("💿 [IndexedDB Debug] saveHealthData called with:", {
+      metrics: Object.keys(data),
+      totalRecords: Object.values(data).reduce(
+        (sum, arr) => sum + arr.length,
+        0,
+      ),
+    });
+
     if (!this.isInitialized) {
       await this.initialize();
     }
 
     // Validate data before saving
     HealthDataValidator.validateResults(data);
+    console.log("✅ [IndexedDB Debug] Data validation passed");
 
     const db = await this.initDB();
     return new Promise<void>((resolve, reject): void => {
@@ -132,12 +141,24 @@ class HealthDataStoreService {
         const existingResult = getRequest.result as HealthDataStore | undefined;
         const existingData = existingResult?.data || {};
 
+        console.log("🔍 [IndexedDB Debug] Existing data:", {
+          metrics: Object.keys(existingData),
+          counts: Object.entries(existingData).map(
+            ([k, v]) => `${k}: ${v.length}`,
+          ),
+        });
+
         // Merge new data with existing data
         const mergedData: HealthDataResults = { ...existingData };
 
         // Process all metric types synchronously
         Object.entries(data).forEach(([metricType, newMetrics]) => {
           const existingMetrics = existingData[metricType] || [];
+          console.log(`📝 [IndexedDB Debug] Processing ${metricType}:`, {
+            existing: existingMetrics.length,
+            new: newMetrics.length,
+          });
+
           const combinedMetrics = [...existingMetrics, ...newMetrics];
 
           // Efficient deduplication using Set for O(n) performance
@@ -151,7 +172,15 @@ class HealthDataStoreService {
             return true;
           });
 
+          console.log(`   ✅ After dedup: ${uniqueMetrics.length} records`);
           mergedData[metricType as keyof HealthDataResults] = uniqueMetrics;
+        });
+
+        console.log("🔀 [IndexedDB Debug] Final merged data:", {
+          metrics: Object.keys(mergedData),
+          counts: Object.entries(mergedData).map(
+            ([k, v]) => `${k}: ${v.length}`,
+          ),
         });
 
         // Save the merged data
@@ -163,9 +192,16 @@ class HealthDataStoreService {
 
         const putRequest = store.put(healthData);
         putRequest.onsuccess = (): void => {
+          console.log(
+            "✅ [IndexedDB Debug] Data saved successfully to IndexedDB!",
+          );
           resolve();
         };
         putRequest.onerror = (): void => {
+          console.error(
+            "❌ [IndexedDB Debug] Error saving to IndexedDB:",
+            putRequest.error,
+          );
           reject(putRequest.error);
         };
       };

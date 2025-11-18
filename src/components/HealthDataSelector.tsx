@@ -306,6 +306,25 @@ const HealthDataSelector: () => React.ReactElement = () => {
             75,
             `CSV loaded successfully (${rowCount.toLocaleString()} rows)`,
           );
+
+          // Debug: Log what we found in the CSV
+          console.log("📊 [CSV Debug] Parsing complete:");
+          console.log(`   - Total rows processed: ${rowCount}`);
+          console.log(
+            `   - Unique metrics found:`,
+            Array.from(uniqueMetrics).sort(),
+          );
+          console.log(
+            `   - Metrics with data:`,
+            Object.keys(healthDataResults).sort(),
+          );
+          Object.entries(healthDataResults).forEach(([metric, data]) => {
+            console.log(`   - ${metric}: ${data.length} records`);
+            if (data.length > 0) {
+              console.log(`     Sample:`, data[0]);
+            }
+          });
+
           resolve(healthDataResults);
         },
         error: (error) => {
@@ -403,7 +422,20 @@ const HealthDataSelector: () => React.ReactElement = () => {
         }
       }
 
+      // Debug: Log what we're about to save
+      console.log("💾 [Save Debug] About to save health data:");
+      console.log(`   - Metrics to save:`, Object.keys(healthDataResults));
+      console.log(
+        `   - Total records:`,
+        Object.values(healthDataResults).reduce(
+          (sum, arr) => sum + arr.length,
+          0,
+        ),
+      );
+
       saveHealthData(healthDataResults as Record<MetricType, HealthMetric[]>);
+
+      console.log("✅ [Save Debug] saveHealthData called successfully");
 
       // Only export CSV on desktop (not mobile) to avoid interrupting the app
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);

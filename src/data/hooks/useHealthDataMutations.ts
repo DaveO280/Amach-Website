@@ -18,10 +18,24 @@ export function useSaveHealthDataMutation(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: HealthDataResults) =>
-      healthDataStore.saveHealthData(data),
+    mutationFn: (data: HealthDataResults) => {
+      console.log(
+        "🔧 [Mutation Debug] useSaveHealthDataMutation called with:",
+        {
+          metrics: Object.keys(data),
+          recordCounts: Object.entries(data).map(
+            ([k, v]) => `${k}: ${v.length}`,
+          ),
+        },
+      );
+      return healthDataStore.saveHealthData(data);
+    },
     onSuccess: () => {
+      console.log("✅ [Mutation Debug] Save successful, invalidating queries");
       queryClient.invalidateQueries({ queryKey: ["healthData"] });
+    },
+    onError: (error) => {
+      console.error("❌ [Mutation Debug] Save failed:", error);
     },
   });
 }

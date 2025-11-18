@@ -26,6 +26,14 @@ export class HealthDataValidator {
       !metric.unit ||
       !metric.type
     ) {
+      console.error("❌ [Validation] Missing required fields:", {
+        hasStartDate: !!metric.startDate,
+        hasEndDate: !!metric.endDate,
+        hasValue: !!metric.value,
+        hasUnit: !!metric.unit,
+        hasType: !!metric.type,
+        metric,
+      });
       throw new ValidationError("Missing required fields in metric");
     }
 
@@ -33,7 +41,18 @@ export class HealthDataValidator {
     const startDate = new Date(metric.startDate);
     const endDate = new Date(metric.endDate);
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      throw new ValidationError("Invalid date format");
+      console.error("❌ [Validation] Invalid date format:", {
+        startDateString: metric.startDate,
+        endDateString: metric.endDate,
+        startDateParsed: startDate.toString(),
+        endDateParsed: endDate.toString(),
+        startDateValid: !isNaN(startDate.getTime()),
+        endDateValid: !isNaN(endDate.getTime()),
+        userAgent: navigator.userAgent,
+      });
+      throw new ValidationError(
+        `Invalid date format: start="${metric.startDate}", end="${metric.endDate}"`,
+      );
     }
 
     // Validate date range

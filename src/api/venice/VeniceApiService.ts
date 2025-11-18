@@ -52,6 +52,11 @@ export class VeniceApiService {
     }
 
     // For client-side usage, point to our API route
+    // Use fetch adapter on mobile for better compatibility with Safari
+    const isMobile =
+      typeof navigator !== "undefined" &&
+      /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
     this.client = axios.create({
       baseURL,
       headers: {
@@ -59,6 +64,8 @@ export class VeniceApiService {
         Accept: "application/json",
       },
       timeout: DEFAULT_CLIENT_TIMEOUT_MS,
+      // Force fetch adapter on mobile to avoid XMLHttpRequest security issues
+      ...(isMobile && { adapter: "fetch" }),
     });
 
     // Request logging interceptor

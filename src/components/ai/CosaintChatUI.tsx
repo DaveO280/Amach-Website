@@ -448,11 +448,11 @@ const CosaintChatUI: React.FC = () => {
               Analysis mode
             </span>
             <div className="flex flex-col gap-1">
-              <div className="inline-flex rounded-lg border border-emerald-200 bg-white shadow-sm">
+              <div className="inline-flex w-fit rounded-lg border border-emerald-200 bg-white shadow-sm">
                 <button
                   type="button"
                   onClick={() => setUseMultiAgent(false)}
-                  className={`px-3 py-1 text-xs font-medium transition-colors ${
+                  className={`whitespace-nowrap px-3 py-1 text-xs font-medium transition-colors ${
                     !useMultiAgent
                       ? "bg-emerald-600 text-white shadow-sm"
                       : "text-emerald-700 hover:bg-emerald-50"
@@ -463,7 +463,7 @@ const CosaintChatUI: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setUseMultiAgent(true)}
-                  className={`px-3 py-1 text-xs font-medium transition-colors ${
+                  className={`whitespace-nowrap px-3 py-1 text-xs font-medium transition-colors ${
                     useMultiAgent
                       ? "bg-emerald-600 text-white shadow-sm"
                       : "text-emerald-700 hover:bg-emerald-50"

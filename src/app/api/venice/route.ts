@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Add Edge Runtime configuration
-export const runtime = "edge";
+// Use Node.js runtime for longer timeout (60s on hobby plan vs 30s for edge)
+export const runtime = "nodejs";
+export const maxDuration = 60; // Maximum allowed on Vercel hobby plan
 
 const REQUEST_TIMEOUT_MS = Number(
   process.env.VENICE_REQUEST_TIMEOUT_MS ?? "120000",

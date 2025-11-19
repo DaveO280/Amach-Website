@@ -52,11 +52,6 @@ export class VeniceApiService {
     }
 
     // For client-side usage, point to our API route
-    // Use fetch adapter on mobile for better compatibility with Safari
-    const isMobile =
-      typeof navigator !== "undefined" &&
-      /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
     this.client = axios.create({
       baseURL,
       headers: {
@@ -64,8 +59,6 @@ export class VeniceApiService {
         Accept: "application/json",
       },
       timeout: DEFAULT_CLIENT_TIMEOUT_MS,
-      // Force fetch adapter on mobile to avoid XMLHttpRequest security issues
-      ...(isMobile && { adapter: "fetch" }),
     });
 
     // Request logging interceptor
@@ -172,6 +165,22 @@ export class VeniceApiService {
         );
       }
 
+      // Use native fetch on mobile Safari instead of axios for better compatibility
+      const isMobile =
+        typeof navigator !== "undefined" &&
+        /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      if (isMobile) {
+        console.log(
+          `[VeniceApiService] Using native fetch for mobile (Safari compatibility)`,
+        );
+        return await this.generateCompletionWithFetch(
+          requestBody,
+          requestId,
+          startTime,
+        );
+      }
+
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {
           reject(
@@ -235,6 +244,89 @@ export class VeniceApiService {
         isTimeout:
           error instanceof Error && error.message.includes("timed out"),
       });
+      throw error;
+    }
+  }
+
+  /**
+   * Native fetch implementation for mobile Safari compatibility
+   * Bypasses axios entirely to avoid XMLHttpRequest issues
+   */
+  private async generateCompletionWithFetch(
+    requestBody: {
+      messages: Array<{ role: string; content: string }>;
+      max_tokens: number;
+      temperature: number;
+      model: string;
+      stream: boolean;
+    },
+    _requestId: string,
+    startTime: number,
+  ): Promise<string> {
+    try {
+      // Construct full URL
+      const baseURL =
+        typeof window !== "undefined" ? window.location.origin : "";
+      const url = `${baseURL}${this.endpointPath}`;
+
+      console.log(`[VeniceApiService] Native fetch request to: ${url}`);
+
+      // Use native fetch with long timeout for mobile
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      console.log(`[VeniceApiService] Native fetch response received`, {
+        status: response.status,
+        ok: response.ok,
+        elapsedMs: Date.now() - startTime,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[VeniceApiService] Fetch error response:`, {
+          status: response.status,
+          statusText: response.statusText,
+          errorText,
+        });
+        throw new Error(
+          `API request failed: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      const data = await response.json();
+
+      // Same response validation as axios version
+      if (data?.choices?.[0]?.message?.content) {
+        console.log(`[VeniceApiService] ✅ Fetch successful`, {
+          elapsedMs: Date.now() - startTime,
+          contentLength: data.choices[0].message.content.length,
+        });
+        return data.choices[0].message.content;
+      }
+
+      if (data?.error) {
+        console.error(`[VeniceApiService] API returned error`, data.error);
+        throw new Error(String(data.error));
+      }
+
+      console.error(`[VeniceApiService] Invalid response format`, { data });
+      throw new Error("Invalid response format from Venice API");
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error("Request timed out after 180000ms");
+      }
       throw error;
     }
   }

@@ -151,6 +151,12 @@ export const HealthProfileManager: React.FC = () => {
 
         if (result.success) {
           setSuccessMessage("Profile updated successfully!");
+
+          // Reload profile from blockchain to update UI
+          const loadResult = await loadProfileFromBlockchain();
+          if (loadResult.success) {
+            console.log("✅ Profile reloaded after update");
+          }
         } else {
           setSuccessMessage(`Update failed: ${result.error}`);
         }
@@ -172,6 +178,12 @@ export const HealthProfileManager: React.FC = () => {
 
         if (result.success) {
           setSuccessMessage("Profile created successfully!");
+
+          // Reload profile from blockchain to update UI
+          const loadResult = await loadProfileFromBlockchain();
+          if (loadResult.success) {
+            console.log("✅ Profile reloaded after creation");
+          }
         } else {
           setSuccessMessage(`Creation failed: ${result.error}`);
         }

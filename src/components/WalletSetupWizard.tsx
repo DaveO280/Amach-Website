@@ -24,7 +24,7 @@ import {
   User,
   Wallet,
 } from "lucide-react";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 
 interface WizardStep {
   id: string;
@@ -60,6 +60,11 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
   const [deployerFundingTx, setDeployerFundingTx] = useState<string | null>(
     null,
   );
+  const [allocationInfo, setAllocationInfo] = useState<{
+    hasAllocation: boolean;
+    hasClaimed: boolean;
+    amount: string;
+  } | null>(null);
 
   // Email and profile data
   const [email, setEmail] = useState("");
@@ -74,8 +79,13 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
   const [heightFeet, setHeightFeet] = useState("");
   const [heightInches, setHeightInches] = useState("");
   const [weightLbs, setWeightLbs] = useState("");
-  const { isConnected, address, connect, updateHealthProfile } =
-    useZkSyncSsoWallet();
+  const {
+    isConnected,
+    address,
+    connect,
+    updateHealthProfile,
+    loadProfileFromBlockchain,
+  } = useZkSyncSsoWallet();
 
   const [steps, setSteps] = useState<WizardStep[]>([
     {
@@ -150,6 +160,52 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       updateStepStatus(steps[currentStepIndex + 1].id, "active");
     }
   }, [currentStepIndex, steps, updateStepStatus]);
+
+  // Check if profile already exists and skip to verification step
+  // Also check allocation eligibility (only once on mount)
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkExistingProfile = async (): Promise<void> => {
+      if (!isConnected || !address || !isMounted) return;
+
+      try {
+        const result = await loadProfileFromBlockchain();
+        if (result.success && isMounted) {
+          console.log("✅ Profile already exists - skipping to verification");
+
+          // Mark previous steps as complete
+          updateStepStatus("email-verification", "complete");
+          updateStepStatus("create-wallet", "complete");
+          updateStepStatus("deployer-funding", "complete");
+          updateStepStatus("create-profile", "complete");
+          updateStepStatus("verify-profile", "active");
+
+          // Jump to verification step
+          const verifyStepIndex = steps.findIndex(
+            (s) => s.id === "verify-profile",
+          );
+          if (verifyStepIndex >= 0) {
+            setCurrentStepIndex(verifyStepIndex);
+          }
+        }
+      } catch (error) {
+        console.log("ℹ️ No existing profile found - starting fresh");
+      }
+
+      // Check allocation eligibility once
+      if (isMounted) {
+        await checkAllocationEligibility();
+      }
+    };
+
+    void checkExistingProfile();
+
+    return (): void => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected, address]); // Removed steps, updateStepStatus, and checkAllocationEligibility to prevent loop
 
   // Navigate to a specific step (only if it's complete or current)
   const navigateToStep = useCallback(
@@ -401,10 +457,19 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
       // Wait for blockchain transaction to be confirmed (5 seconds)
       // This ensures the profile exists on-chain before verification
-      setTimeout(() => {
+      setTimeout(async () => {
         console.log(
-          "✅ Blockchain confirmation complete - moving to verification",
+          "✅ Blockchain confirmation complete - reloading profile...",
         );
+
+        // Reload profile from blockchain to update UI
+        const loadResult = await loadProfileFromBlockchain();
+        if (loadResult.success) {
+          console.log("✅ Profile reloaded - UI should update now");
+        } else {
+          console.warn("⚠️ Profile reload failed:", loadResult.error);
+        }
+
         moveToNextStep();
         void handleVerifyProfile();
       }, 5000); // Increased from 1000ms to 5000ms
@@ -460,11 +525,56 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     }
   };
 
+  // Check allocation eligibility
+  const checkAllocationEligibility = useCallback(async (): Promise<void> => {
+    if (!address) return;
+
+    try {
+      const response = await fetch(
+        `/api/verification/allocation-info?wallet=${address}`,
+      );
+      const data = await response.json();
+
+      if (data.userAllocation) {
+        setAllocationInfo({
+          hasAllocation: data.userAllocation.allocationAmount !== "0.0",
+          hasClaimed: data.userAllocation.hasClaimed,
+          amount: data.userAllocation.allocationAmount,
+        });
+        console.log("✅ Allocation check:", data.userAllocation);
+      } else {
+        setAllocationInfo({
+          hasAllocation: false,
+          hasClaimed: false,
+          amount: "0",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to check allocation:", error);
+      setAllocationInfo({
+        hasAllocation: false,
+        hasClaimed: false,
+        amount: "0",
+      });
+    }
+  }, [address]);
+
   // Step 6: Claim Tokens
   const handleClaimTokens = async (): Promise<void> => {
     try {
       updateStepStatus("claim-tokens", "loading");
       setError(null);
+
+      // Check allocation before claiming
+      await checkAllocationEligibility();
+
+      if (!allocationInfo?.hasAllocation) {
+        throw new Error("No token allocation available for this wallet");
+      }
+
+      if (allocationInfo?.hasClaimed) {
+        throw new Error("Tokens have already been claimed");
+      }
 
       // Use the existing wallet service claim allocation method
       const { zkSyncSsoWalletService } = await import(
@@ -713,14 +823,63 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         );
 
       case "claim-tokens":
+        // Check if user has already claimed
+        if (allocationInfo?.hasClaimed) {
+          return (
+            <div className="space-y-4">
+              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                <p className="text-emerald-800 font-medium">
+                  ✅ You have already claimed your {allocationInfo.amount}{" "}
+                  testnet AHP tokens!
+                </p>
+              </div>
+              <Button
+                onClick={() => onComplete()}
+                className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
+              >
+                Complete Setup
+              </Button>
+            </div>
+          );
+        }
+
+        // Check if user has allocation
+        if (allocationInfo && !allocationInfo.hasAllocation) {
+          return (
+            <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+              <p className="text-amber-800">
+                ⚠️ No token allocation available for this wallet. You may be
+                outside the first 5,000 users.
+              </p>
+              <Button
+                onClick={() => onComplete()}
+                className="w-full mt-4 py-4 bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                Continue Without Tokens
+              </Button>
+            </div>
+          );
+        }
+
         return (
-          <Button
-            onClick={() => void handleClaimTokens()}
-            className="w-full py-6 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white shadow-lg"
-          >
-            <Gift className="h-5 w-5 mr-2" />
-            Claim 1,000 Testnet AHP Tokens
-          </Button>
+          <div className="space-y-4">
+            {allocationInfo && (
+              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                <p className="text-emerald-800">
+                  🎉 You are eligible for{" "}
+                  <strong>{allocationInfo.amount} testnet AHP tokens</strong>!
+                </p>
+              </div>
+            )}
+            <Button
+              onClick={() => void handleClaimTokens()}
+              disabled={!allocationInfo}
+              className="w-full py-6 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white shadow-lg disabled:opacity-50"
+            >
+              <Gift className="h-5 w-5 mr-2" />
+              Claim {allocationInfo?.amount || "1,000"} Testnet AHP Tokens
+            </Button>
+          </div>
         );
 
       default:

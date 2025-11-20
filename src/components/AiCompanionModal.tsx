@@ -14,6 +14,7 @@ import { ChevronDown, ChevronUp, X } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import CosaintChatUI from "./ai/CosaintChatUI";
 import GoalsTab from "./ai/GoalsTab";
+import HealthTimelineTab from "./ai/HealthTimelineTab";
 import HealthReport from "./ai/HealthReport";
 import ProfileInputModal from "./ai/ProfileInputModal";
 
@@ -27,7 +28,9 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
   const [showStats, setShowStats] = useState(true);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
-  const [activeTab, setActiveTab] = useState<"chat" | "goals">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "goals" | "timeline">(
+    "chat",
+  );
 
   // Access the health data provider to check for available data
   const { metricData, userProfile, setUserProfile, setProfile } =
@@ -215,30 +218,40 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
           {/* File Folder Tab Navigation */}
           <div className="flex mb-4 gap-0 w-full border-b border-emerald-200 relative z-10">
             <button
-              className={`flex-1 px-6 py-2 text-base font-semibold transition-colors focus:outline-none
+              className={`flex-1 px-4 py-2 text-sm sm:text-base font-semibold transition-colors focus:outline-none
                 ${
                   activeTab === "chat"
                     ? "bg-white border-x border-t border-emerald-300 rounded-t-lg shadow-sm text-emerald-800 z-20"
-                    : "bg-emerald-50 text-emerald-500 border-b border-emerald-200 z-0"
+                    : "bg-emerald-50 text-emerald-500 border-b border-r border-emerald-200 z-0"
                 }
               `}
-              style={{ marginRight: "-2px" }}
               onClick={() => setActiveTab("chat")}
             >
               Chat
             </button>
             <button
-              className={`flex-1 px-6 py-2 text-base font-semibold transition-colors focus:outline-none
+              className={`flex-1 px-4 py-2 text-sm sm:text-base font-semibold transition-colors focus:outline-none
                 ${
                   activeTab === "goals"
+                    ? "bg-white border-x border-t border-emerald-300 rounded-t-lg shadow-sm text-emerald-800 z-20"
+                    : "bg-emerald-50 text-emerald-500 border-b border-r border-emerald-200 z-0"
+                }
+              `}
+              onClick={() => setActiveTab("goals")}
+            >
+              Goals
+            </button>
+            <button
+              className={`flex-1 px-4 py-2 text-sm sm:text-base font-semibold transition-colors focus:outline-none
+                ${
+                  activeTab === "timeline"
                     ? "bg-white border-x border-t border-emerald-300 rounded-t-lg shadow-sm text-emerald-800 z-20"
                     : "bg-emerald-50 text-emerald-500 border-b border-emerald-200 z-0"
                 }
               `}
-              style={{ marginLeft: "-2px" }}
-              onClick={() => setActiveTab("goals")}
+              onClick={() => setActiveTab("timeline")}
             >
-              Goals
+              Timeline
             </button>
           </div>
           {/* Tab Content */}
@@ -319,9 +332,13 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                   </div>
                 </AiProvider>
               </>
-            ) : (
+            ) : activeTab === "goals" ? (
               <div className="flex-1 min-h-0 flex flex-col">
                 <GoalsTab />
+              </div>
+            ) : (
+              <div className="flex-1 min-h-0 flex flex-col">
+                <HealthTimelineTab />
               </div>
             )}
           </div>

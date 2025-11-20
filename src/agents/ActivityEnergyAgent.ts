@@ -342,8 +342,13 @@ Tone requirements:
       });
 
     lines.push("");
-    lines.push("AVERAGES (entire period):");
-    lines.push(`  • Steps: ${this.formatNumber(averages.steps)} steps/day`);
+    lines.push(
+      "AVERAGES (entire period - calculated from all available data points, excluding null/missing values):",
+    );
+    const stepsDaysWithData = summaries.filter((s) => s.steps !== null).length;
+    lines.push(
+      `  • Steps: ${this.formatNumber(averages.steps)} steps/day (calculated from ${stepsDaysWithData} days with step data)`,
+    );
     lines.push(
       `  • Active Energy: ${this.formatNumber(averages.activeEnergy, 1)} kcal/day`,
     );
@@ -458,8 +463,25 @@ Tone requirements:
 
     if (averages.steps !== null) {
       directedPrompts.push(
-        `Reference average steps ${this.formatNumber(averages.steps)} steps/day.`,
+        `Use the overall average steps ${this.formatNumber(averages.steps)} steps/day as the primary metric. This is calculated from all available step data and is the authoritative average.`,
       );
+    }
+
+    // Calculate and provide recent 30-day average if different from overall
+    const recentSummaries = summaries.slice(-30);
+    const recentStepsWithData = recentSummaries
+      .map((s) => s.steps)
+      .filter((steps): steps is number => steps !== null);
+    if (recentStepsWithData.length > 0 && averages.steps !== null) {
+      const recentAvg =
+        recentStepsWithData.reduce((a, b) => a + b, 0) /
+        recentStepsWithData.length;
+      if (Math.abs(recentAvg - averages.steps) > 100) {
+        // Only mention if significantly different
+        directedPrompts.push(
+          `Note: Recent 30-day average (${this.formatNumber(recentAvg)} steps/day) differs from overall average. Use the overall average (${this.formatNumber(averages.steps)} steps/day) as the primary reference, as it represents the complete dataset.`,
+        );
+      }
     }
     if (averages.activeEnergy !== null) {
       directedPrompts.push(
@@ -576,9 +598,23 @@ ${directedPrompts.map((line) => `- ${line}`).join("\n")}`;
     const weekendToWeekdayStepsRatio =
       avgWeekdaySteps > 0 ? avgWeekendSteps / avgWeekdaySteps : 0;
 
-    // Count sedentary days (<5000 steps)
+    // Calculate recent 30-day average (excluding null values)
+    const recentSummaries = summaries.slice(-30);
+    const recentStepsWithData = recentSummaries
+      .map((s) => s.steps)
+      .filter((steps): steps is number => steps !== null);
+    const recent30DayAverageSteps =
+      recentStepsWithData.length > 0
+        ? Math.round(
+            (recentStepsWithData.reduce((a, b) => a + b, 0) /
+              recentStepsWithData.length) *
+              10,
+          ) / 10
+        : null;
+
+    // Count sedentary days (<5000 steps) - only count days with actual step data
     const sedentaryDayCount = summaries.filter(
-      (s) => (s.steps ?? 0) < 5000,
+      (s) => s.steps !== null && s.steps < 5000,
     ).length;
 
     const highIntensityMinutesPerDay = averages.highIntensityMinutes ?? null;
@@ -609,6 +645,7 @@ ${directedPrompts.map((line) => `- ${line}`).join("\n")}`;
       metadata: {
         ...insight.metadata,
         activityAverageSteps: averages.steps,
+        activityRecent30DayAverageSteps: recent30DayAverageSteps,
         activityAverageActiveEnergy: averages.activeEnergy,
         activityAverageExerciseMinutes: averages.exerciseMinutes,
         activityWeekendToWeekdayStepsRatio: weekendToWeekdayStepsRatio,

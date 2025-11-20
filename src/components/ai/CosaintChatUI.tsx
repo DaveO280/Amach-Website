@@ -3,12 +3,12 @@
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { Button } from "@/components/ui/button";
 import { useAi } from "@/store/aiStore";
+import { parseHealthReport } from "@/utils/reportParsers";
 import { Send, X } from "lucide-react";
 import Papa from "papaparse";
 import React, { useEffect, useRef, useState } from "react";
 import { healthDataStore } from "../../data/store/healthDataStore";
 import { parsePDF } from "../../utils/pdfParser";
-import { parseHealthReport } from "@/utils/reportParsers";
 
 // Define types for our message interface
 interface MessageType {

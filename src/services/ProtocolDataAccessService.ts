@@ -195,10 +195,10 @@ export class ProtocolDataAccessService {
         await import("../lib/zksync-sso-config");
 
       // Get ZK proof hash for privacy-preserving analysis
-      const zkProofHash = await readContract(wagmiConfig, {
+      const zkProof = await readContract(wagmiConfig, {
         address: SECURE_HEALTH_PROFILE_CONTRACT,
         abi: secureHealthProfileAbi,
-        functionName: "getZKProofHash",
+        functionName: "getZKProof",
         args: [userAddress as `0x${string}`],
       });
 
@@ -207,11 +207,11 @@ export class ProtocolDataAccessService {
       return {
         success: true,
         anonymizedData: {
-          ageRange: "calculated_from_zk_proof",
-          heightRange: "calculated_from_zk_proof",
-          weightRange: "calculated_from_zk_proof",
-          emailDomain: "calculated_from_zk_proof",
-          zkProofHash: zkProofHash,
+          ageRange: zkProof.ageRange || "calculated_from_zk_proof",
+          heightRange: zkProof.heightRange || "calculated_from_zk_proof",
+          weightRange: zkProof.weightRange || "calculated_from_zk_proof",
+          emailDomain: zkProof.emailDomain || "calculated_from_zk_proof",
+          zkProofHash: zkProof.proofHash,
         },
       };
     } catch (error) {

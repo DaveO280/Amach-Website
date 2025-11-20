@@ -1,19 +1,22 @@
 import { ethers } from "ethers";
+import { SECURE_HEALTH_PROFILE_CONTRACT } from "../lib/zksync-sso-config";
 
 // Contract configuration
-const CONTRACT_ADDRESS = "0xdEf7d0e5D56d9A846336edAB3c3BFda25F368287";
+const CONTRACT_ADDRESS = SECURE_HEALTH_PROFILE_CONTRACT; // Import from config (永 permanent proxy address)
 const RPC_URL = "https://rpc.ankr.com/zksync_era_sepolia";
 
-// Contract ABI for reading profile data
+// Contract ABI for reading profile data (V1 Upgradeable)
 const CONTRACT_ABI = [
-  "function profiles(address user) view returns (tuple(bytes32 encryptedBirthDate, bytes32 encryptedSex, bytes32 encryptedHeight, bytes32 encryptedEmail, bytes32 encryptedWeight, bytes32 dataHash, uint256 timestamp, bool isActive, uint8 version))",
+  "function getProfile(address user) view returns (tuple(string encryptedBirthDate, string encryptedSex, string encryptedHeight, string encryptedEmail, bytes32 dataHash, uint256 timestamp, bool isActive, uint8 version, string nonce))",
   "function hasProfile(address user) view returns (bool)",
-  "function getProfileVersion(address user) view returns (uint8)",
-  "function hasWeightData(address user) view returns (bool)",
-  "function hasEmailData(address user) view returns (bool)",
-  "function getProfileTimestamp(address user) view returns (uint256)",
-  "function getProfileDataHash(address user) view returns (bytes32)",
+  "function isProfileActive(address user) view returns (bool)",
+  "function getProfileMetadata(address user) view returns (uint256 timestamp, bool isActive, uint8 version, bytes32 dataHash)",
+  "function getTotalProfiles() view returns (uint256)",
+  "function getVersion() view returns (uint8)",
   "function owner() view returns (address)",
+  // Timeline functions
+  "function getHealthTimeline(address user) view returns (tuple(uint256 timestamp, uint8 eventType, string encryptedData, bytes32 eventHash, bool isActive)[])",
+  "function getEventCount(address user) view returns (uint256)",
 ];
 
 export interface OnChainProfile {
@@ -22,14 +25,12 @@ export interface OnChainProfile {
   encryptedSex: string;
   encryptedHeight: string;
   encryptedEmail: string;
-  encryptedWeight: string;
   dataHash: string;
   timestamp: number;
   isActive: boolean;
   exists: boolean;
   version: number;
-  hasWeight: boolean;
-  hasEmail: boolean;
+  nonce: string;
 }
 
 export class HealthProfileReader {
@@ -74,35 +75,28 @@ export class HealthProfileReader {
         return null;
       }
 
-      // Read the profile data
-      const profile = await this.contract.profiles(userAddress);
+      // Read the profile data using getProfile function (V1)
+      const profile = await this.contract.getProfile(userAddress);
       console.log("Raw profile data:", profile);
 
-      // Check if profile is active (timestamp > 0)
-      if (profile[5] === 0n) {
-        // timestamp is at index 5
+      // Check if profile is active
+      if (profile.timestamp === 0n || !profile.isActive) {
         console.log("Profile exists but is not active");
         return null;
       }
 
       const onChainProfile: OnChainProfile = {
         userAddress,
-        encryptedBirthDate: profile[0],
-        encryptedSex: profile[1],
-        encryptedHeight: profile[2],
-        encryptedEmail: profile[3],
-        encryptedWeight: profile[4],
-        dataHash: profile[5],
-        timestamp: Number(profile[6]),
-        isActive: profile[7],
-        version: Number(profile[8]),
+        encryptedBirthDate: profile.encryptedBirthDate,
+        encryptedSex: profile.encryptedSex,
+        encryptedHeight: profile.encryptedHeight,
+        encryptedEmail: profile.encryptedEmail,
+        dataHash: profile.dataHash,
+        timestamp: Number(profile.timestamp),
+        isActive: profile.isActive,
+        version: Number(profile.version),
+        nonce: profile.nonce,
         exists: true,
-        hasWeight:
-          profile[4] !==
-          "0x0000000000000000000000000000000000000000000000000000000000000000",
-        hasEmail:
-          profile[3] !==
-          "0x0000000000000000000000000000000000000000000000000000000000000000",
       };
 
       console.log("✅ Profile read successfully:", {
@@ -120,29 +114,42 @@ export class HealthProfileReader {
   }
 
   /**
+   * Get profile metadata (timestamp, isActive, version, dataHash)
+   */
+  async getProfileMetadata(userAddress: string): Promise<{
+    timestamp: number;
+    isActive: boolean;
+    version: number;
+    dataHash: string;
+  } | null> {
+    try {
+      const metadata = await this.contract.getProfileMetadata(userAddress);
+      return {
+        timestamp: Number(metadata.timestamp),
+        isActive: metadata.isActive,
+        version: Number(metadata.version),
+        dataHash: metadata.dataHash,
+      };
+    } catch (error) {
+      console.error("Error getting profile metadata:", error);
+      return null;
+    }
+  }
+
+  /**
    * Get profile timestamp
    */
   async getProfileTimestamp(userAddress: string): Promise<number | null> {
-    try {
-      const timestamp = await this.contract.getProfileTimestamp(userAddress);
-      return Number(timestamp);
-    } catch (error) {
-      console.error("Error getting profile timestamp:", error);
-      return null;
-    }
+    const metadata = await this.getProfileMetadata(userAddress);
+    return metadata?.timestamp ?? null;
   }
 
   /**
    * Get profile data hash for verification
    */
   async getProfileDataHash(userAddress: string): Promise<string | null> {
-    try {
-      const dataHash = await this.contract.getProfileDataHash(userAddress);
-      return dataHash;
-    } catch (error) {
-      console.error("Error getting profile data hash:", error);
-      return null;
-    }
+    const metadata = await this.getProfileMetadata(userAddress);
+    return metadata?.dataHash ?? null;
   }
 
   /**

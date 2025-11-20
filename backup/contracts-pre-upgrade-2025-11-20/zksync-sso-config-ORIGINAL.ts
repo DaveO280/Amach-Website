@@ -29,56 +29,60 @@ const zkSyncSepoliaTestnet = defineChain({
   testnet: true,
 });
 
-// Secure Health Profile V1 contract ABI (UUPS Upgradeable)
-// Includes: Core profile + Event-based timeline + ZK proofs
+// Secure Health Profile contract ABI for encrypted data operations
 const secureHealthProfileAbi = [
-  // ============================================
-  // PROFILE MANAGEMENT
-  // ============================================
   {
     inputs: [
-      { name: "encryptedBirthDate", type: "string" },
-      { name: "encryptedSex", type: "string" },
-      { name: "encryptedHeight", type: "string" },
-      { name: "encryptedEmail", type: "string" },
-      { name: "dataHash", type: "bytes32" },
-      { name: "nonce", type: "string" },
+      { name: "_encryptedBirthDate", type: "string" },
+      { name: "_encryptedSex", type: "string" },
+      { name: "_encryptedHeight", type: "string" },
+      { name: "_encryptedWeight", type: "string" },
+      { name: "_encryptedEmail", type: "string" },
+      { name: "_dataHash", type: "bytes32" },
+      { name: "_nonce", type: "string" },
     ],
-    name: "createProfile",
+    name: "createSecureProfile",
     outputs: [],
     stateMutability: "nonpayable",
     type: "function",
   },
   {
     inputs: [
-      { name: "encryptedBirthDate", type: "string" },
-      { name: "encryptedSex", type: "string" },
-      { name: "encryptedHeight", type: "string" },
-      { name: "encryptedEmail", type: "string" },
-      { name: "dataHash", type: "bytes32" },
-      { name: "nonce", type: "string" },
+      { name: "_encryptedBirthDate", type: "string" },
+      { name: "_encryptedSex", type: "string" },
+      { name: "_encryptedHeight", type: "string" },
+      { name: "_encryptedWeight", type: "string" },
+      { name: "_encryptedEmail", type: "string" },
+      { name: "_dataHash", type: "bytes32" },
+      { name: "_nonce", type: "string" },
     ],
-    name: "updateProfile",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "deactivateProfile",
+    name: "updateSecureProfile",
     outputs: [],
     stateMutability: "nonpayable",
     type: "function",
   },
   {
     inputs: [{ name: "user", type: "address" }],
-    name: "getProfile",
+    name: "getProfileMetadata",
+    outputs: [
+      { name: "timestamp", type: "uint256" },
+      { name: "isActive", type: "bool" },
+      { name: "version", type: "uint8" },
+      { name: "dataHash", type: "bytes32" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "user", type: "address" }],
+    name: "getEncryptedProfile",
     outputs: [
       {
         components: [
           { name: "encryptedBirthDate", type: "string" },
           { name: "encryptedSex", type: "string" },
           { name: "encryptedHeight", type: "string" },
+          { name: "encryptedWeight", type: "string" },
           { name: "encryptedEmail", type: "string" },
           { name: "dataHash", type: "bytes32" },
           { name: "timestamp", type: "uint256" },
@@ -94,153 +98,12 @@ const secureHealthProfileAbi = [
     type: "function",
   },
   {
-    inputs: [{ name: "user", type: "address" }],
-    name: "hasProfile",
-    outputs: [{ name: "", type: "bool" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [{ name: "user", type: "address" }],
-    name: "isProfileActive",
-    outputs: [{ name: "", type: "bool" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [{ name: "user", type: "address" }],
-    name: "getProfileMetadata",
-    outputs: [
-      { name: "timestamp", type: "uint256" },
-      { name: "isActive", type: "bool" },
-      { name: "version", type: "uint8" },
-      { name: "dataHash", type: "bytes32" },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  // ============================================
-  // HEALTH TIMELINE (Immutable Events with Searchable Encryption)
-  // ============================================
-  {
     inputs: [
-      { name: "searchTag", type: "bytes32" }, // keccak256(eventType + userSecret) for privacy-preserving search
-      { name: "encryptedData", type: "string" },
-      { name: "eventHash", type: "bytes32" },
-    ],
-    name: "addHealthEvent",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [{ name: "eventId", type: "uint256" }],
-    name: "deactivateHealthEvent",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [{ name: "user", type: "address" }],
-    name: "getHealthTimeline",
-    outputs: [
-      {
-        components: [
-          { name: "timestamp", type: "uint256" },
-          { name: "searchTag", type: "bytes32" },
-          { name: "encryptedData", type: "string" },
-          { name: "eventHash", type: "bytes32" },
-          { name: "isActive", type: "bool" },
-        ],
-        name: "",
-        type: "tuple[]",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      { name: "user", type: "address" },
-      { name: "searchTag", type: "bytes32" },
-    ],
-    name: "getEventsByTag",
-    outputs: [
-      {
-        components: [
-          { name: "timestamp", type: "uint256" },
-          { name: "searchTag", type: "bytes32" },
-          { name: "encryptedData", type: "string" },
-          { name: "eventHash", type: "bytes32" },
-          { name: "isActive", type: "bool" },
-        ],
-        name: "",
-        type: "tuple[]",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      { name: "user", type: "address" },
-      { name: "startTime", type: "uint256" },
-      { name: "endTime", type: "uint256" },
-      { name: "searchTag", type: "bytes32" },
-    ],
-    name: "getEventsInRange",
-    outputs: [
-      {
-        components: [
-          { name: "timestamp", type: "uint256" },
-          { name: "searchTag", type: "bytes32" },
-          { name: "encryptedData", type: "string" },
-          { name: "eventHash", type: "bytes32" },
-          { name: "isActive", type: "bool" },
-        ],
-        name: "",
-        type: "tuple[]",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [{ name: "user", type: "address" }],
-    name: "getActiveEvents",
-    outputs: [
-      {
-        components: [
-          { name: "timestamp", type: "uint256" },
-          { name: "eventType", type: "uint8" },
-          { name: "encryptedData", type: "string" },
-          { name: "eventHash", type: "bytes32" },
-          { name: "isActive", type: "bool" },
-        ],
-        name: "",
-        type: "tuple[]",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [{ name: "user", type: "address" }],
-    name: "getEventCount",
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  // ============================================
-  // ZK PROOF MANAGEMENT
-  // ============================================
-  {
-    inputs: [
-      { name: "ageRange", type: "string" },
-      { name: "heightRange", type: "string" },
-      { name: "weightRange", type: "string" },
-      { name: "emailDomain", type: "string" },
-      { name: "proofHash", type: "bytes32" },
+      { name: "_ageRange", type: "string" },
+      { name: "_heightRange", type: "string" },
+      { name: "_weightRange", type: "string" },
+      { name: "_emailDomain", type: "string" },
+      { name: "_proofHash", type: "bytes32" },
     ],
     name: "submitZKProof",
     outputs: [],
@@ -249,35 +112,11 @@ const secureHealthProfileAbi = [
   },
   {
     inputs: [{ name: "user", type: "address" }],
-    name: "getZKProof",
-    outputs: [
-      {
-        components: [
-          { name: "ageRange", type: "string" },
-          { name: "heightRange", type: "string" },
-          { name: "weightRange", type: "string" },
-          { name: "emailDomain", type: "string" },
-          { name: "proofHash", type: "bytes32" },
-          { name: "timestamp", type: "uint256" },
-          { name: "isValid", type: "bool" },
-        ],
-        name: "",
-        type: "tuple",
-      },
-    ],
+    name: "getZKProofHash",
+    outputs: [{ name: "", type: "bytes32" }],
     stateMutability: "view",
     type: "function",
   },
-  {
-    inputs: [],
-    name: "invalidateZKProof",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  // ============================================
-  // CONTRACT INFO
-  // ============================================
   {
     inputs: [],
     name: "getTotalProfiles",
@@ -287,15 +126,15 @@ const secureHealthProfileAbi = [
   },
   {
     inputs: [],
-    name: "getVersion",
+    name: "currentVersion",
     outputs: [{ name: "", type: "uint8" }],
     stateMutability: "view",
     type: "function",
   },
   {
-    inputs: [],
-    name: "owner",
-    outputs: [{ name: "", type: "address" }],
+    inputs: [{ name: "user", type: "address" }],
+    name: "hasProfile",
+    outputs: [{ name: "", type: "bool" }],
     stateMutability: "view",
     type: "function",
   },
@@ -480,14 +319,12 @@ const healthProfileAbi = [
   },
 ] as const;
 
-// Contract addresses (Upgradeable System - November 2025)
-// UUPS Upgradeable architecture with event-based health timeline
+// Contract addresses (Fresh deployment - October 2025)
+// Complete system redeployment with clean slate for beta testing
 const HEALTH_PROFILE_CONTRACT = "0x6C7e52F1FfBCc0Bf001BB9458B64D85d7D7eC9F8"; // Legacy (deprecated)
 const HEALTH_TOKEN_CONTRACT = "0x057df807987f284b55ba6A9ab89d089fd8398B99"; // Clean Slate - Oct 29 2025
 const SECURE_HEALTH_PROFILE_CONTRACT =
-  "0x2A8015613623A6A8D369BcDC2bd6DD202230785a"; // Proxy address - V1 with Searchable Encryption (Nov 20, 2025)
-const SECURE_HEALTH_PROFILE_CONTRACT_V1_OLD =
-  "0xb1e41c4913D52E20aAaF4728c0449Bc6320a45A3"; // Old non-upgradeable (backed up)
+  "0xb1e41c4913D52E20aAaF4728c0449Bc6320a45A3"; // Clean Slate - Oct 29 2025
 const PROFILE_VERIFICATION_CONTRACT =
   "0xA2D3b1b8080895C5bE335d8352D867e4b6e51ab3"; // Clean Slate - Oct 29 2025
 
@@ -499,7 +336,6 @@ export {
   PROFILE_VERIFICATION_CONTRACT,
   profileVerificationAbi,
   SECURE_HEALTH_PROFILE_CONTRACT,
-  SECURE_HEALTH_PROFILE_CONTRACT_V1_OLD, // Old non-upgradeable (for migration reference)
   secureHealthProfileAbi,
 };
 
@@ -580,38 +416,19 @@ export const ssoConnector = zksyncSsoConnector({
         abi: profileVerificationAbi,
         functionName: "claimAllocation",
       }),
-      // Secure profile creation (encrypted data) - V1 Upgradeable
+      // Secure profile creation (encrypted data)
       // Contract enforces: One profile per wallet
       callPolicy({
         address: SECURE_HEALTH_PROFILE_CONTRACT,
         abi: secureHealthProfileAbi,
-        functionName: "createProfile",
+        functionName: "createSecureProfile",
       }),
       // Secure profile updates (encrypted data)
       // Unlimited updates allowed (frequent operation)
       callPolicy({
         address: SECURE_HEALTH_PROFILE_CONTRACT,
         abi: secureHealthProfileAbi,
-        functionName: "updateProfile",
-      }),
-      // Profile deactivation (soft delete)
-      callPolicy({
-        address: SECURE_HEALTH_PROFILE_CONTRACT,
-        abi: secureHealthProfileAbi,
-        functionName: "deactivateProfile",
-      }),
-      // Health timeline events (medications, conditions, weight, etc.)
-      // Unlimited events allowed (append-only timeline)
-      callPolicy({
-        address: SECURE_HEALTH_PROFILE_CONTRACT,
-        abi: secureHealthProfileAbi,
-        functionName: "addHealthEvent",
-      }),
-      // Deactivate health event (soft delete)
-      callPolicy({
-        address: SECURE_HEALTH_PROFILE_CONTRACT,
-        abi: secureHealthProfileAbi,
-        functionName: "deactivateHealthEvent",
+        functionName: "updateSecureProfile",
       }),
       // ZK-proof submission
       // Unlimited submissions allowed (future proofs)
@@ -619,12 +436,6 @@ export const ssoConnector = zksyncSsoConnector({
         address: SECURE_HEALTH_PROFILE_CONTRACT,
         abi: secureHealthProfileAbi,
         functionName: "submitZKProof",
-      }),
-      // ZK-proof invalidation
-      callPolicy({
-        address: SECURE_HEALTH_PROFILE_CONTRACT,
-        abi: secureHealthProfileAbi,
-        functionName: "invalidateZKProof",
       }),
     ],
   },

@@ -116,12 +116,8 @@ export function OnChainProfileDisplay({
               </Badge>
               {profile.isActive && <Badge variant="secondary">Active</Badge>}
               <Badge variant="outline">V{profile.version}</Badge>
-              {profile.hasWeight && (
-                <Badge variant="outline" className="bg-blue-50">
-                  Weight
-                </Badge>
-              )}
-              {profile.hasEmail && (
+              {/* V1: Weight moved to timeline events */}
+              {profile.encryptedEmail && (
                 <Badge variant="outline" className="bg-purple-50">
                   Email
                 </Badge>
@@ -177,11 +173,11 @@ export function OnChainProfileDisplay({
                     {profile.encryptedEmail}
                   </p>
                 </div>
-                {profile.hasWeight && (
+                {profile.nonce && (
                   <div>
                     <span className="font-medium">Weight:</span>
                     <p className="text-muted-foreground font-mono break-all">
-                      {profile.encryptedWeight}
+                      {profile.nonce}
                     </p>
                   </div>
                 )}

@@ -485,7 +485,7 @@ export class ZkSyncSsoWalletService {
         const encryptedProfile = await readContract(wagmiConfig, {
           address: SECURE_HEALTH_PROFILE_CONTRACT,
           abi: secureHealthProfileAbi,
-          functionName: "getProfile",
+          functionName: "getEncryptedProfile",
           args: [this.account.address],
         });
 
@@ -493,9 +493,9 @@ export class ZkSyncSsoWalletService {
           hasBirthDate: !!encryptedProfile.encryptedBirthDate,
           hasSex: !!encryptedProfile.encryptedSex,
           hasHeight: !!encryptedProfile.encryptedHeight,
+          hasWeight: !!encryptedProfile.encryptedWeight,
           hasEmail: !!encryptedProfile.encryptedEmail,
           dataHash: encryptedProfile.dataHash,
-          nonce: encryptedProfile.nonce,
           timestamp: new Date(
             Number(encryptedProfile.timestamp) * 1000,
           ).toISOString(),
@@ -503,13 +503,13 @@ export class ZkSyncSsoWalletService {
           version: encryptedProfile.version,
         });
 
-        // Store the actual encrypted data (V1: no encryptedWeight field)
+        // Store the actual encrypted data (Base64 strings from blockchain)
         this.healthProfile = {
           encryptedBirthDate:
             encryptedProfile.encryptedBirthDate as `0x${string}`,
           encryptedSex: encryptedProfile.encryptedSex as `0x${string}`,
           encryptedHeight: encryptedProfile.encryptedHeight as `0x${string}`,
-          encryptedWeight: "" as `0x${string}`, // V1 removed weight field
+          encryptedWeight: encryptedProfile.encryptedWeight as `0x${string}`,
           encryptedEmail: encryptedProfile.encryptedEmail as `0x${string}`,
           dataHash: encryptedProfile.dataHash as `0x${string}`,
           timestamp: Number(encryptedProfile.timestamp),
@@ -519,16 +519,8 @@ export class ZkSyncSsoWalletService {
             "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`,
         };
 
-        // Sync blockchain data to localStorage (V1 format with nonce)
-        await this.syncBlockchainToLocalStorage({
-          encryptedBirthDate: encryptedProfile.encryptedBirthDate as string,
-          encryptedSex: encryptedProfile.encryptedSex as string,
-          encryptedHeight: encryptedProfile.encryptedHeight as string,
-          encryptedWeight: "", // V1 removed weight
-          encryptedEmail: encryptedProfile.encryptedEmail as string,
-          nonce: encryptedProfile.nonce as string,
-          timestamp: encryptedProfile.timestamp,
-        });
+        // Sync blockchain data to localStorage for fast access
+        await this.syncBlockchainToLocalStorage(encryptedProfile);
 
         console.log("✅ Health profile loaded and synced to localStorage");
       } catch (error) {
@@ -777,13 +769,15 @@ export class ZkSyncSsoWalletService {
         `🔍 Profile exists check: ${profileExists ? "YES" : "NO"} for ${this.account.address}`,
       );
 
-      // Prepare transaction data - V1 contract uses simplified function names
-      const functionName = profileExists ? "updateProfile" : "createProfile";
+      // Prepare transaction data - SecureHealthProfile stores full encrypted strings
+      const functionName = profileExists
+        ? "updateSecureProfile"
+        : "createSecureProfile";
       console.log(`📝 Using function: ${functionName}`);
       const nonce = "0x" + Math.random().toString(16).substr(2, 16); // Generate random nonce
 
-      // V1 contract args (no encryptedWeight parameter)
       const args: readonly [
+        string,
         string,
         string,
         string,
@@ -794,6 +788,7 @@ export class ZkSyncSsoWalletService {
         profile.encryptedBirthDate as string,
         profile.encryptedSex as string,
         profile.encryptedHeight as string,
+        profile.encryptedWeight as string,
         profile.encryptedEmail as string,
         dataHash as `0x${string}`,
         nonce,

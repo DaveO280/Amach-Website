@@ -28,11 +28,14 @@ async function fetchVeniceAI({
   prompt,
   maxTokens = 2000,
 }: VeniceAIRequest): Promise<VeniceAIResponse> {
+  // Use environment variable or fallback to default
+  const modelName =
+    process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.6";
   const response = await axios.post("/api/venice", {
     messages: [{ role: "user", content: prompt }],
     max_tokens: maxTokens,
     temperature: 0.7,
-    model: "llama-3.1-405b",
+    model: modelName,
     stream: false,
   });
   // Adjust this based on your actual API response structure

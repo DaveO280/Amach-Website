@@ -2,9 +2,7 @@
 
 import Papa from "papaparse";
 import { useState } from "react";
-import { DailyScoresDebugger } from "../../components/DailyScoresDebugger";
 import { HealthDashboard } from "../../components/dashboard/HealthDashboard";
-import { FileUploadDebugger } from "../../components/FileUploadDebugger";
 import { OnChainProfileDisplay } from "../../components/OnChainProfileDisplay";
 import { SelectionProvider } from "../../store/selectionStore/provider";
 import { HealthContext, UploadedFileSummary } from "../../types/HealthContext";
@@ -31,8 +29,6 @@ export default function DashboardPage(): JSX.Element {
   const [healthContext, setHealthContext] =
     useState<HealthContext>(defaultContext);
   const [message, setMessage] = useState<string>("");
-  const [showDebugger, setShowDebugger] = useState<boolean>(false);
-  const [showFileDebugger, setShowFileDebugger] = useState<boolean>(false);
 
   // Handler for adding CSV to AI context
   const handleAddToAIContext = (csvFile: File | null): void => {
@@ -71,30 +67,6 @@ export default function DashboardPage(): JSX.Element {
         {/* On-Chain Profile Section */}
         <div className="mt-8">
           <OnChainProfileDisplay userAddress="0x1177909D90D96b787d5e5A8ac613f88231650524" />
-        </div>
-
-        {/* Debug Controls */}
-        <div className="mt-4 p-4 border rounded-lg bg-gray-50">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Debug Tools</h3>
-            <div className="flex space-x-2">
-              <button
-                onClick={() => setShowDebugger(!showDebugger)}
-                className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
-              >
-                {showDebugger ? "Hide" : "Show"} Daily Scores Debugger
-              </button>
-              <button
-                onClick={() => setShowFileDebugger(!showFileDebugger)}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              >
-                {showFileDebugger ? "Hide" : "Show"} File Upload Debugger
-              </button>
-            </div>
-          </div>
-
-          {showDebugger && <DailyScoresDebugger />}
-          {showFileDebugger && <FileUploadDebugger />}
         </div>
 
         <div style={{ margin: "1rem 0" }}>

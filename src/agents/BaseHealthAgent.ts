@@ -437,7 +437,7 @@ Be thorough but precise. Quality over quantity.`;
     };
   }
 
-  private createErrorInsight(response: string): AgentInsight {
+  protected createErrorInsight(response: string): AgentInsight {
     return {
       agentId: this.id,
       relevance: 0.1,

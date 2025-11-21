@@ -2,11 +2,11 @@ import type { VeniceApiService } from "@/api/venice/VeniceApiService";
 
 import { ActivityEnergyAgent } from "./ActivityEnergyAgent";
 import { BaseHealthAgent } from "./BaseHealthAgent";
+import { BloodworkAgent } from "./BloodworkAgent";
 import { CardiovascularAgent } from "./CardiovascularAgent";
+import { DexaAgent } from "./DexaAgent";
 import { RecoveryStressAgent } from "./RecoveryStressAgent";
 import { SleepAgent } from "./SleepAgent";
-import { DexaAgent } from "./DexaAgent";
-import { BloodworkAgent } from "./BloodworkAgent";
 import type {
   AgentExecutionContext,
   AgentInsight,
@@ -103,15 +103,85 @@ export class CoordinatorAgent {
     const { profile, queries } = options;
     const agentInsights: Record<string, AgentInsight> = {};
 
-    for (const agent of this.agents) {
+    // Run all agents in parallel with individual timeouts
+    // This prevents sequential execution from exceeding the 60s Vercel limit
+    const AGENT_TIMEOUT_MS = 50000; // 50 seconds per agent (leaving buffer for coordinator summary)
+
+    const agentPromises = this.agents.map(async (agent) => {
       const query =
         queries?.[agent.id] ?? DEFAULT_AGENT_QUERIES[agent.id] ?? "";
-      const insight = await agent.analyze({
+
+      // Wrap each agent call in a timeout
+      const timeoutPromise = new Promise<AgentInsight>((_, reject) => {
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                `Agent ${agent.id} timed out after ${AGENT_TIMEOUT_MS}ms`,
+              ),
+            ),
+          AGENT_TIMEOUT_MS,
+        );
+      });
+
+      const agentPromise = agent.analyze({
         ...context,
         query,
         profile,
       });
-      agentInsights[agent.id] = insight;
+
+      try {
+        const insight = await Promise.race([agentPromise, timeoutPromise]);
+        return { agentId: agent.id, insight, error: null };
+      } catch (error) {
+        console.error(`[CoordinatorAgent] Agent ${agent.id} failed:`, {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Return error insight so coordinator can still build summary
+        const errorMessage =
+          error instanceof Error ? error.message : "Analysis failed";
+        const errorInsight: AgentInsight = {
+          agentId: agent.id,
+          relevance: 0.1,
+          confidence: 0.3,
+          findings: [
+            {
+              observation: `${agent.name} analysis failed`,
+              evidence: errorMessage,
+              significance: "Analysis could not be completed",
+              confidence: 0.3,
+            },
+          ],
+          trends: [],
+          concerns: [],
+          correlations: [],
+          recommendations: [],
+          dataLimitations: [errorMessage],
+          dataPoints: [],
+          rawResponse: errorMessage,
+        };
+        return {
+          agentId: agent.id,
+          insight: errorInsight,
+          error: errorMessage,
+        };
+      }
+    });
+
+    // Wait for all agents to complete (or fail gracefully)
+    const results = await Promise.allSettled(agentPromises);
+
+    // Process results
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        agentInsights[result.value.agentId] = result.value.insight;
+      } else {
+        // If the promise itself was rejected (shouldn't happen, but handle it)
+        console.error(
+          "[CoordinatorAgent] Agent promise rejected:",
+          result.reason,
+        );
+      }
     }
 
     const combinedSummary = await this.buildSummary(

@@ -14,7 +14,9 @@ interface RateLimitInfo {
 }
 
 const DEFAULT_ENDPOINT_PATH = "/api/venice";
-const DEFAULT_BASE_URL = "http://127.0.0.1:3000";
+// Use empty string for relative URLs in browser (like useVeniceAI does)
+// Only use localhost if explicitly set via env var
+const DEFAULT_BASE_URL = "";
 const DEFAULT_CLIENT_TIMEOUT_MS = Number(
   process.env.NEXT_PUBLIC_VENICE_CLIENT_TIMEOUT_MS ?? "130000",
 );
@@ -107,10 +109,12 @@ export class VeniceApiService {
 
   /**
    * Create a VeniceApiService instance from environment variables
+   * Uses NEXT_PUBLIC_ prefix for client-side access
    */
   static fromEnv(): VeniceApiService {
     const debugMode = process.env.NODE_ENV === "development";
-    const modelName = process.env.VENICE_MODEL_NAME || "llama-3.1-405b";
+    const modelName =
+      process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.6";
     return new VeniceApiService(modelName, debugMode);
   }
 

@@ -102,27 +102,6 @@ export const HealthProfileManager: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Simple encryption function (in production, use proper encryption)
-  // const encryptData = (data: string): string => {
-  //   return ethers.utils.keccak256(ethers.utils.toUtf8Bytes(data));
-  // };
-
-  // Generate data hash for verification (currently unused but kept for future use)
-  // const generateDataHash = (data: HealthProfileData): string => {
-  //   const encryptedBirthDate = encryptData(data.birthDate);
-  //   const encryptedSex = encryptData(data.sex);
-  //   const encryptedHeight = encryptData(data.height.toString());
-  //   const encryptedWeight = encryptData(data.weight.toString());
-  //   const encryptedEmail = encryptData(data.email);
-
-  //   return ethers.utils.keccak256(
-  //     ethers.utils.solidityPack(
-  //       ["bytes32", "bytes32", "bytes32", "bytes32", "bytes32"],
-  //       [encryptedBirthDate, encryptedSex, encryptedHeight, encryptedWeight, encryptedEmail]
-  //     )
-  //   );
-  // };
-
   // Handle profile creation/update
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();

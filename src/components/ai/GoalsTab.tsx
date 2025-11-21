@@ -22,7 +22,9 @@ const GoalsTab: React.FC = (): JSX.Element => {
     () =>
       VeniceApiService.fromEnv
         ? VeniceApiService.fromEnv()
-        : new VeniceApiService("llama-3.1-405b"),
+        : new VeniceApiService(
+            process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.6",
+          ),
     [],
   );
   const aiService = useMemo(() => new CosaintAiService(veniceApi), [veniceApi]);

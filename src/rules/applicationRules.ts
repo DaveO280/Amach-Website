@@ -7,7 +7,7 @@ export const APIRules = {
   // Venice API Configuration
   VENICE: {
     ENDPOINT: "https://api.venice.ai/api/v1",
-    MODEL: "llama-3.1-405b",
+    MODEL: process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.6",
     MAX_TOKENS: 2000,
     TEMPERATURE: 0.7,
     TIMEOUT: 60000, // 60 seconds

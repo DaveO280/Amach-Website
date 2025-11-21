@@ -33,7 +33,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Get API credentials from environment variables (server-side only)
     const apiKey = process.env.VENICE_API_KEY;
     const apiEndpoint = "https://api.venice.ai/api/v1";
-    const modelName = process.env.VENICE_MODEL_NAME || "llama-3.1-405b";
+    const modelName = process.env.VENICE_MODEL_NAME || "zai-org-glm-4.6";
 
     // Enhanced logging for debugging
     console.log("[Venice API Route] Environment check:", {

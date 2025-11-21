@@ -90,26 +90,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Verify signature (this would be done client-side in a real implementation)
-    // For now, we'll simulate the verification
-    // const messageHash = ethers.solidityPackedKeccak256(
-    //   ['string', 'address'],
-    //   [email, walletAddress]
-    // );
-    // const ethSignedMessageHash = ethers.solidityPackedKeccak256(
-    //   ['string', 'bytes32'],
-    //   ['\x19Ethereum Signed Message:\n32', messageHash]
-    // );
-
-    // In a real implementation, you would verify the signature here
-    // const recoveredAddress = ethers.recoverAddress(ethSignedMessageHash, signature);
-    // if (recoveredAddress.toLowerCase() !== walletAddress.toLowerCase()) {
-    //   return NextResponse.json(
-    //     { error: 'Invalid signature' },
-    //     { status: 400 }
-    //   );
-    // }
-
     // Call the verification contract
     const tx = await contract.verifyProfile(email, signature);
     await tx.wait();

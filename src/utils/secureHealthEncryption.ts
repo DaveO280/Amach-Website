@@ -8,7 +8,7 @@
  * 4. Enable protocol access while maintaining privacy
  */
 
-import { keccak256, toHex, fromHex } from "viem";
+import { keccak256, toHex } from "viem";
 
 export interface SecureHealthProfile {
   birthDate: string;
@@ -59,11 +59,14 @@ export async function deriveSecureKey(
     ["deriveBits", "deriveKey"],
   );
 
+  // Use async Web Crypto API PBKDF2 (non-blocking, but CPU intensive with 100k iterations)
+  // IMPORTANT: Do NOT change iterations - it must match what was used for encryption
+  // Existing profiles were encrypted with 100k iterations
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
       salt: new TextEncoder().encode("amach-health-salt"),
-      iterations: 100000,
+      iterations: 100000, // Must match encryption iterations for compatibility
       hash: "SHA-256",
     },
     keyMaterial,
@@ -132,25 +135,139 @@ export async function decryptHealthData(
   walletAddress: string,
   userPassphrase?: string,
 ): Promise<SecureHealthProfile> {
+  console.log(
+    "🔑 Deriving decryption key (PBKDF2 - this may take a few seconds)...",
+  );
   const key = await deriveSecureKey(walletAddress, userPassphrase);
-  const nonce = fromHex(
-    encryptedProfile.nonce as `0x${string}`,
-    "bytes",
-  ) as Uint8Array;
+  console.log("✅ Decryption key derived successfully");
 
-  const birthDate = await decryptField(
-    encryptedProfile.encryptedBirthDate,
-    key,
-    nonce,
-  );
-  const sex = await decryptField(encryptedProfile.encryptedSex, key, nonce);
-  const height = parseInt(
-    await decryptField(encryptedProfile.encryptedHeight, key, nonce),
-  );
-  const weight = parseInt(
-    await decryptField(encryptedProfile.encryptedWeight, key, nonce),
-  );
-  const email = await decryptField(encryptedProfile.encryptedEmail, key, nonce);
+  // Parse nonce from hex string - must be exactly 12 bytes for AES-GCM
+  let nonceHex = encryptedProfile.nonce as string;
+  if (!nonceHex) {
+    throw new Error("Nonce is missing from encrypted profile");
+  }
+
+  console.log("🔍 Parsing nonce:", { nonceHex, length: nonceHex.length });
+
+  // The nonce might be stored in different formats:
+  // 1. Hex string with 0x prefix: "0x1234..."
+  // 2. Hex string without prefix: "1234..."
+  // 3. Base64 (unlikely but possible)
+
+  let nonceBytes: Uint8Array;
+
+  // Remove 0x prefix if present
+  if (nonceHex.startsWith("0x")) {
+    nonceHex = nonceHex.slice(2);
+  }
+
+  // Try parsing as hex first (most common)
+  const hexBytes = nonceHex.match(/.{1,2}/g) || [];
+  if (hexBytes.length > 0) {
+    nonceBytes = new Uint8Array(hexBytes.map((byte) => parseInt(byte, 16)));
+  } else {
+    // If no hex bytes, try as base64
+    try {
+      const base64Decoded = atob(nonceHex);
+      nonceBytes = new Uint8Array(
+        base64Decoded.split("").map((c) => c.charCodeAt(0)),
+      );
+    } catch {
+      throw new Error("Cannot parse nonce - invalid format");
+    }
+  }
+
+  console.log("🔍 Nonce parsed:", {
+    originalHex: encryptedProfile.nonce,
+    hexLength: nonceHex.length,
+    byteLength: nonceBytes.length,
+    expectedBytes: 12,
+    noncePreview: Array.from(nonceBytes).slice(0, 4).join(","),
+  });
+
+  // Handle incomplete nonces from old buggy code
+  // Old code generated random nonce instead of using encryption nonce
+  if (nonceBytes.length !== 12) {
+    console.warn(
+      `⚠️ Invalid nonce length: ${nonceBytes.length} bytes (expected 12)`,
+    );
+    console.warn(`Nonce hex: ${nonceHex} (${nonceHex.length} chars)`);
+    console.warn(`Hex bytes array: ${hexBytes.join(" ")}`);
+    console.warn(
+      `⚠️ Attempting to pad nonce to 12 bytes (this may fail if nonce was generated incorrectly)`,
+    );
+
+    // Try to pad the nonce to 12 bytes by repeating or zero-padding
+    // This is a workaround for profiles created with the buggy nonce generation
+    const paddedNonce = new Uint8Array(12);
+    if (nonceBytes.length < 12) {
+      // Pad with zeros (not ideal but might work)
+      paddedNonce.set(nonceBytes, 0);
+      for (let i = nonceBytes.length; i < 12; i++) {
+        paddedNonce[i] = 0;
+      }
+      console.warn(
+        `⚠️ Padded nonce from ${nonceBytes.length} to 12 bytes (may not decrypt correctly)`,
+      );
+    } else {
+      // Truncate if too long (shouldn't happen)
+      paddedNonce.set(nonceBytes.slice(0, 12));
+      console.warn(`⚠️ Truncated nonce from ${nonceBytes.length} to 12 bytes`);
+    }
+
+    // Try with padded nonce, but warn that it might fail
+    // Note: This will likely fail because the encryption used a different nonce
+    // The profile will need to be re-encrypted with the correct nonce
+    console.error(
+      `❌ Cannot decrypt: Nonce mismatch. Profile was encrypted with ${nonceBytes.length}-byte nonce but AES-GCM requires 12 bytes.`,
+    );
+    console.error(
+      `❌ This profile was likely created with buggy code that generated a random nonce instead of using the encryption nonce.`,
+    );
+    console.error(
+      `❌ Solution: The profile needs to be updated/re-encrypted to fix the nonce.`,
+    );
+    throw new Error(
+      `Invalid nonce length: ${nonceBytes.length} bytes. Expected 12 bytes (24 hex chars) for AES-GCM. ` +
+        `This profile appears to have been created with incorrect nonce generation. Please update the profile.`,
+    );
+  }
+
+  const nonce = nonceBytes;
+
+  // Decrypt each field, handling empty fields gracefully
+  const birthDate =
+    encryptedProfile.encryptedBirthDate &&
+    encryptedProfile.encryptedBirthDate.trim() !== ""
+      ? await decryptField(encryptedProfile.encryptedBirthDate, key, nonce)
+      : "";
+
+  const sex =
+    encryptedProfile.encryptedSex && encryptedProfile.encryptedSex.trim() !== ""
+      ? await decryptField(encryptedProfile.encryptedSex, key, nonce)
+      : "";
+
+  const height =
+    encryptedProfile.encryptedHeight &&
+    encryptedProfile.encryptedHeight.trim() !== ""
+      ? parseInt(
+          await decryptField(encryptedProfile.encryptedHeight, key, nonce),
+        ) || 0
+      : 0;
+
+  const weight =
+    encryptedProfile.encryptedWeight &&
+    encryptedProfile.encryptedWeight.trim() !== ""
+      ? parseInt(
+          await decryptField(encryptedProfile.encryptedWeight, key, nonce),
+        ) || 0
+      : 0;
+
+  const email =
+    encryptedProfile.encryptedEmail &&
+    encryptedProfile.encryptedEmail.trim() !== ""
+      ? await decryptField(encryptedProfile.encryptedEmail, key, nonce)
+      : "";
 
   return {
     birthDate,
@@ -263,22 +380,58 @@ async function encryptField(
   return btoa(String.fromCharCode(...new Uint8Array(encrypted)));
 }
 
-async function decryptField(
+export async function decryptField(
   encryptedData: string,
   key: CryptoKey,
   nonce: Uint8Array,
 ): Promise<string> {
-  const encryptedBytes = Uint8Array.from(atob(encryptedData), (c) =>
-    c.charCodeAt(0),
-  );
+  try {
+    // Handle empty or invalid data - return empty string instead of throwing
+    if (!encryptedData || encryptedData.trim() === "") {
+      console.warn(
+        "⚠️ Decrypt field: Encrypted data is empty, returning empty string",
+      );
+      return "";
+    }
 
-  const decrypted = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: nonce },
-    key,
-    encryptedBytes,
-  );
+    // Remove 0x prefix if present (some on-chain data might have it)
+    let cleanData = encryptedData.startsWith("0x")
+      ? encryptedData.slice(2)
+      : encryptedData;
 
-  return new TextDecoder().decode(decrypted);
+    // Try to decode as base64
+    let encryptedBytes: Uint8Array;
+    try {
+      encryptedBytes = Uint8Array.from(atob(cleanData), (c) => c.charCodeAt(0));
+    } catch (base64Error) {
+      // If base64 decode fails, try hex decode
+      console.warn("⚠️ Base64 decode failed, trying hex decode...");
+      const hexMatch = cleanData.match(/.{1,2}/g);
+      if (!hexMatch) {
+        throw new Error("Cannot decode encrypted data - invalid format");
+      }
+      encryptedBytes = Uint8Array.from(
+        hexMatch.map((byte) => parseInt(byte, 16)),
+      );
+    }
+
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: nonce },
+      key,
+      encryptedBytes,
+    );
+
+    return new TextDecoder().decode(decrypted);
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    console.error(`❌ Decrypt field failed: ${errorMessage}`, {
+      dataLength: encryptedData?.length,
+      dataPreview: encryptedData?.substring(0, 50),
+      nonceLength: nonce.length,
+    });
+    throw new Error(`Decryption failed: ${errorMessage}`);
+  }
 }
 
 /**

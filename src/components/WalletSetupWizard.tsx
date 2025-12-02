@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useZkSyncSsoWallet } from "@/hooks/useZkSyncSsoWallet";
+import { useWalletService } from "@/hooks/useWalletService";
 import {
   AlertCircle,
   CheckCircle,
@@ -24,7 +24,7 @@ import {
   User,
   Wallet,
 } from "lucide-react";
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 interface WizardStep {
   id: string;
@@ -79,13 +79,42 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
   const [heightFeet, setHeightFeet] = useState("");
   const [heightInches, setHeightInches] = useState("");
   const [weightLbs, setWeightLbs] = useState("");
+  const walletService = useWalletService();
   const {
     isConnected,
-    address,
     connect,
     updateHealthProfile,
     loadProfileFromBlockchain,
-  } = useZkSyncSsoWallet();
+  } = walletService;
+
+  // Get address - Privy service has getAddress() method
+  const address = walletService.getAddress();
+
+  // Get methods that may not exist in both services
+  const verifyProfileZKsync =
+    "verifyProfileZKsync" in walletService
+      ? walletService.verifyProfileZKsync
+      : async (
+          email: string,
+        ): Promise<{ success: boolean; txHash?: string; error?: string }> => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          void email; // Suppress unused parameter warning
+          return {
+            success: false,
+            error: "verifyProfileZKsync not available",
+          };
+        };
+  const claimAllocation =
+    "claimAllocation" in walletService
+      ? walletService.claimAllocation
+      : async (): Promise<{
+          success: boolean;
+          txHash?: string;
+          error?: string;
+        }> => ({
+          success: false,
+          error: "claimAllocation not available",
+        });
 
   const [steps, setSteps] = useState<WizardStep[]>([
     {
@@ -161,27 +190,84 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     }
   }, [currentStepIndex, steps, updateStepStatus]);
 
+  // Track if we've already checked for existing profile to prevent infinite loops
+  const hasCheckedProfileRef = React.useRef(false);
+
+  // Reset the check flag when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      hasCheckedProfileRef.current = false;
+    }
+  }, [isOpen]);
+
   // Check if profile already exists and skip to verification step
   // Also check allocation eligibility (only once on mount)
+  // IMPORTANT: Only run this check ONCE when the modal opens with a connected wallet
   useEffect(() => {
     let isMounted = true;
 
     const checkExistingProfile = async (): Promise<void> => {
-      if (!isConnected || !address || !isMounted) return;
+      // Only run ONCE when modal is open AND we have a connection
+      // Don't run during wallet creation flow (when currentStepIndex is 0 or 1)
+      // Don't run if we've already checked
+      if (
+        !isConnected ||
+        !address ||
+        !isMounted ||
+        !isOpen ||
+        currentStepIndex <= 1 ||
+        hasCheckedProfileRef.current
+      ) {
+        return;
+      }
+
+      // Mark that we've checked (before async operations to prevent race conditions)
+      hasCheckedProfileRef.current = true;
 
       try {
         const result = await loadProfileFromBlockchain();
         if (result.success && isMounted) {
-          console.log("✅ Profile already exists - skipping to verification");
+          console.log(
+            "✅ Profile already exists - checking verification status",
+          );
 
-          // Mark previous steps as complete
+          // Mark profile-related steps as complete
           updateStepStatus("email-verification", "complete");
           updateStepStatus("create-wallet", "complete");
           updateStepStatus("deployer-funding", "complete");
           updateStepStatus("create-profile", "complete");
-          updateStepStatus("verify-profile", "active");
 
-          // Jump to verification step
+          // Check allocation eligibility to see if verified
+          await checkAllocationEligibility();
+
+          // Wait a bit for allocation info to be set
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Check if user is already verified via allocation info
+          const response = await fetch(
+            `/api/verification/allocation-info?wallet=${address}`,
+          );
+          if (response.ok) {
+            const data = await response.json();
+            if (data.userAllocation && data.userAllocation.isVerified) {
+              console.log("✅ User already verified - skipping to token claim");
+              updateStepStatus("verify-profile", "complete");
+              // Jump to claim tokens step
+              const claimStepIndex = steps.findIndex(
+                (s) => s.id === "claim-tokens",
+              );
+              if (claimStepIndex >= 0) {
+                setCurrentStepIndex(claimStepIndex);
+              }
+              return;
+            }
+          }
+
+          // Not verified yet, go to verification step
+          console.log(
+            "ℹ️ Profile exists but not verified - go to verification",
+          );
+          updateStepStatus("verify-profile", "active");
           const verifyStepIndex = steps.findIndex(
             (s) => s.id === "verify-profile",
           );
@@ -193,7 +279,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         console.log("ℹ️ No existing profile found - starting fresh");
       }
 
-      // Check allocation eligibility once
+      // Check allocation eligibility once more for good measure
       if (isMounted) {
         await checkAllocationEligibility();
       }
@@ -205,7 +291,119 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       isMounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConnected, address]); // Removed steps, updateStepStatus, and checkAllocationEligibility to prevent loop
+  }, [isOpen]); // Only run when modal opens - removed isConnected and address from dependencies
+
+  // Smart session detection - skip wallet creation if already connected
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // If user is already connected when wizard opens, skip wallet creation step
+    if (isConnected && address && currentStepIndex === 1) {
+      console.log("🎯 Privy session detected - skipping wallet creation step");
+      updateStepStatus("create-wallet", "complete");
+      setWalletAddress(address);
+      // Don't auto-advance here, let the background checker handle it
+    }
+  }, [isOpen, isConnected, address, currentStepIndex, updateStepStatus]);
+
+  // Background step checker - automatically advances when steps are completed
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const checkStepCompletion = async (): Promise<void> => {
+      const currentStep = steps[currentStepIndex];
+
+      // Don't check if step is loading or already complete
+      if (
+        currentStep.status === "loading" ||
+        currentStep.status === "complete"
+      ) {
+        return;
+      }
+
+      try {
+        switch (currentStep.id) {
+          case "create-wallet":
+            // Check if wallet is connected
+            if (isConnected && address) {
+              console.log("✅ Wallet connected - auto-advancing to funding");
+              updateStepStatus("create-wallet", "complete");
+              setWalletAddress(address);
+              moveToNextStep();
+            }
+            break;
+
+          case "deployer-funding":
+            // Check if wallet has been funded
+            if (isConnected && address) {
+              const balanceResult = await walletService.getBalance();
+              if (balanceResult.success && balanceResult.balance) {
+                const balance = parseFloat(balanceResult.balance);
+                if (balance > 0) {
+                  console.log(
+                    "✅ Wallet funded - auto-advancing to profile creation",
+                  );
+                  updateStepStatus("deployer-funding", "complete");
+                  moveToNextStep();
+                }
+              }
+            }
+            break;
+
+          case "create-profile":
+            // DON'T check blockchain here - only check if step status changed to complete
+            // The profile creation handler will update the status when successful
+            // Checking blockchain repeatedly causes error spam when profile doesn't exist
+            break;
+
+          case "verify-profile":
+            // Check verification status via allocation
+            if (isConnected && address && allocationInfo?.hasAllocation) {
+              console.log(
+                "✅ Profile verified - auto-advancing to claim tokens",
+              );
+              updateStepStatus("verify-profile", "complete");
+              moveToNextStep();
+            }
+            break;
+
+          case "claim-tokens":
+            // Check if tokens have been claimed
+            if (allocationInfo?.hasClaimed) {
+              console.log("✅ Tokens claimed - setup complete!");
+              updateStepStatus("claim-tokens", "complete");
+            }
+            break;
+        }
+      } catch (error) {
+        // Don't show errors for background checks, just log them
+        console.log("Background check:", error);
+      }
+    };
+
+    // Run check immediately and then every 3 seconds
+    const intervalId = setInterval(() => {
+      void checkStepCompletion();
+    }, 3000);
+
+    // Initial check
+    void checkStepCompletion();
+
+    return (): void => {
+      clearInterval(intervalId);
+    };
+  }, [
+    isOpen,
+    currentStepIndex,
+    steps,
+    isConnected,
+    address,
+    allocationInfo,
+    updateStepStatus,
+    moveToNextStep,
+    walletService,
+    loadProfileFromBlockchain,
+  ]);
 
   // Navigate to a specific step (only if it's complete or current)
   const navigateToStep = useCallback(
@@ -236,21 +434,83 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
   // Email verification functions - checks blockchain directly
   const checkEmailWhitelist = async (email: string): Promise<boolean> => {
-    try {
-      console.log("🔍 Checking email whitelist on blockchain...");
+    const maxRetries = 3;
+    const retryDelay = 2000; // 2 seconds
 
-      // Import the blockchain-based whitelist checker
-      const { isEmailWhitelisted } = await import("@/lib/sharedDatabase");
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(
+          `🔍 Checking email whitelist on blockchain... (attempt ${attempt}/${maxRetries})`,
+        );
 
-      // Query blockchain directly (no API needed!)
-      const isWhitelisted = await isEmailWhitelisted(email);
+        // Use the wallet service's isEmailWhitelisted method (works with Privy)
+        const result = await walletService.isEmailWhitelisted(email);
 
-      console.log(`✅ Email ${email} whitelist status:`, isWhitelisted);
-      return isWhitelisted;
-    } catch (error) {
-      console.error("❌ Failed to check email whitelist:", error);
-      return false;
+        if (result.success && result.isWhitelisted !== undefined) {
+          console.log(
+            `✅ Email ${email} whitelist status:`,
+            result.isWhitelisted,
+          );
+          return result.isWhitelisted;
+        }
+
+        // If we got a result but it failed, check if it's a timeout
+        if (result.error) {
+          const isTimeout =
+            result.error.toLowerCase().includes("timeout") ||
+            result.error.toLowerCase().includes("took too long");
+
+          if (isTimeout && attempt < maxRetries) {
+            console.warn(
+              `⏳ Timeout on attempt ${attempt}, retrying in ${retryDelay}ms...`,
+            );
+            await new Promise((resolve) => setTimeout(resolve, retryDelay));
+            continue;
+          }
+
+          // If it's not a timeout or we've exhausted retries, throw the error
+          throw new Error(result.error);
+        }
+
+        // Fallback: try the sharedDatabase method
+        const { isEmailWhitelisted } = await import("@/lib/sharedDatabase");
+        const isWhitelisted = await isEmailWhitelisted(email);
+        console.log(`✅ Email ${email} whitelist status:`, isWhitelisted);
+        return isWhitelisted;
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        const isTimeout =
+          errorMessage.toLowerCase().includes("timeout") ||
+          errorMessage.toLowerCase().includes("took too long");
+
+        if (isTimeout && attempt < maxRetries) {
+          console.warn(
+            `⏳ Timeout on attempt ${attempt}, retrying in ${retryDelay}ms...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          continue;
+        }
+
+        // If it's the last attempt or not a timeout, log and throw
+        console.error(
+          `❌ Failed to check email whitelist (attempt ${attempt}/${maxRetries}):`,
+          errorMessage,
+        );
+
+        if (attempt === maxRetries) {
+          // On final attempt, throw a more user-friendly error
+          throw new Error(
+            isTimeout
+              ? "Network timeout while checking whitelist. Please check your connection and try again."
+              : `Failed to verify email: ${errorMessage}`,
+          );
+        }
+      }
     }
+
+    // Should never reach here, but just in case
+    return false;
   };
 
   // Step 1: Email Verification
@@ -307,27 +567,50 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         return;
       }
 
+      console.log("🔐 Starting Privy wallet connection...");
       const result = await connect();
 
       if (!result.success) {
         throw new Error(result.error || "Wallet connection failed");
       }
 
-      // Wait a moment for the connection state to sync
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      console.log("✅ Privy login initiated, waiting for connection state...");
 
-      // Get address from service if state hasn't updated yet
-      const { zkSyncSsoWalletService } = await import(
-        "@/services/ZkSyncSsoWalletService"
-      );
-      const walletAddr = address || zkSyncSsoWalletService.getAddress();
+      // Wait longer for Privy to complete authentication and update state
+      // Privy authentication can take a few seconds
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Poll for address with timeout
+      let walletAddr: string | null = null;
+      const maxAttempts = 10;
+      const pollInterval = 500;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        walletAddr =
+          address ||
+          ("getAddress" in walletService ? walletService.getAddress() : null);
+
+        if (walletAddr) {
+          console.log(`✅ Wallet address obtained: ${walletAddr}`);
+          break;
+        }
+
+        console.log(
+          `⏳ Waiting for wallet address... (${attempt + 1}/${maxAttempts})`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      }
 
       if (!walletAddr) {
-        throw new Error("Wallet connection failed - no address available");
+        throw new Error(
+          "Wallet connection succeeded but address not available. Please close and reopen the wizard.",
+        );
       }
 
       setWalletAddress(walletAddr);
       updateStepStatus("create-wallet", "complete");
+
+      console.log("✅ Wallet creation complete, moving to funding step");
 
       // Automatically move to deployer funding
       setTimeout(() => {
@@ -351,16 +634,17 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       updateStepStatus("deployer-funding", "loading");
       setError(null);
 
-      // Show notification while wallet deploys to blockchain
+      // Show notification while wallet address is being set up
       console.log(
-        "⏳ Deploying wallet to blockchain... (10 second wait for full deployment)",
+        "⏳ Setting up wallet... (Privy embedded wallets deploy automatically on first transaction)",
       );
 
-      // Wait 10 seconds for wallet to fully deploy to blockchain
-      // This prevents "invalid address" errors when funding
-      await new Promise((resolve) => setTimeout(resolve, 10000));
+      // Wait a moment for the wallet address to be fully available
+      // Note: Privy embedded wallets are smart contract wallets that deploy on first transaction
+      // The address exists immediately, but the contract deploys when the wallet makes its first transaction
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      console.log("✅ Wallet deployment complete - proceeding with funding");
+      console.log("✅ Wallet address ready - proceeding with funding");
 
       // Call your deployer funding function
       const response = await fetch("/api/fund-new-wallet", {
@@ -370,11 +654,24 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        // Make error message less discouraging
-        console.warn("⚠️ Funding attempt failed:", errorData.error);
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = {
+            error: `HTTP ${response.status}: ${response.statusText}`,
+          };
+        }
+        // Log full error details for debugging
+        console.error("⚠️ Funding API error:", {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData.error,
+          details: errorData.details,
+        });
         throw new Error(
           errorData.error ||
+            errorData.details ||
             "Funding service temporarily unavailable. Your wallet is ready!",
         );
       }
@@ -470,16 +767,60 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
           console.warn("⚠️ Profile reload failed:", loadResult.error);
         }
 
+        // Check if user is already verified before auto-calling verification
+        const allocationResponse = await fetch(
+          `/api/verification/allocation-info?wallet=${address}`,
+        );
+        if (allocationResponse.ok) {
+          const allocationData = await allocationResponse.json();
+          if (
+            allocationData.userAllocation &&
+            allocationData.userAllocation.isVerified
+          ) {
+            console.log(
+              "✅ User already verified - skipping auto-verification",
+            );
+            updateStepStatus("verify-profile", "complete");
+            // Jump to claim tokens
+            const claimStepIndex = steps.findIndex(
+              (s) => s.id === "claim-tokens",
+            );
+            if (claimStepIndex >= 0) {
+              setCurrentStepIndex(claimStepIndex);
+            }
+            return;
+          }
+        }
+
+        // Not verified yet, proceed to verification step
         moveToNextStep();
         void handleVerifyProfile();
       }, 5000); // Increased from 1000ms to 5000ms
     } catch (err) {
       console.error("Profile creation error:", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to create profile. Please try again.",
-      );
+
+      // Check if it's a wallet timeout error (Privy modal didn't show)
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const isWalletTimeout =
+        errorMessage.includes("Wallet timeout") ||
+        errorMessage.includes("timeout");
+
+      if (isWalletTimeout) {
+        setError(
+          "⚠️ Transaction approval modal didn't appear. Please check:\n" +
+            "1. Allow popups for this site in your browser\n" +
+            "2. Make sure you're logged in to Privy\n" +
+            "3. Try clicking the button again\n\n" +
+            "If the issue persists, check the debug panel at the bottom-right of the page.",
+        );
+      } else {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to create profile. Please try again.",
+        );
+      }
+
       updateStepStatus("create-profile", "error");
     }
   };
@@ -490,12 +831,8 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       updateStepStatus("verify-profile", "loading");
       setError(null);
 
-      // Import the service and use its method
-      const { zkSyncSsoWalletService } = await import(
-        "@/services/ZkSyncSsoWalletService"
-      );
-      const verifyResult =
-        await zkSyncSsoWalletService.verifyProfileZKsync(email);
+      // Use the unified wallet service method
+      const verifyResult = await verifyProfileZKsync(email);
 
       if (!verifyResult.success) {
         throw new Error(verifyResult.error || "Failed to verify profile");
@@ -530,9 +867,24 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     if (!address) return;
 
     try {
+      console.log("🔍 Checking allocation eligibility for:", address);
       const response = await fetch(
         `/api/verification/allocation-info?wallet=${address}`,
       );
+
+      // Handle non-OK responses gracefully
+      if (!response.ok) {
+        console.log(
+          "ℹ️ Allocation API returned non-OK status (expected for new wallets)",
+        );
+        setAllocationInfo({
+          hasAllocation: false,
+          hasClaimed: false,
+          amount: "0",
+        });
+        return;
+      }
+
       const data = await response.json();
 
       if (data.userAllocation) {
@@ -548,9 +900,15 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
           hasClaimed: false,
           amount: "0",
         });
+        console.log(
+          "ℹ️ No allocation found for wallet (expected for new wallets)",
+        );
       }
     } catch (error) {
-      console.error("Failed to check allocation:", error);
+      console.log(
+        "ℹ️ Could not check allocation (expected for new wallets):",
+        error instanceof Error ? error.message : error,
+      );
       setAllocationInfo({
         hasAllocation: false,
         hasClaimed: false,
@@ -576,11 +934,8 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         throw new Error("Tokens have already been claimed");
       }
 
-      // Use the existing wallet service claim allocation method
-      const { zkSyncSsoWalletService } = await import(
-        "@/services/ZkSyncSsoWalletService"
-      );
-      const result = await zkSyncSsoWalletService.claimAllocation();
+      // Use the unified wallet service claim allocation method
+      const result = await claimAllocation();
 
       if (!result.success) {
         throw new Error(result.error || "Token claim failed");
@@ -708,7 +1063,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
             className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
           >
             <Wallet className="h-5 w-5 mr-2" />
-            Create Wallet with ZKsync SSO
+            Create Wallet
           </Button>
         );
 
@@ -822,6 +1177,55 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
           </div>
         );
 
+      case "verify-profile":
+        // Check if already verified
+        if (allocationInfo?.hasAllocation) {
+          return (
+            <div className="space-y-4">
+              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                <p className="text-emerald-800 font-medium">
+                  ✅ Your profile is already verified!
+                </p>
+                <p className="text-emerald-700 text-sm mt-2">
+                  You can proceed to claim your tokens.
+                </p>
+              </div>
+              <Button
+                onClick={() => {
+                  updateStepStatus("verify-profile", "complete");
+                  const claimStepIndex = steps.findIndex(
+                    (s) => s.id === "claim-tokens",
+                  );
+                  if (claimStepIndex >= 0) {
+                    setCurrentStepIndex(claimStepIndex);
+                  }
+                }}
+                className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
+              >
+                Continue to Token Claim
+              </Button>
+            </div>
+          );
+        }
+
+        // Not verified yet - show verification button
+        return (
+          <div className="space-y-4">
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-blue-800">
+                Verify your profile on the blockchain to claim your tokens.
+              </p>
+            </div>
+            <Button
+              onClick={() => void handleVerifyProfile()}
+              className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
+            >
+              <Shield className="h-5 w-5 mr-2" />
+              Verify Profile
+            </Button>
+          </div>
+        );
+
       case "claim-tokens":
         // Check if user has already claimed
         if (allocationInfo?.hasClaimed) {
@@ -891,8 +1295,19 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     }
   };
 
+  const handleOpenChange = useCallback(
+    (open: boolean): void => {
+      // Only call onClose if dialog is being closed
+      // Don't check isOpen here to avoid dependency loop
+      if (!open) {
+        onClose();
+      }
+    },
+    [onClose],
+  );
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto p-0 bg-gradient-to-br from-amber-50 via-white to-emerald-50">
         <div className="p-6 sm:p-8">
           <DialogHeader className="mb-8">

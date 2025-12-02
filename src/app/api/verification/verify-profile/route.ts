@@ -4,11 +4,16 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 import { ethers } from "ethers";
+import { getContractAddresses } from "@/lib/networkConfig";
 
-// Contract configuration (Fresh Deployment - Oct 28 2025)
-const PROFILE_VERIFICATION_CONTRACT =
-  process.env.PROFILE_VERIFICATION_CONTRACT ||
-  "0xA2D3b1b8080895C5bE335d8352D867e4b6e51ab3";
+// Contract configuration - uses networkConfig for automatic network switching
+const getProfileVerificationContract = (): string => {
+  return (
+    process.env.PROFILE_VERIFICATION_CONTRACT ||
+    getContractAddresses().PROFILE_VERIFICATION_CONTRACT
+  );
+};
+
 const RPC_URL = process.env.ZKSYNC_RPC_URL || "https://sepolia.era.zksync.dev";
 const PRIVATE_KEY = process.env.ADMIN_PRIVATE_KEY || "";
 
@@ -57,7 +62,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
     const signer = new ethers.Wallet(PRIVATE_KEY, provider);
     const contract = new ethers.Contract(
-      PROFILE_VERIFICATION_CONTRACT,
+      getProfileVerificationContract(),
       PROFILE_VERIFICATION_ABI,
       signer,
     );

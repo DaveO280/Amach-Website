@@ -30,12 +30,12 @@ describe("Wallet-Derived Encryption", () => {
   });
 
   describe("Key Derivation", () => {
-    it("should derive consistent keys from the same signature and address", () => {
-      const key1 = deriveEncryptionKeyFromSignature(
+    it("should derive consistent keys from the same signature and address", async () => {
+      const key1 = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
-      const key2 = deriveEncryptionKeyFromSignature(
+      const key2 = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
@@ -45,12 +45,12 @@ describe("Wallet-Derived Encryption", () => {
       expect(key1.length).toBeGreaterThan(0);
     });
 
-    it("should derive different keys for different wallet addresses", () => {
-      const key1 = deriveEncryptionKeyFromSignature(
+    it("should derive different keys for different wallet addresses", async () => {
+      const key1 = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
-      const key2 = deriveEncryptionKeyFromSignature(
+      const key2 = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress2,
       );
@@ -58,15 +58,15 @@ describe("Wallet-Derived Encryption", () => {
       expect(key1).not.toBe(key2);
     });
 
-    it("should derive different keys for different signatures", () => {
+    it("should derive different keys for different signatures", async () => {
       const signature1 = mockSignature;
       const signature2 = "0x" + "f".repeat(130);
 
-      const key1 = deriveEncryptionKeyFromSignature(
+      const key1 = await deriveEncryptionKeyFromSignature(
         signature1,
         mockWalletAddress1,
       );
-      const key2 = deriveEncryptionKeyFromSignature(
+      const key2 = await deriveEncryptionKeyFromSignature(
         signature2,
         mockWalletAddress1,
       );
@@ -93,8 +93,8 @@ describe("Wallet-Derived Encryption", () => {
   });
 
   describe("Encryption/Decryption", () => {
-    it("should encrypt and decrypt data successfully", () => {
-      const key = deriveEncryptionKeyFromSignature(
+    it("should encrypt and decrypt data successfully", async () => {
+      const key = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
@@ -113,12 +113,12 @@ describe("Wallet-Derived Encryption", () => {
       expect(encrypted).toContain("0x");
     });
 
-    it("should fail to decrypt with wrong key", () => {
-      const key1 = deriveEncryptionKeyFromSignature(
+    it("should fail to decrypt with wrong key", async () => {
+      const key1 = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
-      const key2 = deriveEncryptionKeyFromSignature(
+      const key2 = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress2,
       );
@@ -143,8 +143,8 @@ describe("Wallet-Derived Encryption", () => {
       }).toThrow();
     });
 
-    it("should handle empty data", () => {
-      const key = deriveEncryptionKeyFromSignature(
+    it("should handle empty data", async () => {
+      const key = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
@@ -160,8 +160,8 @@ describe("Wallet-Derived Encryption", () => {
       expect(decrypted).toBe("");
     });
 
-    it("should handle special characters", () => {
-      const key = deriveEncryptionKeyFromSignature(
+    it("should handle special characters", async () => {
+      const key = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
@@ -179,8 +179,8 @@ describe("Wallet-Derived Encryption", () => {
       expect(decrypted).toBe(originalData);
     });
 
-    it("should handle data with 0x prefix", () => {
-      const key = deriveEncryptionKeyFromSignature(
+    it("should handle data with 0x prefix", async () => {
+      const key = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
@@ -206,8 +206,8 @@ describe("Wallet-Derived Encryption", () => {
   });
 
   describe("Key Ownership Verification", () => {
-    it("should verify correct key ownership", () => {
-      const key = deriveEncryptionKeyFromSignature(
+    it("should verify correct key ownership", async () => {
+      const key = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
@@ -221,8 +221,8 @@ describe("Wallet-Derived Encryption", () => {
       expect(isValid).toBe(true);
     });
 
-    it("should reject incorrect key ownership", () => {
-      const key = deriveEncryptionKeyFromSignature(
+    it("should reject incorrect key ownership", async () => {
+      const key = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
@@ -236,8 +236,8 @@ describe("Wallet-Derived Encryption", () => {
       expect(isValid).toBe(false);
     });
 
-    it("should be case-insensitive for address comparison", () => {
-      const key = deriveEncryptionKeyFromSignature(
+    it("should be case-insensitive for address comparison", async () => {
+      const key = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
@@ -256,8 +256,8 @@ describe("Wallet-Derived Encryption", () => {
   });
 
   describe("Encryption Key Cache", () => {
-    it("should cache encryption keys", () => {
-      const key = deriveEncryptionKeyFromSignature(
+    it("should cache encryption keys", async () => {
+      const key = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
@@ -280,8 +280,8 @@ describe("Wallet-Derived Encryption", () => {
       expect(cached).toBeNull();
     });
 
-    it("should handle cache expiry (simulated)", () => {
-      const key = deriveEncryptionKeyFromSignature(
+    it("should handle cache expiry (simulated)", async () => {
+      const key = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
@@ -305,12 +305,12 @@ describe("Wallet-Derived Encryption", () => {
       expect(cached).toBeNull();
     });
 
-    it("should clear cache for specific address", () => {
-      const key1 = deriveEncryptionKeyFromSignature(
+    it("should clear cache for specific address", async () => {
+      const key1 = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
-      const key2 = deriveEncryptionKeyFromSignature(
+      const key2 = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress2,
       );
@@ -333,12 +333,12 @@ describe("Wallet-Derived Encryption", () => {
       expect(encryptionKeyCache.get(mockWalletAddress2)).toBeTruthy();
     });
 
-    it("should clear all cache", () => {
-      const key1 = deriveEncryptionKeyFromSignature(
+    it("should clear all cache", async () => {
+      const key1 = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
-      const key2 = deriveEncryptionKeyFromSignature(
+      const key2 = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress2,
       );
@@ -363,8 +363,8 @@ describe("Wallet-Derived Encryption", () => {
   });
 
   describe("Security Properties", () => {
-    it("should produce keys of sufficient length", () => {
-      const key = deriveEncryptionKeyFromSignature(
+    it("should produce keys of sufficient length", async () => {
+      const key = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
@@ -373,8 +373,8 @@ describe("Wallet-Derived Encryption", () => {
       expect(key.length).toBe(64);
     });
 
-    it("should produce different ciphertext for same data", () => {
-      const key = deriveEncryptionKeyFromSignature(
+    it("should produce different ciphertext for same data", async () => {
+      const key = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );
@@ -398,8 +398,8 @@ describe("Wallet-Derived Encryption", () => {
       expect(decrypted2).toBe(originalData);
     });
 
-    it("should not expose key material in encrypted output", () => {
-      const key = deriveEncryptionKeyFromSignature(
+    it("should not expose key material in encrypted output", async () => {
+      const key = await deriveEncryptionKeyFromSignature(
         mockSignature,
         mockWalletAddress1,
       );

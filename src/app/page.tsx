@@ -5,10 +5,10 @@ import BetaNotification from "@/components/BetaNotification"; // Import the new 
 import HealthDashboardModal from "@/components/HealthDashboardModal";
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { OnboardingModal } from "@/components/OnboardingModal";
+import WalletConnectButton from "@/components/WalletConnectButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { WalletSetupWizard } from "@/components/WalletSetupWizard";
-import { ZkSyncSsoWalletButton } from "@/components/ZkSyncSsoWalletButton";
 import { Brain, Leaf, Lock, Menu, Sparkles, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
@@ -248,8 +248,8 @@ const MainPage: React.FC = (): JSX.Element => {
                   ))}
                 </div>
 
-                {/* ZKsync SSO Wallet Connection Component */}
-                <ZkSyncSsoWalletButton
+                {/* Wallet connection button */}
+                <WalletConnectButton
                   onDashboardClick={handleDashboardClick}
                   onAiCompanionClick={() => setIsAiCompanionOpen(true)}
                 />
@@ -289,14 +289,17 @@ const MainPage: React.FC = (): JSX.Element => {
               </a>
             ))}
 
-            {/* Mobile ZKsync SSO Wallet Connection */}
-            <div className="space-y-2">
-              <div className="text-lg text-amber-900 py-2">
-                Connect ZKsync SSO Wallet
-              </div>
-              <ZkSyncSsoWalletButton
-                onDashboardClick={handleDashboardClick}
-                onAiCompanionClick={() => setIsAiCompanionOpen(true)}
+            {/* Wallet connection button for mobile */}
+            <div className="pt-4 border-t border-amber-200">
+              <WalletConnectButton
+                onDashboardClick={() => {
+                  handleDashboardClick();
+                  setIsMobileMenuOpen(false);
+                }}
+                onAiCompanionClick={() => {
+                  setIsAiCompanionOpen(true);
+                  setIsMobileMenuOpen(false);
+                }}
               />
             </div>
           </div>

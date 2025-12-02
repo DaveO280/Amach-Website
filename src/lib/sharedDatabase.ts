@@ -17,10 +17,11 @@ export async function isEmailWhitelisted(email: string): Promise<boolean> {
     // Dynamic import to avoid issues with SSR
     const { readContract } = await import("@wagmi/core");
     const {
-      wagmiConfig,
+      getWagmiConfig,
       profileVerificationAbi,
       PROFILE_VERIFICATION_CONTRACT,
     } = await import("./zksync-sso-config");
+    const wagmiConfig = getWagmiConfig();
 
     // Hash the email using keccak256 (same as contract)
     const emailHash = hashEmailForBlockchain(email);
@@ -29,7 +30,7 @@ export async function isEmailWhitelisted(email: string): Promise<boolean> {
 
     // Query blockchain for email hash
     const isWhitelisted = await readContract(wagmiConfig, {
-      address: PROFILE_VERIFICATION_CONTRACT,
+      address: PROFILE_VERIFICATION_CONTRACT as `0x${string}`,
       abi: profileVerificationAbi,
       functionName: "isEmailWhitelisted",
       args: [email], // Contract handles hashing internally

@@ -2,7 +2,7 @@
 
 import { AlertCircle, CheckCircle, Loader2, Shield, User } from "lucide-react";
 import React, { useEffect, useState } from "react";
-import { useZkSyncSsoWallet } from "../hooks/useZkSyncSsoWallet";
+import { useWalletService } from "../hooks/useWalletService";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -34,14 +34,15 @@ interface HealthProfileData {
 export const HealthProfileManager: React.FC = () => {
   const {
     isConnected,
+    address,
     healthProfile,
     updateHealthProfile,
     isProfileLoading,
     loadProfileFromBlockchain,
-    getDecryptedProfile,
+    refreshProfile,
     error,
     clearError,
-  } = useZkSyncSsoWallet();
+  } = useWalletService();
 
   const [profileData, setProfileData] = useState<HealthProfileData>({
     birthDate: "",
@@ -66,36 +67,96 @@ export const HealthProfileManager: React.FC = () => {
   };
 
   // Auto-populate profile data when healthProfile is loaded
+  // Decrypt directly from blockchain (no signature required)
   useEffect(() => {
     const loadDecryptedData = async (): Promise<void> => {
       if (healthProfile && isConnected) {
-        // Try to get decrypted data from local storage first
-        const decryptedData = await getDecryptedProfile();
+        // Try to decrypt directly from blockchain-encrypted profile (no localStorage, no signature)
+        try {
+          const { decryptHealthData } = await import(
+            "@/utils/secureHealthEncryption"
+          );
 
-        if (decryptedData) {
-          // Use actual decrypted data from local storage
+          // Check if nonce is available (required for decryption)
+          if (!healthProfile.nonce) {
+            throw new Error("Nonce not available in profile - cannot decrypt");
+          }
+
+          const onChainProfile = {
+            encryptedBirthDate: healthProfile.encryptedBirthDate,
+            encryptedSex: healthProfile.encryptedSex,
+            encryptedHeight: healthProfile.encryptedHeight,
+            encryptedWeight: healthProfile.encryptedWeight || "",
+            encryptedEmail: healthProfile.encryptedEmail,
+            dataHash: healthProfile.dataHash,
+            timestamp: healthProfile.timestamp,
+            version: healthProfile.version,
+            nonce: healthProfile.nonce, // Use nonce from blockchain
+          };
+
+          // Decrypt using blockchain encryption key (no signature needed - uses wallet address)
+          // Note: This uses PBKDF2 which may take a few seconds but won't freeze since it's async
+          if (!address) {
+            throw new Error("Wallet address not available");
+          }
+
+          console.log("🔓 Decrypting profile from blockchain for display...");
+          const decryptedData = await decryptHealthData(
+            onChainProfile,
+            address,
+            undefined,
+          );
+
+          if (decryptedData) {
+            setProfileData({
+              birthDate: decryptedData.birthDate || "",
+              sex: decryptedData.sex || "",
+              height: decryptedData.height || 0,
+              weight: decryptedData.weight || 0,
+              email: decryptedData.email || "",
+            });
+            console.log("✅ Profile decrypted and displayed successfully", {
+              hasBirthDate: !!decryptedData.birthDate,
+              hasSex: !!decryptedData.sex,
+              hasHeight: !!decryptedData.height,
+              hasWeight: !!decryptedData.weight,
+              hasEmail: !!decryptedData.email,
+            });
+          } else {
+            console.warn("⚠️ Decryption returned null or undefined");
+          }
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : "";
+          console.warn("⚠️ Could not decrypt profile for display:", error);
+
+          // Check if it's a nonce mismatch error
+          if (
+            errorMsg.includes("Invalid nonce length") ||
+            errorMsg.includes("nonce")
+          ) {
+            console.warn(
+              "⚠️ Profile has nonce mismatch - it was created with buggy code",
+            );
+            console.warn("⚠️ The profile needs to be updated to fix the nonce");
+            console.warn(
+              "⚠️ For now, profile data cannot be displayed (encrypted on blockchain)",
+            );
+          }
+
+          // Show encrypted indicator instead of sample data
           setProfileData({
-            birthDate: decryptedData.birthDate || "",
-            sex: decryptedData.sex || "",
-            height: decryptedData.height || 0,
-            weight: decryptedData.weight || 0,
-            email: decryptedData.email || "",
-          });
-        } else {
-          // Fallback to sample data if no decrypted data available
-          setProfileData({
-            birthDate: "01/01/1990", // Sample data
-            sex: "Not specified",
-            height: 72, // 6 feet in inches
-            weight: 150,
-            email: "user@example.com",
+            birthDate: "[Cannot decrypt - nonce mismatch]",
+            sex: "[Cannot decrypt - nonce mismatch]",
+            height: 0,
+            weight: 0,
+            email: "[Cannot decrypt - nonce mismatch]",
           });
         }
       }
     };
 
     loadDecryptedData();
-  }, [healthProfile, isConnected, getDecryptedProfile]);
+  }, [healthProfile, isConnected, address]);
 
   const [isCreating, setIsCreating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -188,18 +249,32 @@ export const HealthProfileManager: React.FC = () => {
     setSuccessMessage(null);
 
     try {
+      // Show initial loading message
+      setSuccessMessage(
+        "🔄 Loading profile... This may take 10-30 seconds due to encryption key derivation. Please wait...",
+      );
+
+      // Use setTimeout to allow UI to update before the potentially long-running operation
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
       const result = await loadProfileFromBlockchain();
 
       if (result.success) {
         setSuccessMessage(
-          "✅ Profile loaded successfully! Check the console for details.",
+          "✅ Profile loaded successfully! The profile will update automatically.",
         );
+        // Don't reload - the profile is already in state and will update the UI
+        // Reloading could interrupt signature requests
+        // Instead, just refresh the profile data
+        await refreshProfile();
       } else {
         setSuccessMessage(`❌ Error loading profile: ${result.error}`);
       }
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      console.error("❌ Error loading profile:", err);
       setSuccessMessage(
-        `❌ Error loading profile: ${err instanceof Error ? err.message : "Unknown error"}`,
+        `❌ Error loading profile: ${errorMessage}. Please try again or check the console for details.`,
       );
     } finally {
       setIsLoading(false);

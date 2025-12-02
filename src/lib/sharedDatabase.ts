@@ -14,14 +14,20 @@ export async function isEmailWhitelisted(email: string): Promise<boolean> {
   try {
     console.log("🔍 Checking email whitelist on blockchain...");
 
-    // Dynamic import to avoid issues with SSR
-    const { readContract } = await import("@wagmi/core");
-    const {
-      getWagmiConfig,
-      profileVerificationAbi,
-      PROFILE_VERIFICATION_CONTRACT,
-    } = await import("./zksync-sso-config");
-    const wagmiConfig = getWagmiConfig();
+    // Use viem directly for server-side blockchain queries (no wagmi needed)
+    const { createPublicClient, http } = await import("viem");
+    const { getContractAddresses } = await import("./networkConfig");
+    const { profileVerificationAbi } = await import("./zksync-sso-config");
+
+    const contracts = getContractAddresses();
+    const { getActiveChain } = await import("./networkConfig");
+    const chain = getActiveChain();
+
+    // Create public client for blockchain queries
+    const publicClient = createPublicClient({
+      chain,
+      transport: http(),
+    });
 
     // Hash the email using keccak256 (same as contract)
     const emailHash = hashEmailForBlockchain(email);
@@ -29,8 +35,8 @@ export async function isEmailWhitelisted(email: string): Promise<boolean> {
     console.log("🔐 Email hash:", emailHash);
 
     // Query blockchain for email hash
-    const isWhitelisted = await readContract(wagmiConfig, {
-      address: PROFILE_VERIFICATION_CONTRACT as `0x${string}`,
+    const isWhitelisted = await publicClient.readContract({
+      address: contracts.PROFILE_VERIFICATION_CONTRACT as `0x${string}`,
       abi: profileVerificationAbi,
       functionName: "isEmailWhitelisted",
       args: [email], // Contract handles hashing internally

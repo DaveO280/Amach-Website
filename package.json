@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --experimental-https",
+    "dev:http": "next dev",
     "dev:https": "next dev --experimental-https",
     "build": "pnpm lint && pnpm type-check && next build",
     "vercel-build": "next build",
@@ -28,6 +29,8 @@
     "coordinator:csv": "cross-env VENICE_API_BASE_URL=http://127.0.0.1:3000 pnpm exec tsx scripts/analyzeCoordinatorFromCsv.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.937.0",
+    "@privy-io/react-auth": "^3.8.0",
     "@radix-ui/react-alert-dialog": "^1.0.5",
     "@radix-ui/react-avatar": "^1.0.4",
     "@radix-ui/react-dialog": "^1.0.5",

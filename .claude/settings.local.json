@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm build:*)",
+      "Bash(pnpm type-check:*)",
+      "Bash(pnpm exec tsx:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(npx hardhat compile:*)",
+      "Bash(npx hardhat run:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

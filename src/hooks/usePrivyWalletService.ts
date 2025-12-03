@@ -540,24 +540,13 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
           undefined,
         );
 
-        // 2. Store encrypted weight in localStorage (V1 contract doesn't store weight on-chain)
-        // Weight will be stored as timeline events in future, but for now use localStorage
-        if (encryptedProfile.encryptedWeight) {
-          try {
-            localStorage.setItem(
-              `amach-encrypted-weight-${address}`,
-              encryptedProfile.encryptedWeight,
-            );
-            console.log("💾 Stored encrypted weight in localStorage");
-          } catch (e) {
-            console.warn("⚠️ Failed to store weight in localStorage:", e);
-          }
-        }
+        // 2. No need to store weight in localStorage anymore - V3 contract stores it on-chain!
+        console.log("✅ Weight will be stored on-chain with V3 contract");
 
-        // 3. Generate data hash (V1 contract doesn't store weight, so exclude it from hash)
+        // 3. Generate data hash (V3 contract stores weight on-chain, include it in hash)
         const { keccak256 } = await import("viem");
-        // Only hash fields that are stored on-chain: birthDate, sex, height, email
-        const dataToHash = `${encryptedProfile.encryptedBirthDate}-${encryptedProfile.encryptedSex}-${encryptedProfile.encryptedHeight}-${encryptedProfile.encryptedEmail}`;
+        // Hash ALL fields including weight (V3 stores weight on-chain)
+        const dataToHash = `${encryptedProfile.encryptedBirthDate}-${encryptedProfile.encryptedSex}-${encryptedProfile.encryptedHeight}-${encryptedProfile.encryptedWeight}-${encryptedProfile.encryptedEmail}`;
         const dataHash = keccak256(new TextEncoder().encode(dataToHash));
 
         // 4. Check if profile exists
@@ -579,8 +568,10 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
 
         console.log(`🔍 Profile exists: ${profileExists ? "YES" : "NO"}`);
 
-        // 5. Prepare transaction
-        const functionName = profileExists ? "updateProfile" : "createProfile";
+        // 5. Prepare transaction with V3 functions (includes weight)
+        const functionName = profileExists
+          ? "updateProfileWithWeight"
+          : "createProfileWithWeight";
 
         // Use the nonce from encryption (12 bytes = 24 hex chars)
         // This is critical - the nonce must match what was used for encryption!
@@ -592,10 +583,12 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
           expectedLength: 26, // "0x" + 24 hex chars
         });
 
+        // V3 contract function signature: (birthDate, sex, height, weight, email, dataHash, nonce)
         const args = [
           encryptedProfile.encryptedBirthDate as string,
           encryptedProfile.encryptedSex as string,
           encryptedProfile.encryptedHeight as string,
+          encryptedProfile.encryptedWeight as string, // NEW: Weight included for V3
           encryptedProfile.encryptedEmail as string,
           dataHash as `0x${string}`,
           nonce,

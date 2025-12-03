@@ -1,0 +1,13 @@
+{
+  "timestamp": 1764786417816,
+  "network": "zksyncSepolia",
+  "proxyAddress": "0x2A8015613623A6A8D369BcDC2bd6DD202230785a",
+  "v3ImplementationAddress": "0x378e8ec2507c6987a3A2a075bB9c21817e4e8453",
+  "upgradeTransaction": "0xe05d6e5f513130255fb886b2c25e962c8d0d805ba9b89564c314ff93ea29c442",
+  "deployer": "0xC9fFD981932FA4F91A0f31184264Ce079d196c48",
+  "previousVersion": "1",
+  "newVersion": "3",
+  "profilesPreserved": "2",
+  "gasUsed": "179265",
+  "upgradeMethod": "upgradeToAndCall (OpenZeppelin v5)"
+}

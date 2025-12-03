@@ -1,0 +1,24 @@
+{
+  "network": "unknown",
+  "deployedAt": "2025-12-01T18:02:37.015Z",
+  "deployer": "0xC9fFD981932FA4F91A0f31184264Ce079d196c48",
+  "transactionHash": "0x0303ab1eb25fd6bc51cdfd4a04a363c4d3809ded461d66818fe0791c4e90569c",
+  "blockNumber": 6161027,
+  "contracts": {
+    "profileVerification": {
+      "address": "0xC9950703cE4eD704d2a0B075F7FAC3d968940f57",
+      "features": [
+        "Email whitelist management",
+        "Token allocation (1000 AHP per user)",
+        "Profile verification",
+        "ZKsync SSO integration"
+      ]
+    }
+  },
+  "configuration": {
+    "maxAllocations": 5000,
+    "allocationPerUser": "1000 AHP",
+    "totalAllocated": 0,
+    "totalVerifiedUsers": 0
+  }
+}

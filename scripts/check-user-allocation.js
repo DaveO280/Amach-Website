@@ -1,95 +1,130 @@
-const { ethers } = require("hardhat");
+/**
+ * Check user allocation status using getUserVerification function
+ */
+
+const { ethers } = require("ethers");
+
+const PROFILE_VERIFICATION_CONTRACT =
+  "0xC9950703cE4eD704d2a0B075F7FAC3d968940f57";
+const USER_WALLET = "0x58147e61cc2683295c6eD00D5daeB8052B3D0c87";
+const RPC_URL = "https://sepolia.era.zksync.dev";
+
+const ABI = [
+  "function getUserVerification(address user) external view returns (tuple(string email, address wallet, uint256 userId, uint256 timestamp, bool isActive, bool hasReceivedTokens, uint256 tokenAllocation) verification)",
+  "function healthToken() external view returns (address)",
+];
 
 async function main() {
-  console.log("🔍 Checking user allocation status...");
+  console.log("🔍 Checking user allocation...\n");
 
-  // Contract addresses
-  const PROFILE_VERIFICATION_ADDRESS =
-    "0x2C35eBf2085e5d1224Fb170A1594E314Dea6B759";
-  const HEALTH_TOKEN_ADDRESS = "0xb697C5f2c72e8598714D31ED105723f9C65531C2";
-
-  // Get contract instances
-  const profileVerification = await ethers.getContractAt(
-    "ProfileVerification",
-    PROFILE_VERIFICATION_ADDRESS,
-  );
-  const healthToken = await ethers.getContractAt(
-    "IERC20",
-    HEALTH_TOKEN_ADDRESS,
+  const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+  const contract = new ethers.Contract(
+    PROFILE_VERIFICATION_CONTRACT,
+    ABI,
+    provider,
   );
 
-  // Check all verified users
-  console.log("\n📊 All verified users:");
-  const totalUsers = await profileVerification.getTotalVerifiedUsers();
-  console.log("Total verified users:", totalUsers.toString());
-
-  // Check specific wallet addresses that might be in use
-  const testAddresses = [
-    "0xC9fFD981932FA4F91A0f31184264Ce079d196c48", // Deployer account
-    "0xF3750F0a1F6E9e06a1887d7b9f3E638F8fA64759", // From earlier check
-  ];
-
-  for (const address of testAddresses) {
-    console.log(`\n🔍 Checking wallet: ${address}`);
-
-    try {
-      // Check if wallet is verified
-      const isVerified = await profileVerification.isUserVerified(address);
-      console.log("Is verified:", isVerified);
-
-      if (isVerified) {
-        const verification =
-          await profileVerification.getUserVerification(address);
-        console.log("Email:", verification.email);
-        console.log(
-          "Token allocation:",
-          ethers.utils.formatEther(verification.tokenAllocation),
-          "AHP",
-        );
-        console.log("Has claimed:", verification.hasReceivedTokens);
-        console.log("User ID:", verification.userId.toString());
-
-        // Check token balance
-        const balance = await healthToken.balanceOf(address);
-        console.log("Current $AHP balance:", ethers.utils.formatEther(balance));
-      } else {
-        console.log("❌ Wallet not verified");
-      }
-    } catch (error) {
-      console.log("❌ Error checking wallet:", error.message);
-    }
-  }
-
-  // Check by email
-  console.log("\n📧 Checking by email: ogara.d@gmail.com");
   try {
-    const isInUse = await profileVerification.isEmailInUse("ogara.d@gmail.com");
-    console.log("Email in use:", isInUse);
+    const verification = await contract.getUserVerification(USER_WALLET);
 
-    if (isInUse) {
-      const walletAddress =
-        await profileVerification.emailToWallet("ogara.d@gmail.com");
-      console.log("Linked wallet:", walletAddress);
+    console.log("📊 User Verification:");
+    console.log("   Email:", verification.email);
+    console.log("   Wallet:", verification.wallet);
+    console.log("   User ID:", verification.userId.toString());
+    console.log(
+      "   Timestamp:",
+      new Date(verification.timestamp.toNumber() * 1000).toLocaleString(),
+    );
+    console.log("   Is Active:", verification.isActive);
+    console.log("   Has Received Tokens:", verification.hasReceivedTokens);
+    console.log(
+      "   Token Allocation:",
+      ethers.utils.formatEther(verification.tokenAllocation),
+      "AHP",
+    );
 
-      const verification =
-        await profileVerification.getUserVerification(walletAddress);
+    console.log("\n🔍 Claim Requirements Check:");
+
+    let canClaim = true;
+
+    if (!verification.isActive) {
+      console.log("   ❌ User is not active");
+      canClaim = false;
+    } else {
+      console.log("   ✅ User is active");
+    }
+
+    if (verification.tokenAllocation.eq(0)) {
+      console.log("   ❌ No allocation (0 AHP)");
+      canClaim = false;
+    } else {
       console.log(
-        "Token allocation:",
+        "   ✅ Has allocation:",
         ethers.utils.formatEther(verification.tokenAllocation),
         "AHP",
       );
-      console.log("Has claimed:", verification.hasReceivedTokens);
+    }
+
+    if (verification.hasReceivedTokens) {
+      console.log("   ❌ Tokens already claimed");
+      canClaim = false;
+    } else {
+      console.log("   ✅ Tokens not yet claimed");
+    }
+
+    const healthToken = await contract.healthToken();
+    if (healthToken === ethers.constants.AddressZero) {
+      console.log("   ❌ Health token not set");
+      canClaim = false;
+    } else {
+      console.log("   ✅ Health token configured:", healthToken);
+    }
+
+    // Check contract token balance
+    const tokenAbi = [
+      "function balanceOf(address) external view returns (uint256)",
+    ];
+    const tokenContract = new ethers.Contract(healthToken, tokenAbi, provider);
+    const contractBalance = await tokenContract.balanceOf(
+      PROFILE_VERIFICATION_CONTRACT,
+    );
+
+    console.log(
+      "\n💰 Contract Token Balance:",
+      ethers.utils.formatEther(contractBalance),
+      "AHP",
+    );
+
+    if (contractBalance.lt(verification.tokenAllocation)) {
+      console.log("   ❌ Contract doesn't have enough tokens!");
+      console.log(
+        "       Needs:",
+        ethers.utils.formatEther(verification.tokenAllocation),
+        "AHP",
+      );
+      console.log(
+        "       Has:",
+        ethers.utils.formatEther(contractBalance),
+        "AHP",
+      );
+      canClaim = false;
+    } else {
+      console.log("   ✅ Contract has sufficient balance");
+    }
+
+    if (canClaim) {
+      console.log("\n✅ User CAN claim allocation!");
+    } else {
+      console.log("\n❌ User CANNOT claim allocation - see issues above");
     }
   } catch (error) {
-    console.log("❌ Error checking email:", error.message);
+    console.error("❌ Error:", error.message);
   }
-
-  console.log("\n✅ User allocation check completed!");
 }
 
 main()
   .then(() => process.exit(0))
   .catch((error) => {
-    console.error(error);
+    console.error("\n❌ Error:", error);
     process.exit(1);
   });

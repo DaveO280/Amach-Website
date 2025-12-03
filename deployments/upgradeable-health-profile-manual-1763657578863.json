@@ -1,0 +1,46 @@
+{
+  "network": "zksync-sepolia",
+  "deployedAt": "2025-11-20T16:52:58.863Z",
+  "deployer": "0xC9fFD981932FA4F91A0f31184264Ce079d196c48",
+  "contracts": {
+    "proxy": {
+      "address": "0x2A8015613623A6A8D369BcDC2bd6DD202230785a",
+      "description": "永 Permanent address - users interact with this",
+      "contractName": "ERC1967Proxy (UUPS)"
+    },
+    "implementation": {
+      "address": "0x9aD92C50548c7D0628f21836c48230041330D277",
+      "description": "Implementation V1 - can be upgraded",
+      "contractName": "SecureHealthProfileV1"
+    }
+  },
+  "deploymentMethod": "manual",
+  "ethersVersion": "5.8.0",
+  "features": {
+    "version": "1",
+    "upgradeable": true,
+    "proxyPattern": "UUPS (ERC1967)",
+    "features": [
+      "Core encrypted profile (birthDate, sex, height, email)",
+      "Event-based health timeline (medications, conditions, weight, etc.)",
+      "ZK proof submission",
+      "Append-only immutable events",
+      "Soft delete (deactivate) functionality"
+    ]
+  },
+  "upgradeInstructions": {
+    "note": "To upgrade to V2, deploy new implementation and call upgradeTo()",
+    "steps": [
+      "Deploy SecureHealthProfileV2.sol",
+      "Get implementation address",
+      "Call: proxiedContract.upgradeTo(newImplementationAddress)",
+      "All data preserved in proxy storage",
+      "New functions immediately available"
+    ]
+  },
+  "migration": {
+    "oldContract": "0xb1e41c4913D52E20aAaF4728c0449Bc6320a45A3",
+    "oldContractBackup": "backup/contracts-pre-upgrade-2025-11-20/",
+    "note": "2 profiles exist on old contract - users should re-enter data"
+  }
+}

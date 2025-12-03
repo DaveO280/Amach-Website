@@ -1,0 +1,55 @@
+
+> amach-health@0.1.0 dev C:\Users\ogara\AmachHealth(S)\Amach-Website
+> next dev --experimental-https
+
+ ⚠ Warning: Found multiple lockfiles. Selecting C:\Users\ogara\pnpm-lock.yaml.
+   Consider removing the lockfiles at:
+   * C:\Users\ogara\AmachHealth(S)\Amach-Website\pnpm-lock.yaml
+
+ ⚠ Self-signed certificates are currently an experimental feature, use with caution.
+   Using already generated self signed certificate
+ ⚠ Port 3000 is in use by process 67440, using available port 3003 instead.
+   ▲ Next.js 15.4.5
+   - Local:        https://localhost:3003
+   - Network:      https://192.168.1.15:3003
+   - Environments: .env.local, .env
+   - Experiments (use with caution):
+     · serverComponentsExternalPackages
+
+ ✓ Starting...
+ ⚠ Invalid next.config.js options detected: 
+ ⚠     Unrecognized key(s) in object: 'serverComponentsExternalPackages' at "experimental"
+ ⚠ See more info here: https://nextjs.org/docs/messages/invalid-next-config
+ ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+ ✓ Ready in 2.4s
+   Reload env: .env.local
+   Reload env: .env.local
+   Reload env: .env.local
+ ⚠ Found a change in next.config.js. Restarting the server to apply the changes...
+   ▲ Next.js 15.4.5
+   - Local:        https://localhost:3003
+   - Network:      https://10.2.0.2:3003
+   - Environments: .env.local, .env
+   - Experiments (use with caution):
+     · serverComponentsExternalPackages
+
+ ✓ Starting...
+ ⚠ Invalid next.config.js options detected: 
+ ⚠     Unrecognized key(s) in object: 'serverComponentsExternalPackages' at "experimental"
+ ⚠ See more info here: https://nextjs.org/docs/messages/invalid-next-config
+ ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+ ✓ Ready in 6.4s
+ ⚠ Found a change in next.config.js. Restarting the server to apply the changes...
+   ▲ Next.js 15.4.5
+   - Local:        https://localhost:3003
+   - Network:      https://10.2.0.2:3003
+   - Environments: .env.local, .env
+   - Experiments (use with caution):
+     · serverComponentsExternalPackages
+
+ ✓ Starting...
+ ⚠ Invalid next.config.js options detected: 
+ ⚠     Unrecognized key(s) in object: 'serverComponentsExternalPackages' at "experimental"
+ ⚠ See more info here: https://nextjs.org/docs/messages/invalid-next-config
+ ⚠ `experimental.serverComponentsExternalPackages` has been moved to `serverExternalPackages`. Please update your next.config.js file accordingly.
+ ✓ Ready in 6.8s

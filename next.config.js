@@ -16,26 +16,44 @@ const nextConfig = {
     };
 
     // Fix ethers.js network detection issues in Next.js
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      fs: false,
-      net: false,
-      tls: false,
-      crypto: false,
-      stream: false,
-      url: false,
-      zlib: false,
-      http: false,
-      https: false,
-      assert: false,
-      os: false,
-      path: false,
-    };
+    // Only disable Node.js modules for client-side builds
+    // Server-side (isServer=true) needs http/https for ethers.js RPC calls
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+        stream: false,
+        url: false,
+        zlib: false,
+        http: false,
+        https: false,
+        assert: false,
+        os: false,
+        path: false,
+      };
+    } else {
+      // Server-side: allow Node.js modules for ethers.js
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        // Don't disable http/https on server - ethers needs them for RPC calls
+      };
+    }
 
     return config;
   },
   // Make sure Next.js knows to transpile my-health-app
   transpilePackages: ["my-health-app"],
+  // Prevent SSR evaluation of SSO connector modules
+  // This ensures client-side only code (like zksync-sso) isn't evaluated during SSR
+  experimental: {
+    serverComponentsExternalPackages: ["zksync-sso", "@wagmi/core", "viem"],
+  },
   // Add headers for CORS
   async headers() {
     return [

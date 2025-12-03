@@ -1,0 +1,44 @@
+{
+  "network": "zksync-sepolia",
+  "timestamp": "2025-12-01T18:02:42.628Z",
+  "deployer": "0xC9fFD981932FA4F91A0f31184264Ce079d196c48",
+  "contracts": {
+    "healthToken": {
+      "address": "0x057df807987f284b55ba6A9ab89d089fd8398B99",
+      "name": "AmachHealth Protocol",
+      "symbol": "AHP",
+      "totalSupply": "500000000",
+      "distributionAmount": "10000000"
+    },
+    "secureHealthProfile": {
+      "address": "0xb1e41c4913D52E20aAaF4728c0449Bc6320a45A3",
+      "version": "2.0",
+      "features": [
+        "AES-256-GCM encryption",
+        "On-chain encrypted data storage",
+        "ZK-proof support",
+        "Protocol access control"
+      ]
+    },
+    "profileVerification": {
+      "address": "0xC9950703cE4eD704d2a0B075F7FAC3d968940f57",
+      "features": [
+        "Email whitelist management",
+        "Token allocation",
+        "Profile verification",
+        "ZKsync SSO integration"
+      ]
+    }
+  },
+  "configuration": {
+    "authorizedProtocols": ["0xC9fFD981932FA4F91A0f31184264Ce079d196c48"],
+    "initialWhitelistedEmails": [],
+    "tokenAllocationAmount": "1000",
+    "distributionTokens": "10000000.0"
+  },
+  "environment": {
+    "rpcUrl": "https://sepolia.era.zksync.dev",
+    "chainId": 300
+  },
+  "notes": "Contract redeployed on 2025-12-01T18:02:42.629Z - Previous registrations cleared"
+}

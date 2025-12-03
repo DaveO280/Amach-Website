@@ -11,9 +11,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-// Contract addresses (should match main app)
+// Contract addresses (should match main app - Redeployed December 2025)
 const PROFILE_VERIFICATION_CONTRACT =
-  "0xA2D3b1b8080895C5bE335d8352D867e4b6e51ab3";
+  "0xC9950703cE4eD704d2a0B075F7FAC3d968940f57";
 
 // ProfileVerification ABI (only the functions we need)
 const PROFILE_VERIFICATION_ABI = [

@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.937.0",
-    "@privy-io/react-auth": "^3.8.0",
+    "@privy-io/react-auth": "^3.8.1",
     "@radix-ui/react-alert-dialog": "^1.0.5",
     "@radix-ui/react-avatar": "^1.0.4",
     "@radix-ui/react-dialog": "^1.0.5",
@@ -50,7 +50,7 @@
     "@types/papaparse": "^5.3.15",
     "@vercel/analytics": "^1.5.0",
     "@wagmi/core": "^2.21.0",
-    "axios": "^1.11.0",
+    "axios": "^1.13.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "cors": "^2.8.5",
@@ -132,7 +132,12 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "sharp"
-    ]
+    ],
+    "overrides": {
+      "form-data": "^4.0.1",
+      "axios": "^1.13.2",
+      "glob": "^10.3.10"
+    }
   },
   "lint-staged": {
     "**/*.{ts,tsx}": [

@@ -129,6 +129,58 @@ export const HealthProfileManager: React.FC = () => {
           const errorMsg = error instanceof Error ? error.message : "";
           console.warn("⚠️ Could not decrypt profile for display:", error);
 
+          // If decryption fails, try to decrypt individual fields (weight might fail separately)
+          // This handles the case where weight was encrypted with a different nonce
+          console.log("🔄 Attempting to decrypt fields individually...");
+          try {
+            const { decryptHealthData } = await import(
+              "@/utils/secureHealthEncryption"
+            );
+
+            if (!address) {
+              throw new Error("Wallet address not available");
+            }
+
+            // Re-create profile without weight to attempt partial decryption
+            if (!healthProfile.nonce) {
+              throw new Error("Nonce not available");
+            }
+
+            const profileWithoutWeight = {
+              encryptedBirthDate: healthProfile.encryptedBirthDate,
+              encryptedSex: healthProfile.encryptedSex,
+              encryptedHeight: healthProfile.encryptedHeight,
+              encryptedWeight: "", // Skip weight - might have different nonce
+              encryptedEmail: healthProfile.encryptedEmail,
+              dataHash: healthProfile.dataHash,
+              timestamp: healthProfile.timestamp,
+              version: healthProfile.version,
+              nonce: healthProfile.nonce,
+            };
+
+            const partialData = await decryptHealthData(
+              profileWithoutWeight,
+              address,
+              undefined,
+            );
+
+            if (partialData) {
+              setProfileData({
+                birthDate: partialData.birthDate || "",
+                sex: partialData.sex || "",
+                height: partialData.height || 0,
+                weight: 0, // Weight couldn't be decrypted - will be re-encrypted on next update
+                email: partialData.email || "",
+              });
+              setSuccessMessage(
+                "⚠️ Profile loaded, but weight could not be decrypted (likely encrypted with different nonce). It will be re-encrypted on next profile update.",
+              );
+              return; // Success with partial data
+            }
+          } catch (partialError) {
+            console.warn("⚠️ Partial decryption also failed:", partialError);
+          }
+
           // Check if it's a nonce mismatch error
           if (
             errorMsg.includes("Invalid nonce length") ||
@@ -138,9 +190,6 @@ export const HealthProfileManager: React.FC = () => {
               "⚠️ Profile has nonce mismatch - it was created with buggy code",
             );
             console.warn("⚠️ The profile needs to be updated to fix the nonce");
-            console.warn(
-              "⚠️ For now, profile data cannot be displayed (encrypted on blockchain)",
-            );
           }
 
           // Show encrypted indicator instead of sample data

@@ -255,13 +255,31 @@ export async function decryptHealthData(
         ) || 0
       : 0;
 
-  const weight =
+  // Weight might be encrypted with a different nonce (if stored in localStorage from an old save)
+  // Try to decrypt it, but don't fail if it doesn't work - it will be re-encrypted on next save
+  let weight = 0;
+  if (
     encryptedProfile.encryptedWeight &&
     encryptedProfile.encryptedWeight.trim() !== ""
-      ? parseInt(
-          await decryptField(encryptedProfile.encryptedWeight, key, nonce),
-        ) || 0
-      : 0;
+  ) {
+    try {
+      const decryptedWeight = await decryptField(
+        encryptedProfile.encryptedWeight,
+        key,
+        nonce,
+      );
+      weight = parseInt(decryptedWeight) || 0;
+    } catch (weightError) {
+      console.warn(
+        "⚠️ Could not decrypt weight (may have been encrypted with different nonce):",
+        weightError,
+      );
+      console.warn("ℹ️ Weight will be re-encrypted on next profile update");
+      // Weight decryption failed - likely encrypted with old nonce
+      // This is OK - it will be re-encrypted with the correct nonce when profile is updated
+      weight = 0;
+    }
+  }
 
   const email =
     encryptedProfile.encryptedEmail &&

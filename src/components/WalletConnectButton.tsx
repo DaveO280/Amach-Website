@@ -1,6 +1,6 @@
-import { Activity, Bot, ChevronDown, Wallet } from "lucide-react";
+import { ChevronDown, Wallet, LayoutDashboard, Brain } from "lucide-react";
 import React, { useState } from "react";
-import { useWalletConnection } from "../hooks/useWalletConnection";
+import { useWalletService } from "../hooks/useWalletService";
 import { Button } from "./ui/button";
 
 interface WalletConnectButtonProps {
@@ -12,8 +12,7 @@ const WalletConnectButton: React.FC<WalletConnectButtonProps> = ({
   onDashboardClick,
   onAiCompanionClick,
 }) => {
-  const { isConnected, profile, error, connect, disconnect } =
-    useWalletConnection();
+  const { isConnected, address, connect, disconnect } = useWalletService();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const handleConnect = async (): Promise<void> => {
@@ -24,106 +23,101 @@ const WalletConnectButton: React.FC<WalletConnectButtonProps> = ({
     }
   };
 
-  const handleDisconnect = (): void => {
-    disconnect();
+  const handleDisconnect = async (): Promise<void> => {
+    await disconnect();
     setIsDropdownOpen(false);
+  };
+
+  const handleNavigateToWallet = (e?: React.MouseEvent): void => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setIsDropdownOpen(false);
+    // Use window.location for reliable navigation
+    window.location.href = "/wallet";
   };
 
   const dropdownItems = [
     {
-      label: "Dashboard",
-      action: onDashboardClick,
-      icon: Activity,
-      href: "#",
+      label: "Wallet",
+      action: handleNavigateToWallet,
+      icon: Wallet,
     },
     {
-      label: "AI Agent",
+      label: "Dashboard",
+      action: onDashboardClick,
+      icon: LayoutDashboard,
+    },
+    {
+      label: "AI Companion",
       action: onAiCompanionClick,
-      href: "#",
-      icon: Bot,
+      icon: Brain,
     },
   ];
 
+  const shortAddress = (addr: string | null | undefined): string => {
+    if (!addr) return "";
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
+
   return (
     <div className="wallet-connect-container">
-      {error && (
-        <div
-          className="error-message"
-          style={{ color: "red", marginBottom: "10px", fontSize: "12px" }}
-        >
-          {error}
-        </div>
-      )}
-
       {!isConnected ? (
         <Button
           variant="outline"
-          className="text-amber-900 hover:text-emerald-600"
+          className="text-amber-900 hover:text-emerald-600 border-amber-300 hover:border-emerald-600"
           onClick={handleConnect}
         >
           <Wallet className="h-4 w-4 mr-2" />
           Connect Wallet
-          <ChevronDown className="h-4 w-4 ml-2" />
         </Button>
       ) : (
-        <div className="relative group">
+        <div className="relative">
           <Button
             variant="outline"
-            className="text-amber-900 hover:text-emerald-600"
+            className="text-amber-900 hover:text-emerald-600 border-amber-300 hover:border-emerald-600"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
           >
             <Wallet className="h-4 w-4 mr-2" />
-            Connected
+            {shortAddress(address)}
             <ChevronDown className="h-4 w-4 ml-2" />
           </Button>
 
-          {/* Profile info tooltip */}
-          {profile && (
-            <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-              <div className="px-4 py-2 text-xs text-gray-600 border-b">
-                <div>Age: {profile.age}</div>
-                <div>Weight: {profile.weight}kg</div>
-                <div>Height: {profile.height}cm</div>
-                <div>Sex: {profile.biologicalSex}</div>
+          {/* Dropdown menu */}
+          {isDropdownOpen && (
+            <div className="absolute right-0 mt-2 w-48 bg-white border border-amber-200 rounded-md shadow-lg z-50">
+              {dropdownItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDropdownOpen(false);
+                      if (item.action) {
+                        item.action(e);
+                      }
+                    }}
+                    className="flex items-center w-full px-4 py-2 text-sm text-amber-900 hover:bg-emerald-50 cursor-pointer transition-colors"
+                  >
+                    <Icon className="h-4 w-4 mr-2" />
+                    {item.label}
+                  </button>
+                );
+              })}
+              <div className="border-t border-amber-200">
+                <button
+                  onClick={handleDisconnect}
+                  className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 cursor-pointer transition-colors"
+                >
+                  Disconnect
+                </button>
               </div>
             </div>
           )}
-
-          {/* Dropdown menu */}
-          <div
-            className={`absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-md shadow-lg transition-all duration-200 z-50 ${
-              isDropdownOpen ? "opacity-100 visible" : "opacity-0 invisible"
-            }`}
-          >
-            {dropdownItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.label}
-                  onClick={() => {
-                    setIsDropdownOpen(false);
-                    if (item.action) {
-                      item.action();
-                    } else if (item.href && item.href !== "#") {
-                      window.location.href = item.href;
-                    }
-                  }}
-                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
-                >
-                  <Icon className="h-4 w-4 mr-2" />
-                  {item.label}
-                </button>
-              );
-            })}
-            <div className="border-t">
-              <button
-                onClick={handleDisconnect}
-                className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 cursor-pointer"
-              >
-                Disconnect
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

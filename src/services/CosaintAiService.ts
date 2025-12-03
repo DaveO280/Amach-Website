@@ -13,6 +13,12 @@ import type { HealthContextMetrics } from "../types/HealthContext";
 import type { HealthDataByType } from "../types/healthData";
 import { logger } from "../utils/logger";
 import { runCoordinatorAnalysis } from "./CoordinatorService";
+import {
+  type HealthMetric,
+  type UserContext,
+  rankMetricsByRelevance,
+  getTopRelevant,
+} from "@/ai/RelevanceScorer";
 
 const RESPONSE_FORMAT_GUIDELINES = `
 
@@ -25,6 +31,88 @@ export class CosaintAiService {
   constructor(veniceApi: VeniceApiService) {
     this.veniceApi = veniceApi;
     this.characteristics = new CharacteristicsLoader(cosaintCharacteristics);
+  }
+
+  /**
+   * Convert HealthDataByType to HealthMetric[] format for relevance scoring
+   */
+  private convertToHealthMetrics(
+    metricData?: HealthDataByType,
+  ): HealthMetric[] {
+    if (!metricData) return [];
+
+    const metrics: HealthMetric[] = [];
+
+    // Convert each metric type to HealthMetric format
+    Object.entries(metricData).forEach(([type, dataPoints]) => {
+      if (!dataPoints || !Array.isArray(dataPoints)) return;
+
+      dataPoints.forEach((point) => {
+        // Parse value to number (it's stored as string in HealthDataPoint)
+        const numValue = parseFloat(point.value);
+        if (isNaN(numValue)) return;
+
+        // Use startDate as timestamp (convert ISO string to timestamp)
+        const timestamp = new Date(point.startDate).getTime();
+
+        metrics.push({
+          type,
+          value: numValue,
+          unit: point.unit || "",
+          timestamp,
+          startDate: point.startDate, // Preserve for sleep duration analysis
+          endDate: point.endDate, // Preserve for sleep duration analysis
+        });
+      });
+    });
+
+    return metrics;
+  }
+
+  /**
+   * Build UserContext from user profile and conversation history
+   */
+  private buildUserContext(
+    userProfile?: NormalizedUserProfile,
+    conversationHistory?: Array<{
+      role: "user" | "assistant";
+      content: string;
+    }>,
+  ): UserContext {
+    // Extract goals and conditions from conversation history
+    const goals: string[] = [];
+    const conditions: string[] = [];
+    const recentQueries: string[] = [];
+
+    conversationHistory?.forEach((msg) => {
+      if (msg.role === "user") {
+        const content = msg.content.toLowerCase();
+        recentQueries.push(content);
+
+        // Simple keyword matching to extract goals
+        if (content.includes("want to") || content.includes("goal")) {
+          goals.push(msg.content);
+        }
+        // Extract conditions
+        if (
+          content.includes("diagnosed") ||
+          content.includes("condition") ||
+          content.includes("illness")
+        ) {
+          conditions.push(msg.content);
+        }
+      }
+    });
+
+    return {
+      age: userProfile?.age,
+      sex: userProfile?.sex as "male" | "female" | undefined,
+      weight: userProfile?.weightLbs || userProfile?.weightKg,
+      height: userProfile?.heightIn || userProfile?.heightCm,
+      goals: goals.length > 0 ? goals : undefined,
+      conditions: conditions.length > 0 ? conditions : undefined,
+      recentQueries: recentQueries.slice(-5), // Keep last 5 queries
+    };
   }
 
   /**
@@ -108,6 +196,38 @@ export class CosaintAiService {
         structuredReportCount: reports?.length ?? 0,
       });
 
+      // Convert and rank health metrics by relevance
+      let rankedMetrics: HealthMetric[] = [];
+      if (metricData && Object.keys(metricData).length > 0) {
+        const healthMetrics = this.convertToHealthMetrics(metricData);
+        const userContext = this.buildUserContext(
+          userProfile,
+          conversationHistory,
+        );
+
+        console.log("[CosaintAiService] Ranking metrics by relevance:", {
+          totalMetrics: healthMetrics.length,
+          userContext: {
+            hasGoals: Boolean(userContext.goals?.length),
+            hasConditions: Boolean(userContext.conditions?.length),
+            hasRecentQueries: Boolean(userContext.recentQueries?.length),
+          },
+        });
+
+        // Rank metrics by relevance
+        const ranked = rankMetricsByRelevance(healthMetrics, userContext);
+
+        // Get top 100 most relevant metrics (reduce context size while keeping quality)
+        rankedMetrics = getTopRelevant(ranked, 100).map((rm) => rm.metric);
+
+        console.log("[CosaintAiService] Ranked metrics:", {
+          topMetricsCount: rankedMetrics.length,
+          topMetricTypes: [
+            ...new Set(rankedMetrics.slice(0, 10).map((m) => m.type)),
+          ],
+        });
+      }
+
       let coordinatorResult: CoordinatorResult | null = null;
       if (
         useMultiAgent &&
@@ -138,6 +258,7 @@ export class CosaintAiService {
         userProfile,
         coordinatorResult,
         reports,
+        rankedMetrics,
       );
 
       // Log the prompt for debugging (you can remove this in production)
@@ -235,11 +356,41 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
     userProfile?: NormalizedUserProfile,
     coordinatorResult?: CoordinatorResult | null,
     reports?: ParsedReportSummary[],
+    rankedMetrics?: HealthMetric[],
   ): string {
     // Build the system message including character background, health data, file context, and user profile
     let systemMessage = this.buildSystemMessage(healthData, userProfile);
     systemMessage +=
       "\n\nFollow-up instruction: Always address the user's latest question or concern first, use the conversation history to avoid repeating full introductions or already acknowledged profile details, and consolidate duplicate findings instead of listing the same metric multiple times.";
+
+    // Add relevance-ranked metrics if available
+    if (rankedMetrics && rankedMetrics.length > 0) {
+      systemMessage +=
+        "\n\n📊 Top Relevant Health Metrics (AI-scored by importance):";
+
+      // Group metrics by type for better readability
+      const metricsByType = rankedMetrics.reduce(
+        (acc, metric) => {
+          if (!acc[metric.type]) acc[metric.type] = [];
+          acc[metric.type].push(metric);
+          return acc;
+        },
+        {} as Record<string, HealthMetric[]>,
+      );
+
+      // Show top 5 metric types with their most recent values
+      Object.entries(metricsByType)
+        .slice(0, 5)
+        .forEach(([type, metrics]) => {
+          // Get most recent metric of this type
+          const latest = metrics.sort((a, b) => b.timestamp - a.timestamp)[0];
+          const date = new Date(latest.timestamp).toLocaleDateString();
+          systemMessage += `\n- ${type}: ${latest.value}${latest.unit || ""} (${date}, ${metrics.length} data points available)`;
+        });
+
+      systemMessage +=
+        "\n\nNote: These metrics have been prioritized based on relevance to the user's goals, health conditions, and conversation context.";
+    }
 
     if (coordinatorResult?.combinedSummary) {
       const summary = coordinatorResult.combinedSummary;

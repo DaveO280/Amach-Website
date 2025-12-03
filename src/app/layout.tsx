@@ -1,6 +1,6 @@
 import HealthDataContextWrapper from "@/components/HealthDataContextWrapper";
+import PrivyProvider from "@/components/PrivyProvider";
 import QueryProvider from "@/components/QueryProvider";
-import { ZkSyncSsoWalletButton } from "@/components/ZkSyncSsoWalletButton";
 import { SelectionProvider } from "@/store/selectionStore/provider";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
@@ -32,17 +32,13 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ErudaLoader />
-        <QueryProvider>
-          <HealthDataContextWrapper>
-            <SelectionProvider>
-              {/* Keep wallet connection logic mounted globally; hidden to avoid duplicate UI */}
-              <div className="hidden">
-                <ZkSyncSsoWalletButton />
-              </div>
-              {children}
-            </SelectionProvider>
-          </HealthDataContextWrapper>
-        </QueryProvider>
+        <PrivyProvider>
+          <QueryProvider>
+            <HealthDataContextWrapper>
+              <SelectionProvider>{children}</SelectionProvider>
+            </HealthDataContextWrapper>
+          </QueryProvider>
+        </PrivyProvider>
         <Analytics />
       </body>
     </html>

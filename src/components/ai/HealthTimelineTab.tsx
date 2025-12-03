@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useZkSyncSsoWallet } from "@/hooks/useZkSyncSsoWallet";
+import { useWalletService } from "@/hooks/useWalletService";
 import {
   addHealthEvent,
   readHealthTimeline,
@@ -15,7 +15,8 @@ import {
 import { Plus, X, Search, Calendar, Eye } from "lucide-react";
 
 export default function HealthTimelineTab(): JSX.Element {
-  const { isConnected, address } = useZkSyncSsoWallet();
+  const { isConnected, getAddress } = useWalletService();
+  const address = getAddress();
   const [events, setEvents] = useState<HealthEvent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);

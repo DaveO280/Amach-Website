@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useZkSyncSsoWallet } from "@/hooks/useZkSyncSsoWallet";
+import { useWalletService } from "@/hooks/useWalletService";
 import type { NormalizedUserProfile } from "@/utils/userProfileUtils";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -38,7 +38,7 @@ export const ProfileInputModal: React.FC<ProfileInputModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
 
   const { isConnected, getDecryptedProfile, loadProfileFromBlockchain } =
-    useZkSyncSsoWallet();
+    useWalletService();
 
   useEffect(() => {
     const populateFromWallet = async (): Promise<void> => {

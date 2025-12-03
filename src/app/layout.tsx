@@ -16,10 +16,21 @@ export const metadata: Metadata = {
   description: "Driven by Data, Guided by Nature",
   keywords: ["healthcare", "AI", "blockchain", "analytics", "medicine"],
   icons: {
-    icon: {
-      url: "/icon.svg",
-      type: "image/svg+xml",
-    },
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon.svg", type: "image/svg+xml", sizes: "any" },
+    ],
+    apple: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon.svg", type: "image/svg+xml", sizes: "180x180" },
+    ],
+    shortcut: "/icon.svg",
+  },
+  manifest: "/icon.svg",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Amach Health",
   },
 };
 

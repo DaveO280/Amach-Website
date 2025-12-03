@@ -3,7 +3,7 @@
 import { Shield, Wallet, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import React, { useEffect, useRef, useState } from "react";
-import { useZkSyncSsoWallet } from "../hooks/useZkSyncSsoWallet";
+import { useWalletService } from "../hooks/useWalletService";
 import { Badge } from "./ui/badge";
 
 // Import the actual components directly to avoid chunk loading errors
@@ -70,7 +70,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
     "selector",
   );
   const modalRef = useRef<HTMLDivElement>(null);
-  const { isConnected, healthProfile } = useZkSyncSsoWallet();
+  const { isConnected, healthProfile } = useWalletService();
 
   // Check viewport size to adjust UI accordingly
   useEffect(() => {

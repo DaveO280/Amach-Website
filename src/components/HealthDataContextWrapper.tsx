@@ -33,7 +33,7 @@ import type {
   WalletContextVault,
 } from "@/types/contextVault";
 import { buildContextVaultSnapshot } from "@/utils/contextVault";
-import { zkSyncSsoWalletService } from "@/services/ZkSyncSsoWalletService";
+import { useWalletService } from "@/hooks/useWalletService";
 
 // Profile type
 interface ProfileData extends NormalizedUserProfile {}
@@ -146,6 +146,7 @@ export default function HealthDataContextWrapper({
 }: {
   children: React.ReactNode;
 }): JSX.Element {
+  const walletService = useWalletService();
   // Health data state
   const { data: metricData = {}, isPending, error } = useHealthDataQuery();
   const [processingState, setProcessingState] = useState<ProcessingState>(
@@ -900,9 +901,9 @@ export default function HealthDataContextWrapper({
             recentMessagesLimit: options?.recentMessagesLimit,
             metadata: options?.metadata,
           });
-          return zkSyncSsoWalletService.saveContextVault(vault);
+          return walletService.saveContextVault(vault);
         },
-        loadContextVault: () => zkSyncSsoWalletService.loadContextVault(),
+        loadContextVault: () => walletService.loadContextVault(),
       }}
     >
       {children}

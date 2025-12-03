@@ -3,7 +3,7 @@
 import HealthStatCards from "@/components/ai/HealthStatCards";
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { Button } from "@/components/ui/button";
-import { useZkSyncSsoWallet } from "@/hooks/useZkSyncSsoWallet";
+import { useWalletService } from "@/hooks/useWalletService";
 import AiProvider from "@/store/aiStore";
 import {
   normalizeUserProfile,
@@ -32,22 +32,41 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
     "chat",
   );
 
+  // Track if we've already populated profile to prevent infinite loops
+  const hasPopulatedProfileRef = useRef(false);
+
   // Access the health data provider to check for available data
   const { metricData, userProfile, setUserProfile, setProfile } =
     useHealthDataContext();
 
   // Get wallet data
   const { isConnected, getDecryptedProfile, loadProfileFromBlockchain } =
-    useZkSyncSsoWallet();
+    useWalletService();
 
   // Check if health data is available
   const hasHealthData = Object.keys(metricData).length > 0;
 
+  // Reset the populated flag when modal closes
+  useEffect(() => {
+    if (!props.isOpen) {
+      hasPopulatedProfileRef.current = false;
+    }
+  }, [props.isOpen]);
+
   // Auto-populate profile from wallet when modal opens
   useEffect(() => {
     const populateProfileFromWallet = async (): Promise<void> => {
-      if (!props.isOpen || !isConnected || isProfileComplete(userProfile))
+      if (
+        !props.isOpen ||
+        !isConnected ||
+        isProfileComplete(userProfile) ||
+        hasPopulatedProfileRef.current
+      ) {
         return;
+      }
+
+      // Mark as populated before async operations
+      hasPopulatedProfileRef.current = true;
 
       try {
         // Load fresh data from blockchain
@@ -86,15 +105,8 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
     };
 
     populateProfileFromWallet();
-  }, [
-    props.isOpen,
-    isConnected,
-    userProfile,
-    getDecryptedProfile,
-    loadProfileFromBlockchain,
-    setUserProfile,
-    setProfile,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.isOpen, isConnected]); // Removed userProfile and setter functions from dependencies
 
   // Check viewport size to adjust UI accordingly
   useEffect(() => {

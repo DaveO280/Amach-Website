@@ -5,18 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Wallet, Shield, Loader2, RefreshCw, Coins } from "lucide-react";
-import { useZkSyncSsoWallet } from "../hooks/useZkSyncSsoWallet";
+import { useWalletService } from "../hooks/useWalletService";
 
 export const WalletSummaryWidget: React.FC = () => {
-  const {
-    isConnected,
-    isConnecting,
-    address,
-    balance,
-    healthProfile,
-    connect,
-    getBalance,
-  } = useZkSyncSsoWallet();
+  const { isConnected, address, balance, healthProfile, connect, getBalance } =
+    useWalletService();
 
   useEffect(() => {
     if (isConnected) {
@@ -43,11 +36,10 @@ export const WalletSummaryWidget: React.FC = () => {
             onClick={() => {
               void connect();
             }}
-            disabled={isConnecting}
             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-            aria-label="Connect ZKsync SSO Wallet"
+            aria-label="Connect Wallet"
           >
-            {isConnecting ? (
+            {false ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Connecting...

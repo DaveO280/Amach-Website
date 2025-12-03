@@ -11,7 +11,7 @@ import {
   Wallet,
 } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
-import { useZkSyncSsoWallet } from "../hooks/useZkSyncSsoWallet";
+import { useWalletService } from "../hooks/useWalletService";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -27,9 +27,10 @@ export const CryptoWallet: React.FC = () => {
     getBalance,
     getTokenBalances,
     sendETH,
+    claimAllocation,
     error,
     clearError,
-  } = useZkSyncSsoWallet();
+  } = useWalletService();
 
   const [isLoading, setIsLoading] = useState(false);
   const [sendTo, setSendTo] = useState("");
@@ -151,11 +152,8 @@ export const CryptoWallet: React.FC = () => {
     setSuccessMessage(null);
 
     try {
-      // Import the service and call claim allocation
-      const { zkSyncSsoWalletService } = await import(
-        "@/services/ZkSyncSsoWalletService"
-      );
-      const result = await zkSyncSsoWalletService.claimAllocation();
+      // Call claim allocation using wallet service
+      const result = await claimAllocation();
 
       if (result.success) {
         setSuccessMessage(
@@ -180,12 +178,16 @@ export const CryptoWallet: React.FC = () => {
 
     setIsLoadingTokenBalance(true);
     try {
-      // Call the token contract to get balance
-      const { readContract } = await import("@wagmi/core");
-      const { wagmiConfig } = await import("@/lib/zksync-sso-config");
-      const { formatUnits } = await import("viem");
+      // Call the token contract to get balance using viem
+      const { createPublicClient, http, formatUnits } = await import("viem");
+      const { getActiveChain } = await import("@/lib/networkConfig");
 
-      const balance = await readContract(wagmiConfig, {
+      const publicClient = createPublicClient({
+        chain: getActiveChain(),
+        transport: http(),
+      });
+
+      const balance = await publicClient.readContract({
         address: "0x057df807987f284b55ba6A9ab89d089fd8398B99", // HealthToken address (Clean Slate)
         abi: [
           {

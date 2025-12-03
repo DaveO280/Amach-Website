@@ -1,33 +1,7 @@
-import { createConfig } from "@wagmi/core";
-import { defineChain, http, parseEther, parseUnits } from "viem";
-import { callPolicy, zksyncSsoConnector } from "zksync-sso/connector";
+import { getContractAddresses } from "./networkConfig";
 
-// Define ZKsync Sepolia Testnet chain
-const zkSyncSepoliaTestnet = defineChain({
-  id: 300,
-  name: "zkSync Era Sepolia Testnet",
-  network: "zksync-sepolia-testnet",
-  nativeCurrency: {
-    decimals: 18,
-    name: "Ether",
-    symbol: "ETH",
-  },
-  rpcUrls: {
-    default: {
-      http: ["https://sepolia.era.zksync.dev"],
-    },
-    public: {
-      http: ["https://sepolia.era.zksync.dev"],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: "zkSync Era Sepolia Explorer",
-      url: "https://sepolia.explorer.zksync.io",
-    },
-  },
-  testnet: true,
-});
+// Note: Chain definitions have been moved to networkConfig.ts
+// This file now only exports contract ABIs and addresses
 
 // Secure Health Profile V1 contract ABI (UUPS Upgradeable)
 // Includes: Core profile + Event-based timeline + ZK proofs
@@ -68,6 +42,77 @@ const secureHealthProfileAbi = [
     name: "deactivateProfile",
     outputs: [],
     stateMutability: "nonpayable",
+    type: "function",
+  },
+  // ============================================
+  // V3: PROFILE FUNCTIONS WITH WEIGHT
+  // ============================================
+  {
+    inputs: [
+      { name: "encryptedBirthDate", type: "string" },
+      { name: "encryptedSex", type: "string" },
+      { name: "encryptedHeight", type: "string" },
+      { name: "encryptedWeight", type: "string" },
+      { name: "encryptedEmail", type: "string" },
+      { name: "dataHash", type: "bytes32" },
+      { name: "nonce", type: "string" },
+    ],
+    name: "createProfileWithWeight",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "encryptedBirthDate", type: "string" },
+      { name: "encryptedSex", type: "string" },
+      { name: "encryptedHeight", type: "string" },
+      { name: "encryptedWeight", type: "string" },
+      { name: "encryptedEmail", type: "string" },
+      { name: "dataHash", type: "bytes32" },
+      { name: "nonce", type: "string" },
+    ],
+    name: "updateProfileWithWeight",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "encryptedWeight", type: "string" }],
+    name: "updateWeight",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "user", type: "address" }],
+    name: "getProfileWithWeight",
+    outputs: [
+      {
+        components: [
+          { name: "encryptedBirthDate", type: "string" },
+          { name: "encryptedSex", type: "string" },
+          { name: "encryptedHeight", type: "string" },
+          { name: "encryptedEmail", type: "string" },
+          { name: "dataHash", type: "bytes32" },
+          { name: "timestamp", type: "uint256" },
+          { name: "isActive", type: "bool" },
+          { name: "version", type: "uint8" },
+          { name: "nonce", type: "string" },
+        ],
+        name: "profile",
+        type: "tuple",
+      },
+      { name: "weight", type: "string" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "user", type: "address" }],
+    name: "getWeight",
+    outputs: [{ name: "", type: "string" }],
+    stateMutability: "view",
     type: "function",
   },
   {
@@ -273,6 +318,51 @@ const secureHealthProfileAbi = [
     name: "invalidateZKProof",
     outputs: [],
     stateMutability: "nonpayable",
+    type: "function",
+  },
+  // ============================================
+  // V2: STORJ OFF-CHAIN STORAGE
+  // ============================================
+  {
+    inputs: [
+      { name: "searchTag", type: "bytes32" },
+      { name: "storjUri", type: "string" },
+      { name: "contentHash", type: "bytes32" },
+      { name: "eventHash", type: "bytes32" },
+    ],
+    name: "addHealthEventV2",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "eventId", type: "uint256" },
+    ],
+    name: "getEventStorjUri",
+    outputs: [{ name: "", type: "string" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "eventId", type: "uint256" },
+    ],
+    name: "getEventContentHash",
+    outputs: [{ name: "", type: "bytes32" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "eventId", type: "uint256" },
+    ],
+    name: "isStorjEvent",
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
     type: "function",
   },
   // ============================================
@@ -488,8 +578,10 @@ const SECURE_HEALTH_PROFILE_CONTRACT =
   "0x2A8015613623A6A8D369BcDC2bd6DD202230785a"; // Proxy address - V1 with Searchable Encryption (Nov 20, 2025)
 const SECURE_HEALTH_PROFILE_CONTRACT_V1_OLD =
   "0xb1e41c4913D52E20aAaF4728c0449Bc6320a45A3"; // Old non-upgradeable (backed up)
+// Get contract address from networkConfig for automatic network switching
 const PROFILE_VERIFICATION_CONTRACT =
-  "0xA2D3b1b8080895C5bE335d8352D867e4b6e51ab3"; // Clean Slate - Oct 29 2025
+  process.env.PROFILE_VERIFICATION_CONTRACT ||
+  getContractAddresses().PROFILE_VERIFICATION_CONTRACT;
 
 // Export the ABIs and contract addresses
 export {
@@ -503,172 +595,5 @@ export {
   secureHealthProfileAbi,
 };
 
-// Token decimals for health-related transactions
-const HEALTH_TOKEN_DECIMALS = 18;
-
-// ZKsync SSO Connector with health-specific session configuration
-// 🔒 SECURITY CONFIGURATION FOR MAINNET READINESS
-export const ssoConnector = zksyncSsoConnector({
-  // Use ZKsync hosted auth server (default)
-  // No authServerUrl needed - uses ZKsync's hosted service
-
-  // Session configuration for health data operations
-  session: {
-    // 🔐 Session expires in 1 day (reduced from 7 days for security)
-    // User will need to reconnect daily, balancing security with UX
-    expiry: "1 day",
-
-    // 🔐 Allow up to 0.05 ETH in gas fees per session (reduced from 0.1 ETH)
-    // Limits damage if session key is compromised
-    feeLimit: parseEther("0.05"),
-
-    // 🔐 Allow ETH transfers for health-related payments
-    transfers: [
-      {
-        // Allow transfers to legacy health profile contract
-        to: HEALTH_PROFILE_CONTRACT,
-        valueLimit: parseEther("0.01"), // Max 0.01 ETH per transfer (reduced from 0.05 ETH)
-      },
-      // Add more health-related addresses as needed
-    ],
-
-    // 🔐 Smart contracts enforce one-time operations at the contract level:
-    //   - claimAllocation: Only once per wallet (contract enforces)
-    //   - createProfile/createSecureProfile: Only once per wallet (contract enforces)
-    //   - verifyProfile: Only once per wallet (contract enforces)
-    // SSO session provides UX (no explicit signatures), contracts provide security
-    contractCalls: [
-      // Profile verification (with signature)
-      // Contract enforces: One verification per wallet
-      callPolicy({
-        address: PROFILE_VERIFICATION_CONTRACT,
-        abi: profileVerificationAbi,
-        functionName: "verifyProfile",
-      }),
-      // Profile verification (ZKsync SSO - no signature)
-      // Contract enforces: One verification per wallet
-      callPolicy({
-        address: PROFILE_VERIFICATION_CONTRACT,
-        abi: profileVerificationAbi,
-        functionName: "verifyProfileZKsync",
-      }),
-      // Health profile creation (legacy)
-      // Contract enforces: One profile per wallet
-      callPolicy({
-        address: HEALTH_PROFILE_CONTRACT,
-        abi: healthProfileAbi,
-        functionName: "createProfile",
-      }),
-      // Health profile updates (legacy)
-      // Unlimited updates allowed (frequent operation)
-      callPolicy({
-        address: HEALTH_PROFILE_CONTRACT,
-        abi: healthProfileAbi,
-        functionName: "updateProfile",
-      }),
-      // Weight updates (legacy)
-      // Unlimited updates allowed (daily tracking)
-      callPolicy({
-        address: HEALTH_PROFILE_CONTRACT,
-        abi: healthProfileAbi,
-        functionName: "updateWeight",
-      }),
-      // 🚨 CRITICAL: Token allocation claiming
-      // Contract enforces: One claim per wallet (prevents token drainage)
-      callPolicy({
-        address: PROFILE_VERIFICATION_CONTRACT,
-        abi: profileVerificationAbi,
-        functionName: "claimAllocation",
-      }),
-      // Secure profile creation (encrypted data) - V1 Upgradeable
-      // Contract enforces: One profile per wallet
-      callPolicy({
-        address: SECURE_HEALTH_PROFILE_CONTRACT,
-        abi: secureHealthProfileAbi,
-        functionName: "createProfile",
-      }),
-      // Secure profile updates (encrypted data)
-      // Unlimited updates allowed (frequent operation)
-      callPolicy({
-        address: SECURE_HEALTH_PROFILE_CONTRACT,
-        abi: secureHealthProfileAbi,
-        functionName: "updateProfile",
-      }),
-      // Profile deactivation (soft delete)
-      callPolicy({
-        address: SECURE_HEALTH_PROFILE_CONTRACT,
-        abi: secureHealthProfileAbi,
-        functionName: "deactivateProfile",
-      }),
-      // Health timeline events (medications, conditions, weight, etc.)
-      // Unlimited events allowed (append-only timeline)
-      callPolicy({
-        address: SECURE_HEALTH_PROFILE_CONTRACT,
-        abi: secureHealthProfileAbi,
-        functionName: "addHealthEvent",
-      }),
-      // Deactivate health event (soft delete)
-      callPolicy({
-        address: SECURE_HEALTH_PROFILE_CONTRACT,
-        abi: secureHealthProfileAbi,
-        functionName: "deactivateHealthEvent",
-      }),
-      // ZK-proof submission
-      // Unlimited submissions allowed (future proofs)
-      callPolicy({
-        address: SECURE_HEALTH_PROFILE_CONTRACT,
-        abi: secureHealthProfileAbi,
-        functionName: "submitZKProof",
-      }),
-      // ZK-proof invalidation
-      callPolicy({
-        address: SECURE_HEALTH_PROFILE_CONTRACT,
-        abi: secureHealthProfileAbi,
-        functionName: "invalidateZKProof",
-      }),
-    ],
-  },
-});
-
-// Wagmi configuration for ZKsync SSO
-export const wagmiConfig = createConfig({
-  connectors: [ssoConnector],
-  chains: [zkSyncSepoliaTestnet],
-  transports: {
-    [zkSyncSepoliaTestnet.id]: http("https://sepolia.era.zksync.dev"), // Explicit RPC URL
-  },
-});
-
-// Health-specific SSO configuration
-export const healthSsoConfig = {
-  // Contract addresses
-  contracts: {
-    healthProfile: HEALTH_PROFILE_CONTRACT,
-    profileVerification: PROFILE_VERIFICATION_CONTRACT,
-    // Add other health-related contracts as needed
-  },
-
-  // Network configuration
-  network: {
-    chainId: zkSyncSepoliaTestnet.id,
-    name: zkSyncSepoliaTestnet.name,
-    rpcUrl: zkSyncSepoliaTestnet.rpcUrls.default.http[0],
-  },
-
-  // Session limits for health operations
-  sessionLimits: {
-    maxGasFee: parseEther("0.1"),
-    maxTransferValue: parseEther("0.05"),
-    maxHealthTokenAmount: parseUnits("1.0", HEALTH_TOKEN_DECIMALS),
-    sessionDuration: "1 day",
-  },
-
-  // Health data permissions
-  healthDataPermissions: {
-    read: "READ_ONLY",
-    write: "READ_WRITE",
-    admin: "FULL_ACCESS",
-  },
-} as const;
-
-export default healthSsoConfig;
+// Note: SSO connector functions have been removed
+// All wallet operations now use Privy instead of zkSync SSO

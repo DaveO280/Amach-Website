@@ -15,15 +15,33 @@ export default function PrivyProvider({
 }): JSX.Element {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
-  // If appId is missing, return children without PrivyProvider
-  // This allows the app to work even if Privy isn't configured
+  // If appId is missing, show error instead of returning unwrapped children
+  // This prevents hooks from being called outside the PrivyProvider context
   if (!appId || appId.trim() === "") {
     if (typeof window !== "undefined") {
-      console.warn(
-        "⚠️ NEXT_PUBLIC_PRIVY_APP_ID not set. Privy features will not work.",
+      console.error(
+        "❌ NEXT_PUBLIC_PRIVY_APP_ID not set. Please configure this environment variable.",
       );
     }
-    return children as JSX.Element;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-red-50">
+        <div className="text-center p-8 bg-white rounded-lg shadow-lg max-w-md">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">
+            Configuration Error
+          </h1>
+          <p className="text-gray-700 mb-2">
+            The Privy App ID is not configured in environment variables.
+          </p>
+          <p className="text-sm text-gray-600">
+            Please set{" "}
+            <code className="bg-gray-100 px-2 py-1 rounded">
+              NEXT_PUBLIC_PRIVY_APP_ID
+            </code>{" "}
+            and redeploy.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   // Get the active chain based on environment

@@ -1,7 +1,17 @@
 "use client";
 
-import { wagmiConfig } from "../lib/zksync-sso-config";
 import { decryptHealthData } from "../utils/secureHealthEncryption";
+
+// ⚠️ MIGRATION IN PROGRESS: This service is being refactored to use Privy wallet service
+// TODO: Replace wagmi/SSO code with viem + Privy implementation
+
+// Temporary stub for getWagmiConfig until migration is complete
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getWagmiConfig(): any {
+  throw new Error(
+    "ProtocolDataAccessService is being migrated to Privy - this function is temporarily unavailable",
+  );
+}
 
 /**
  * Service for protocol to access and decrypt health data for AI analysis
@@ -60,10 +70,13 @@ export class ProtocolDataAccessService {
 
     try {
       const { readContract } = await import("@wagmi/core");
-      const { secureHealthProfileAbi, SECURE_HEALTH_PROFILE_CONTRACT } =
-        await import("../lib/zksync-sso-config");
+      const {
+        /* getWagmiConfig, */ secureHealthProfileAbi,
+        SECURE_HEALTH_PROFILE_CONTRACT,
+      } = await import("../lib/contractConfig");
 
       // Get profile metadata to verify it exists
+      const wagmiConfig = getWagmiConfig(); // Using stub function above
       const profileMetadata = (await readContract(wagmiConfig, {
         address: SECURE_HEALTH_PROFILE_CONTRACT,
         abi: secureHealthProfileAbi,
@@ -191,10 +204,13 @@ export class ProtocolDataAccessService {
 
     try {
       const { readContract } = await import("@wagmi/core");
-      const { secureHealthProfileAbi, SECURE_HEALTH_PROFILE_CONTRACT } =
-        await import("../lib/zksync-sso-config");
+      const {
+        /* getWagmiConfig, */ secureHealthProfileAbi,
+        SECURE_HEALTH_PROFILE_CONTRACT,
+      } = await import("../lib/contractConfig");
 
       // Get ZK proof hash for privacy-preserving analysis
+      const wagmiConfig = getWagmiConfig(); // Using stub function above
       const zkProof = await readContract(wagmiConfig, {
         address: SECURE_HEALTH_PROFILE_CONTRACT,
         abi: secureHealthProfileAbi,
@@ -241,9 +257,12 @@ export class ProtocolDataAccessService {
 
     try {
       const { writeContract } = await import("@wagmi/core");
-      const { secureHealthProfileAbi, SECURE_HEALTH_PROFILE_CONTRACT } =
-        await import("../lib/zksync-sso-config");
+      const {
+        /* getWagmiConfig, */ secureHealthProfileAbi,
+        SECURE_HEALTH_PROFILE_CONTRACT,
+      } = await import("../lib/contractConfig");
 
+      const wagmiConfig = getWagmiConfig(); // Using stub function above
       const hash = await writeContract(wagmiConfig, {
         address: SECURE_HEALTH_PROFILE_CONTRACT,
         abi: secureHealthProfileAbi,

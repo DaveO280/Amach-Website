@@ -566,9 +566,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
           return { success: false, error: "Failed to create public client" };
         }
 
-        const { secureHealthProfileAbi } = await import(
-          "@/lib/zksync-sso-config"
-        );
+        const { secureHealthProfileAbi } = await import("@/lib/contractConfig");
         const { getContractAddresses } = await import("@/lib/networkConfig");
         const contracts = getContractAddresses();
 
@@ -762,9 +760,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         return { success: false, error: "Failed to create public client" };
       }
 
-      const { secureHealthProfileAbi } = await import(
-        "@/lib/zksync-sso-config"
-      );
+      const { secureHealthProfileAbi } = await import("@/lib/contractConfig");
       const { getContractAddresses } = await import("@/lib/networkConfig");
       const contracts = getContractAddresses();
 
@@ -1022,7 +1018,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         }
 
         const { PROFILE_VERIFICATION_CONTRACT } = await import(
-          "@/lib/zksync-sso-config"
+          "@/lib/contractConfig"
         );
 
         const { getActiveChain } = await import("@/lib/networkConfig");
@@ -1361,7 +1357,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
           }
 
           const { profileVerificationAbi } = await import(
-            "@/lib/zksync-sso-config"
+            "@/lib/contractConfig"
           );
           const { getContractAddresses } = await import("@/lib/networkConfig");
           const contracts = getContractAddresses();

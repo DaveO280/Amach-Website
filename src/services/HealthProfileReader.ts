@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { SECURE_HEALTH_PROFILE_CONTRACT } from "../lib/zksync-sso-config";
+import { SECURE_HEALTH_PROFILE_CONTRACT } from "../lib/contractConfig";
 
 // Contract configuration
 const CONTRACT_ADDRESS = SECURE_HEALTH_PROFILE_CONTRACT; // Import from config (永 permanent proxy address)

@@ -17,7 +17,7 @@ export async function isEmailWhitelisted(email: string): Promise<boolean> {
     // Use viem directly for server-side blockchain queries (no wagmi needed)
     const { createPublicClient, http } = await import("viem");
     const { getContractAddresses } = await import("./networkConfig");
-    const { profileVerificationAbi } = await import("./zksync-sso-config");
+    const { profileVerificationAbi } = await import("./contractConfig");
 
     const contracts = getContractAddresses();
     const { getActiveChain } = await import("./networkConfig");

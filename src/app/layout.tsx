@@ -26,7 +26,6 @@ export const metadata: Metadata = {
     ],
     shortcut: "/icon.svg",
   },
-  manifest: "/icon.svg",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

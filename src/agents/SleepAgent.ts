@@ -5,6 +5,10 @@ import type {
   AgentInsight,
   MetricSample,
 } from "./types";
+import {
+  createTieredDataFormat,
+  formatTieredDataForPrompt,
+} from "./utils/dataAggregation";
 
 interface SleepAgentData {
   sleepAnalysis: MetricSample[];
@@ -130,52 +134,94 @@ You analyze sleep data with clinical rigor, identifying patterns that impact hea
     };
   }
 
-  protected formatDataForAnalysis(data: SleepAgentData): string {
+  protected formatDataForAnalysis(
+    data: SleepAgentData,
+    context?: AgentExecutionContext,
+  ): string {
     const sections: string[] = [];
+    const analysisMode = context?.analysisMode || "ongoing";
 
     if (data.sleepAnalysis.length > 0) {
       console.log(
-        `[Sleep Agent] formatDataForAnalysis received ${data.sleepAnalysis.length} sleep samples`,
+        `[Sleep Agent] formatDataForAnalysis received ${data.sleepAnalysis.length} sleep samples (mode: ${analysisMode})`,
       );
 
-      sections.push("SLEEP DURATION DATA:");
-      const durations = data.sleepAnalysis.map((sample) => {
-        const timestamp = sample.timestamp ?? new Date();
-        const hours = sample.value / 3600;
-        return {
-          date: timestamp.toLocaleDateString(),
-          dayOfWeek: timestamp.toLocaleDateString("en-US", {
-            weekday: "short",
-          }),
-          hours,
+      // Use tiered format for initial analysis, simple format for ongoing
+      if (analysisMode === "initial") {
+        const tiered = createTieredDataFormat(data.sleepAnalysis);
+        // Convert seconds to hours for display
+        const tieredHours = {
+          ...tiered,
+          daily: tiered.daily.map((d) => ({
+            ...d,
+            value: d.value / 3600, // Convert seconds to hours
+            min: d.min ? d.min / 3600 : undefined,
+            max: d.max ? d.max / 3600 : undefined,
+          })),
+          weekly: tiered.weekly.map((w) => ({
+            ...w,
+            value: w.value / 3600,
+            min: w.min ? w.min / 3600 : undefined,
+            max: w.max ? w.max / 3600 : undefined,
+          })),
+          monthly: tiered.monthly.map((m) => ({
+            ...m,
+            value: m.value / 3600,
+            min: m.min ? m.min / 3600 : undefined,
+            max: m.max ? m.max / 3600 : undefined,
+          })),
+          fullPeriodStats: {
+            ...tiered.fullPeriodStats,
+            average: tiered.fullPeriodStats.average / 3600,
+            min: tiered.fullPeriodStats.min / 3600,
+            max: tiered.fullPeriodStats.max / 3600,
+          },
         };
-      });
-
-      const avgSleep =
-        durations.reduce((sum, entry) => sum + entry.hours, 0) /
-        durations.length;
-      const minSleep = Math.min(...durations.map((entry) => entry.hours));
-      const maxSleep = Math.max(...durations.map((entry) => entry.hours));
-
-      sections.push(
-        `Average: ${avgSleep.toFixed(1)}h | Range: ${minSleep.toFixed(
-          1,
-        )}h - ${maxSleep.toFixed(1)}h`,
-      );
-      sections.push(`Total days: ${durations.length}`);
-      sections.push("");
-
-      // Limit daily detail to most recent 30 days to prevent prompt overflow
-      const recentDurations = durations.slice(-30);
-      sections.push(
-        `Daily Sleep Duration (most recent ${recentDurations.length} days):`,
-      );
-      recentDurations.forEach((entry) => {
         sections.push(
-          `  ${entry.date} (${entry.dayOfWeek}): ${entry.hours.toFixed(1)}h`,
+          formatTieredDataForPrompt(tieredHours, "Sleep Duration", "h"),
         );
-      });
-      sections.push("");
+        sections.push("");
+      } else {
+        // Ongoing mode: simple format with last 30 days
+        sections.push("SLEEP DURATION DATA:");
+        const durations = data.sleepAnalysis.map((sample) => {
+          const timestamp = sample.timestamp ?? new Date();
+          const hours = sample.value / 3600;
+          return {
+            date: timestamp.toLocaleDateString(),
+            dayOfWeek: timestamp.toLocaleDateString("en-US", {
+              weekday: "short",
+            }),
+            hours,
+          };
+        });
+
+        const avgSleep =
+          durations.reduce((sum, entry) => sum + entry.hours, 0) /
+          durations.length;
+        const minSleep = Math.min(...durations.map((entry) => entry.hours));
+        const maxSleep = Math.max(...durations.map((entry) => entry.hours));
+
+        sections.push(
+          `Average: ${avgSleep.toFixed(1)}h | Range: ${minSleep.toFixed(
+            1,
+          )}h - ${maxSleep.toFixed(1)}h`,
+        );
+        sections.push(`Total days: ${durations.length}`);
+        sections.push("");
+
+        // Limit daily detail to most recent 30 days
+        const recentDurations = durations.slice(-30);
+        sections.push(
+          `Daily Sleep Duration (most recent ${recentDurations.length} days):`,
+        );
+        recentDurations.forEach((entry) => {
+          sections.push(
+            `  ${entry.date} (${entry.dayOfWeek}): ${entry.hours.toFixed(1)}h`,
+          );
+        });
+        sections.push("");
+      }
     }
 
     if (data.hrv.length > 0) {
@@ -226,8 +272,9 @@ You analyze sleep data with clinical rigor, identifying patterns that impact hea
     query: string,
     data: SleepAgentData,
     quality: AgentDataQualityAssessment,
+    context?: AgentExecutionContext,
   ): string {
-    const basePrompt = super.buildDetailedPrompt(query, data, quality);
+    const basePrompt = super.buildDetailedPrompt(query, data, quality, context);
 
     let averageSleepHours: number | null = null;
     let sleepRangeHours: number | null = null;

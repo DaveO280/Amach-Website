@@ -174,6 +174,7 @@ Tone requirements:
     const heartRateSamples =
       appleHealth.HKQuantityTypeIdentifierHeartRate ?? [];
 
+    // Build daily summaries
     const dayKeys = new Set<string>();
     stepsSamples.forEach((sample) => dayKeys.add(this.dayKey(sample)));
     activeEnergySamples.forEach((sample) => dayKeys.add(this.dayKey(sample)));
@@ -182,6 +183,8 @@ Tone requirements:
     const summaries: DailyActivitySummary[] = Array.from(dayKeys)
       .map((key) => ({
         date: key,
+        // For aggregated data, value is already the daily/weekly/monthly average
+        // For raw data, findValueForDay will sum all readings for that day
         steps: this.findValueForDay(stepsSamples, key),
         activeEnergy: this.findValueForDay(activeEnergySamples, key),
         exerciseMinutes: this.findValueForDay(exerciseSamples, key),
@@ -672,10 +675,40 @@ ${directedPrompts.map((line) => `- ${line}`).join("\n")}`;
     return match ? match.value : null;
   }
 
+  /**
+   * Calculate average value from samples
+   * IMPORTANT: For cumulative metrics (steps, active energy), samples should already
+   * be aggregated by day (sum per day) by the CoordinatorService before reaching agents.
+   * This function just averages those daily totals.
+   */
   private averageValue(samples: MetricSample[]): number | null {
     if (!samples.length) return null;
-    const sum = samples.reduce((total, sample) => total + sample.value, 0);
-    return Math.round((sum / samples.length) * 10) / 10;
+
+    // Check if samples are already aggregated (from tiered aggregation)
+    const hasAggregationMetadata = samples.some(
+      (s) => s.metadata?.aggregationType || s.metadata?.periodType,
+    );
+
+    if (hasAggregationMetadata) {
+      // Samples are already daily/weekly/monthly aggregates - just average them
+      const sum = samples.reduce((total, sample) => total + sample.value, 0);
+      return Math.round((sum / samples.length) * 10) / 10;
+    }
+
+    // Legacy path: samples are raw readings, need to aggregate by day first
+    // Group by day
+    const dailyTotals = new Map<string, number>();
+    for (const sample of samples) {
+      const dateKey = this.dayKey(sample);
+      dailyTotals.set(dateKey, (dailyTotals.get(dateKey) || 0) + sample.value);
+    }
+
+    // Average the daily totals
+    const values = Array.from(dailyTotals.values());
+    if (values.length === 0) return null;
+
+    const sum = values.reduce((total, val) => total + val, 0);
+    return Math.round((sum / values.length) * 10) / 10;
   }
 
   private formatNumber(value: number | null, digits: number = 0): string {

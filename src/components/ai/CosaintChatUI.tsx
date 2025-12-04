@@ -4,11 +4,12 @@ import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { Button } from "@/components/ui/button";
 import { useAi } from "@/store/aiStore";
 import { parseHealthReport } from "@/utils/reportParsers";
-import { Send, X } from "lucide-react";
+import { Send, X, Sparkles } from "lucide-react";
 import Papa from "papaparse";
 import React, { useEffect, useRef, useState } from "react";
 import { healthDataStore } from "../../data/store/healthDataStore";
 import { parsePDF } from "../../utils/pdfParser";
+import { shouldRunInitialAnalysis } from "@/utils/analysisState";
 
 // Define types for our message interface
 interface MessageType {
@@ -29,10 +30,12 @@ const CosaintChatUI: React.FC = () => {
     setUseMultiAgent,
   } = useAi();
   const [input, setInput] = useState("");
+  const [forceInitialAnalysis, setForceInitialAnalysis] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const {
     metrics,
+    metricData, // Raw metric data from IndexedDB
     uploadedFiles,
     addUploadedFile,
     removeUploadedFile,
@@ -62,8 +65,65 @@ const CosaintChatUI: React.FC = () => {
   const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [autoExpandOnSend, setAutoExpandOnSend] = useState(true);
+  const [shouldRunInitial, setShouldRunInitial] = useState(false);
 
   const AUTO_EXPAND_STORAGE_KEY = "cosaintAutoExpandOnSend";
+
+  // Check if initial analysis should be recommended
+  // Use raw metricData (HealthDataByType) instead of processed metrics
+  useEffect(() => {
+    if (metricData && Object.keys(metricData).length > 0) {
+      let earliest: number | null = null;
+      let latest: number | null = null;
+
+      // metricData is HealthDataByType: { [metricType: string]: HealthDataPoint[] }
+      for (const dataPoints of Object.values(metricData)) {
+        if (Array.isArray(dataPoints)) {
+          for (const point of dataPoints) {
+            if (point?.startDate) {
+              const timestamp = new Date(point.startDate).getTime();
+              if (!Number.isNaN(timestamp)) {
+                if (earliest === null || timestamp < earliest) {
+                  earliest = timestamp;
+                }
+                if (latest === null || timestamp > latest) {
+                  latest = timestamp;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (earliest !== null && latest !== null) {
+        const dataRange = {
+          start: new Date(earliest),
+          end: new Date(latest),
+        };
+        const days =
+          (dataRange.end.getTime() - dataRange.start.getTime()) /
+          (1000 * 60 * 60 * 24);
+        const recommended = shouldRunInitialAnalysis(dataRange);
+        console.log("[CosaintChatUI] Initial analysis check:", {
+          dataRange: {
+            start: dataRange.start.toISOString(),
+            end: dataRange.end.toISOString(),
+            days: days.toFixed(1),
+          },
+          recommended,
+          metricTypes: Object.keys(metricData).length,
+        });
+        setShouldRunInitial(recommended);
+      } else {
+        console.log(
+          "[CosaintChatUI] Could not determine data range from metricData",
+        );
+        setShouldRunInitial(false);
+      }
+    } else {
+      setShouldRunInitial(false);
+    }
+  }, [metricData]);
 
   const inferReportType = (
     fileName: string,
@@ -153,8 +213,9 @@ const CosaintChatUI: React.FC = () => {
     if (autoExpandOnSend && !isExpanded) {
       setIsExpanded(true);
     }
-    await sendMessage(input);
+    await sendMessage(input, forceInitialAnalysis);
     setInput("");
+    setForceInitialAnalysis(false); // Reset flag after sending
     setLoadingStartTime(null);
   };
 
@@ -478,6 +539,50 @@ const CosaintChatUI: React.FC = () => {
               </span>
             </div>
           </div>
+          {/* Initial Analysis Recommendation - Always visible when recommended */}
+          {shouldRunInitial && !forceInitialAnalysis && (
+            <div className="mt-2 flex items-center gap-2 rounded-lg border-2 border-amber-300 bg-amber-50 px-3 py-2 shadow-sm">
+              <Sparkles className="h-4 w-4 text-amber-600" />
+              <div className="flex-1">
+                <span className="text-xs font-semibold text-amber-900">
+                  Deep Historical Analysis Recommended
+                </span>
+                <p className="text-[11px] text-amber-800">
+                  Your data spans a long period. Run an initial deep analysis to
+                  uncover long-term trends and seasonal patterns.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForceInitialAnalysis(true)}
+                className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700 shadow-sm"
+              >
+                Run Now
+              </button>
+            </div>
+          )}
+          {forceInitialAnalysis && (
+            <div className="mt-2 flex items-center gap-2 rounded-lg border-2 border-emerald-300 bg-emerald-50 px-3 py-2 shadow-sm">
+              <Sparkles className="h-4 w-4 text-emerald-600" />
+              <div className="flex-1">
+                <span className="text-xs font-semibold text-emerald-900">
+                  Deep Historical Analysis Queued
+                </span>
+                <p className="text-[11px] text-emerald-800">
+                  Deep historical analysis will run on your next message. This
+                  will analyze your full data range with tiered aggregation.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForceInitialAnalysis(false)}
+                className="rounded-md border border-emerald-600 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          <div className="flex flex-col gap-1"></div>
           <div className="flex items-center gap-3 self-end sm:self-auto">
             <label className="flex items-center gap-2 rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-emerald-700 shadow-sm">
               <input

@@ -102,6 +102,8 @@ export interface AgentDataQualityAssessment {
   missing: string[];
 }
 
+export type AnalysisMode = "initial" | "ongoing";
+
 export interface AgentExecutionContext {
   query: string;
   timeWindow: AgentTimeWindow;
@@ -109,6 +111,7 @@ export interface AgentExecutionContext {
   dataAvailability?: AgentDataAvailabilitySummary;
   profile?: AgentProfile;
   conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
+  analysisMode?: AnalysisMode; // 'initial' for full historical analysis, 'ongoing' for incremental updates
 }
 
 export interface AgentAnalysisRequest {

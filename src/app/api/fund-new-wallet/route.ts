@@ -4,6 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 // This prevents ethers from using the web version (fetch/XHR) which causes "missing response" errors
 export const runtime = "nodejs";
 
+// Set maximum duration for Vercel (Pro plan: 300s, Hobby: 10s)
+// Note: Funding can take up to 2+ minutes (balance check + send + confirmation)
+// If on Hobby plan, consider upgrading or using a queue system
+export const maxDuration = 300; // 5 minutes (Pro plan)
+
 import { ethers } from "ethers";
 
 /**
@@ -12,33 +17,51 @@ import { ethers } from "ethers";
  * without needing to manually acquire testnet ETH first
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  // IMMEDIATE logging - use console.error for better visibility in Vercel
+  const requestId = `fund-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  const startTime = Date.now();
+
+  console.error(`========================================`);
+  console.error(`[${requestId}] 🚀 FUNDING REQUEST RECEIVED`);
+  console.error(`[${requestId}] Time: ${new Date().toISOString()}`);
+  console.error(`[${requestId}] Path: /api/fund-new-wallet`);
+  console.error(`========================================`);
+
   // Declare variables in outer scope so they're accessible in catch block
   let address: string | undefined;
   let deployerWallet: ethers.Wallet | undefined;
 
   try {
+    console.error(`[${requestId}] 📥 Parsing request body...`);
     const requestData = await request.json();
     address = requestData.address;
+    console.error(`[${requestId}] 📬 Address received: ${address}`);
 
     if (!address || !ethers.utils.isAddress(address)) {
+      console.error(`[${requestId}] ❌ Invalid address:`, address);
       return NextResponse.json(
         { error: "Invalid wallet address" },
         { status: 400 },
       );
     }
 
+    console.error(`[${requestId}] ✅ Address validated: ${address}`);
+
     // Get deployer private key from environment (using same as hardhat config)
     // Check both PRIVATE_KEY and DEPLOYER_PRIVATE_KEY for compatibility
+    console.error(`[${requestId}] 🔑 Checking for PRIVATE_KEY...`);
     const deployerPrivateKey =
       process.env.PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY;
 
     if (!deployerPrivateKey) {
-      console.error("❌ PRIVATE_KEY not configured in environment");
       console.error(
-        "💡 Note: Next.js API routes read from .env.local, not .env",
+        `[${requestId}] ❌ PRIVATE_KEY not configured in environment`,
       );
       console.error(
-        "💡 Make sure PRIVATE_KEY is in .env.local and restart the dev server",
+        `[${requestId}] 💡 Note: Next.js API routes read from .env.local, not .env`,
+      );
+      console.error(
+        `[${requestId}] 💡 Make sure PRIVATE_KEY is in .env.local and restart the dev server`,
       );
       return NextResponse.json(
         {
@@ -51,67 +74,104 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    console.error(
+      `[${requestId}] ✅ PRIVATE_KEY found (length: ${deployerPrivateKey.length})`,
+    );
+
     // Get RPC URL from environment
     const rpcUrl =
       process.env.NEXT_PUBLIC_ZKSYNC_RPC_URL ||
       "https://sepolia.era.zksync.dev";
 
-    console.log(`📬 Recipient address: ${address}`);
-    console.log(`🔗 Using RPC URL: ${rpcUrl}`);
+    console.log(`[${requestId}] 📬 Recipient address: ${address}`);
+    console.log(`[${requestId}] 🔗 Using RPC URL: ${rpcUrl}`);
 
     // Create wallet without provider first (we'll use fetch for RPC calls)
     const deployerWalletSigner = new ethers.Wallet(deployerPrivateKey);
     deployerWallet = deployerWalletSigner; // For error logging
-    console.log(`💰 Deployer wallet address: ${deployerWalletSigner.address}`);
+    const deployerAddress = deployerWalletSigner.address;
+    console.log(
+      `[${requestId}] 💰 Deployer wallet address: ${deployerAddress}`,
+    );
+    console.log(`[${requestId}] ⏱️ Elapsed: ${Date.now() - startTime}ms`);
 
     // Helper function to make RPC calls using fetch (more reliable in Next.js)
     async function rpcCall(
       method: string,
       params: unknown[],
     ): Promise<unknown> {
-      const response = await fetch(rpcUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method,
-          params,
-        }),
+      const rpcStartTime = Date.now();
+      console.log(`[${requestId}] 🔄 RPC call: ${method}`, {
+        params: params.length > 0 ? `${params.length} params` : "no params",
       });
 
-      if (!response.ok) {
-        throw new Error(`RPC request failed: ${response.statusText}`);
-      }
+      try {
+        const response = await fetch(rpcUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method,
+            params,
+          }),
+        });
 
-      const data = await response.json();
-      if (data.error) {
-        throw new Error(
-          `RPC error: ${data.error.message || JSON.stringify(data.error)}`,
+        const rpcDuration = Date.now() - rpcStartTime;
+        console.log(
+          `[${requestId}] ⏱️ RPC ${method} completed in ${rpcDuration}ms`,
         );
-      }
 
-      return data.result;
+        if (!response.ok) {
+          console.error(
+            `[${requestId}] ❌ RPC request failed: ${response.status} ${response.statusText}`,
+          );
+          throw new Error(`RPC request failed: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        if (data.error) {
+          console.error(`[${requestId}] ❌ RPC error response:`, data.error);
+          throw new Error(
+            `RPC error: ${data.error.message || JSON.stringify(data.error)}`,
+          );
+        }
+
+        return data.result;
+      } catch (error) {
+        const rpcDuration = Date.now() - rpcStartTime;
+        console.error(
+          `[${requestId}] ❌ RPC ${method} failed after ${rpcDuration}ms:`,
+          error,
+        );
+        throw error;
+      }
     }
 
     // Check deployer balance with retry logic
+    console.log(`[${requestId}] 🔍 Starting balance check...`);
     let deployerBalance: ethers.BigNumber | undefined;
     const maxRetries = 3;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(
-          `🔍 Checking deployer balance... (attempt ${attempt}/${maxRetries})`,
+          `[${requestId}] 🔍 Checking deployer balance... (attempt ${attempt}/${maxRetries})`,
         );
-        console.log(`   Deployer address: ${deployerWalletSigner.address}`);
-        console.log(`   RPC URL: ${rpcUrl}`);
+        console.log(`[${requestId}]    Deployer address: ${deployerAddress}`);
+        console.log(`[${requestId}]    RPC URL: ${rpcUrl}`);
+        console.log(`[${requestId}] ⏱️ Elapsed: ${Date.now() - startTime}ms`);
 
+        const balanceCheckStart = Date.now();
         const balanceHex = await Promise.race([
-          rpcCall("eth_getBalance", [deployerWalletSigner.address, "latest"]),
+          rpcCall("eth_getBalance", [deployerAddress, "latest"]),
           new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error("Balance check timeout after 30 seconds")),
-              30000,
-            ),
+            setTimeout(() => {
+              const elapsed = Date.now() - balanceCheckStart;
+              console.error(
+                `[${requestId}] ⏱️ Balance check timeout after ${elapsed}ms`,
+              );
+              reject(new Error("Balance check timeout after 30 seconds"));
+            }, 30000),
           ),
         ]);
 
@@ -252,21 +312,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Send transaction with retry logic
-    console.log(`📤 Funding wallet ${address} with 0.001 ETH...`);
+    console.log(
+      `[${requestId}] 📤 Funding wallet ${address} with 0.001 ETH...`,
+    );
+    console.log(`[${requestId}] ⏱️ Elapsed: ${Date.now() - startTime}ms`);
+
     let txHash: string | undefined;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
+        console.log(
+          `[${requestId}] 🔄 Transaction attempt ${attempt}/${maxRetries}`,
+        );
         // Get nonce
         const nonceHex = (await rpcCall("eth_getTransactionCount", [
-          deployerWalletSigner.address,
+          deployerAddress,
           "latest",
         ])) as string;
         const nonce = parseInt(nonceHex, 16);
+        console.log(`[${requestId}] 📝 Nonce: ${nonce}`);
 
         // Get gas price
         const gasPriceHex = (await rpcCall("eth_gasPrice", [])) as string;
         const gasPrice = ethers.BigNumber.from(gasPriceHex);
+        console.log(
+          `[${requestId}] ⛽ Gas price: ${ethers.utils.formatUnits(gasPrice, "gwei")} gwei`,
+        );
 
         // zkSync Era has a quirk: if the recipient is a smart contract wallet (like Privy),
         // and it hasn't been deployed yet, it can't validate incoming transactions.
@@ -296,20 +367,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         };
 
         // Sign transaction
+        console.log(`[${requestId}] ✍️ Signing transaction...`);
         const signedTx = await deployerWalletSigner.signTransaction(tx);
+        console.log(`[${requestId}] ✅ Transaction signed`);
 
         // Send raw transaction
+        console.log(`[${requestId}] 📡 Sending transaction to network...`);
+        const sendStartTime = Date.now();
         txHash = await Promise.race([
           rpcCall("eth_sendRawTransaction", [signedTx]) as Promise<string>,
           new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error("Transaction send timeout")),
-              60000,
-            ),
+            setTimeout(() => {
+              const elapsed = Date.now() - sendStartTime;
+              console.error(
+                `[${requestId}] ⏱️ Transaction send timeout after ${elapsed}ms`,
+              );
+              reject(new Error("Transaction send timeout"));
+            }, 60000),
           ),
         ]);
 
-        console.log(`✅ Transaction sent: ${txHash}`);
+        console.log(`[${requestId}] ✅ Transaction sent: ${txHash}`);
+        console.log(
+          `[${requestId}] ⏱️ Send duration: ${Date.now() - sendStartTime}ms`,
+        );
+        console.log(
+          `[${requestId}] ⏱️ Total elapsed: ${Date.now() - startTime}ms`,
+        );
+
         break;
       } catch (error) {
         if (attempt === maxRetries) {
@@ -329,13 +414,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Wait for transaction confirmation with timeout
-    console.log(`⏳ Waiting for transaction confirmation...`);
+    console.log(`[${requestId}] ⏳ Waiting for transaction confirmation...`);
+    console.log(`[${requestId}] 📋 Transaction hash: ${txHash}`);
     let receipt: { transactionHash: string; status: string } | null = null;
-    const startTime = Date.now();
+    const confirmationStartTime = Date.now();
     const confirmationTimeout = 120000; // 2 minutes
+    let pollCount = 0;
 
-    while (Date.now() - startTime < confirmationTimeout) {
+    while (Date.now() - confirmationStartTime < confirmationTimeout) {
       try {
+        pollCount++;
+        const elapsed = Date.now() - confirmationStartTime;
+        console.log(
+          `[${requestId}] 🔍 Polling for receipt (attempt ${pollCount}, ${elapsed}ms elapsed)...`,
+        );
+
         const receiptResult = await rpcCall("eth_getTransactionReceipt", [
           txHash,
         ]);
@@ -344,23 +437,45 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             transactionHash: string;
             status: string;
           };
+          console.log(`[${requestId}] ✅ Receipt received:`, {
+            hash: receipt.transactionHash,
+            status: receipt.status,
+            pollAttempts: pollCount,
+            elapsed: Date.now() - confirmationStartTime,
+          });
           break;
         }
         // Wait 2 seconds before checking again
         await new Promise((resolve) => setTimeout(resolve, 2000));
       } catch (error) {
         // Ignore errors during polling, continue waiting
-        console.log("Waiting for receipt...");
+        console.log(
+          `[${requestId}] ⚠️ Receipt poll error (continuing):`,
+          error instanceof Error ? error.message : String(error),
+        );
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
 
     if (!receipt) {
-      throw new Error("Transaction confirmation timeout");
+      const elapsed = Date.now() - confirmationStartTime;
+      console.error(
+        `[${requestId}] ❌ Transaction confirmation timeout after ${elapsed}ms`,
+      );
+      console.error(`[${requestId}] 📋 Transaction hash: ${txHash}`);
+      console.error(
+        `[${requestId}] ⏱️ Total elapsed: ${Date.now() - startTime}ms`,
+      );
+      throw new Error(
+        `Transaction confirmation timeout after ${elapsed}ms. Tx: ${txHash}`,
+      );
     }
 
     console.log(
-      `Successfully funded ${address}. Tx: ${receipt.transactionHash}`,
+      `[${requestId}] ✅ Successfully funded ${address}. Tx: ${receipt.transactionHash}`,
+    );
+    console.log(
+      `[${requestId}] ⏱️ Total duration: ${Date.now() - startTime}ms`,
     );
 
     // Get updated balance
@@ -379,12 +494,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
   } catch (error) {
     // Log the full error for debugging
-    console.error("Error funding wallet:", error);
+    const totalElapsed = Date.now() - startTime;
+    console.error(
+      `[${requestId}] ❌ Error funding wallet after ${totalElapsed}ms:`,
+      error,
+    );
+
     if (error instanceof Error) {
-      console.error("Error details:", {
+      console.error(`[${requestId}] Error details:`, {
         message: error.message,
         stack: error.stack,
         name: error.name,
+        address,
+        deployerAddress: deployerWallet?.address,
       });
     }
 

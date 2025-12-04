@@ -16,7 +16,10 @@ interface Message {
 
 interface AiContextType {
   messages: Message[];
-  sendMessage: (message: string) => Promise<void>;
+  sendMessage: (
+    message: string,
+    forceInitialAnalysis?: boolean,
+  ) => Promise<void>;
   isLoading: boolean;
   error: string | null;
   clearMessages: () => void;
@@ -98,7 +101,10 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   };
 
   // Function to send a message to the AI
-  const sendMessage = async (message: string): Promise<void> => {
+  const sendMessage = async (
+    message: string,
+    forceInitialAnalysis?: boolean,
+  ): Promise<void> => {
     try {
       setIsLoading(true);
       setError(null);
@@ -157,6 +163,7 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         metricData,
         useMultiAgent,
         reports,
+        forceInitialAnalysis || false,
       );
 
       console.log("[aiStore] Response received from service:", {

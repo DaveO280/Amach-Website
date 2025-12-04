@@ -111,6 +111,7 @@ OUTPUT STRUCTURE:
       context.query,
       relevantData,
       dataQuality,
+      context,
     );
 
     try {
@@ -141,12 +142,27 @@ OUTPUT STRUCTURE:
         confidence: insight.confidence,
       });
 
-      return this.postProcessInsight(
-        insight,
-        relevantData,
-        dataQuality,
-        context,
-      );
+      try {
+        return this.postProcessInsight(
+          insight,
+          relevantData,
+          dataQuality,
+          context,
+        );
+      } catch (postProcessError) {
+        console.error(`❌ [${this.name}] postProcessInsight failed:`, {
+          error:
+            postProcessError instanceof Error
+              ? postProcessError.message
+              : String(postProcessError),
+          stack:
+            postProcessError instanceof Error
+              ? postProcessError.stack?.substring(0, 500)
+              : undefined,
+        });
+        // Return insight even if post-processing fails
+        return insight;
+      }
     } catch (error) {
       console.error(`❌ [${this.name}] Venice completion failed:`, {
         error: error instanceof Error ? error.message : String(error),
@@ -164,6 +180,7 @@ OUTPUT STRUCTURE:
     query: string,
     data: unknown,
     quality: AgentDataQualityAssessment,
+    context?: AgentExecutionContext,
   ): string {
     const dateRange =
       quality.dateRange != null
@@ -179,7 +196,7 @@ DATA QUALITY ASSESSMENT:
 ${quality.missing.length > 0 ? `- Missing: ${quality.missing.join(", ")}` : ""}
 
 AVAILABLE DATA:
-${this.formatDataForAnalysis(data)}
+${this.formatDataForAnalysis(data, context)}
 
 TIME CONTEXT:
 - Analysis Period: ${dateRange}
@@ -206,7 +223,10 @@ Be thorough but precise. Quality over quantity.`;
     data: unknown,
   ): AgentDataQualityAssessment;
 
-  protected abstract formatDataForAnalysis(data: unknown): string;
+  protected abstract formatDataForAnalysis(
+    data: unknown,
+    context?: AgentExecutionContext,
+  ): string;
 
   protected parseEnhancedResponse(response: string): AgentInsight {
     try {

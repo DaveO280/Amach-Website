@@ -9,7 +9,16 @@ import type {
 import type { VeniceApiService } from "@/api/venice/VeniceApiService";
 import type { HealthDataByType } from "@/types/healthData";
 import type { ParsedReportSummary } from "@/types/reportData";
+import { healthDataProcessor } from "@/data/processors/HealthDataProcessor";
 import { processSleepData } from "@/utils/sleepDataProcessor";
+import {
+  applyTieredAggregation,
+  aggregateSamplesByDay,
+  aggregateDailyValues,
+} from "@/utils/tieredDataAggregation";
+import { isCumulativeMetric } from "@/utils/dataDeduplicator";
+
+export type AnalysisMode = "initial" | "ongoing";
 
 interface RunCoordinatorOptions {
   metricData?: HealthDataByType;
@@ -28,6 +37,7 @@ interface RunCoordinatorOptions {
   } | null;
   conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
   veniceService: VeniceApiService;
+  analysisMode?: AnalysisMode; // 'initial' for full historical analysis, 'ongoing' for incremental updates
 }
 
 interface TransformResult {
@@ -53,12 +63,63 @@ export async function runCoordinatorAnalysis({
   profile,
   conversationHistory,
   veniceService,
+  analysisMode = "ongoing",
 }: RunCoordinatorOptions): Promise<CoordinatorResult | null> {
   if (!metricData && (!reports || reports.length === 0)) {
     return null;
   }
 
-  const { appleHealth, timeWindow } = transformMetricData(metricData ?? {});
+  // Check if HealthDataProcessor has processed data
+  // If not, process it now (backward compatibility)
+  if (!healthDataProcessor.hasData() && metricData) {
+    console.log(
+      "[CoordinatorService] Processing data through HealthDataProcessor...",
+    );
+    await healthDataProcessor.processRawData(metricData, false); // Don't persist during analysis
+  }
+
+  // Get pre-aggregated data from processor
+  const useProcessedData = healthDataProcessor.hasData();
+  let appleHealth: AppleHealthMetricMap = {};
+  let timeWindow: AgentExecutionContext["timeWindow"];
+
+  if (useProcessedData) {
+    console.log(
+      "[CoordinatorService] Using pre-aggregated data from HealthDataProcessor",
+    );
+
+    // Get data optimized for AI agents
+    const agentData = healthDataProcessor.getDataForAIAgents({
+      tieredAggregation: analysisMode === "initial",
+    });
+
+    // Convert to AppleHealthMetricMap
+    appleHealth = agentData as AppleHealthMetricMap;
+
+    // Get time window from processor
+    const dateRange = healthDataProcessor.getDateRange();
+    if (dateRange) {
+      timeWindow = { start: dateRange.start, end: dateRange.end };
+    } else {
+      const now = Date.now();
+      timeWindow = {
+        start: new Date(now - 90 * 24 * 60 * 60 * 1000),
+        end: new Date(now),
+      };
+    }
+
+    console.log(
+      `[CoordinatorService] Using ${analysisMode} mode with ${Object.keys(appleHealth).length} metrics`,
+    );
+  } else {
+    // Fallback to old method if processor not used
+    console.log(
+      "[CoordinatorService] Fallback: Using legacy transformMetricData",
+    );
+    const transformed = transformMetricData(metricData ?? {}, analysisMode);
+    appleHealth = transformed.appleHealth;
+    timeWindow = transformed.timeWindow;
+  }
 
   if (Object.keys(appleHealth).length === 0 && (!reports || !reports.length)) {
     return null;
@@ -75,6 +136,7 @@ export async function runCoordinatorAnalysis({
       },
       timeWindow,
       conversationHistory,
+      analysisMode,
     },
     { profile: agentProfile },
   );
@@ -82,10 +144,19 @@ export async function runCoordinatorAnalysis({
   return result;
 }
 
-function transformMetricData(metricData: HealthDataByType): TransformResult {
+function transformMetricData(
+  metricData: HealthDataByType,
+  analysisMode: AnalysisMode = "ongoing",
+): TransformResult {
   const appleHealth: AppleHealthMetricMap = {};
   let earliest: number | null = null;
   let latest: number | null = null;
+
+  // For ongoing analysis, limit to recent data (simple window)
+  // For initial analysis, use tiered aggregation (30d daily, 150d weekly, rest monthly)
+  const MAX_DAYS_ONGOING = 60; // ~2 months for ongoing
+
+  console.log(`[CoordinatorService] Transform mode: ${analysisMode}`);
 
   for (const [metricId, points] of Object.entries(metricData)) {
     if (!SUPPORTED_METRICS.has(metricId)) {
@@ -95,7 +166,7 @@ function transformMetricData(metricData: HealthDataByType): TransformResult {
     // Special handling for sleep data: convert raw stages to aggregated durations
     if (metricId === "HKCategoryTypeIdentifierSleepAnalysis") {
       console.log(
-        `[CoordinatorService] Processing ${points.length} raw sleep stage records`,
+        `[CoordinatorService] Processing ${points.length} raw sleep stage records (mode: ${analysisMode})`,
       );
 
       // Process raw sleep stages into daily aggregated data
@@ -104,15 +175,9 @@ function transformMetricData(metricData: HealthDataByType): TransformResult {
         `[CoordinatorService] Processed into ${processedSleepData.length} daily sleep summaries`,
       );
 
-      // Limit to most recent 60 days to prevent overwhelming Venice AI with too much context
-      const recentSleepData = processedSleepData.slice(-60);
-      console.log(
-        `[CoordinatorService] Limiting to ${recentSleepData.length} most recent days (from ${processedSleepData.length} total)`,
-      );
-
-      // Convert processed daily data into MetricSample format for agents
-      const sleepSamples: MetricSample[] = [];
-      for (const dayData of recentSleepData) {
+      // Convert processed daily data into MetricSample format
+      const allSleepSamples: MetricSample[] = [];
+      for (const dayData of processedSleepData) {
         const timestamp = new Date(dayData.date);
         if (Number.isNaN(timestamp.getTime())) {
           continue;
@@ -121,7 +186,7 @@ function transformMetricData(metricData: HealthDataByType): TransformResult {
         // Sleep duration in seconds (agents expect numeric values)
         const durationSeconds = dayData.sleepDuration * 60; // Convert minutes to seconds
 
-        sleepSamples.push({
+        allSleepSamples.push({
           timestamp,
           value: durationSeconds,
           unit: "s",
@@ -132,8 +197,27 @@ function transformMetricData(metricData: HealthDataByType): TransformResult {
             date: dayData.date,
           },
         });
+      }
 
-        const timeValue = timestamp.getTime();
+      // Apply tiered aggregation for initial mode, simple window for ongoing
+      let finalSleepSamples: MetricSample[];
+      if (analysisMode === "initial") {
+        // Use tiered aggregation for full dataset
+        finalSleepSamples = applyTieredAggregation(allSleepSamples, metricId);
+        console.log(
+          `[CoordinatorService] Applied tiered aggregation: ${allSleepSamples.length} days → ${finalSleepSamples.length} aggregated periods`,
+        );
+      } else {
+        // Use simple recent window for ongoing
+        finalSleepSamples = allSleepSamples.slice(-MAX_DAYS_ONGOING);
+        console.log(
+          `[CoordinatorService] Using ${finalSleepSamples.length} recent days (from ${allSleepSamples.length} total)`,
+        );
+      }
+
+      // Track time window
+      for (const sample of finalSleepSamples) {
+        const timeValue = sample.timestamp.getTime();
         if (earliest === null || timeValue < earliest) {
           earliest = timeValue;
         }
@@ -142,15 +226,16 @@ function transformMetricData(metricData: HealthDataByType): TransformResult {
         }
       }
 
-      if (sleepSamples.length > 0) {
-        appleHealth[metricId] = sleepSamples;
+      if (finalSleepSamples.length > 0) {
+        appleHealth[metricId] = finalSleepSamples;
         console.log(
-          `[CoordinatorService] Added ${sleepSamples.length} aggregated sleep duration samples for agents`,
+          `[CoordinatorService] Added ${finalSleepSamples.length} sleep samples for agents (mode: ${analysisMode})`,
         );
       }
       continue;
     }
 
+    // Handle other metrics (steps, heart rate, HRV, etc.)
     const samples: MetricSample[] = [];
 
     for (const point of points) {
@@ -179,8 +264,56 @@ function transformMetricData(metricData: HealthDataByType): TransformResult {
           type: point.type,
         },
       });
+    }
 
-      const timeValue = timestamp.getTime();
+    if (samples.length === 0) {
+      continue;
+    }
+
+    // Apply tiered aggregation for initial mode, simple window for ongoing
+    let finalSamples: MetricSample[];
+    if (analysisMode === "initial") {
+      // Use tiered aggregation for full dataset
+      finalSamples = applyTieredAggregation(samples, metricId);
+      console.log(
+        `[CoordinatorService] ${metricId}: ${samples.length} samples → ${finalSamples.length} aggregated periods (tiered)`,
+      );
+    } else {
+      // For ongoing mode: ALWAYS aggregate cumulative metrics by day first
+      const isCumulative = isCumulativeMetric(metricId);
+
+      if (isCumulative) {
+        // Aggregate by day, then take recent 60 days
+        const dailyGroups = aggregateSamplesByDay(samples);
+        const dailyAggregates = aggregateDailyValues(dailyGroups, true);
+
+        // Convert to array and sort by date
+        const sortedDates = Array.from(dailyAggregates.keys()).sort();
+        const recentDates = sortedDates.slice(-MAX_DAYS_ONGOING);
+
+        finalSamples = recentDates.map(
+          (dateKey) => dailyAggregates.get(dateKey)!,
+        );
+
+        console.log(
+          `[CoordinatorService] ${metricId}: ${samples.length} samples → ${dailyAggregates.size} days → ${finalSamples.length} recent days`,
+        );
+      } else {
+        // For non-cumulative metrics, just use recent samples
+        const sortedSamples = [...samples].sort(
+          (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
+        );
+        finalSamples = sortedSamples.slice(-MAX_DAYS_ONGOING * 50); // ~50 samples per day estimate
+
+        console.log(
+          `[CoordinatorService] ${metricId}: Using ${finalSamples.length} recent samples (from ${samples.length} total)`,
+        );
+      }
+    }
+
+    // Track time window
+    for (const sample of finalSamples) {
+      const timeValue = sample.timestamp.getTime();
       if (earliest === null || timeValue < earliest) {
         earliest = timeValue;
       }
@@ -189,8 +322,8 @@ function transformMetricData(metricData: HealthDataByType): TransformResult {
       }
     }
 
-    if (samples.length > 0) {
-      appleHealth[metricId] = samples;
+    if (finalSamples.length > 0) {
+      appleHealth[metricId] = finalSamples;
     }
   }
 
@@ -200,6 +333,10 @@ function transformMetricData(metricData: HealthDataByType): TransformResult {
       ? new Date(earliest)
       : new Date(now - 90 * 24 * 60 * 60 * 1000);
   const end = latest !== null ? new Date(latest) : new Date(now);
+
+  console.log(
+    `[CoordinatorService] Final time window: ${start.toISOString().split("T")[0]} to ${end.toISOString().split("T")[0]} (${Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000))} days)`,
+  );
 
   return {
     appleHealth,

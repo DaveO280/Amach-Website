@@ -1,5 +1,6 @@
 import type { HealthGoal, HealthScore } from "../../types/HealthContext";
 import type { DailyHealthScores } from "../../utils/dailyHealthScoreCalculator";
+import type { MetricSample } from "@/agents/types";
 import {
   HealthDataResults,
   HealthMetric,
@@ -8,11 +9,12 @@ import {
 import { HealthDataValidator } from "../validation/healthDataValidator";
 
 const DB_NAME = "amach-health-db";
-const DB_VERSION = 2; // Increment version for new store
+const DB_VERSION = 3; // Increment version for processed-data store
 const STORE_NAME = "health-data";
 const GOALS_STORE = "goals";
 const DAILY_SCORES_STORE = "daily-scores";
 const UPLOADED_FILES_STORE = "uploaded-files";
+const PROCESSED_DATA_STORE = "processed-data"; // New store for pre-aggregated data
 
 interface HealthDataStore {
   id: string;
@@ -36,6 +38,29 @@ interface UploadedFileStore {
   pageCount?: number;
   uploadedAt: string;
   lastAccessed: string;
+}
+
+interface ProcessedDataStore {
+  id: string;
+  // Daily aggregates stored as serialized Map
+  dailyAggregates: Record<
+    string,
+    Array<{
+      dateKey: string;
+      timestamp: string;
+      value: number;
+      unit: string;
+      metadata?: Record<string, unknown>;
+    }>
+  >;
+  // Processed sleep data
+  sleepData: unknown[];
+  // Date range
+  dateRange: {
+    start: string;
+    end: string;
+  };
+  lastUpdated: string;
 }
 
 class HealthDataStoreService {
@@ -92,6 +117,18 @@ class HealthDataStoreService {
             unique: false,
           });
           uploadedFilesStore.createIndex("fileName", "fileName", {
+            unique: false,
+          });
+        }
+        // Create processed data store if it doesn't exist
+        if (!db.objectStoreNames.contains(PROCESSED_DATA_STORE)) {
+          const processedDataStore = db.createObjectStore(
+            PROCESSED_DATA_STORE,
+            {
+              keyPath: "id",
+            },
+          );
+          processedDataStore.createIndex("lastUpdated", "lastUpdated", {
             unique: false,
           });
         }
@@ -637,6 +674,184 @@ class HealthDataStoreService {
       };
 
       request.onsuccess = (): void => {
+        resolve();
+      };
+    });
+  }
+
+  // ============================================================================
+  // Processed Data Methods
+  // ============================================================================
+
+  /**
+   * Save processed health data (pre-aggregated)
+   * This stores daily aggregates and processed sleep data
+   */
+  async saveProcessedData(processedData: {
+    dailyAggregates: Record<string, Map<string, unknown>>;
+    sleepData: unknown[];
+    dateRange: { start: Date; end: Date };
+  }): Promise<void> {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    console.log("[IndexedDB] Saving processed data...");
+
+    const db = await this.initDB();
+    return new Promise<void>((resolve, reject): void => {
+      const transaction = db.transaction([PROCESSED_DATA_STORE], "readwrite");
+      const store = transaction.objectStore(PROCESSED_DATA_STORE);
+
+      // Serialize Map to array for storage
+      const serializedAggregates: Record<
+        string,
+        Array<{
+          dateKey: string;
+          timestamp: string;
+          value: number;
+          unit: string;
+          metadata?: Record<string, unknown>;
+        }>
+      > = {};
+
+      for (const [metricType, dailyMap] of Object.entries(
+        processedData.dailyAggregates,
+      )) {
+        const entries = Array.from(dailyMap.entries()).map(
+          ([dateKey, sample]) => {
+            const metricSample = sample as MetricSample;
+            return {
+              dateKey,
+              timestamp: metricSample.timestamp.toISOString(),
+              value: metricSample.value,
+              unit: metricSample.unit || "",
+              metadata: metricSample.metadata,
+            };
+          },
+        );
+        serializedAggregates[metricType] = entries;
+      }
+
+      const dataToStore: ProcessedDataStore = {
+        id: "current",
+        dailyAggregates: serializedAggregates,
+        sleepData: processedData.sleepData,
+        dateRange: {
+          start: processedData.dateRange.start.toISOString(),
+          end: processedData.dateRange.end.toISOString(),
+        },
+        lastUpdated: new Date().toISOString(),
+      };
+
+      const request = store.put(dataToStore);
+
+      request.onerror = (): void => {
+        console.error(
+          "[IndexedDB] Error saving processed data:",
+          request.error,
+        );
+        reject(request.error);
+      };
+
+      request.onsuccess = (): void => {
+        console.log("[IndexedDB] Processed data saved successfully");
+        resolve();
+      };
+    });
+  }
+
+  /**
+   * Get processed health data (pre-aggregated)
+   */
+  async getProcessedData(): Promise<{
+    dailyAggregates: Record<string, Map<string, unknown>>;
+    sleepData: unknown[];
+    dateRange: { start: Date; end: Date };
+    lastUpdated: Date;
+  } | null> {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    const db = await this.initDB();
+    return new Promise<{
+      dailyAggregates: Record<string, Map<string, unknown>>;
+      sleepData: unknown[];
+      dateRange: { start: Date; end: Date };
+      lastUpdated: Date;
+    } | null>((resolve, reject): void => {
+      const transaction = db.transaction([PROCESSED_DATA_STORE], "readonly");
+      const store = transaction.objectStore(PROCESSED_DATA_STORE);
+      const request = store.get("current");
+
+      request.onerror = (): void => {
+        reject(request.error);
+      };
+
+      request.onsuccess = (): void => {
+        const result = request.result as ProcessedDataStore | undefined;
+
+        if (!result) {
+          resolve(null);
+          return;
+        }
+
+        // Deserialize arrays back to Map
+        const dailyAggregates: Record<string, Map<string, unknown>> = {};
+
+        for (const [metricType, entries] of Object.entries(
+          result.dailyAggregates,
+        )) {
+          const map = new Map<string, unknown>();
+          for (const entry of entries) {
+            map.set(entry.dateKey, {
+              timestamp: new Date(entry.timestamp),
+              value: entry.value,
+              unit: entry.unit,
+              metadata: entry.metadata,
+            });
+          }
+          dailyAggregates[metricType] = map;
+        }
+
+        resolve({
+          dailyAggregates,
+          sleepData: result.sleepData,
+          dateRange: {
+            start: new Date(result.dateRange.start),
+            end: new Date(result.dateRange.end),
+          },
+          lastUpdated: new Date(result.lastUpdated),
+        });
+      };
+    });
+  }
+
+  /**
+   * Clear processed data
+   */
+  async clearProcessedData(): Promise<void> {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    const db = await this.initDB();
+    return new Promise<void>((resolve, reject): void => {
+      const transaction = db.transaction([PROCESSED_DATA_STORE], "readwrite");
+      const store = transaction.objectStore(PROCESSED_DATA_STORE);
+      const request = store.delete("current");
+
+      request.onerror = (): void => {
+        console.error(
+          "[IndexedDB] Error clearing processed data:",
+          request.error,
+        );
+        reject(request.error);
+      };
+
+      request.onsuccess = (): void => {
+        console.log("[IndexedDB] Processed data cleared");
         resolve();
       };
     });

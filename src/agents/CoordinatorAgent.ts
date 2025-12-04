@@ -103,40 +103,51 @@ export class CoordinatorAgent {
     const { profile, queries } = options;
     const agentInsights: Record<string, AgentInsight> = {};
 
-    // Run all agents in parallel with individual timeouts
-    // This prevents sequential execution from exceeding the 60s Vercel limit
-    const AGENT_TIMEOUT_MS = 50000; // 50 seconds per agent (leaving buffer for coordinator summary)
+    // Run all agents in parallel
+    // Note: We rely on Venice API's built-in timeout (130s) rather than adding our own
+    // to avoid race conditions where Venice completes successfully but our timeout wins
 
     const agentPromises = this.agents.map(async (agent) => {
       const query =
         queries?.[agent.id] ?? DEFAULT_AGENT_QUERIES[agent.id] ?? "";
 
-      // Wrap each agent call in a timeout
-      const timeoutPromise = new Promise<AgentInsight>((_, reject) => {
-        setTimeout(
-          () =>
-            reject(
-              new Error(
-                `Agent ${agent.id} timed out after ${AGENT_TIMEOUT_MS}ms`,
-              ),
-            ),
-          AGENT_TIMEOUT_MS,
-        );
-      });
-
-      const agentPromise = agent.analyze({
-        ...context,
-        query,
-        profile,
-      });
+      const startTime = Date.now();
 
       try {
-        const insight = await Promise.race([agentPromise, timeoutPromise]);
+        // Let Venice API handle its own timeout (130s) - no need for additional timeout here
+        const insight = await agent.analyze({
+          ...context,
+          query,
+          profile,
+        });
+
+        const duration = Date.now() - startTime;
+        console.log(
+          `✅ [CoordinatorAgent] Agent ${agent.id} completed successfully in ${duration}ms`,
+          {
+            findingsCount: insight.findings?.length ?? 0,
+            confidence: insight.confidence,
+            relevance: insight.relevance,
+          },
+        );
+
         return { agentId: agent.id, insight, error: null };
       } catch (error) {
-        console.error(`[CoordinatorAgent] Agent ${agent.id} failed:`, {
-          error: error instanceof Error ? error.message : String(error),
-        });
+        const duration = Date.now() - startTime;
+        console.error(
+          `❌ [CoordinatorAgent] Agent ${agent.id} failed after ${duration}ms:`,
+          {
+            error: error instanceof Error ? error.message : String(error),
+            stack:
+              error instanceof Error
+                ? error.stack?.substring(0, 500)
+                : undefined,
+            errorType:
+              error instanceof Error ? error.constructor.name : typeof error,
+            isTimeout:
+              error instanceof Error && error.message.includes("timed out"),
+          },
+        );
         // Return error insight so coordinator can still build summary
         const errorMessage =
           error instanceof Error ? error.message : "Analysis failed";
@@ -174,21 +185,56 @@ export class CoordinatorAgent {
     // Process results
     for (const result of results) {
       if (result.status === "fulfilled") {
-        agentInsights[result.value.agentId] = result.value.insight;
+        const { agentId, insight, error } = result.value;
+        agentInsights[agentId] = insight;
+
+        if (error) {
+          console.warn(
+            `[CoordinatorAgent] Agent ${agentId} completed with error:`,
+            error,
+          );
+        } else {
+          console.log(`[CoordinatorAgent] Agent ${agentId} result processed:`, {
+            hasInsight: Boolean(insight),
+            findingsCount: insight.findings?.length ?? 0,
+            confidence: insight.confidence,
+            relevance: insight.relevance,
+          });
+        }
       } else {
         // If the promise itself was rejected (shouldn't happen, but handle it)
-        console.error(
-          "[CoordinatorAgent] Agent promise rejected:",
-          result.reason,
-        );
+        console.error("[CoordinatorAgent] Agent promise rejected:", {
+          reason: result.reason,
+          errorMessage:
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason),
+          stack:
+            result.reason instanceof Error
+              ? result.reason.stack?.substring(0, 500)
+              : undefined,
+        });
       }
     }
+
+    console.log("[CoordinatorAgent] Agent results summary:", {
+      totalAgents: this.agents.length,
+      successfulInsights: Object.keys(agentInsights).length,
+      agentIds: Object.keys(agentInsights),
+    });
 
     const combinedSummary = await this.buildSummary(
       agentInsights,
       profile,
       context.conversationHistory,
     );
+
+    console.log("[CoordinatorAgent] Summary generation result:", {
+      hasSummary: Boolean(combinedSummary),
+      hasParsed: Boolean(combinedSummary?.parsed),
+      hasRaw: Boolean(combinedSummary?.raw),
+      rawLength: combinedSummary?.raw?.length ?? 0,
+    });
 
     return {
       profile,
@@ -240,13 +286,29 @@ export class CoordinatorAgent {
       let parsed: CoordinatorSummary | null = null;
       try {
         parsed = JSON.parse(rawSummary) as CoordinatorSummary;
+        console.log("[CoordinatorAgent] Summary parsed successfully:", {
+          hasSummary: Boolean(parsed?.summary),
+          keyFindingsCount: parsed?.keyFindings?.length ?? 0,
+          priorityActionsCount: parsed?.priorityActions?.length ?? 0,
+          watchItemsCount: parsed?.watchItems?.length ?? 0,
+        });
       } catch (error) {
+        console.error("[CoordinatorAgent] Summary parsing failed:", {
+          error: error instanceof Error ? error.message : String(error),
+          rawSummaryLength: rawSummary.length,
+          rawSummaryPreview: rawSummary.substring(0, 500),
+        });
         // If parsing fails, keep parsed as null but return raw for inspection
       }
 
       return { raw: rawSummary, parsed };
     } catch (error) {
-      console.error("Coordinator summary generation failed", error);
+      console.error("[CoordinatorAgent] Summary generation failed:", {
+        error: error instanceof Error ? error.message : String(error),
+        stack:
+          error instanceof Error ? error.stack?.substring(0, 500) : undefined,
+        agentCount: Object.keys(agentInsights).length,
+      });
       return undefined;
     }
   }

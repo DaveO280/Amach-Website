@@ -19,6 +19,16 @@ import {
   rankMetricsByRelevance,
   getTopRelevant,
 } from "@/ai/RelevanceScorer";
+import {
+  getRecommendedAnalysisMode,
+  updateAnalysisState,
+} from "@/utils/analysisState";
+import {
+  diagnoseAnalysisResult,
+  logAnalysisDiagnostics,
+} from "@/utils/analysisDiagnostics";
+import { isCumulativeMetric } from "@/utils/dataDeduplicator";
+import { extractDatePart } from "@/utils/dataDeduplicator";
 
 const RESPONSE_FORMAT_GUIDELINES = `
 
@@ -181,6 +191,7 @@ export class CosaintAiService {
     metricData?: HealthDataByType,
     useMultiAgent: boolean = true,
     reports?: ParsedReportSummary[],
+    forceInitialAnalysis: boolean = false,
   ): Promise<string> {
     try {
       // Log health data and file status
@@ -198,15 +209,16 @@ export class CosaintAiService {
 
       // Convert and rank health metrics by relevance
       let rankedMetrics: HealthMetric[] = [];
+      let allHealthMetrics: HealthMetric[] = []; // Keep all metrics for date range calculation
       if (metricData && Object.keys(metricData).length > 0) {
-        const healthMetrics = this.convertToHealthMetrics(metricData);
+        allHealthMetrics = this.convertToHealthMetrics(metricData);
         const userContext = this.buildUserContext(
           userProfile,
           conversationHistory,
         );
 
         console.log("[CosaintAiService] Ranking metrics by relevance:", {
-          totalMetrics: healthMetrics.length,
+          totalMetrics: allHealthMetrics.length,
           userContext: {
             hasGoals: Boolean(userContext.goals?.length),
             hasConditions: Boolean(userContext.conditions?.length),
@@ -215,7 +227,7 @@ export class CosaintAiService {
         });
 
         // Rank metrics by relevance
-        const ranked = rankMetricsByRelevance(healthMetrics, userContext);
+        const ranked = rankMetricsByRelevance(allHealthMetrics, userContext);
 
         // Get top 100 most relevant metrics (reduce context size while keeping quality)
         rankedMetrics = getTopRelevant(ranked, 100).map((rm) => rm.metric);
@@ -234,13 +246,97 @@ export class CosaintAiService {
         ((metricData && Object.keys(metricData).length > 0) || reports?.length)
       ) {
         try {
+          // Calculate data range for analysis mode detection
+          let dataRange: { start: Date; end: Date } | undefined;
+          if (metricData && Object.keys(metricData).length > 0) {
+            let earliest: number | null = null;
+            let latest: number | null = null;
+
+            for (const points of Object.values(metricData)) {
+              for (const point of points) {
+                if (point?.startDate) {
+                  const timestamp = new Date(point.startDate).getTime();
+                  if (!Number.isNaN(timestamp)) {
+                    if (earliest === null || timestamp < earliest) {
+                      earliest = timestamp;
+                    }
+                    if (latest === null || timestamp > latest) {
+                      latest = timestamp;
+                    }
+                  }
+                }
+              }
+            }
+
+            if (earliest !== null && latest !== null) {
+              dataRange = {
+                start: new Date(earliest),
+                end: new Date(latest),
+              };
+            }
+          }
+
+          // Determine analysis mode using auto-detection or force flag
+          const analysisMode = getRecommendedAnalysisMode(
+            dataRange,
+            forceInitialAnalysis,
+          );
+
+          console.log("[CosaintAiService] Analysis mode determined:", {
+            mode: analysisMode,
+            forceInitial: forceInitialAnalysis,
+            dataRange: dataRange
+              ? {
+                  start: dataRange.start.toISOString(),
+                  end: dataRange.end.toISOString(),
+                  days:
+                    (dataRange.end.getTime() - dataRange.start.getTime()) /
+                    (1000 * 60 * 60 * 24),
+                }
+              : null,
+          });
+
           coordinatorResult = await runCoordinatorAnalysis({
             metricData,
             profile: userProfile,
             reports,
             conversationHistory,
             veniceService: this.veniceApi,
+            analysisMode,
           });
+
+          // Log diagnostics for debugging
+          if (coordinatorResult) {
+            const metricCount = metricData ? Object.keys(metricData).length : 0;
+            const reportCount = reports?.length ?? 0;
+            const diagnostics = diagnoseAnalysisResult(
+              coordinatorResult,
+              metricCount,
+              reportCount,
+            );
+            if (diagnostics) {
+              logAnalysisDiagnostics(diagnostics);
+            }
+
+            // Update analysis state after successful analysis
+            if (dataRange) {
+              updateAnalysisState(analysisMode, dataRange);
+              console.log("[CosaintAiService] Analysis state updated:", {
+                mode: analysisMode,
+                date: new Date().toISOString(),
+              });
+            }
+          } else {
+            console.warn(
+              "[CosaintAiService] Coordinator analysis returned null",
+              {
+                hasMetricData: Boolean(
+                  metricData && Object.keys(metricData).length > 0,
+                ),
+                hasReports: Boolean(reports && reports.length > 0),
+              },
+            );
+          }
         } catch (coordinatorError) {
           console.warn(
             "[CosaintAiService] Coordinator analysis failed:",
@@ -259,6 +355,7 @@ export class CosaintAiService {
         coordinatorResult,
         reports,
         rankedMetrics,
+        allHealthMetrics, // Pass all metrics for accurate date range calculation
       );
 
       // Log the prompt for debugging (you can remove this in production)
@@ -357,19 +454,21 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
     coordinatorResult?: CoordinatorResult | null,
     reports?: ParsedReportSummary[],
     rankedMetrics?: HealthMetric[],
+    allMetrics?: HealthMetric[], // All metrics for accurate date range calculation
   ): string {
     // Build the system message including character background, health data, file context, and user profile
     let systemMessage = this.buildSystemMessage(healthData, userProfile);
     systemMessage +=
       "\n\nFollow-up instruction: Always address the user's latest question or concern first, use the conversation history to avoid repeating full introductions or already acknowledged profile details, and consolidate duplicate findings instead of listing the same metric multiple times.";
 
-    // Add relevance-ranked metrics if available
-    if (rankedMetrics && rankedMetrics.length > 0) {
+    // Add relevance-ranked metrics if available AND we don't have coordinator results
+    // (If we have coordinator results, the agents already analyzed the data properly with tiered aggregation)
+    if (rankedMetrics && rankedMetrics.length > 0 && !coordinatorResult) {
       systemMessage +=
         "\n\n📊 Top Relevant Health Metrics (AI-scored by importance):";
 
-      // Group metrics by type for better readability
-      const metricsByType = rankedMetrics.reduce(
+      // Group ranked metrics by type for relevance display
+      const rankedMetricsByType = rankedMetrics.reduce(
         (acc, metric) => {
           if (!acc[metric.type]) acc[metric.type] = [];
           acc[metric.type].push(metric);
@@ -378,14 +477,112 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
         {} as Record<string, HealthMetric[]>,
       );
 
-      // Show top 5 metric types with their most recent values
-      Object.entries(metricsByType)
+      // Use all metrics (not just ranked) for accurate date range calculation
+      const allMetricsByType = (allMetrics || rankedMetrics).reduce(
+        (acc, metric) => {
+          if (!acc[metric.type]) acc[metric.type] = [];
+          acc[metric.type].push(metric);
+          return acc;
+        },
+        {} as Record<string, HealthMetric[]>,
+      );
+
+      // Show top 5 metric types with aggregated information
+      Object.entries(rankedMetricsByType)
         .slice(0, 5)
-        .forEach(([type, metrics]) => {
-          // Get most recent metric of this type
-          const latest = metrics.sort((a, b) => b.timestamp - a.timestamp)[0];
-          const date = new Date(latest.timestamp).toLocaleDateString();
-          systemMessage += `\n- ${type}: ${latest.value}${latest.unit || ""} (${date}, ${metrics.length} data points available)`;
+        .forEach(([type, rankedTypeMetrics]) => {
+          if (rankedTypeMetrics.length === 0) return;
+
+          // Get all metrics of this type for accurate date range
+          const allTypeMetrics = allMetricsByType[type] || rankedTypeMetrics;
+
+          // Check if this is a cumulative metric (steps, active energy, exercise time)
+          const isCumulative = isCumulativeMetric(type);
+
+          let avg: number | null = null;
+          let min: number | null = null;
+          let max: number | null = null;
+
+          if (isCumulative) {
+            // For cumulative metrics, aggregate by day first (sum per day), then average daily totals
+            const dailyTotals = new Map<string, number>();
+
+            for (const metric of allTypeMetrics) {
+              try {
+                // Safely extract date - use timestamp if startDate not available
+                const dateStr =
+                  metric.startDate || new Date(metric.timestamp).toISOString();
+                const dateKey = extractDatePart(dateStr);
+                const currentTotal = dailyTotals.get(dateKey) || 0;
+                dailyTotals.set(dateKey, currentTotal + metric.value);
+              } catch (e) {
+                // Skip invalid dates
+                console.warn(`[CosaintAiService] Invalid date for metric:`, e);
+                continue;
+              }
+            }
+
+            const dailyValues = Array.from(dailyTotals.values());
+            if (dailyValues.length > 0) {
+              avg =
+                dailyValues.reduce((sum, v) => sum + v, 0) / dailyValues.length;
+              min = Math.min(...dailyValues);
+              max = Math.max(...dailyValues);
+            }
+          } else {
+            // For non-cumulative metrics (heart rate, HRV, etc.), average individual readings
+            const values = allTypeMetrics
+              .map((m) => m.value)
+              .filter((v) => !isNaN(v));
+            if (values.length > 0) {
+              avg = values.reduce((sum, v) => sum + v, 0) / values.length;
+              min = Math.min(...values);
+              max = Math.max(...values);
+            }
+          }
+
+          // Calculate date range from ALL metrics of this type (not just ranked)
+          const sortedAll = allTypeMetrics.sort(
+            (a, b) => a.timestamp - b.timestamp,
+          );
+          const earliest = sortedAll[0];
+          const latest = sortedAll[sortedAll.length - 1];
+
+          // Format date range
+          const startDate = new Date(earliest.timestamp).toLocaleDateString();
+          const endDate = new Date(latest.timestamp).toLocaleDateString();
+          const dateRange =
+            startDate === endDate ? startDate : `${startDate} to ${endDate}`;
+
+          // Format value display
+          let valueDisplay = "";
+          if (avg !== null) {
+            valueDisplay = `Avg: ${avg.toFixed(1)}${earliest.unit || ""}`;
+            if (min !== null && max !== null && min !== max) {
+              valueDisplay += ` (Range: ${min.toFixed(1)}-${max.toFixed(1)})`;
+            }
+          } else {
+            valueDisplay = `Latest: ${latest.value}${latest.unit || ""}`;
+          }
+
+          // For cumulative metrics, show daily average in the description
+          let dataPointDescription = `${allTypeMetrics.length} data points`;
+          if (isCumulative) {
+            try {
+              const uniqueDays = new Set<string>();
+              for (const m of allTypeMetrics) {
+                const dateStr =
+                  m.startDate || new Date(m.timestamp).toISOString();
+                uniqueDays.add(extractDatePart(dateStr));
+              }
+              dataPointDescription = `${allTypeMetrics.length} readings, ${uniqueDays.size} days`;
+            } catch (e) {
+              // Fallback to simple count if date extraction fails
+              dataPointDescription = `${allTypeMetrics.length} readings`;
+            }
+          }
+
+          systemMessage += `\n- ${type}: ${valueDisplay} (${dateRange}, ${dataPointDescription})`;
         });
 
       systemMessage +=

@@ -645,12 +645,36 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       console.log("✅ Wallet address ready - proceeding with funding");
+      console.log("📬 Funding address:", walletAddress || address);
 
       // Call your deployer funding function
+      const fundingStartTime = Date.now();
+      const fundingAddress = walletAddress || address;
+      console.log(`⏱️ Starting funding request at ${new Date().toISOString()}`);
+      console.log(`📬 Funding address: ${fundingAddress}`);
+      console.log(`🔗 API endpoint: /api/fund-new-wallet`);
+
       const response = await fetch("/api/fund-new-wallet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: walletAddress || address }),
+        body: JSON.stringify({ address: fundingAddress }),
+      });
+
+      console.log(
+        `📡 Fetch completed after ${Date.now() - fundingStartTime}ms`,
+        {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+          headers: Object.fromEntries(response.headers.entries()),
+        },
+      );
+
+      const fetchDuration = Date.now() - fundingStartTime;
+      console.log(`⏱️ Funding API response received after ${fetchDuration}ms`, {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
       });
 
       if (!response.ok) {

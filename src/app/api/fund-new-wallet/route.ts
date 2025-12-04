@@ -4,10 +4,14 @@ import { NextRequest, NextResponse } from "next/server";
 // This prevents ethers from using the web version (fetch/XHR) which causes "missing response" errors
 export const runtime = "nodejs";
 
-// Set maximum duration for Vercel (Pro plan: 300s, Hobby: 10s)
-// Note: Funding can take up to 2+ minutes (balance check + send + confirmation)
-// If on Hobby plan, consider upgrading or using a queue system
-export const maxDuration = 300; // 5 minutes (Pro plan)
+// Set maximum duration for Vercel
+// Hobby plan: max 60s, Pro plan: max 300s
+// Note: Funding can take up to 2+ minutes, but we're limited to 60s on Hobby plan
+// If funding times out, consider:
+// 1. Upgrading to Pro plan (allows 300s)
+// 2. Using a queue system (e.g., Vercel Queue or external service)
+// 3. Splitting into separate endpoints (send tx, then poll for confirmation separately)
+export const maxDuration = 60; // 60 seconds (Hobby plan max, upgrade to Pro for 300s)
 
 import { ethers } from "ethers";
 

@@ -701,6 +701,22 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       }
 
       const data = await response.json();
+
+      // Handle case where wallet is already funded (manual funding or previous attempt)
+      if (data.alreadyFunded) {
+        console.log("✅ Wallet already funded - skipping funding step");
+        console.log(`💰 Current balance: ${data.balance} ETH`);
+        // Don't set transaction hash since no transaction was sent
+        updateStepStatus("deployer-funding", "complete");
+
+        // Move to profile creation step
+        setTimeout(() => {
+          moveToNextStep();
+        }, 1500);
+        return;
+      }
+
+      // Normal funding flow - transaction was sent
       setDeployerFundingTx(data.transactionHash);
       updateStepStatus("deployer-funding", "complete");
 

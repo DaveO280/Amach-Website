@@ -70,9 +70,9 @@ my-health-app-backup/
 
 certificates
 
-# Admin app database and data (local only)
-admin-app/admin-data/*.db
-admin-app/admin-data/*.db-*
+# Admin app (internal only - should not be in public repo)
+admin-app/
+scripts/admin-verify-user.js
 tracking-data.json
 *.zip
 

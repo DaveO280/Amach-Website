@@ -624,7 +624,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
           args,
           account: address as `0x${string}`,
           chain: getActiveChain(),
-          gas: 500000n, // Higher gas limit for profile updates (more complex operation)
+          gas: 2000000n, // Very high gas limit for Privy smart contract wallet deployment + profile creation
           maxFeePerGas,
           maxPriorityFeePerGas,
         });
@@ -757,10 +757,10 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
       const { getContractAddresses } = await import("@/lib/networkConfig");
       const contracts = getContractAddresses();
 
-      const encryptedProfile = await publicClient.readContract({
+      const profileResponse = await publicClient.readContract({
         address: contracts.SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
         abi: secureHealthProfileAbi,
-        functionName: "getProfile",
+        functionName: "getProfileWithWeight",
         args: [address as `0x${string}`],
       });
 
@@ -768,25 +768,24 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
       console.log("✅ Retrieved encrypted profile from blockchain");
 
       // Log the full response to see what we actually got
-      console.log("🔍 Full encrypted profile response:", encryptedProfile);
+      console.log("🔍 Full encrypted profile response:", profileResponse);
 
-      // V1 contract doesn't store weight on-chain - load from localStorage if available
-      let encryptedWeight = "";
-      try {
-        const storedWeight = localStorage.getItem(
-          `amach-encrypted-weight-${address}`,
-        );
-        if (storedWeight) {
-          encryptedWeight = storedWeight;
-          console.log("✅ Loaded encrypted weight from localStorage");
-        } else {
-          console.log(
-            "ℹ️ No encrypted weight in localStorage (V1 contract doesn't store weight on-chain)",
-          );
-        }
-      } catch (e) {
-        console.warn("⚠️ Failed to load weight from localStorage:", e);
-      }
+      // V3 contract returns [profile, weight] tuple
+      // Destructure the response: [0] = profile object, [1] = weight string
+      const [encryptedProfile, encryptedWeight] = profileResponse as [
+        {
+          encryptedBirthDate: string;
+          encryptedSex: string;
+          encryptedHeight: string;
+          encryptedEmail: string;
+          dataHash: `0x${string}`;
+          timestamp: bigint;
+          isActive: boolean;
+          version: number;
+          nonce: string;
+        },
+        string,
+      ];
 
       console.log("🔍 Encrypted profile fields:", {
         hasBirthDate: !!encryptedProfile.encryptedBirthDate,
@@ -795,17 +794,17 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         hasWeight: !!encryptedWeight,
         hasEmail: !!encryptedProfile.encryptedEmail,
         hasNonce: !!encryptedProfile.nonce,
-        weightSource: encryptedWeight ? "localStorage" : "none",
+        weightSource: "blockchain",
       });
 
       // Update state - include nonce for decryption
-      // Note: weight is stored in localStorage, not on-chain (V1 design)
+      // Note: V3 contract stores weight on-chain
       setHealthProfile({
         encryptedBirthDate:
           encryptedProfile.encryptedBirthDate as `0x${string}`,
         encryptedSex: encryptedProfile.encryptedSex as `0x${string}`,
         encryptedHeight: encryptedProfile.encryptedHeight as `0x${string}`,
-        encryptedWeight: encryptedWeight as `0x${string}`, // From localStorage if available
+        encryptedWeight: encryptedWeight as `0x${string}`, // From blockchain (V3)
         encryptedEmail: encryptedProfile.encryptedEmail as `0x${string}`,
         dataHash: encryptedProfile.dataHash as `0x${string}`,
         timestamp: Number(encryptedProfile.timestamp),

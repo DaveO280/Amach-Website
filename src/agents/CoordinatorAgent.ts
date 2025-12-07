@@ -285,7 +285,22 @@ export class CoordinatorAgent {
 
       let parsed: CoordinatorSummary | null = null;
       try {
-        parsed = JSON.parse(rawSummary) as CoordinatorSummary;
+        // Strip markdown code fences if present (Venice API sometimes wraps JSON in ```json...```)
+        let cleanedSummary = rawSummary.trim();
+        if (cleanedSummary.startsWith("```json")) {
+          cleanedSummary = cleanedSummary.substring(7); // Remove ```json
+        } else if (cleanedSummary.startsWith("```")) {
+          cleanedSummary = cleanedSummary.substring(3); // Remove ```
+        }
+        if (cleanedSummary.endsWith("```")) {
+          cleanedSummary = cleanedSummary.substring(
+            0,
+            cleanedSummary.length - 3,
+          );
+        }
+        cleanedSummary = cleanedSummary.trim();
+
+        parsed = JSON.parse(cleanedSummary) as CoordinatorSummary;
         console.log("[CoordinatorAgent] Summary parsed successfully:", {
           hasSummary: Boolean(parsed?.summary),
           keyFindingsCount: parsed?.keyFindings?.length ?? 0,

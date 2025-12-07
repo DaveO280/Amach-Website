@@ -589,8 +589,18 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
         "\n\nNote: These metrics have been prioritized based on relevance to the user's goals, health conditions, and conversation context.";
     }
 
+    // Debug: Check if coordinator summary exists
+    console.log("[CosaintAI] Coordinator result check:", {
+      hasCoordinatorResult: !!coordinatorResult,
+      hasCombinedSummary: !!coordinatorResult?.combinedSummary,
+      summaryPreview: coordinatorResult?.combinedSummary
+        ? JSON.stringify(coordinatorResult.combinedSummary).substring(0, 200)
+        : null,
+    });
+
     if (coordinatorResult?.combinedSummary) {
       const summary = coordinatorResult.combinedSummary;
+      console.log("[CosaintAI] Adding coordinator summary to system message");
       systemMessage +=
         "\n\nLatest multi-agent synthesis (do not repeat profile details already mentioned in the summary):";
       systemMessage += `\nSummary: ${summary.summary}`;
@@ -607,6 +617,16 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
           .map((item) => `- ${item}`)
           .join("\n")}`;
       }
+
+      // Add formatting instructions
+      systemMessage +=
+        "\n\nIMPORTANT FORMATTING INSTRUCTIONS:\n" +
+        "- Present the analysis using the same structure as shown above (Summary, Key Findings, Priority Actions, Watch Items)\n" +
+        "- DO NOT add introductory greetings like 'Hello! I'm Cosaint' - jump straight into the analysis\n" +
+        "- DO NOT use markdown headers (###) or bold formatting (**) for section titles\n" +
+        "- Keep your warm, conversational tone with natural flow and helpful context\n" +
+        "- Use plain text section labels (e.g., 'Summary:' not '### Summary')\n" +
+        "- Match the structure and depth of the synthesis above while maintaining your friendly, evidence-informed voice";
     }
 
     if (coordinatorResult?.agentInsights) {
@@ -697,14 +717,22 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
     const formattedHistory =
       this.formatConversationHistory(conversationHistory);
 
-    // Combine everything into a single prompt
-    return `${systemMessage}
+    // Debug: Check final prompt includes coordinator summary
+    const finalPrompt = `${systemMessage}
 
 ${formattedHistory}
 
 User: ${userMessage}
 
 Please provide a helpful response as Cosaint, keeping in mind the user's health data, profile, and uploaded files if available. Your response should be friendly, empathetic and evidence-informed.`;
+
+    console.log(
+      "[CosaintAI] Final prompt includes coordinator summary:",
+      finalPrompt.includes("Latest multi-agent synthesis"),
+    );
+    console.log("[CosaintAI] System message length:", systemMessage.length);
+
+    return finalPrompt;
   }
 
   /**

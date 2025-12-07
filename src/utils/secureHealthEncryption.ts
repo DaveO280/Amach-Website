@@ -390,7 +390,7 @@ async function encryptField(
   nonce: Uint8Array,
 ): Promise<string> {
   const encrypted = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: nonce },
+    { name: "AES-GCM", iv: nonce as BufferSource },
     key,
     new TextEncoder().encode(data),
   );
@@ -434,9 +434,9 @@ export async function decryptField(
     }
 
     const decrypted = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: nonce },
+      { name: "AES-GCM", iv: nonce as BufferSource },
       key,
-      encryptedBytes,
+      encryptedBytes as BufferSource,
     );
 
     return new TextDecoder().decode(decrypted);

@@ -3,7 +3,9 @@ const path = require("path");
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Use Node.js runtime for blockchain interactions
-  serverExternalPackages: ["ethers"],
+  serverExternalPackages: ["ethers", "zksync-sso", "@wagmi/core", "viem"],
+  // Turbopack config (empty to silence Next.js 16 warning, using webpack instead)
+  turbopack: {},
   // Add webpack config to include my-health-app and fix ethers.js issues
   webpack: (config, { isServer }) => {
     // Add my-health-app to the modules included in the build
@@ -49,11 +51,6 @@ const nextConfig = {
   },
   // Make sure Next.js knows to transpile my-health-app
   transpilePackages: ["my-health-app"],
-  // Prevent SSR evaluation of SSO connector modules
-  // This ensures client-side only code (like zksync-sso) isn't evaluated during SSR
-  experimental: {
-    serverComponentsExternalPackages: ["zksync-sso", "@wagmi/core", "viem"],
-  },
   // Add headers for CORS
   async headers() {
     return [

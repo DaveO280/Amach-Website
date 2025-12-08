@@ -14,8 +14,8 @@ import { ChevronDown, ChevronUp, X } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import CosaintChatUI from "./ai/CosaintChatUI";
 import GoalsTab from "./ai/GoalsTab";
-import HealthTimelineTab from "./ai/HealthTimelineTab";
 import HealthReport from "./ai/HealthReport";
+import HealthTimelineTab from "./ai/HealthTimelineTab";
 import ProfileInputModal from "./ai/ProfileInputModal";
 
 interface AiCompanionModalProps {
@@ -70,10 +70,19 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
 
       try {
         // Load fresh data from blockchain
-        await loadProfileFromBlockchain();
+        const loadResult = await loadProfileFromBlockchain();
 
-        // Get decrypted profile data
-        const walletProfile = await getDecryptedProfile();
+        if (!loadResult.success) {
+          console.warn(
+            "⚠️ Failed to load profile from blockchain:",
+            loadResult.error,
+          );
+          return;
+        }
+
+        // Use the profile data directly from the load result to avoid React state timing issues
+        // This is especially important in production where state updates may be batched differently
+        const walletProfile = await getDecryptedProfile(loadResult.profile);
 
         if (walletProfile) {
           const rawProfile: RawUserProfileInput = {

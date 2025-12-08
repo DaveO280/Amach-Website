@@ -42,7 +42,7 @@ import { trackingService } from "@/utils/trackingService";
 import React, { useCallback, useMemo, useState } from "react";
 
 // Static import - PrivyProvider handles SSR automatically
-import { useWallets, usePrivy, useSignMessage } from "@privy-io/react-auth";
+import { usePrivy, useSignMessage, useWallets } from "@privy-io/react-auth";
 
 export interface PrivyWalletServiceReturn {
   // Connection methods
@@ -60,13 +60,17 @@ export interface PrivyWalletServiceReturn {
   loadHealthProfileFromBlockchain: () => Promise<{
     success: boolean;
     error?: string;
+    profile?: EncryptedHealthProfile;
   }>;
   loadProfileFromBlockchain: () => Promise<{
     success: boolean;
     error?: string;
+    profile?: EncryptedHealthProfile;
   }>; // Alias for compatibility
   getHealthProfile: () => EncryptedHealthProfile | null;
-  getDecryptedProfile: () => Promise<HealthProfileData | null>;
+  getDecryptedProfile: (
+    profileOverride?: EncryptedHealthProfile,
+  ) => Promise<HealthProfileData | null>;
 
   // Verification & allocation
   verifyProfileZKsync: (
@@ -143,11 +147,11 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
   const { signMessage: privySignMessage } = useSignMessage();
 
   // Get wallet address
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const wallet = wallets?.[0] as
     | { address?: string; getEthereumProvider?: () => Promise<unknown> }
     | undefined;
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+   
   const address = wallet?.address as string | undefined;
   const isConnected = ready && authenticated && !!address;
 
@@ -205,7 +209,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
           },
         );
 
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+         
         const signature = result.signature as string;
 
         if (!signature || signature.length < 132) {
@@ -251,9 +255,8 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
     );
 
     try {
-      const { getCachedWalletEncryptionKey } = await import(
-        "@/utils/walletEncryption"
-      );
+      const { getCachedWalletEncryptionKey } =
+        await import("@/utils/walletEncryption");
 
       console.log("🔑 Attempting signature-based key derivation with Privy...");
       const encryptionKey = await getCachedWalletEncryptionKey(
@@ -322,9 +325,8 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
     try {
       // Clear encryption key cache on disconnect for security
       if (address) {
-        const { clearEncryptionKeyOnDisconnect } = await import(
-          "@/utils/walletEncryption"
-        );
+        const { clearEncryptionKeyOnDisconnect } =
+          await import("@/utils/walletEncryption");
         clearEncryptionKeyOnDisconnect(address);
       }
 
@@ -353,7 +355,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         return false;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+       
       const provider = (await wallet.getEthereumProvider()) as {
         request?: (args: {
           method: string;
@@ -366,7 +368,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
       }
 
       // Check current chain ID
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+       
       const currentChainId = await provider.request({ method: "eth_chainId" });
       const currentChainIdNumber = parseInt(currentChainId as string, 16);
 
@@ -454,7 +456,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         console.warn("⚠️ Wallet does not have getEthereumProvider method");
         return null;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+       
       const provider = await wallet.getEthereumProvider();
       if (!provider) {
         console.warn("⚠️ Wallet does not have Ethereum provider");
@@ -473,7 +475,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
       const client = createWalletClient({
         account: address as `0x${string}`,
         chain: getActiveChain(),
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+         
         transport: custom(providerAsAny),
       });
 
@@ -522,9 +524,8 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         console.log("💾 Updating health profile on blockchain with Privy...");
 
         // 1. Encrypt the profile data
-        const { encryptHealthData: encryptSecureData } = await import(
-          "@/utils/secureHealthEncryption"
-        );
+        const { encryptHealthData: encryptSecureData } =
+          await import("@/utils/secureHealthEncryption");
 
         const secureProfile = {
           birthDate: profile.birthDate || "",
@@ -661,9 +662,8 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
 
             // Store encrypted data in localStorage
             const walletEncryptionKey = await getWalletDerivedEncryptionKey();
-            const { encryptWithWalletKey } = await import(
-              "@/utils/walletEncryption"
-            );
+            const { encryptWithWalletKey } =
+              await import("@/utils/walletEncryption");
             const storageKey = `health_profile_${address}`;
             const encryptedProfileStorage = {
               birthDate: profile.birthDate
@@ -739,6 +739,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
   const loadHealthProfileFromBlockchain = useCallback(async (): Promise<{
     success: boolean;
     error?: string;
+    profile?: EncryptedHealthProfile;
   }> => {
     if (!isConnected || !address) {
       return { success: false, error: "No account connected" };
@@ -794,8 +795,24 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         hasWeight: !!encryptedWeight,
         hasEmail: !!encryptedProfile.encryptedEmail,
         hasNonce: !!encryptedProfile.nonce,
+        nonceValue: encryptedProfile.nonce,
+        nonceLength: encryptedProfile.nonce?.length,
         weightSource: "blockchain",
       });
+
+      // Validate nonce before setting state
+      if (!encryptedProfile.nonce || encryptedProfile.nonce.trim() === "") {
+        console.error(
+          "❌ CRITICAL: Nonce is missing or empty in blockchain profile!",
+          {
+            nonce: encryptedProfile.nonce,
+            profile: encryptedProfile,
+          },
+        );
+        throw new Error(
+          "Profile loaded from blockchain but nonce is missing. Cannot decrypt without nonce.",
+        );
+      }
 
       // Update state - include nonce for decryption
       // Note: V3 contract stores weight on-chain
@@ -822,7 +839,26 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         "ℹ️ Profile loaded from blockchain - localStorage sync skipped (can cause freezing)",
       );
 
-      return { success: true };
+      // IMPORTANT: Return the profile data so callers can use it immediately
+      // This avoids React state timing issues in production builds
+      return {
+        success: true,
+        profile: {
+          encryptedBirthDate:
+            encryptedProfile.encryptedBirthDate as `0x${string}`,
+          encryptedSex: encryptedProfile.encryptedSex as `0x${string}`,
+          encryptedHeight: encryptedProfile.encryptedHeight as `0x${string}`,
+          encryptedWeight: encryptedWeight as `0x${string}`,
+          encryptedEmail: encryptedProfile.encryptedEmail as `0x${string}`,
+          dataHash: encryptedProfile.dataHash as `0x${string}`,
+          timestamp: Number(encryptedProfile.timestamp),
+          isActive: encryptedProfile.isActive,
+          version: Number(encryptedProfile.version),
+          zkProofHash:
+            "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`,
+          nonce: encryptedProfile.nonce as string,
+        },
+      };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
@@ -838,31 +874,44 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
   }, [isConnected, address, getPublicClient]);
 
   // Get decrypted profile
-  const getDecryptedProfile =
-    useCallback(async (): Promise<HealthProfileData | null> => {
+  // Optionally accepts a profile parameter to avoid React state timing issues
+  const getDecryptedProfile = useCallback(
+    async (
+      profileOverride?: EncryptedHealthProfile,
+    ): Promise<HealthProfileData | null> => {
       if (!address) return null;
+
+      // Use provided profile or fall back to state (helps with production timing issues)
+      const profileToUse = profileOverride || healthProfile;
 
       // Priority 1: Decrypt from blockchain-loaded healthProfile state (includes weight from localStorage)
       // This is the preferred method since it has the latest data including weight
-      if (healthProfile && healthProfile.nonce) {
+      console.log("🔍 getDecryptedProfile check:", {
+        hasHealthProfile: !!healthProfile,
+        hasProfileOverride: !!profileOverride,
+        hasNonce: !!profileToUse?.nonce,
+        nonceValue: profileToUse?.nonce,
+        address,
+      });
+
+      if (profileToUse && profileToUse.nonce) {
         try {
           console.log(
             "🔓 Decrypting profile from blockchain-loaded state (includes weight)...",
           );
-          const { decryptHealthData } = await import(
-            "@/utils/secureHealthEncryption"
-          );
+          const { decryptHealthData } =
+            await import("@/utils/secureHealthEncryption");
 
           const onChainProfile = {
-            encryptedBirthDate: healthProfile.encryptedBirthDate,
-            encryptedSex: healthProfile.encryptedSex,
-            encryptedHeight: healthProfile.encryptedHeight,
-            encryptedWeight: healthProfile.encryptedWeight || "",
-            encryptedEmail: healthProfile.encryptedEmail,
-            dataHash: healthProfile.dataHash,
-            timestamp: healthProfile.timestamp,
-            version: healthProfile.version,
-            nonce: healthProfile.nonce,
+            encryptedBirthDate: profileToUse.encryptedBirthDate,
+            encryptedSex: profileToUse.encryptedSex,
+            encryptedHeight: profileToUse.encryptedHeight,
+            encryptedWeight: profileToUse.encryptedWeight || "",
+            encryptedEmail: profileToUse.encryptedEmail,
+            dataHash: profileToUse.dataHash,
+            timestamp: profileToUse.timestamp,
+            version: profileToUse.version,
+            nonce: profileToUse.nonce,
           };
 
           const decryptedData = await decryptHealthData(
@@ -878,17 +927,49 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
               height: decryptedData.height,
               weight: decryptedData.weight,
               email: decryptedData.email,
-              isActive: healthProfile.isActive,
-              version: healthProfile.version,
-              timestamp: healthProfile.timestamp,
+              isActive: profileToUse.isActive,
+              version: profileToUse.version,
+              timestamp: profileToUse.timestamp,
             };
           }
         } catch (error) {
-          console.warn(
-            "⚠️ Failed to decrypt from blockchain state, falling back to localStorage:",
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+          console.error(
+            "❌ Failed to decrypt from blockchain state:",
+            errorMessage,
             error,
           );
           // Fall through to localStorage fallback
+        }
+      } else {
+        // Profile loaded but missing nonce - try to reload from blockchain
+        if (profileToUse && !profileToUse.nonce) {
+          console.warn(
+            "⚠️ Profile loaded but nonce is missing. Attempting to reload from blockchain...",
+          );
+          try {
+            await loadHealthProfileFromBlockchain();
+            // Wait a bit for state to update, then retry
+            await new Promise((resolve) => setTimeout(resolve, 200));
+            // Retry decryption - the state should be updated now
+            return getDecryptedProfile();
+          } catch (reloadError) {
+            console.error("❌ Failed to reload profile:", reloadError);
+          }
+        } else if (!healthProfile) {
+          console.warn(
+            "⚠️ No health profile loaded. Attempting to load from blockchain...",
+          );
+          try {
+            await loadHealthProfileFromBlockchain();
+            // Wait a bit for state to update, then retry
+            await new Promise((resolve) => setTimeout(resolve, 200));
+            // Retry decryption - the state should be updated now
+            return getDecryptedProfile();
+          } catch (loadError) {
+            console.error("❌ Failed to load profile:", loadError);
+          }
         }
       }
 
@@ -904,9 +985,8 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
       try {
         const encryptedProfile = JSON.parse(stored);
         const walletEncryptionKey = await getWalletDerivedEncryptionKey();
-        const { decryptWithWalletKey } = await import(
-          "@/utils/walletEncryption"
-        );
+        const { decryptWithWalletKey } =
+          await import("@/utils/walletEncryption");
 
         // Also try to load weight from separate localStorage key if available
         let decryptedWeight: number | undefined;
@@ -916,13 +996,11 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
           );
           if (storedWeight && healthProfile?.nonce) {
             // Weight is encrypted with on-chain encryption, so decrypt using decryptField
-            const { decryptField } = await import(
-              "@/utils/secureHealthEncryption"
-            );
+            const { decryptField } =
+              await import("@/utils/secureHealthEncryption");
             // Derive the key for decryption
-            const { deriveSecureKey } = await import(
-              "@/utils/secureHealthEncryption"
-            );
+            const { deriveSecureKey } =
+              await import("@/utils/secureHealthEncryption");
             const key = await deriveSecureKey(address, undefined);
 
             // Parse nonce (same format as in decryptHealthData)
@@ -990,7 +1068,9 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         console.error("❌ Failed to decrypt stored profile:", error);
         return null;
       }
-    }, [address, getWalletDerivedEncryptionKey, healthProfile]);
+    },
+    [address, getWalletDerivedEncryptionKey, healthProfile],
+  );
 
   // Verify profile
   const verifyProfileZKsync = useCallback(
@@ -1009,9 +1089,8 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
           return { success: false, error: "Failed to create wallet client" };
         }
 
-        const { PROFILE_VERIFICATION_CONTRACT } = await import(
-          "@/lib/contractConfig"
-        );
+        const { PROFILE_VERIFICATION_CONTRACT } =
+          await import("@/lib/contractConfig");
 
         const { getActiveChain } = await import("@/lib/networkConfig");
 
@@ -1149,9 +1228,8 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
 
       try {
         const walletEncryptionKey = await getWalletDerivedEncryptionKey();
-        const { encryptWithWalletKey } = await import(
-          "@/utils/walletEncryption"
-        );
+        const { encryptWithWalletKey } =
+          await import("@/utils/walletEncryption");
 
         const payload = JSON.stringify(vault);
         const storageKey = `context_vault_${address}`;
@@ -1186,9 +1264,8 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
 
       try {
         const walletEncryptionKey = await getWalletDerivedEncryptionKey();
-        const { decryptWithWalletKey } = await import(
-          "@/utils/walletEncryption"
-        );
+        const { decryptWithWalletKey } =
+          await import("@/utils/walletEncryption");
 
         const envelope = JSON.parse(stored) as {
           encryptedPayload: string;
@@ -1348,9 +1425,8 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
             return { success: false, error: "Failed to create public client" };
           }
 
-          const { profileVerificationAbi } = await import(
-            "@/lib/contractConfig"
-          );
+          const { profileVerificationAbi } =
+            await import("@/lib/contractConfig");
           const { getContractAddresses } = await import("@/lib/networkConfig");
           const contracts = getContractAddresses();
 

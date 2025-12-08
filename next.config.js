@@ -1,4 +1,5 @@
 const path = require("path");
+const webpack = require("webpack");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -8,14 +9,41 @@ const nextConfig = {
   turbopack: {},
   // Add webpack config to include my-health-app and fix ethers.js issues
   webpack: (config, { isServer }) => {
-    // Add my-health-app to the modules included in the build
-    config.resolve.modules.push(path.resolve(__dirname, "./my-health-app"));
+    // Ignore test files and other unnecessary files from node_modules
+    config.plugins = config.plugins || [];
+    config.plugins.push(
+      new webpack.IgnorePlugin({
+        resourceRegExp: /\.(test|spec)\.(js|ts|mjs)$/,
+        contextRegExp: /node_modules/,
+      }),
+    );
 
-    // Also make sure the resolve paths include my-health-app/src
+    // Ignore test directories
+    config.plugins.push(
+      new webpack.IgnorePlugin({
+        resourceRegExp: /\/test\//,
+        contextRegExp: /node_modules/,
+      }),
+    );
+
+    // Ignore README, LICENSE, and other non-code files
+    config.plugins.push(
+      new webpack.IgnorePlugin({
+        resourceRegExp: /\.(md|txt|LICENSE|CHANGELOG)$/,
+        contextRegExp: /node_modules/,
+      }),
+    );
+
+    // Ignore test directories and files in node_modules
+    config.resolve = config.resolve || {};
     config.resolve.alias = {
       ...config.resolve.alias,
       "health-app": path.resolve(__dirname, "./my-health-app/src"),
     };
+
+    // Add my-health-app to the modules included in the build
+    config.resolve.modules = config.resolve.modules || [];
+    config.resolve.modules.push(path.resolve(__dirname, "./my-health-app"));
 
     // Fix ethers.js network detection issues in Next.js
     // Only disable Node.js modules for client-side builds

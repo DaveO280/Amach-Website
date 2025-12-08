@@ -13,8 +13,9 @@ const nextConfig = {
     "pino",
     "thread-stream",
   ],
-  // Explicitly disable Turbopack - we need webpack for custom configs
-  // The --webpack flag should work, but removing turbopack config ensures webpack is used
+  // Empty turbopack config to silence Next.js 16 warning
+  // We're using webpack via --webpack flag, but need this to prevent the error
+  turbopack: {},
   // Add webpack config to include my-health-app and fix ethers.js issues
   webpack: (config, { isServer }) => {
     // Ignore test files and other unnecessary files from node_modules

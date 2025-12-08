@@ -4,9 +4,17 @@ const webpack = require("webpack");
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Use Node.js runtime for blockchain interactions
-  serverExternalPackages: ["ethers", "zksync-sso", "@wagmi/core", "viem"],
-  // Turbopack config (empty to silence Next.js 16 warning, using webpack instead)
-  turbopack: {},
+  // Also externalize packages that have test files that shouldn't be bundled
+  serverExternalPackages: [
+    "ethers",
+    "zksync-sso",
+    "@wagmi/core",
+    "viem",
+    "pino",
+    "thread-stream",
+  ],
+  // Explicitly disable Turbopack - we need webpack for custom configs
+  // The --webpack flag should work, but removing turbopack config ensures webpack is used
   // Add webpack config to include my-health-app and fix ethers.js issues
   webpack: (config, { isServer }) => {
     // Ignore test files and other unnecessary files from node_modules

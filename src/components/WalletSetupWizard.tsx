@@ -97,7 +97,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       : async (
           email: string,
         ): Promise<{ success: boolean; txHash?: string; error?: string }> => {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+           
           void email; // Suppress unused parameter warning
           return {
             success: false,
@@ -252,6 +252,13 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
             if (data.userAllocation && data.userAllocation.isVerified) {
               console.log("✅ User already verified - skipping to token claim");
               updateStepStatus("verify-profile", "complete");
+              // Check if tokens were already claimed
+              if (data.userAllocation.hasClaimed) {
+                console.log(
+                  "✅ Tokens already claimed - marking step as complete",
+                );
+                updateStepStatus("claim-tokens", "complete");
+              }
               // Jump to claim tokens step
               const claimStepIndex = steps.findIndex(
                 (s) => s.id === "claim-tokens",
@@ -336,6 +343,16 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
           case "deployer-funding":
             // Check if wallet has been funded
             if (isConnected && address) {
+              // If step just became active, trigger funding
+              if (currentStep.status === "active") {
+                console.log(
+                  "🚀 Funding step is active - triggering funding process",
+                );
+                void handleDeployerFunding();
+                // Don't check balance yet, let the handler update the status
+                break;
+              }
+
               const balanceResult = await walletService.getBalance();
               if (balanceResult.success && balanceResult.balance) {
                 const balance = parseFloat(balanceResult.balance);
@@ -368,10 +385,26 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
             break;
 
           case "claim-tokens":
-            // Check if tokens have been claimed
-            if (allocationInfo?.hasClaimed) {
-              console.log("✅ Tokens claimed - setup complete!");
-              updateStepStatus("claim-tokens", "complete");
+            // Check if tokens have been claimed by refreshing allocation info
+            if (isConnected && address) {
+              try {
+                // Refresh allocation info to get latest status
+                await checkAllocationEligibility();
+                // Also check directly from API for immediate verification
+                const response = await fetch(
+                  `/api/verification/allocation-info?wallet=${address}`,
+                );
+                if (response.ok) {
+                  const data = await response.json();
+                  if (data.userAllocation?.hasClaimed) {
+                    console.log("✅ Tokens claimed - setup complete!");
+                    updateStepStatus("claim-tokens", "complete");
+                  }
+                }
+              } catch (error) {
+                // Silently fail - will retry on next interval
+                console.log("Background allocation check:", error);
+              }
             }
             break;
         }
@@ -392,17 +425,20 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     return (): void => {
       clearInterval(intervalId);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isOpen,
     currentStepIndex,
     steps,
     isConnected,
     address,
+    walletAddress,
     allocationInfo,
     updateStepStatus,
     moveToNextStep,
     walletService,
     loadProfileFromBlockchain,
+    // handleDeployerFunding omitted to avoid circular dependency (it's stable via useCallback)
   ]);
 
   // Navigate to a specific step (only if it's complete or current)
@@ -821,6 +857,13 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
               "✅ User already verified - skipping auto-verification",
             );
             updateStepStatus("verify-profile", "complete");
+            // Check if tokens were already claimed
+            if (allocationData.userAllocation.hasClaimed) {
+              console.log(
+                "✅ Tokens already claimed - marking step as complete",
+              );
+              updateStepStatus("claim-tokens", "complete");
+            }
             // Jump to claim tokens
             const claimStepIndex = steps.findIndex(
               (s) => s.id === "claim-tokens",

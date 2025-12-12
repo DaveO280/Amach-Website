@@ -82,7 +82,20 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
 
         // Use the profile data directly from the load result to avoid React state timing issues
         // This is especially important in production where state updates may be batched differently
+        console.log("🔍 Load result profile data:", {
+          hasProfile: !!loadResult.profile,
+          hasNonce: !!loadResult.profile?.nonce,
+          profileKeys: loadResult.profile
+            ? Object.keys(loadResult.profile)
+            : [],
+        });
+
         const walletProfile = await getDecryptedProfile(loadResult.profile);
+
+        console.log("🔍 Decrypted profile result:", {
+          hasWalletProfile: !!walletProfile,
+          walletProfileKeys: walletProfile ? Object.keys(walletProfile) : [],
+        });
 
         if (walletProfile) {
           const rawProfile: RawUserProfileInput = {

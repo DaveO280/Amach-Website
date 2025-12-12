@@ -270,6 +270,31 @@ function transformMetricData(
       continue;
     }
 
+    // Special handling: Heart rate needs raw samples for zone calculations
+    // Don't aggregate heart rate, keep all individual readings
+    if (metricId === "HKQuantityTypeIdentifierHeartRate") {
+      const sortedSamples = [...samples].sort(
+        (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
+      );
+      appleHealth[metricId] = sortedSamples;
+
+      console.log(
+        `[CoordinatorService] ${metricId}: ${sortedSamples.length} raw samples (for zone calculations)`,
+      );
+
+      // Track time window
+      for (const sample of sortedSamples) {
+        const timeValue = sample.timestamp.getTime();
+        if (earliest === null || timeValue < earliest) {
+          earliest = timeValue;
+        }
+        if (latest === null || timeValue > latest) {
+          latest = timeValue;
+        }
+      }
+      continue;
+    }
+
     // Apply tiered aggregation for initial mode, simple window for ongoing
     let finalSamples: MetricSample[];
     if (analysisMode === "initial") {

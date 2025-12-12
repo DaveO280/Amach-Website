@@ -237,44 +237,199 @@ Tone requirements:
     };
   }
 
-  protected formatDataForAnalysis(data: {
-    summaries: CardioDaySummary[];
-    averages: CardioAverages;
-    recovery: CardioRecoveryData;
-  }): string {
+  protected formatDataForAnalysis(
+    data: {
+      summaries: CardioDaySummary[];
+      averages: CardioAverages;
+      recovery: CardioRecoveryData;
+    },
+    context?: AgentExecutionContext,
+  ): string {
     const { summaries, averages } = data;
+    const analysisMode = context?.analysisMode || "ongoing";
 
     const lines: string[] = [];
 
-    lines.push("CARDIO DATA SUMMARY (last 30 days if available):");
-    summaries.slice(-30).forEach((summary) => {
+    // For initial analysis, use tiered format
+    if (analysisMode === "initial") {
       lines.push(
-        `  ${summary.date}: restingHR=${this.formatNumber(summary.restingHeartRate)} bpm | HRV=${this.formatNumber(summary.hrv, 1)} ms | avgHR=${this.formatNumber(summary.avgHeartRate)} bpm | maxHR=${this.formatNumber(summary.maxHeartRate)} bpm | exercise=${this.formatNumber(summary.exerciseMinutes, 1)} min`,
+        "═══════════════════════════════════════════════════════════════",
       );
-    });
+      lines.push(
+        "TIERED CARDIOVASCULAR ANALYSIS: ALL-TIME → 90-DAY → 30-DAY → RECENT WEEK",
+      );
+      lines.push(
+        "═══════════════════════════════════════════════════════════════",
+      );
+      lines.push("");
+      lines.push(
+        "INSTRUCTIONS: Analyze cardiovascular patterns systematically from baseline to recent period.",
+      );
+      lines.push("1. Start with ALL-TIME BASELINE (resting HR, HRV averages)");
+      lines.push("2. Compare 90-DAY PERIOD to baseline for medium-term trends");
+      lines.push(
+        "3. Compare 30-DAY PERIOD to identify recent cardiovascular shifts",
+      );
+      lines.push(
+        "4. Examine RECENT WEEK for acute changes in heart rate metrics",
+      );
+      lines.push(
+        "5. Look for CORRELATIONS (e.g., when exercise increases, does resting HR rise?)",
+      );
+      lines.push("");
 
-    lines.push("");
-    lines.push("AVERAGES (entire period):");
-    lines.push(
-      `  • Resting HR: ${this.formatNumber(averages.restingHeartRate, 1)} bpm`,
-    );
-    lines.push(`  • HRV: ${this.formatNumber(averages.hrv, 1)} ms`);
-    lines.push(
-      `  • Avg Daytime HR: ${this.formatNumber(averages.avgHeartRate, 1)} bpm`,
-    );
-    lines.push(
-      `  • Peak HR: ${this.formatNumber(averages.maxHeartRate, 1)} bpm`,
-    );
-    lines.push(
-      `  • Exercise Minutes: ${this.formatNumber(averages.exerciseMinutes, 1)} min/day`,
-    );
-    if (averages.vo2Max !== null) {
+      // Calculate period averages
+      const recent30d = this.calculatePeriodAverages(summaries, 30);
+      const recent90d = this.calculatePeriodAverages(summaries, 90);
+
+      // TIER 1: ALL-TIME BASELINE
       lines.push(
-        `  • VO2 Max: ${this.formatNumber(averages.vo2Max, 1)} ml/kg/min`,
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
       );
+      lines.push("TIER 1: ALL-TIME BASELINE (Full History)");
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      lines.push(
+        `Resting HR: ${this.formatNumber(averages.restingHeartRate, 1)} bpm (average)`,
+      );
+      lines.push(
+        `HRV: ${this.formatNumber(averages.hrv, 1)} ms (average autonomic balance)`,
+      );
+      lines.push(
+        `Avg Daytime HR: ${this.formatNumber(averages.avgHeartRate, 1)} bpm`,
+      );
+      lines.push(
+        `Peak HR: ${this.formatNumber(averages.maxHeartRate, 1)} bpm (max observed)`,
+      );
+      if (averages.vo2Max !== null) {
+        lines.push(
+          `VO2 Max: ${this.formatNumber(averages.vo2Max, 1)} ml/kg/min (cardio fitness)`,
+        );
+      }
+      lines.push("");
+
+      // TIER 2: 90-DAY PERIOD
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      lines.push("TIER 2: 90-DAY PERIOD (vs Baseline)");
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      if (
+        recent90d.restingHeartRate !== null &&
+        averages.restingHeartRate !== null
+      ) {
+        const diff = recent90d.restingHeartRate - averages.restingHeartRate;
+        lines.push(
+          `Resting HR: ${this.formatNumber(recent90d.restingHeartRate, 1)} bpm (${diff > 0 ? "+" : ""}${this.formatNumber(diff, 1)} vs baseline)`,
+        );
+      }
+      if (recent90d.hrv !== null && averages.hrv !== null) {
+        const diff = recent90d.hrv - averages.hrv;
+        lines.push(
+          `HRV: ${this.formatNumber(recent90d.hrv, 1)} ms (${diff > 0 ? "+" : ""}${this.formatNumber(diff, 1)} vs baseline)`,
+        );
+      }
+      if (recent90d.exerciseMinutes !== null) {
+        lines.push(
+          `Exercise: ${this.formatNumber(recent90d.exerciseMinutes, 1)} min/day`,
+        );
+      }
+      lines.push("");
+
+      // TIER 3: 30-DAY PERIOD
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      lines.push("TIER 3: 30-DAY PERIOD (Recent Trend)");
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      if (
+        recent30d.restingHeartRate !== null &&
+        recent90d.restingHeartRate !== null
+      ) {
+        const diff = recent30d.restingHeartRate - recent90d.restingHeartRate;
+        lines.push(
+          `Resting HR: ${this.formatNumber(recent30d.restingHeartRate, 1)} bpm (${diff > 0 ? "+" : ""}${this.formatNumber(diff, 1)} vs 90-day)`,
+        );
+      }
+      if (recent30d.hrv !== null && recent90d.hrv !== null) {
+        const diff = recent30d.hrv - recent90d.hrv;
+        lines.push(
+          `HRV: ${this.formatNumber(recent30d.hrv, 1)} ms (${diff > 0 ? "+" : ""}${this.formatNumber(diff, 1)} vs 90-day)`,
+        );
+      }
+      lines.push("");
+
+      // TIER 4: RECENT WEEK
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      lines.push("TIER 4: RECENT WEEK (Latest Activity)");
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      summaries.slice(-7).forEach((summary) => {
+        lines.push(
+          `${summary.date}: RHR=${this.formatNumber(summary.restingHeartRate)}bpm | HRV=${this.formatNumber(summary.hrv, 1)}ms | Avg=${this.formatNumber(summary.avgHeartRate)}bpm | Max=${this.formatNumber(summary.maxHeartRate)}bpm`,
+        );
+      });
+    } else {
+      // For ongoing analysis, use simple format
+      lines.push("CARDIO DATA SUMMARY (last 30 days if available):");
+      summaries.slice(-30).forEach((summary) => {
+        lines.push(
+          `  ${summary.date}: restingHR=${this.formatNumber(summary.restingHeartRate)} bpm | HRV=${this.formatNumber(summary.hrv, 1)} ms | avgHR=${this.formatNumber(summary.avgHeartRate)} bpm | maxHR=${this.formatNumber(summary.maxHeartRate)} bpm | exercise=${this.formatNumber(summary.exerciseMinutes, 1)} min`,
+        );
+      });
+
+      lines.push("");
+      lines.push("AVERAGES (entire period):");
+      lines.push(
+        `  • Resting HR: ${this.formatNumber(averages.restingHeartRate, 1)} bpm`,
+      );
+      lines.push(`  • HRV: ${this.formatNumber(averages.hrv, 1)} ms`);
+      lines.push(
+        `  • Avg Daytime HR: ${this.formatNumber(averages.avgHeartRate, 1)} bpm`,
+      );
+      lines.push(
+        `  • Peak HR: ${this.formatNumber(averages.maxHeartRate, 1)} bpm`,
+      );
+      lines.push(
+        `  • Exercise Minutes: ${this.formatNumber(averages.exerciseMinutes, 1)} min/day`,
+      );
+      if (averages.vo2Max !== null) {
+        lines.push(
+          `  • VO2 Max: ${this.formatNumber(averages.vo2Max, 1)} ml/kg/min`,
+        );
+      }
     }
 
     return lines.join("\n");
+  }
+
+  private calculatePeriodAverages(
+    summaries: CardioDaySummary[],
+    days: number,
+  ): CardioAverages {
+    const recent = summaries.slice(-days);
+    return {
+      restingHeartRate: this.averageFromSummaries(
+        recent,
+        (s) => s.restingHeartRate,
+      ),
+      hrv: this.averageFromSummaries(recent, (s) => s.hrv),
+      avgHeartRate: this.averageFromSummaries(recent, (s) => s.avgHeartRate),
+      maxHeartRate: this.averageFromSummaries(recent, (s) => s.maxHeartRate),
+      exerciseMinutes: this.averageFromSummaries(
+        recent,
+        (s) => s.exerciseMinutes,
+      ),
+      vo2Max: this.averageFromSummaries(recent, (s) => s.vo2Max),
+    };
   }
 
   protected buildDetailedPrompt(

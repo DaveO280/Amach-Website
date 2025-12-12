@@ -128,7 +128,7 @@ OUTPUT STRUCTURE:
         systemPrompt: this.getEnhancedSystemPrompt(),
         userPrompt: prompt,
         temperature: 0.4,
-        maxTokens: 4000,
+        maxTokens: 8000, // Increased for historical context analysis
       });
 
       console.log(`✅ [${this.name}] Venice API response received`, {

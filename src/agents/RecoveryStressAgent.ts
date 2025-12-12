@@ -240,41 +240,211 @@ Tone requirements:
     };
   }
 
-  protected formatDataForAnalysis(data: {
-    summaries: RecoveryDaySummary[];
-    averages: RecoveryAverages;
-  }): string {
+  protected formatDataForAnalysis(
+    data: {
+      summaries: RecoveryDaySummary[];
+      averages: RecoveryAverages;
+    },
+    context?: AgentExecutionContext,
+  ): string {
     const { summaries, averages } = data;
+    const analysisMode = context?.analysisMode || "ongoing";
 
     const lines: string[] = [];
 
-    lines.push("RECOVERY DATA SUMMARY (last 30 days if available):");
-    summaries.slice(-30).forEach((summary) => {
+    // For initial analysis, use tiered format
+    if (analysisMode === "initial") {
       lines.push(
-        `  ${summary.date}: HRV=${this.formatNumber(summary.hrv, 1)} ms | restingHR=${this.formatNumber(summary.restingHeartRate)} bpm | respRate=${this.formatNumber(summary.respiratoryRate, 1)} /min | sleep=${this.formatNumber(summary.sleepHours, 1)} h | exercise=${this.formatNumber(summary.exerciseMinutes, 1)} min | energy=${this.formatNumber(summary.activeEnergy, 1)} kcal`,
+        "═══════════════════════════════════════════════════════════════",
       );
-    });
+      lines.push(
+        "TIERED RECOVERY & STRESS ANALYSIS: ALL-TIME → 90-DAY → 30-DAY → RECENT WEEK",
+      );
+      lines.push(
+        "═══════════════════════════════════════════════════════════════",
+      );
+      lines.push("");
+      lines.push(
+        "INSTRUCTIONS: Analyze recovery patterns systematically from baseline to recent period.",
+      );
+      lines.push(
+        "1. Start with ALL-TIME BASELINE (HRV, resting HR, sleep averages)",
+      );
+      lines.push(
+        "2. Compare 90-DAY PERIOD to baseline for medium-term recovery trends",
+      );
+      lines.push(
+        "3. Compare 30-DAY PERIOD to identify recent stress/recovery shifts",
+      );
+      lines.push(
+        "4. Examine RECENT WEEK for acute changes in recovery markers",
+      );
+      lines.push(
+        "5. Look for CORRELATIONS (e.g., when exercise increases, does HRV drop?)",
+      );
+      lines.push("");
 
-    lines.push("");
-    lines.push("AVERAGES (entire period):");
-    lines.push(`  • HRV: ${this.formatNumber(averages.hrv, 1)} ms`);
-    lines.push(
-      `  • Resting Heart Rate: ${this.formatNumber(averages.restingHeartRate, 1)} bpm`,
-    );
-    lines.push(
-      `  • Respiratory Rate: ${this.formatNumber(averages.respiratoryRate, 1)} count/min`,
-    );
-    lines.push(
-      `  • Sleep Duration: ${this.formatNumber(averages.sleepHours, 1)} h`,
-    );
-    lines.push(
-      `  • Active Energy: ${this.formatNumber(averages.activeEnergy, 1)} kcal/day`,
-    );
-    lines.push(
-      `  • Exercise Minutes: ${this.formatNumber(averages.exerciseMinutes, 1)} min/day`,
-    );
+      // Calculate period averages
+      const recent30d = this.calculatePeriodAverages(summaries, 30);
+      const recent90d = this.calculatePeriodAverages(summaries, 90);
+
+      // TIER 1: ALL-TIME BASELINE
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      lines.push("TIER 1: ALL-TIME BASELINE (Full History)");
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      lines.push(
+        `HRV: ${this.formatNumber(averages.hrv, 1)} ms (average autonomic balance)`,
+      );
+      lines.push(
+        `Resting HR: ${this.formatNumber(averages.restingHeartRate, 1)} bpm (average)`,
+      );
+      lines.push(
+        `Respiratory Rate: ${this.formatNumber(averages.respiratoryRate, 1)} /min`,
+      );
+      lines.push(
+        `Sleep Duration: ${this.formatNumber(averages.sleepHours, 1)} h (average)`,
+      );
+      lines.push(
+        `Active Energy: ${this.formatNumber(averages.activeEnergy, 1)} kcal/day`,
+      );
+      lines.push(
+        `Exercise: ${this.formatNumber(averages.exerciseMinutes, 1)} min/day`,
+      );
+      lines.push("");
+
+      // TIER 2: 90-DAY PERIOD
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      lines.push("TIER 2: 90-DAY PERIOD (vs Baseline)");
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      if (recent90d.hrv !== null && averages.hrv !== null) {
+        const diff = recent90d.hrv - averages.hrv;
+        lines.push(
+          `HRV: ${this.formatNumber(recent90d.hrv, 1)} ms (${diff > 0 ? "+" : ""}${this.formatNumber(diff, 1)} vs baseline)`,
+        );
+      }
+      if (
+        recent90d.restingHeartRate !== null &&
+        averages.restingHeartRate !== null
+      ) {
+        const diff = recent90d.restingHeartRate - averages.restingHeartRate;
+        lines.push(
+          `Resting HR: ${this.formatNumber(recent90d.restingHeartRate, 1)} bpm (${diff > 0 ? "+" : ""}${this.formatNumber(diff, 1)} vs baseline)`,
+        );
+      }
+      if (recent90d.sleepHours !== null && averages.sleepHours !== null) {
+        const diff = recent90d.sleepHours - averages.sleepHours;
+        lines.push(
+          `Sleep: ${this.formatNumber(recent90d.sleepHours, 1)} h (${diff > 0 ? "+" : ""}${this.formatNumber(diff, 1)} vs baseline)`,
+        );
+      }
+      lines.push("");
+
+      // TIER 3: 30-DAY PERIOD
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      lines.push("TIER 3: 30-DAY PERIOD (Recent Trend)");
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      if (recent30d.hrv !== null && recent90d.hrv !== null) {
+        const diff = recent30d.hrv - recent90d.hrv;
+        lines.push(
+          `HRV: ${this.formatNumber(recent30d.hrv, 1)} ms (${diff > 0 ? "+" : ""}${this.formatNumber(diff, 1)} vs 90-day)`,
+        );
+      }
+      if (
+        recent30d.restingHeartRate !== null &&
+        recent90d.restingHeartRate !== null
+      ) {
+        const diff = recent30d.restingHeartRate - recent90d.restingHeartRate;
+        lines.push(
+          `Resting HR: ${this.formatNumber(recent30d.restingHeartRate, 1)} bpm (${diff > 0 ? "+" : ""}${this.formatNumber(diff, 1)} vs 90-day)`,
+        );
+      }
+      if (recent30d.sleepHours !== null && recent90d.sleepHours !== null) {
+        const diff = recent30d.sleepHours - recent90d.sleepHours;
+        lines.push(
+          `Sleep: ${this.formatNumber(recent30d.sleepHours, 1)} h (${diff > 0 ? "+" : ""}${this.formatNumber(diff, 1)} vs 90-day)`,
+        );
+      }
+      lines.push("");
+
+      // TIER 4: RECENT WEEK
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      lines.push("TIER 4: RECENT WEEK (Latest Activity)");
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      summaries.slice(-7).forEach((summary) => {
+        lines.push(
+          `${summary.date}: HRV=${this.formatNumber(summary.hrv, 1)}ms | RHR=${this.formatNumber(summary.restingHeartRate)}bpm | Sleep=${this.formatNumber(summary.sleepHours, 1)}h | Ex=${this.formatNumber(summary.exerciseMinutes)}min`,
+        );
+      });
+    } else {
+      // For ongoing analysis, use simple format
+      lines.push("RECOVERY DATA SUMMARY (last 30 days if available):");
+      summaries.slice(-30).forEach((summary) => {
+        lines.push(
+          `  ${summary.date}: HRV=${this.formatNumber(summary.hrv, 1)} ms | restingHR=${this.formatNumber(summary.restingHeartRate)} bpm | respRate=${this.formatNumber(summary.respiratoryRate, 1)} /min | sleep=${this.formatNumber(summary.sleepHours, 1)} h | exercise=${this.formatNumber(summary.exerciseMinutes, 1)} min | energy=${this.formatNumber(summary.activeEnergy, 1)} kcal`,
+        );
+      });
+
+      lines.push("");
+      lines.push("AVERAGES (entire period):");
+      lines.push(`  • HRV: ${this.formatNumber(averages.hrv, 1)} ms`);
+      lines.push(
+        `  • Resting Heart Rate: ${this.formatNumber(averages.restingHeartRate, 1)} bpm`,
+      );
+      lines.push(
+        `  • Respiratory Rate: ${this.formatNumber(averages.respiratoryRate, 1)} count/min`,
+      );
+      lines.push(
+        `  • Sleep Duration: ${this.formatNumber(averages.sleepHours, 1)} h`,
+      );
+      lines.push(
+        `  • Active Energy: ${this.formatNumber(averages.activeEnergy, 1)} kcal/day`,
+      );
+      lines.push(
+        `  • Exercise Minutes: ${this.formatNumber(averages.exerciseMinutes, 1)} min/day`,
+      );
+    }
 
     return lines.join("\n");
+  }
+
+  private calculatePeriodAverages(
+    summaries: RecoveryDaySummary[],
+    days: number,
+  ): RecoveryAverages {
+    const recent = summaries.slice(-days);
+    return {
+      hrv: this.averageFromSummaries(recent, (s) => s.hrv),
+      restingHeartRate: this.averageFromSummaries(
+        recent,
+        (s) => s.restingHeartRate,
+      ),
+      respiratoryRate: this.averageFromSummaries(
+        recent,
+        (s) => s.respiratoryRate,
+      ),
+      sleepHours: this.averageFromSummaries(recent, (s) => s.sleepHours),
+      activeEnergy: this.averageFromSummaries(recent, (s) => s.activeEnergy),
+      exerciseMinutes: this.averageFromSummaries(
+        recent,
+        (s) => s.exerciseMinutes,
+      ),
+    };
   }
 
   protected buildDetailedPrompt(

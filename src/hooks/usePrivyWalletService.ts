@@ -91,6 +91,7 @@ export interface PrivyWalletServiceReturn {
 
   // Utility methods
   signMessage: (message: string) => Promise<string>;
+  getWalletClient: () => Promise<import("viem").WalletClient | null>;
   getBalance: () => Promise<{
     success: boolean;
     balance?: string;
@@ -147,11 +148,11 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
   const { signMessage: privySignMessage } = useSignMessage();
 
   // Get wallet address
-   
+
   const wallet = wallets?.[0] as
     | { address?: string; getEthereumProvider?: () => Promise<unknown> }
     | undefined;
-   
+
   const address = wallet?.address as string | undefined;
   const isConnected = ready && authenticated && !!address;
 
@@ -209,7 +210,6 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
           },
         );
 
-         
         const signature = result.signature as string;
 
         if (!signature || signature.length < 132) {
@@ -355,7 +355,6 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         return false;
       }
 
-       
       const provider = (await wallet.getEthereumProvider()) as {
         request?: (args: {
           method: string;
@@ -368,7 +367,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
       }
 
       // Check current chain ID
-       
+
       const currentChainId = await provider.request({ method: "eth_chainId" });
       const currentChainIdNumber = parseInt(currentChainId as string, 16);
 
@@ -456,7 +455,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         console.warn("⚠️ Wallet does not have getEthereumProvider method");
         return null;
       }
-       
+
       const provider = await wallet.getEthereumProvider();
       if (!provider) {
         console.warn("⚠️ Wallet does not have Ethereum provider");
@@ -475,7 +474,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
       const client = createWalletClient({
         account: address as `0x${string}`,
         chain: getActiveChain(),
-         
+
         transport: custom(providerAsAny),
       });
 
@@ -507,6 +506,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
       return client;
     } catch (error) {
       console.error("Failed to create public client:", error);
+      // Return null instead of throwing to prevent breaking the app
       return null;
     }
   }, []);
@@ -1510,6 +1510,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
 
       // Utility methods
       signMessage,
+      getWalletClient,
       getBalance,
       getTokenBalances,
       sendETH,
@@ -1535,6 +1536,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
       address,
       healthProfile,
       signMessage,
+      getWalletClient,
       ready,
       authenticated,
       updateHealthProfile,

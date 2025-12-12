@@ -388,6 +388,18 @@ export class HealthDataProcessor {
     for (const [metricType, dailyData] of Object.entries(
       this.processedData.dailyAggregates,
     )) {
+      // Special handling: Heart rate needs raw samples for zone calculations
+      if (metricType === "HKQuantityTypeIdentifierHeartRate") {
+        const rawHeartRate = this.getRawHeartRateSamples(options);
+        if (rawHeartRate.length > 0) {
+          result[metricType] = rawHeartRate;
+          console.log(
+            `[HealthDataProcessor] ${metricType}: ${rawHeartRate.length} raw samples (for zone calculations)`,
+          );
+        }
+        continue;
+      }
+
       const samples = Array.from(dailyData.values());
 
       if (tieredAggregation) {
@@ -452,6 +464,126 @@ export class HealthDataProcessor {
       if (endDate && dayDate > endDate) return false;
       return true;
     });
+  }
+
+  /**
+   * Get raw heart rate samples for zone calculations
+   * Heart rate zones need individual readings, not daily averages
+   */
+  getRawHeartRateSamples(options: GetDataOptions = {}): MetricSample[] {
+    if (!this.processedData || !this.processedData.rawData) {
+      return [];
+    }
+
+    const { startDate, endDate } = options;
+    const heartRateData =
+      this.processedData.rawData["HKQuantityTypeIdentifierHeartRate"];
+
+    if (!heartRateData) {
+      return [];
+    }
+
+    // Convert raw data points to MetricSample format
+    const samples: MetricSample[] = heartRateData
+      .map((point) => ({
+        timestamp: new Date(point.startDate),
+        value: parseFloat(point.value),
+        unit: point.unit,
+        metadata: {
+          source: point.source,
+          device: point.device,
+          type: point.type,
+          endDate: point.endDate,
+        },
+      }))
+      .filter((s) => {
+        // Filter out invalid samples
+        if (isNaN(s.value) || isNaN(s.timestamp.getTime())) return false;
+
+        // Filter by date range if specified
+        if (startDate && s.timestamp < startDate) return false;
+        if (endDate && s.timestamp > endDate) return false;
+
+        return true;
+      })
+      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+    return samples;
+  }
+
+  /**
+   * Get data with historical context for AI agents
+   * Returns both full historical data and recent detailed data
+   */
+  getDataWithHistoricalContext(
+    metricType: string,
+    recentDays: number = 60,
+  ): {
+    historical: MetricSample[];
+    recent: MetricSample[];
+  } {
+    if (!this.processedData) {
+      return { historical: [], recent: [] };
+    }
+
+    // Special handling for sleep
+    if (metricType === "HKCategoryTypeIdentifierSleepAnalysis") {
+      const now = new Date();
+      const recentStart = new Date(
+        now.getTime() - recentDays * 24 * 60 * 60 * 1000,
+      );
+
+      const allSleep = this.processedData.sleepData.map((day) => ({
+        timestamp: new Date(day.date),
+        value: day.sleepDuration * 60, // Convert minutes to seconds
+        unit: "s" as const,
+        metadata: {
+          efficiency: day.metrics.sleepEfficiency,
+          totalDuration: day.totalDuration,
+          stages: day.stageData,
+          date: day.date,
+        },
+      }));
+
+      return {
+        historical: allSleep,
+        recent: allSleep.filter((s) => s.timestamp >= recentStart),
+      };
+    }
+
+    // Special handling for heart rate (needs raw samples)
+    if (metricType === "HKQuantityTypeIdentifierHeartRate") {
+      const now = new Date();
+      const recentStart = new Date(
+        now.getTime() - recentDays * 24 * 60 * 60 * 1000,
+      );
+      const allSamples = this.getRawHeartRateSamples();
+
+      return {
+        historical: allSamples,
+        recent: allSamples.filter((s) => s.timestamp >= recentStart),
+      };
+    }
+
+    // For other metrics, use daily aggregates
+    const dailyData = this.processedData.dailyAggregates[metricType];
+    if (!dailyData) {
+      return { historical: [], recent: [] };
+    }
+
+    const now = new Date();
+    const recentStart = new Date(
+      now.getTime() - recentDays * 24 * 60 * 60 * 1000,
+    );
+
+    const allSamples = Array.from(dailyData.values()).sort(
+      (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
+    );
+
+    return {
+      historical: allSamples,
+      recent: allSamples.filter((s) => s.timestamp >= recentStart),
+    };
   }
 
   /**

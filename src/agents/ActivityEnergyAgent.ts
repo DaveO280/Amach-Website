@@ -6,6 +6,10 @@ import type {
   AppleHealthMetricMap,
   MetricSample,
 } from "./types";
+import {
+  generateHistoricalContext,
+  type HistoricalContext,
+} from "@/utils/historicalStats";
 
 interface DailyActivitySummary {
   date: string;
@@ -159,6 +163,13 @@ Tone requirements:
     };
     appleHealth: AppleHealthMetricMap;
     heartRateZones?: HeartRateZoneMinutes;
+    historicalContext?: {
+      steps?: HistoricalContext;
+      activeEnergy?: HistoricalContext;
+      exerciseMinutes?: HistoricalContext;
+      hrv?: HistoricalContext;
+      restingHeartRate?: HistoricalContext;
+    };
   } {
     const appleHealth = context.availableData.appleHealth ?? {};
 
@@ -225,6 +236,45 @@ Tone requirements:
         Math.round((moderateTotal / divisor) * 10) / 10;
     }
 
+    // Generate historical context for key metrics
+    const historicalContext: {
+      steps?: HistoricalContext;
+      activeEnergy?: HistoricalContext;
+      exerciseMinutes?: HistoricalContext;
+      hrv?: HistoricalContext;
+      restingHeartRate?: HistoricalContext;
+    } = {};
+
+    // Steps: higher is better
+    if (stepsSamples.length >= 30) {
+      const ctx = generateHistoricalContext(stepsSamples, "higher");
+      if (ctx) historicalContext.steps = ctx;
+    }
+
+    // Active energy: higher is better
+    if (activeEnergySamples.length >= 30) {
+      const ctx = generateHistoricalContext(activeEnergySamples, "higher");
+      if (ctx) historicalContext.activeEnergy = ctx;
+    }
+
+    // Exercise minutes: higher is better
+    if (exerciseSamples.length >= 30) {
+      const ctx = generateHistoricalContext(exerciseSamples, "higher");
+      if (ctx) historicalContext.exerciseMinutes = ctx;
+    }
+
+    // HRV: higher is better
+    if (hrvSamples.length >= 30) {
+      const ctx = generateHistoricalContext(hrvSamples, "higher");
+      if (ctx) historicalContext.hrv = ctx;
+    }
+
+    // Resting heart rate: lower is better
+    if (restingHeartRateSamples.length >= 30) {
+      const ctx = generateHistoricalContext(restingHeartRateSamples, "lower");
+      if (ctx) historicalContext.restingHeartRate = ctx;
+    }
+
     return {
       summaries,
       averages,
@@ -235,6 +285,10 @@ Tone requirements:
       },
       appleHealth,
       heartRateZones: zoneMinutes,
+      historicalContext:
+        Object.keys(historicalContext).length > 0
+          ? historicalContext
+          : undefined,
     };
   }
 
@@ -250,8 +304,16 @@ Tone requirements:
       restingHeartRateDays: number;
     };
     heartRateZones?: HeartRateZoneMinutes;
+    historicalContext?: {
+      steps?: HistoricalContext;
+      activeEnergy?: HistoricalContext;
+      exerciseMinutes?: HistoricalContext;
+      hrv?: HistoricalContext;
+      restingHeartRate?: HistoricalContext;
+    };
   }): AgentDataQualityAssessment {
-    const { summaries, averages, coverage, heartRateZones } = data;
+    const { summaries, averages, coverage, heartRateZones, historicalContext } =
+      data;
 
     const strengths: string[] = [];
     const limitations: string[] = [];
@@ -299,6 +361,14 @@ Tone requirements:
       missing.push("Average resting heart rate");
     if (!heartRateZones) missing.push("Heart rate training zone distribution");
 
+    // Add strength if we have historical context
+    if (historicalContext && Object.keys(historicalContext).length > 0) {
+      const metricCount = Object.keys(historicalContext).length;
+      strengths.push(
+        `Historical context available for ${metricCount} metric${metricCount > 1 ? "s" : ""} (enables personalized baseline comparisons)`,
+      );
+    }
+
     const score =
       (coverage.stepsDays >= 21 ? 0.35 : coverage.stepsDays >= 7 ? 0.25 : 0) +
       (coverage.activeEnergyDays >= 7 ? 0.25 : 0.1) +
@@ -330,106 +400,560 @@ Tone requirements:
     averages: ActivityAverages;
     recovery: { hrv: MetricSample[]; restingHeartRate: MetricSample[] };
     heartRateZones?: HeartRateZoneMinutes;
+    historicalContext?: {
+      steps?: HistoricalContext;
+      activeEnergy?: HistoricalContext;
+      exerciseMinutes?: HistoricalContext;
+      hrv?: HistoricalContext;
+      restingHeartRate?: HistoricalContext;
+    };
   }): string {
-    const { summaries, averages, recovery, heartRateZones } = data;
+    const { summaries, averages, recovery, heartRateZones, historicalContext } =
+      data;
 
     const lines: string[] = [];
 
-    lines.push("DAILY ACTIVITY SUMMARY (last 30 days if available):");
+    // Calculate period-specific averages for tiered analysis
+    const recent7d = this.calculatePeriodAverages(summaries, recovery, 7);
+    const recent30d = this.calculatePeriodAverages(summaries, recovery, 30);
+    const recent90d = this.calculatePeriodAverages(summaries, recovery, 90);
+
+    lines.push(
+      "═══════════════════════════════════════════════════════════════",
+    );
+    lines.push(
+      "TIERED HIERARCHICAL ANALYSIS: ALL-TIME → 90-DAY → 30-DAY → RECENT WEEK",
+    );
+    lines.push(
+      "═══════════════════════════════════════════════════════════════",
+    );
+    lines.push("");
+    lines.push(
+      "INSTRUCTIONS: Analyze health patterns systematically from widest baseline to most recent period.",
+    );
+    lines.push(
+      "1. Start with ALL-TIME BASELINE to understand this person's normal ranges",
+    );
+    lines.push(
+      "2. Compare 90-DAY PERIOD to baseline to identify medium-term trends",
+    );
+    lines.push(
+      "3. Compare 30-DAY PERIOD to both 90-day and baseline to see recent shifts",
+    );
+    lines.push("4. Examine RECENT WEEK for acute changes or outliers");
+    lines.push(
+      "5. Look for CORRELATIONS between metrics (e.g., when steps drop, does HRV also drop?)",
+    );
+    lines.push(
+      "6. Flag OUTLIERS that deviate significantly from personal norms (2+ standard deviations)",
+    );
+    lines.push("");
+
+    // TIER 1: ALL-TIME BASELINE
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    lines.push("TIER 1: ALL-TIME BASELINE (Full History)");
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    if (historicalContext?.steps) {
+      const ctx = historicalContext.steps;
+      const daysTracked = Math.floor(
+        (ctx.baseline.lastDate.getTime() - ctx.baseline.firstDate.getTime()) /
+          (1000 * 60 * 60 * 24),
+      );
+      lines.push(`Steps (${daysTracked} days tracked):`);
+      lines.push(
+        `  Mean: ${this.formatNumber(ctx.baseline.mean, 0)} steps/day`,
+      );
+      lines.push(
+        `  Range: ${this.formatNumber(ctx.baseline.min, 0)} - ${this.formatNumber(ctx.baseline.max, 0)} steps/day`,
+      );
+      lines.push(
+        `  Percentiles: p25=${this.formatNumber(ctx.baseline.p25, 0)} | p50=${this.formatNumber(ctx.baseline.p50, 0)} | p75=${this.formatNumber(ctx.baseline.p75, 0)}`,
+      );
+    } else {
+      lines.push(
+        `Steps: ${this.formatNumber(averages.steps, 0)} steps/day (average across all data)`,
+      );
+    }
+
+    if (historicalContext?.activeEnergy) {
+      const ctx = historicalContext.activeEnergy;
+      lines.push(
+        `Active Energy: ${this.formatNumber(ctx.baseline.mean, 0)} kcal/day (range: ${this.formatNumber(ctx.baseline.min, 0)}-${this.formatNumber(ctx.baseline.max, 0)})`,
+      );
+    } else {
+      lines.push(
+        `Active Energy: ${this.formatNumber(averages.activeEnergy, 1)} kcal/day (average)`,
+      );
+    }
+
+    if (historicalContext?.exerciseMinutes) {
+      const ctx = historicalContext.exerciseMinutes;
+      lines.push(
+        `Exercise: ${this.formatNumber(ctx.baseline.mean, 0)} min/day (range: ${this.formatNumber(ctx.baseline.min, 0)}-${this.formatNumber(ctx.baseline.max, 0)})`,
+      );
+    } else {
+      lines.push(
+        `Exercise: ${this.formatNumber(averages.exerciseMinutes, 1)} min/day (average)`,
+      );
+    }
+
+    if (historicalContext?.hrv) {
+      const ctx = historicalContext.hrv;
+      lines.push(
+        `HRV: ${this.formatNumber(ctx.baseline.mean, 1)} ms (range: ${this.formatNumber(ctx.baseline.min, 1)}-${this.formatNumber(ctx.baseline.max, 1)} ms)`,
+      );
+    } else if (averages.hrv !== null) {
+      lines.push(`HRV: ${this.formatNumber(averages.hrv, 1)} ms (average)`);
+    }
+
+    if (historicalContext?.restingHeartRate) {
+      const ctx = historicalContext.restingHeartRate;
+      lines.push(
+        `Resting HR: ${this.formatNumber(ctx.baseline.mean, 1)} bpm (range: ${this.formatNumber(ctx.baseline.min, 1)}-${this.formatNumber(ctx.baseline.max, 1)} bpm)`,
+      );
+      const low = ctx.milestones.find((m) => m.type === "low");
+      if (low) {
+        lines.push(
+          `  → Personal best: ${this.formatNumber(low.value, 1)} bpm (${low.daysAgo} days ago)`,
+        );
+      }
+    } else if (averages.restingHeartRate !== null) {
+      lines.push(
+        `Resting HR: ${this.formatNumber(averages.restingHeartRate, 1)} bpm (average)`,
+      );
+    }
+
+    lines.push("");
+
+    // TIER 2: 90-DAY PERIOD
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    lines.push("TIER 2: 90-DAY PERIOD (vs Baseline)");
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    if (recent90d.steps !== null) {
+      const vsBaseline =
+        averages.steps !== null
+          ? ((recent90d.steps - averages.steps) / averages.steps) * 100
+          : 0;
+      const trend = historicalContext?.steps?.trend90d;
+      lines.push(
+        `Steps: ${this.formatNumber(recent90d.steps, 0)} steps/day (${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}% vs baseline)`,
+      );
+      if (trend) {
+        lines.push(
+          `  → Trend: ${trend.direction} (${trend.changePercent > 0 ? "+" : ""}${this.formatNumber(trend.changePercent, 1)}%)`,
+        );
+      }
+    }
+
+    if (recent90d.activeEnergy !== null && averages.activeEnergy !== null) {
+      const vsBaseline =
+        ((recent90d.activeEnergy - averages.activeEnergy) /
+          averages.activeEnergy) *
+        100;
+      lines.push(
+        `Active Energy: ${this.formatNumber(recent90d.activeEnergy, 0)} kcal/day (${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}% vs baseline)`,
+      );
+    }
+
+    if (
+      recent90d.exerciseMinutes !== null &&
+      averages.exerciseMinutes !== null
+    ) {
+      const vsBaseline =
+        ((recent90d.exerciseMinutes - averages.exerciseMinutes) /
+          averages.exerciseMinutes) *
+        100;
+      lines.push(
+        `Exercise: ${this.formatNumber(recent90d.exerciseMinutes, 0)} min/day (${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}% vs baseline)`,
+      );
+    }
+
+    if (recent90d.hrv !== null && averages.hrv !== null) {
+      const vsBaseline = ((recent90d.hrv - averages.hrv) / averages.hrv) * 100;
+      const trend = historicalContext?.hrv?.trend90d;
+      lines.push(
+        `HRV: ${this.formatNumber(recent90d.hrv, 1)} ms (${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}% vs baseline)`,
+      );
+      if (trend) {
+        lines.push(`  → Trend: ${trend.direction}`);
+      }
+    }
+
+    if (
+      recent90d.restingHeartRate !== null &&
+      averages.restingHeartRate !== null
+    ) {
+      const vsBaseline =
+        ((recent90d.restingHeartRate - averages.restingHeartRate) /
+          averages.restingHeartRate) *
+        100;
+      const trend = historicalContext?.restingHeartRate?.trend90d;
+      lines.push(
+        `Resting HR: ${this.formatNumber(recent90d.restingHeartRate, 1)} bpm (${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}% vs baseline)`,
+      );
+      if (trend) {
+        lines.push(
+          `  → Trend: ${trend.direction} (${trend.changePercent > 0 ? "higher" : "lower"} is ${trend.direction === "improving" ? "better" : "worse"})`,
+        );
+      }
+    }
+
+    lines.push("");
+
+    // TIER 3: 30-DAY PERIOD
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    lines.push("TIER 3: 30-DAY PERIOD (vs 90-Day & Baseline)");
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    if (recent30d.steps !== null) {
+      const vsBaseline =
+        averages.steps !== null
+          ? ((recent30d.steps - averages.steps) / averages.steps) * 100
+          : 0;
+      const vs90d =
+        recent90d.steps !== null
+          ? ((recent30d.steps - recent90d.steps) / recent90d.steps) * 100
+          : 0;
+      const trend = historicalContext?.steps?.trend30d;
+      lines.push(`Steps: ${this.formatNumber(recent30d.steps, 0)} steps/day`);
+      lines.push(
+        `  → vs baseline: ${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}%`,
+      );
+      if (recent90d.steps !== null) {
+        lines.push(
+          `  → vs 90-day: ${vs90d > 0 ? "+" : ""}${this.formatNumber(vs90d, 1)}%`,
+        );
+      }
+      if (trend) {
+        lines.push(
+          `  → Trend: ${trend.direction} (${trend.changePercent > 0 ? "+" : ""}${this.formatNumber(trend.changePercent, 1)}%)`,
+        );
+      }
+    }
+
+    if (recent30d.activeEnergy !== null && averages.activeEnergy !== null) {
+      const vsBaseline =
+        ((recent30d.activeEnergy - averages.activeEnergy) /
+          averages.activeEnergy) *
+        100;
+      const vs90d =
+        recent90d.activeEnergy !== null
+          ? ((recent30d.activeEnergy - recent90d.activeEnergy) /
+              recent90d.activeEnergy) *
+            100
+          : 0;
+      lines.push(
+        `Active Energy: ${this.formatNumber(recent30d.activeEnergy, 0)} kcal/day (${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}% vs baseline, ${vs90d > 0 ? "+" : ""}${this.formatNumber(vs90d, 1)}% vs 90-day)`,
+      );
+    }
+
+    if (
+      recent30d.exerciseMinutes !== null &&
+      averages.exerciseMinutes !== null
+    ) {
+      const vsBaseline =
+        ((recent30d.exerciseMinutes - averages.exerciseMinutes) /
+          averages.exerciseMinutes) *
+        100;
+      const vs90d =
+        recent90d.exerciseMinutes !== null
+          ? ((recent30d.exerciseMinutes - recent90d.exerciseMinutes) /
+              recent90d.exerciseMinutes) *
+            100
+          : 0;
+      lines.push(
+        `Exercise: ${this.formatNumber(recent30d.exerciseMinutes, 0)} min/day (${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}% vs baseline, ${vs90d > 0 ? "+" : ""}${this.formatNumber(vs90d, 1)}% vs 90-day)`,
+      );
+    }
+
+    if (recent30d.hrv !== null && averages.hrv !== null) {
+      const vsBaseline = ((recent30d.hrv - averages.hrv) / averages.hrv) * 100;
+      const vs90d =
+        recent90d.hrv !== null
+          ? ((recent30d.hrv - recent90d.hrv) / recent90d.hrv) * 100
+          : 0;
+      lines.push(
+        `HRV: ${this.formatNumber(recent30d.hrv, 1)} ms (${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}% vs baseline, ${vs90d > 0 ? "+" : ""}${this.formatNumber(vs90d, 1)}% vs 90-day)`,
+      );
+    }
+
+    if (
+      recent30d.restingHeartRate !== null &&
+      averages.restingHeartRate !== null
+    ) {
+      const vsBaseline =
+        ((recent30d.restingHeartRate - averages.restingHeartRate) /
+          averages.restingHeartRate) *
+        100;
+      const vs90d =
+        recent90d.restingHeartRate !== null
+          ? ((recent30d.restingHeartRate - recent90d.restingHeartRate) /
+              recent90d.restingHeartRate) *
+            100
+          : 0;
+      lines.push(
+        `Resting HR: ${this.formatNumber(recent30d.restingHeartRate, 1)} bpm (${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}% vs baseline, ${vs90d > 0 ? "+" : ""}${this.formatNumber(vs90d, 1)}% vs 90-day)`,
+      );
+    }
+
+    lines.push("");
+
+    // TIER 4: RECENT WEEK
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    lines.push("TIER 4: RECENT WEEK (Last 7 Days - Check for Acute Changes)");
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    if (recent7d.steps !== null) {
+      const vsBaseline =
+        averages.steps !== null
+          ? ((recent7d.steps - averages.steps) / averages.steps) * 100
+          : 0;
+      const vs30d =
+        recent30d.steps !== null
+          ? ((recent7d.steps - recent30d.steps) / recent30d.steps) * 100
+          : 0;
+      lines.push(
+        `Steps: ${this.formatNumber(recent7d.steps, 0)} steps/day (${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}% vs baseline, ${vs30d > 0 ? "+" : ""}${this.formatNumber(vs30d, 1)}% vs 30-day)`,
+      );
+
+      // Flag outliers
+      if (historicalContext?.steps) {
+        const baseline = historicalContext.steps.baseline.mean;
+        const deviation =
+          (Math.abs(recent7d.steps - baseline) / baseline) * 100;
+        if (deviation > 20) {
+          lines.push(
+            `  ⚠ OUTLIER: Recent week deviates ${this.formatNumber(deviation, 0)}% from personal baseline`,
+          );
+        }
+      }
+    }
+
+    if (recent7d.activeEnergy !== null && averages.activeEnergy !== null) {
+      const vsBaseline =
+        ((recent7d.activeEnergy - averages.activeEnergy) /
+          averages.activeEnergy) *
+        100;
+      const vs30d =
+        recent30d.activeEnergy !== null
+          ? ((recent7d.activeEnergy - recent30d.activeEnergy) /
+              recent30d.activeEnergy) *
+            100
+          : 0;
+      lines.push(
+        `Active Energy: ${this.formatNumber(recent7d.activeEnergy, 0)} kcal/day (${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}% vs baseline, ${vs30d > 0 ? "+" : ""}${this.formatNumber(vs30d, 1)}% vs 30-day)`,
+      );
+    }
+
+    if (
+      recent7d.exerciseMinutes !== null &&
+      averages.exerciseMinutes !== null
+    ) {
+      const vsBaseline =
+        ((recent7d.exerciseMinutes - averages.exerciseMinutes) /
+          averages.exerciseMinutes) *
+        100;
+      const vs30d =
+        recent30d.exerciseMinutes !== null
+          ? ((recent7d.exerciseMinutes - recent30d.exerciseMinutes) /
+              recent30d.exerciseMinutes) *
+            100
+          : 0;
+      lines.push(
+        `Exercise: ${this.formatNumber(recent7d.exerciseMinutes, 0)} min/day (${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}% vs baseline, ${vs30d > 0 ? "+" : ""}${this.formatNumber(vs30d, 1)}% vs 30-day)`,
+      );
+    }
+
+    if (recent7d.hrv !== null && averages.hrv !== null) {
+      const vsBaseline = ((recent7d.hrv - averages.hrv) / averages.hrv) * 100;
+      const vs30d =
+        recent30d.hrv !== null
+          ? ((recent7d.hrv - recent30d.hrv) / recent30d.hrv) * 100
+          : 0;
+      lines.push(
+        `HRV: ${this.formatNumber(recent7d.hrv, 1)} ms (${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}% vs baseline, ${vs30d > 0 ? "+" : ""}${this.formatNumber(vs30d, 1)}% vs 30-day)`,
+      );
+    }
+
+    if (
+      recent7d.restingHeartRate !== null &&
+      averages.restingHeartRate !== null
+    ) {
+      const vsBaseline =
+        ((recent7d.restingHeartRate - averages.restingHeartRate) /
+          averages.restingHeartRate) *
+        100;
+      const vs30d =
+        recent30d.restingHeartRate !== null
+          ? ((recent7d.restingHeartRate - recent30d.restingHeartRate) /
+              recent30d.restingHeartRate) *
+            100
+          : 0;
+      lines.push(
+        `Resting HR: ${this.formatNumber(recent7d.restingHeartRate, 1)} bpm (${vsBaseline > 0 ? "+" : ""}${this.formatNumber(vsBaseline, 1)}% vs baseline, ${vs30d > 0 ? "+" : ""}${this.formatNumber(vs30d, 1)}% vs 30-day)`,
+      );
+
+      // Flag outliers for resting HR
+      if (historicalContext?.restingHeartRate) {
+        const baseline = historicalContext.restingHeartRate.baseline.mean;
+        const deviation = Math.abs(recent7d.restingHeartRate - baseline);
+        if (deviation > 5) {
+          lines.push(
+            `  ⚠ OUTLIER: Resting HR is ${this.formatNumber(deviation, 1)} bpm away from personal baseline`,
+          );
+        }
+      }
+    }
+
+    lines.push("");
+
+    // CORRELATION & OUTLIER DETECTION
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    lines.push("CORRELATION & PATTERN DETECTION");
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    lines.push("Look for relationships across metrics:");
+    lines.push(
+      "  • When steps decrease, does HRV also decrease? (indicates recovery link to movement)",
+    );
+    lines.push(
+      "  • When exercise increases, does resting HR decrease? (indicates cardiovascular adaptation)",
+    );
+    lines.push(
+      "  • Are there weekly patterns? (e.g., lower activity on weekends)",
+    );
+    lines.push("  • Are there outlier days that deviate >2 std dev from mean?");
+    lines.push("");
+
+    // Additional context
+    if (heartRateZones) {
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      lines.push("HEART RATE ZONE DISTRIBUTION");
+      lines.push(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      );
+      const daysTracked = summaries.length;
+      const zone1PerDay =
+        heartRateZones.zone1Minutes / Math.max(1, daysTracked);
+      const zone2PerDay =
+        heartRateZones.zone2Minutes / Math.max(1, daysTracked);
+      const zone3PerDay =
+        heartRateZones.zone3Minutes / Math.max(1, daysTracked);
+      const zone4PerDay =
+        heartRateZones.zone4Minutes / Math.max(1, daysTracked);
+      const zone5PerDay =
+        heartRateZones.zone5Minutes / Math.max(1, daysTracked);
+
+      lines.push(
+        `Zone 1 (<60% max): ${this.formatNumber(zone1PerDay, 1)} min/day`,
+      );
+      lines.push(
+        `Zone 2 (60-70%): ${this.formatNumber(zone2PerDay, 1)} min/day`,
+      );
+      lines.push(
+        `Zone 3 (70-80%): ${this.formatNumber(zone3PerDay, 1)} min/day`,
+      );
+      lines.push(
+        `Zone 4 (80-90%): ${this.formatNumber(zone4PerDay, 1)} min/day`,
+      );
+      lines.push(`Zone 5 (>90%): ${this.formatNumber(zone5PerDay, 1)} min/day`);
+
+      const highIntensity = zone4PerDay + zone5PerDay;
+      const moderate = zone2PerDay + zone3PerDay;
+      const weeklyModerate = moderate * 7;
+      const weeklyHigh = highIntensity * 7;
+      const moderateEquivalent = weeklyModerate + weeklyHigh * 2;
+
+      lines.push("");
+      lines.push(
+        `Weekly totals: ${this.formatNumber(weeklyModerate, 0)} min moderate + ${this.formatNumber(weeklyHigh, 0)} min high`,
+      );
+      lines.push(
+        `Moderate-equivalent: ${this.formatNumber(moderateEquivalent, 0)} min/week (goal: ≥150 min)`,
+      );
+      lines.push(
+        `Meets WHO guidelines: ${moderateEquivalent >= 150 ? "YES ✓" : "NO (deficit: " + this.formatNumber(150 - moderateEquivalent, 0) + " min)"}`,
+      );
+      lines.push("");
+    }
+
+    // Raw daily data (last 14 days only, for reference)
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    lines.push("RAW DAILY DATA (Last 14 Days - For Reference Only)");
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     summaries
-      .slice(-30)
+      .slice(-14)
       .forEach(({ date, steps, activeEnergy, exerciseMinutes }) => {
         lines.push(
-          `  ${date}: steps=${this.formatNumber(steps)} | activeEnergy=${this.formatNumber(activeEnergy)} kcal | exercise=${this.formatNumber(exerciseMinutes)} min`,
+          `${date}: steps=${this.formatNumber(steps)} | energy=${this.formatNumber(activeEnergy)} kcal | exercise=${this.formatNumber(exerciseMinutes)} min`,
         );
       });
 
-    lines.push("");
-    lines.push(
-      "AVERAGES (entire period - calculated from all available data points, excluding null/missing values):",
-    );
-    const stepsDaysWithData = summaries.filter((s) => s.steps !== null).length;
-    lines.push(
-      `  • Steps: ${this.formatNumber(averages.steps)} steps/day (calculated from ${stepsDaysWithData} days with step data)`,
-    );
-    lines.push(
-      `  • Active Energy: ${this.formatNumber(averages.activeEnergy, 1)} kcal/day`,
-    );
-    lines.push(
-      `  • Exercise Minutes: ${this.formatNumber(averages.exerciseMinutes, 1)} min/day`,
-    );
-    if (averages.hrv !== null) {
-      lines.push(`  • HRV: ${this.formatNumber(averages.hrv, 1)} ms`);
-    }
-    if (averages.restingHeartRate !== null) {
-      lines.push(
-        `  • Resting Heart Rate: ${this.formatNumber(averages.restingHeartRate, 1)} bpm`,
-      );
-    }
-    if (averages.highIntensityMinutes !== null) {
-      lines.push(
-        `  • High-Intensity (Zones 4-5): ${this.formatNumber(averages.highIntensityMinutes, 1)} min/day (~${this.formatNumber(averages.highIntensityMinutes * 7, 1)} min/week)`,
-      );
-    }
-    if (averages.moderateIntensityMinutes !== null) {
-      lines.push(
-        `  • Moderate Intensity (Zones 2-3): ${this.formatNumber(averages.moderateIntensityMinutes, 1)} min/day (~${this.formatNumber(averages.moderateIntensityMinutes * 7, 1)} min/week)`,
-      );
-    }
-    if (
-      averages.highIntensityMinutes !== null ||
-      averages.moderateIntensityMinutes !== null
-    ) {
-      const weeklyModerateEquivalent =
-        (averages.moderateIntensityMinutes ?? 0) * 7 +
-        (averages.highIntensityMinutes ?? 0) * 7 * 2;
-      lines.push(
-        `  • Moderate-equivalent aerobic load: ~${this.formatNumber(weeklyModerateEquivalent, 1)} minutes/week`,
-      );
-    }
-
-    if (heartRateZones) {
-      lines.push("");
-      lines.push("HEART RATE ZONE DISTRIBUTION (estimated):");
-      lines.push(
-        `  • Zone 1 (<60% max): ${this.formatNumber(heartRateZones.zone1Minutes, 1)} min`,
-      );
-      lines.push(
-        `  • Zone 2 (60-70%): ${this.formatNumber(heartRateZones.zone2Minutes, 1)} min`,
-      );
-      lines.push(
-        `  • Zone 3 (70-80%): ${this.formatNumber(heartRateZones.zone3Minutes, 1)} min`,
-      );
-      lines.push(
-        `  • Zone 4 (80-90%): ${this.formatNumber(heartRateZones.zone4Minutes, 1)} min`,
-      );
-      lines.push(
-        `  • Zone 5 (>90%): ${this.formatNumber(heartRateZones.zone5Minutes, 1)} min`,
-      );
-      lines.push(
-        `  • Total sampled time: ${this.formatNumber(heartRateZones.totalMinutes, 1)} min`,
-      );
-    }
-
-    if (recovery.hrv.length || recovery.restingHeartRate.length) {
-      lines.push("");
-      lines.push("RECOVERY METRICS:");
-      if (recovery.hrv.length) {
-        const latest = recovery.hrv[recovery.hrv.length - 1];
-        lines.push(
-          `  • Latest HRV: ${this.formatNumber(latest.value, 1)} ms (${latest.timestamp.toISOString().split("T")[0]})`,
-        );
-      }
-      if (recovery.restingHeartRate.length) {
-        const latest =
-          recovery.restingHeartRate[recovery.restingHeartRate.length - 1];
-        lines.push(
-          `  • Latest Resting HR: ${this.formatNumber(latest.value, 1)} bpm (${latest.timestamp.toISOString().split("T")[0]})`,
-        );
-      }
-    }
-
     return lines.join("\n");
+  }
+
+  /**
+   * Calculate averages for a specific time period (last N days)
+   */
+  private calculatePeriodAverages(
+    summaries: DailyActivitySummary[],
+    recovery: { hrv: MetricSample[]; restingHeartRate: MetricSample[] },
+    days: number,
+  ): {
+    steps: number | null;
+    activeEnergy: number | null;
+    exerciseMinutes: number | null;
+    hrv: number | null;
+    restingHeartRate: number | null;
+  } {
+    const now = new Date();
+    const periodStart = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+    const periodSummaries = summaries.slice(-days);
+
+    const stepsData = periodSummaries
+      .map((s) => s.steps)
+      .filter((v): v is number => v !== null);
+    const energyData = periodSummaries
+      .map((s) => s.activeEnergy)
+      .filter((v): v is number => v !== null);
+    const exerciseData = periodSummaries
+      .map((s) => s.exerciseMinutes)
+      .filter((v): v is number => v !== null);
+
+    // Filter HRV and Resting HR samples for the period
+    const hrvData = recovery.hrv
+      .filter((s) => s.timestamp >= periodStart)
+      .map((s) => s.value);
+    const restingHRData = recovery.restingHeartRate
+      .filter((s) => s.timestamp >= periodStart)
+      .map((s) => s.value);
+
+    return {
+      steps:
+        stepsData.length > 0
+          ? stepsData.reduce((a, b) => a + b, 0) / stepsData.length
+          : null,
+      activeEnergy:
+        energyData.length > 0
+          ? energyData.reduce((a, b) => a + b, 0) / energyData.length
+          : null,
+      exerciseMinutes:
+        exerciseData.length > 0
+          ? exerciseData.reduce((a, b) => a + b, 0) / exerciseData.length
+          : null,
+      hrv:
+        hrvData.length > 0
+          ? hrvData.reduce((a, b) => a + b, 0) / hrvData.length
+          : null,
+      restingHeartRate:
+        restingHRData.length > 0
+          ? restingHRData.reduce((a, b) => a + b, 0) / restingHRData.length
+          : null,
+    };
   }
 
   protected buildDetailedPrompt(
@@ -447,18 +971,27 @@ Tone requirements:
         restingHeartRateDays: number;
       };
       heartRateZones?: HeartRateZoneMinutes;
+      historicalContext?: {
+        steps?: HistoricalContext;
+        activeEnergy?: HistoricalContext;
+        exerciseMinutes?: HistoricalContext;
+        hrv?: HistoricalContext;
+        restingHeartRate?: HistoricalContext;
+      };
     },
     quality: AgentDataQualityAssessment,
   ): string {
     const basePrompt = super.buildDetailedPrompt(query, data, quality);
-    const { summaries, averages, recovery, heartRateZones } = data;
+    const { summaries, averages, recovery, heartRateZones, historicalContext } =
+      data;
 
     const latest = summaries[summaries.length - 1];
 
     const directedPrompts: string[] = [
-      "Focus on trends in daily movement, exercise consistency, and energy expenditure.",
-      "Identify any sedentary patterns or significant deviations from average activity levels.",
-      "Provide actionable recommendations to optimize activity and energy balance.",
+      "CRITICAL: Analyze TRENDS and PATTERNS across the full time period, not just the most recent day.",
+      "Focus on multi-week patterns in movement, exercise consistency, and energy expenditure.",
+      "Identify trends over time: Are metrics improving, declining, or stable? Reference 30-day trends from historical context.",
+      "Look for noteworthy patterns: sustained increases/decreases, cyclical behavior, outlier periods.",
       "Only populate the `concerns` array for moderate or high severity issues.",
       "When data appears healthy, frame recommendations as positive reinforcement rather than warnings.",
       "Reference specific metrics and their values in your findings and recommendations.",
@@ -522,22 +1055,32 @@ Tone requirements:
       );
     }
 
+    // Add historical context guidance FIRST (before single-day snapshots)
+    if (historicalContext && Object.keys(historicalContext).length > 0) {
+      directedPrompts.push(
+        "CRITICAL: Use the HISTORICAL CONTEXT section to provide personalized insights comparing RECENT TRENDS (not just one day) to this user's historical patterns.",
+      );
+      directedPrompts.push(
+        "Focus on multi-day and multi-week patterns. Examples: 'Over the past 30 days, your step count has declined 15% from your typical median', 'Your resting HR has been trending 5 bpm higher than your 6-month low for the past 2 weeks', 'Your exercise volume increased 35% over the past 6 months - sustainable or overreaching?'",
+      );
+    }
+
     if (latest) {
       directedPrompts.push(
-        `Include the most recent day snapshot (${latest.date}) with steps ${this.formatNumber(latest.steps)}, active energy ${this.formatNumber(latest.activeEnergy)} kcal, exercise ${this.formatNumber(latest.exerciseMinutes)} min.`,
+        `Most recent data point (${latest.date}): steps ${this.formatNumber(latest.steps)}, active energy ${this.formatNumber(latest.activeEnergy)} kcal, exercise ${this.formatNumber(latest.exerciseMinutes)} min. Use this for context, but focus analysis on broader trends.`,
       );
     }
     if (recovery.hrv.length) {
       const recent = recovery.hrv[recovery.hrv.length - 1];
       directedPrompts.push(
-        `Reference latest HRV sample ${this.formatNumber(recent.value, 1)} ms (${recent.timestamp.toISOString().split("T")[0]}).`,
+        `Latest HRV: ${this.formatNumber(recent.value, 1)} ms (${recent.timestamp.toISOString().split("T")[0]}). Compare to typical range, not as standalone finding.`,
       );
     }
     if (recovery.restingHeartRate.length) {
       const recent =
         recovery.restingHeartRate[recovery.restingHeartRate.length - 1];
       directedPrompts.push(
-        `Reference latest resting HR ${this.formatNumber(recent.value, 1)} bpm (${recent.timestamp.toISOString().split("T")[0]}).`,
+        `Latest resting HR: ${this.formatNumber(recent.value, 1)} bpm (${recent.timestamp.toISOString().split("T")[0]}). Compare to typical range and recent trend, not as standalone finding.`,
       );
     }
 

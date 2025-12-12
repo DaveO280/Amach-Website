@@ -3,19 +3,44 @@
  */
 
 export {
-  StorjClient,
   createStorjClient,
-  type StorjConfig,
-  type StorageReference,
-  type UploadOptions,
+  StorjClient,
   type DownloadResult,
+  type StorageReference,
+  type StorjConfig,
+  type UploadOptions,
 } from "./StorjClient";
 
 export {
-  StorageService,
   createStorageService,
   getStorageService,
-  type StoredHealthData,
+  StorageService,
   type RetrievedHealthData,
+  type StoredHealthData,
   type StoreOptions,
 } from "./StorageService";
+
+export {
+  createStorjTimelineService,
+  getStorjTimelineService,
+  StorjTimelineService,
+  type BatchTimelineEventResult,
+  type TimelineEventOptions,
+  type TimelineEventResult,
+} from "./StorjTimelineService";
+
+export {
+  createStorjConversationService,
+  getStorjConversationService,
+  StorjConversationService,
+  type ConversationStorageOptions,
+  type ConversationStorageResult,
+} from "./StorjConversationService";
+
+export {
+  createStorjSyncService,
+  getStorjSyncService,
+  StorjSyncService,
+  type SyncOptions,
+  type SyncResult,
+} from "./StorjSyncService";

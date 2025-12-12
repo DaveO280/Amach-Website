@@ -13,15 +13,11 @@
  */
 
 import {
-  StorjClient,
-  StorageReference,
-  createStorjClient,
-} from "./StorjClient";
-import {
   WalletEncryptionKey,
-  encryptWithWalletKey,
   decryptWithWalletKey,
+  encryptWithWalletKey,
 } from "../utils/walletEncryption";
+import { StorageReference, StorjClient } from "./StorjClient";
 
 export interface StoredHealthData {
   storjUri: string;
@@ -46,12 +42,14 @@ export interface StoreOptions {
 
 /**
  * Service for storing and retrieving encrypted health data via Storj
+ * Uses strict bucket validation to ensure users can only access their own bucket
  */
 export class StorageService {
   private storjClient: StorjClient;
 
   constructor(storjClient?: StorjClient) {
-    this.storjClient = storjClient || createStorjClient();
+    // Use provided client or create one with strict validation
+    this.storjClient = storjClient || StorjClient.createClient();
   }
 
   /**
@@ -79,10 +77,11 @@ export class StorageService {
       // 3. Convert to Uint8Array for Storj
       const encryptedBytes = new TextEncoder().encode(encryptedData);
 
-      // 4. Upload to Storj
+      // 4. Upload to Storj (bucket validation happens inside)
       const reference = await this.storjClient.uploadEncryptedData(
         userAddress,
         encryptedBytes,
+        encryptionKey,
         {
           dataType: options.dataType,
           metadata: {
@@ -125,11 +124,15 @@ export class StorageService {
     storjUri: string,
     encryptionKey: WalletEncryptionKey,
     expectedHash?: string,
+    userAddress?: string,
   ): Promise<RetrievedHealthData<T>> {
     try {
-      // 1. Download encrypted data from Storj
-      const downloadResult =
-        await this.storjClient.downloadEncryptedData(storjUri);
+      // 1. Download encrypted data from Storj (bucket validation happens inside)
+      const downloadResult = await this.storjClient.downloadEncryptedData(
+        storjUri,
+        userAddress,
+        encryptionKey,
+      );
 
       // 2. Verify content hash if provided
       let verified = true;
@@ -196,7 +199,11 @@ export class StorageService {
 
       // 2. Delete old data (best effort, don't fail if delete fails)
       try {
-        await this.storjClient.deleteEncryptedData(oldUri);
+        await this.storjClient.deleteEncryptedData(
+          oldUri,
+          userAddress,
+          encryptionKey,
+        );
         console.log(`🗑️ Deleted old data at ${oldUri}`);
       } catch (deleteError) {
         console.warn(`⚠️ Failed to delete old data at ${oldUri}:`, deleteError);
@@ -217,9 +224,17 @@ export class StorageService {
    *
    * @param storjUri - URI of data to delete
    */
-  async deleteHealthData(storjUri: string): Promise<void> {
+  async deleteHealthData(
+    storjUri: string,
+    userAddress: string,
+    encryptionKey: WalletEncryptionKey,
+  ): Promise<void> {
     try {
-      await this.storjClient.deleteEncryptedData(storjUri);
+      await this.storjClient.deleteEncryptedData(
+        storjUri,
+        userAddress,
+        encryptionKey,
+      );
       console.log(`🗑️ Deleted health data at ${storjUri}`);
     } catch (error) {
       console.error(`❌ Failed to delete health data at ${storjUri}:`, error);
@@ -238,9 +253,11 @@ export class StorageService {
    */
   async listUserData(
     userAddress: string,
+    encryptionKey: WalletEncryptionKey,
     dataType?: string,
   ): Promise<StorageReference[]> {
-    return this.storjClient.listUserData(userAddress, dataType);
+    // Bucket validation happens inside listUserData
+    return this.storjClient.listUserData(userAddress, encryptionKey, dataType);
   }
 
   /**

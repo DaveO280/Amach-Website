@@ -2,7 +2,6 @@
 
 import HealthStatCards from "@/components/ai/HealthStatCards";
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
-import { Button } from "@/components/ui/button";
 import { useWalletService } from "@/hooks/useWalletService";
 import AiProvider from "@/store/aiStore";
 import {
@@ -14,9 +13,9 @@ import { ChevronDown, ChevronUp, X } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import CosaintChatUI from "./ai/CosaintChatUI";
 import GoalsTab from "./ai/GoalsTab";
-import HealthReport from "./ai/HealthReport";
 import HealthTimelineTab from "./ai/HealthTimelineTab";
 import ProfileInputModal from "./ai/ProfileInputModal";
+import { GuidePopup } from "./ui/GuidePopup";
 
 interface AiCompanionModalProps {
   isOpen: boolean;
@@ -31,13 +30,26 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
   const [activeTab, setActiveTab] = useState<"chat" | "goals" | "timeline">(
     "chat",
   );
+  const [showWalletBanner, setShowWalletBanner] = useState(true);
+
+  // Popup state management
+  const [showHealthDashboardPopup, setShowHealthDashboardPopup] =
+    useState(false);
+  const [showUploadFilePopup, setShowUploadFilePopup] = useState(false);
+  const healthDashboardRef = useRef<HTMLButtonElement>(null);
+  const uploadFileRef = useRef<HTMLButtonElement>(null);
 
   // Track if we've already populated profile to prevent infinite loops
   const hasPopulatedProfileRef = useRef(false);
 
   // Access the health data provider to check for available data
-  const { metricData, userProfile, setUserProfile, setProfile } =
-    useHealthDataContext();
+  const {
+    metricData,
+    userProfile,
+    setUserProfile,
+    setProfile,
+    setIsDashboardOpen,
+  } = useHealthDataContext();
 
   // Get wallet data
   const { isConnected, getDecryptedProfile, loadProfileFromBlockchain } =
@@ -52,6 +64,144 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
       hasPopulatedProfileRef.current = false;
     }
   }, [props.isOpen]);
+
+  // Load banner dismissal state from localStorage
+  useEffect(() => {
+    const dismissed = localStorage.getItem("amach-wallet-banner-dismissed");
+    if (dismissed === "true") {
+      setShowWalletBanner(false);
+    }
+  }, []);
+
+  // Check if popups should be shown when modal opens
+  useEffect(() => {
+    if (!props.isOpen) {
+      setShowHealthDashboardPopup(false);
+      setShowUploadFilePopup(false);
+      return;
+    }
+
+    // Check if popups have been dismissed
+    const healthDashboardDismissed = localStorage.getItem(
+      "amach-health-dashboard-popup-dismissed",
+    );
+    const uploadFileDismissed = localStorage.getItem(
+      "amach-upload-file-popup-dismissed",
+    );
+
+    // Show first popup if not dismissed, after a delay to ensure DOM is ready
+    // Only show if Health Dashboard link is visible (no health data)
+    if (!healthDashboardDismissed && !hasHealthData) {
+      // Retry mechanism to wait for element to appear
+      let timeoutId: NodeJS.Timeout;
+      const checkAndShow = (attempts = 0): void => {
+        // Check if element exists and is visible
+        if (
+          healthDashboardRef.current &&
+          healthDashboardRef.current.offsetParent !== null
+        ) {
+          // Scroll element into view if needed
+          healthDashboardRef.current.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+            inline: "center",
+          });
+
+          // Wait for scroll to complete before showing popup
+          timeoutId = setTimeout(() => {
+            setShowHealthDashboardPopup(true);
+          }, 600);
+          return;
+        }
+        if (attempts < 20) {
+          timeoutId = setTimeout(() => checkAndShow(attempts + 1), 150);
+        } else {
+          console.warn("Health Dashboard element not found after retries");
+        }
+      };
+      const timer = setTimeout(() => checkAndShow(), 500);
+      return () => {
+        clearTimeout(timer);
+        if (timeoutId) clearTimeout(timeoutId);
+      };
+    } else if (!uploadFileDismissed) {
+      // If first popup was dismissed/not applicable, show second popup
+      // Retry mechanism to wait for element to appear
+      let timeoutId: NodeJS.Timeout;
+      const checkAndShow = (attempts = 0): void => {
+        // Check if element exists and is visible
+        if (
+          uploadFileRef.current &&
+          uploadFileRef.current.offsetParent !== null
+        ) {
+          // Scroll element into view if needed
+          uploadFileRef.current.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+            inline: "center",
+          });
+
+          // Wait for scroll to complete before showing popup
+          timeoutId = setTimeout(() => {
+            setShowUploadFilePopup(true);
+          }, 600);
+          return;
+        }
+        if (attempts < 20) {
+          timeoutId = setTimeout(() => checkAndShow(attempts + 1), 150);
+        } else {
+          console.warn("Upload File element not found after retries");
+        }
+      };
+      const timer = setTimeout(
+        () => checkAndShow(),
+        healthDashboardDismissed || hasHealthData ? 500 : 1000,
+      );
+      return () => {
+        clearTimeout(timer);
+        if (timeoutId) clearTimeout(timeoutId);
+      };
+    }
+  }, [props.isOpen, hasHealthData]);
+
+  // Handle Health Dashboard popup close - show Upload File popup next
+  const handleHealthDashboardPopupClose = (): void => {
+    setShowHealthDashboardPopup(false);
+    const uploadFileDismissed = localStorage.getItem(
+      "amach-upload-file-popup-dismissed",
+    );
+    if (!uploadFileDismissed) {
+      setTimeout(() => {
+        setShowUploadFilePopup(true);
+      }, 300);
+    }
+  };
+
+  // Handle "Don't show again" for Health Dashboard popup
+  const handleHealthDashboardDontShowAgain = (): void => {
+    localStorage.setItem("amach-health-dashboard-popup-dismissed", "true");
+    setShowHealthDashboardPopup(false);
+    const uploadFileDismissed = localStorage.getItem(
+      "amach-upload-file-popup-dismissed",
+    );
+    if (!uploadFileDismissed) {
+      setTimeout(() => {
+        setShowUploadFilePopup(true);
+      }, 300);
+    }
+  };
+
+  // Handle "Don't show again" for Upload File popup
+  const handleUploadFileDontShowAgain = (): void => {
+    localStorage.setItem("amach-upload-file-popup-dismissed", "true");
+    setShowUploadFilePopup(false);
+  };
+
+  // Handle banner dismissal
+  const handleDismissBanner = (): void => {
+    setShowWalletBanner(false);
+    localStorage.setItem("amach-wallet-banner-dismissed", "true");
+  };
 
   // Auto-populate profile from wallet when modal opens
   useEffect(() => {
@@ -245,11 +395,11 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
         </header>
 
         <div
-          className="p-2 sm:p-4 md:p-6 overflow-auto"
+          className="p-2 sm:p-4 md:p-6 overflow-auto relative"
           style={{ maxHeight: "calc(90vh - 60px)" }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* File Folder Tab Navigation */}
+          {/* File Folder Tab Navigation - Always visible, locked tabs when no wallet */}
           <div className="flex mb-4 gap-0 w-full border-b border-emerald-200 relative z-10">
             <button
               className={`flex-1 px-4 py-2 text-sm sm:text-base font-semibold transition-colors focus:outline-none
@@ -263,35 +413,86 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
             >
               Chat
             </button>
-            <button
-              className={`flex-1 px-4 py-2 text-sm sm:text-base font-semibold transition-colors focus:outline-none
-                ${
-                  activeTab === "goals"
-                    ? "bg-white border-x border-t border-emerald-300 rounded-t-lg shadow-sm text-emerald-800 z-20"
-                    : "bg-emerald-50 text-emerald-500 border-b border-r border-emerald-200 z-0"
-                }
-              `}
-              onClick={() => setActiveTab("goals")}
-            >
-              Goals
-            </button>
-            <button
-              className={`flex-1 px-4 py-2 text-sm sm:text-base font-semibold transition-colors focus:outline-none
-                ${
-                  activeTab === "timeline"
-                    ? "bg-white border-x border-t border-emerald-300 rounded-t-lg shadow-sm text-emerald-800 z-20"
-                    : "bg-emerald-50 text-emerald-500 border-b border-emerald-200 z-0"
-                }
-              `}
-              onClick={() => setActiveTab("timeline")}
-            >
-              Timeline
-            </button>
+            <div className="flex-1 relative group">
+              <button
+                className={`w-full px-4 py-2 text-sm sm:text-base font-semibold transition-colors focus:outline-none
+                  ${
+                    activeTab === "goals"
+                      ? "bg-white border-x border-t border-emerald-300 rounded-t-lg shadow-sm text-emerald-800 z-20"
+                      : "bg-emerald-50 text-emerald-500 border-b border-r border-emerald-200 z-0"
+                  }
+                  ${!isConnected ? "opacity-50 cursor-not-allowed" : ""}
+                `}
+                onClick={() => isConnected && setActiveTab("goals")}
+                disabled={!isConnected}
+              >
+                Goals
+              </button>
+              {!isConnected && (
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-emerald-900/95 text-white text-xs rounded-md invisible group-hover:visible pointer-events-none whitespace-nowrap z-50">
+                  🔒 Create a wallet to unlock Goals
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 -mb-0.5 border-4 border-transparent border-b-emerald-900/95"></div>
+                </div>
+              )}
+            </div>
+            <div className="flex-1 relative group">
+              <button
+                className={`w-full px-4 py-2 text-sm sm:text-base font-semibold transition-colors focus:outline-none
+                  ${
+                    activeTab === "timeline"
+                      ? "bg-white border-x border-t border-emerald-300 rounded-t-lg shadow-sm text-emerald-800 z-20"
+                      : "bg-emerald-50 text-emerald-500 border-b border-emerald-200 z-0"
+                  }
+                  ${!isConnected ? "opacity-50 cursor-not-allowed" : ""}
+                `}
+                onClick={() => isConnected && setActiveTab("timeline")}
+                disabled={!isConnected}
+              >
+                Timeline
+              </button>
+              {!isConnected && (
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-emerald-900/95 text-white text-xs rounded-md invisible group-hover:visible pointer-events-none whitespace-nowrap z-50">
+                  🔒 Create a wallet to unlock Timeline
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 -mb-0.5 border-4 border-transparent border-b-emerald-900/95"></div>
+                </div>
+              )}
+            </div>
           </div>
           {/* Tab Content */}
           <div className="flex-1 min-h-0 flex flex-col">
             {activeTab === "chat" ? (
               <>
+                {/* Wallet Benefits Banner - Only show if not connected and not dismissed */}
+                {!isConnected && showWalletBanner && (
+                  <div className="mb-4 p-4 bg-gradient-to-r from-emerald-50 to-amber-50 rounded-lg border border-emerald-200 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-emerald-800 mb-2">
+                          💡 Unlock Context-Powered AI
+                        </h4>
+                        <p className="text-sm text-emerald-700 mb-2">
+                          Create a wallet to enable 100% private health data
+                          storage. Your AI insights become more powerful with
+                          your complete health context.
+                        </p>
+                        <a
+                          href="/wallet-benefits"
+                          className="text-sm text-emerald-600 hover:text-emerald-700 underline font-medium"
+                        >
+                          Learn more about wallet benefits →
+                        </a>
+                      </div>
+                      <button
+                        onClick={handleDismissBanner}
+                        className="text-emerald-600 hover:text-emerald-800 transition-colors"
+                        aria-label="Dismiss banner"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Health Stats Section with Toggle */}
                 {hasHealthData && (
                   <div className="mb-4">
@@ -319,50 +520,31 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                   </div>
                 )}
 
-                {/* Health Report Section */}
-                {hasHealthData ? (
-                  isProfileComplete(userProfile) ? (
-                    <div className="space-y-4">
-                      {isConnected && (
-                        <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                          <p className="text-green-800 text-sm">
-                            ✅ Using profile data from your wallet
-                          </p>
-                        </div>
-                      )}
-                      <HealthReport />
-                    </div>
-                  ) : (
-                    <div className="flex flex-col space-y-4">
-                      <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
-                        <p className="text-amber-800">
-                          {isConnected
-                            ? "Loading your profile from blockchain..."
-                            : "Please enter your profile information to generate a personalized health report."}
-                        </p>
-                      </div>
-                      <Button
-                        onClick={() => setShowProfileModal(true)}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white w-fit"
-                        disabled={isConnected}
-                      >
-                        {isConnected
-                          ? "Loading Profile..."
-                          : "Generate Health Report"}
-                      </Button>
-                    </div>
-                  )
-                ) : (
+                {/* Health Data Availability Message */}
+                {!hasHealthData && (
                   <div className="mb-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
                     <p className="text-amber-800">
-                      No health data available yet. Process your data in the
-                      Health Dashboard for personalized insights.
+                      No health data available yet. Process your data in the{" "}
+                      <button
+                        ref={healthDashboardRef}
+                        onClick={() => {
+                          props.onClose();
+                          // Open dashboard modal directly
+                          setTimeout(() => {
+                            setIsDashboardOpen(true);
+                          }, 100);
+                        }}
+                        className="text-emerald-600 hover:text-emerald-700 underline font-medium cursor-pointer"
+                      >
+                        Health Dashboard
+                      </button>{" "}
+                      for personalized insights.
                     </p>
                   </div>
                 )}
                 <AiProvider>
                   <div className="flex-1 min-h-0 flex flex-col">
-                    <CosaintChatUI />
+                    <CosaintChatUI uploadFileButtonRef={uploadFileRef} />
                   </div>
                 </AiProvider>
               </>
@@ -402,6 +584,53 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
           setShowProfileModal(false);
         }}
         initialProfile={userProfile as NormalizedUserProfile | null}
+      />
+
+      {/* Health Dashboard Guide Popup */}
+      <GuidePopup
+        isVisible={showHealthDashboardPopup && !!healthDashboardRef.current}
+        onClose={handleHealthDashboardPopupClose}
+        onDontShowAgain={handleHealthDashboardDontShowAgain}
+        targetElementRef={healthDashboardRef}
+        title="📊 Add Your Health Data"
+        position="bottom"
+        content={
+          <div>
+            <p className="mb-2">
+              Add your Apple Health data in the{" "}
+              <strong>Health Dashboard</strong> to get personalized AI insights.
+            </p>
+            <p className="mb-2">
+              <strong>🔒 Your data is completely private</strong> - it&apos;s
+              stored locally in your browser and never leaves your device.
+            </p>
+            <p className="text-xs text-amber-700 font-medium">
+              ⚠️ Please don&apos;t use this feature on a public or shared
+              computer.
+            </p>
+          </div>
+        }
+      />
+
+      {/* Upload File Guide Popup */}
+      <GuidePopup
+        isVisible={showUploadFilePopup && !!uploadFileRef.current}
+        onClose={() => setShowUploadFilePopup(false)}
+        onDontShowAgain={handleUploadFileDontShowAgain}
+        targetElementRef={uploadFileRef}
+        title="📁 Upload Files for Context"
+        position="bottom"
+        content={
+          <div>
+            <p>
+              You can also upload health reports, lab results, or other health
+              documents using the{" "}
+              <strong>&quot;Upload File to Context&quot;</strong> button. This
+              helps the AI provide more personalized insights based on your
+              complete health history.
+            </p>
+          </div>
+        }
       />
     </div>
   );

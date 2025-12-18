@@ -88,7 +88,7 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [aiService, setAiService] = useState<CosaintAiService | null>(null);
-  const [useMultiAgent, setUseMultiAgent] = useState<boolean>(true);
+  const [useMultiAgent, setUseMultiAgent] = useState<boolean>(false);
 
   // Initialize the AI service
   const getAIService = async (): Promise<CosaintAiService> => {

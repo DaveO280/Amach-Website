@@ -30,6 +30,26 @@ import {
 import { isCumulativeMetric } from "@/utils/dataDeduplicator";
 import { extractDatePart } from "@/utils/dataDeduplicator";
 
+/**
+ * Efficiently get min/max timestamps from a large array without sorting
+ */
+function getTimestampRange(
+  metrics: HealthMetric[],
+): { min: number; max: number } | null {
+  if (metrics.length === 0) return null;
+
+  let min = metrics[0].timestamp;
+  let max = metrics[0].timestamp;
+
+  for (let i = 1; i < metrics.length; i++) {
+    const ts = metrics[i].timestamp;
+    if (ts < min) min = ts;
+    if (ts > max) max = ts;
+  }
+
+  return { min, max };
+}
+
 const RESPONSE_FORMAT_GUIDELINES = `
 
 Be informative and analytical. Weave metrics into flowing, detailed sentences that explain context and significance. Compare their numbers to age/sex norms to show what's working well or needs attention. Connect how different metrics influence each other. Stay measured and grounded in the data—let the numbers speak for themselves without excessive enthusiasm.
@@ -537,49 +557,106 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
             if (dailyValues.length > 0) {
               avg =
                 dailyValues.reduce((sum, v) => sum + v, 0) / dailyValues.length;
-              min = Math.min(...dailyValues);
-              max = Math.max(...dailyValues);
+              // Use reduce instead of spread operator to avoid stack overflow with large arrays
+              min = dailyValues.reduce(
+                (acc, v) => Math.min(acc, v),
+                dailyValues[0],
+              );
+              max = dailyValues.reduce(
+                (acc, v) => Math.max(acc, v),
+                dailyValues[0],
+              );
             }
           } else {
-            // For non-cumulative metrics (heart rate, HRV, etc.), average individual readings
-            const values = allTypeMetrics
-              .map((m) => m.value)
-              .filter((v) => !isNaN(v));
-            if (values.length > 0) {
-              avg = values.reduce((sum, v) => sum + v, 0) / values.length;
-              min = Math.min(...values);
-              max = Math.max(...values);
+            // For non-cumulative metrics (heart rate, HRV, etc.), aggregate by day first
+            // Calculate daily averages, then stats from those daily averages
+            console.log(
+              `[CosaintAI] ${type} is non-cumulative, aggregating by day first`,
+            );
+            const dailyAverages = new Map<
+              string,
+              { sum: number; count: number }
+            >();
+
+            // Aggregate all readings by day
+            for (const metric of allTypeMetrics) {
+              try {
+                const dateStr =
+                  metric.startDate || new Date(metric.timestamp).toISOString();
+                const dateKey = extractDatePart(dateStr);
+                const value = metric.value;
+
+                if (isNaN(value)) continue;
+
+                const existing = dailyAverages.get(dateKey);
+                if (existing) {
+                  existing.sum += value;
+                  existing.count += 1;
+                } else {
+                  dailyAverages.set(dateKey, { sum: value, count: 1 });
+                }
+              } catch (e) {
+                console.warn(
+                  `[CosaintAiService] Invalid metric for daily aggregation:`,
+                  e,
+                );
+                continue;
+              }
+            }
+
+            // Calculate daily average values
+            const dailyValues: number[] = [];
+            for (const aggregate of dailyAverages.values()) {
+              if (aggregate.count > 0) {
+                dailyValues.push(aggregate.sum / aggregate.count);
+              }
+            }
+
+            if (dailyValues.length > 0) {
+              avg =
+                dailyValues.reduce((sum, v) => sum + v, 0) / dailyValues.length;
+              // Use reduce instead of spread operator to avoid stack overflow with large arrays
+              min = dailyValues.reduce(
+                (acc, v) => Math.min(acc, v),
+                dailyValues[0],
+              );
+              max = dailyValues.reduce(
+                (acc, v) => Math.max(acc, v),
+                dailyValues[0],
+              );
             }
           }
 
-          // Calculate date range from ALL metrics of this type (not just ranked)
-          // CRITICAL: Create shallow copy before sorting to prevent mutation
-          // Mutating the array causes circular references in production webpack builds
-          console.log(
-            `[CosaintAI] About to sort ${allTypeMetrics.length} metrics for date range`,
-          );
-          const sortedAll = [...allTypeMetrics].sort(
-            (a, b) => a.timestamp - b.timestamp,
-          );
-          console.log(`[CosaintAI] Sorting complete for ${type}`);
-          const earliest = sortedAll[0];
-          const latest = sortedAll[sortedAll.length - 1];
+          // Calculate date range efficiently without sorting all metrics
+          const timestampRange = getTimestampRange(allTypeMetrics);
+          if (!timestampRange) {
+            console.warn(`[CosaintAI] No timestamp range for ${type}`);
+            return; // Skip to next iteration in forEach
+          }
+
+          // Get unit from first metric
+          const firstMetric = allTypeMetrics[0];
+          const unit = firstMetric?.unit || "";
 
           // Format date range
-          const startDate = new Date(earliest.timestamp).toLocaleDateString();
-          const endDate = new Date(latest.timestamp).toLocaleDateString();
+          const startDate = new Date(timestampRange.min).toLocaleDateString();
+          const endDate = new Date(timestampRange.max).toLocaleDateString();
           const dateRange =
             startDate === endDate ? startDate : `${startDate} to ${endDate}`;
 
           // Format value display
           let valueDisplay = "";
           if (avg !== null) {
-            valueDisplay = `Avg: ${avg.toFixed(1)}${earliest.unit || ""}`;
+            valueDisplay = `Avg: ${avg.toFixed(1)}${unit}`;
             if (min !== null && max !== null && min !== max) {
               valueDisplay += ` (Range: ${min.toFixed(1)}-${max.toFixed(1)})`;
             }
           } else {
-            valueDisplay = `Latest: ${latest.value}${latest.unit || ""}`;
+            // Get latest value from the metric with the max timestamp
+            const latestMetric =
+              allTypeMetrics.find((m) => m.timestamp === timestampRange.max) ||
+              allTypeMetrics[allTypeMetrics.length - 1];
+            valueDisplay = `Latest: ${latestMetric?.value || "N/A"}${unit}`;
           }
 
           // For cumulative metrics, show daily average in the description

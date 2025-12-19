@@ -30,6 +30,7 @@ export const GuidePopup: React.FC<GuidePopupProps> = ({
     rotation: 0,
   });
   const [isMobile, setIsMobile] = useState(false);
+  const [hasPositioned, setHasPositioned] = useState(false);
 
   // Detect mobile on mount and resize
   useEffect(() => {
@@ -40,6 +41,30 @@ export const GuidePopup: React.FC<GuidePopupProps> = ({
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
+
+  // Reset positioning state when visibility changes
+  useEffect(() => {
+    if (!isVisible) {
+      setHasPositioned(false);
+    }
+  }, [isVisible]);
+
+  // Scroll popup into view after it's positioned
+  useEffect(() => {
+    if (isVisible && hasPositioned && popupRef.current) {
+      // Small delay to ensure the popup is rendered at its final position
+      const scrollTimeout = setTimeout(() => {
+        if (popupRef.current) {
+          popupRef.current.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+            inline: "center",
+          });
+        }
+      }, 100);
+      return () => clearTimeout(scrollTimeout);
+    }
+  }, [isVisible, hasPositioned]);
 
   useEffect(() => {
     if (!isVisible || !targetElementRef.current || !popupRef.current) {
@@ -97,6 +122,7 @@ export const GuidePopup: React.FC<GuidePopupProps> = ({
 
         setPopupPosition({ top, left });
         setArrowPosition({ edge: arrowEdge, offset: arrowOffset, rotation: 0 });
+        setHasPositioned(true);
         return;
       }
 
@@ -200,6 +226,7 @@ export const GuidePopup: React.FC<GuidePopupProps> = ({
 
       setPopupPosition({ top, left });
       setArrowPosition({ edge: arrowEdge, offset: arrowOffset, rotation: 0 });
+      setHasPositioned(true);
     };
 
     updatePosition();

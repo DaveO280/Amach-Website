@@ -488,6 +488,23 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
     rankedMetrics?: HealthMetric[],
     allMetrics?: HealthMetric[], // All metrics for accurate date range calculation
   ): string {
+    // CRITICAL: Aggressively sanitize metrics at method entry to prevent ANY circular references
+    // This is a last line of defense - metrics should already be clean, but we ensure it here
+    const deepCloneMetric = (metric: HealthMetric): HealthMetric => {
+      return {
+        type: metric.type,
+        value: metric.value,
+        timestamp: metric.timestamp,
+        unit: metric.unit,
+        startDate: metric.startDate,
+        endDate: metric.endDate,
+        // Explicitly exclude metadata to avoid circular refs
+      };
+    };
+
+    const safeRankedMetrics = rankedMetrics?.map(deepCloneMetric);
+    const safeAllMetrics = allMetrics?.map(deepCloneMetric);
+
     // Build the system message including character background, health data, file context, and user profile
     let systemMessage = this.buildSystemMessage(healthData, userProfile);
     systemMessage +=
@@ -495,12 +512,16 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
 
     // Add relevance-ranked metrics if available AND we don't have coordinator results
     // (If we have coordinator results, the agents already analyzed the data properly with tiered aggregation)
-    if (rankedMetrics && rankedMetrics.length > 0 && !coordinatorResult) {
+    if (
+      safeRankedMetrics &&
+      safeRankedMetrics.length > 0 &&
+      !coordinatorResult
+    ) {
       systemMessage +=
         "\n\n📊 Top Relevant Health Metrics (AI-scored by importance):";
 
       // Group ranked metrics by type for relevance display
-      const rankedMetricsByType = rankedMetrics.reduce(
+      const rankedMetricsByType = safeRankedMetrics.reduce(
         (acc, metric) => {
           if (!acc[metric.type]) acc[metric.type] = [];
           acc[metric.type].push(metric);
@@ -510,7 +531,7 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
       );
 
       // Use all metrics (not just ranked) for accurate date range calculation
-      const allMetricsByType = (allMetrics || rankedMetrics).reduce(
+      const allMetricsByType = (safeAllMetrics || safeRankedMetrics).reduce(
         (acc, metric) => {
           if (!acc[metric.type]) acc[metric.type] = [];
           acc[metric.type].push(metric);

@@ -589,13 +589,29 @@ export async function addHealthEventV2(
     }
 
     const storjResult = await storjResponse.json();
+    console.log("📦 Storj API response:", JSON.stringify(storjResult, null, 2));
+
     if (!storjResult.success || !storjResult.result) {
       throw new Error(
         storjResult.error || "Storj upload failed - no result returned",
       );
     }
 
+    // Check if the inner result indicates success (storeTimelineEvent returns { success, storjUri, ... })
+    if (storjResult.result.success === false) {
+      throw new Error(
+        storjResult.result.error || "Storj timeline store failed",
+      );
+    }
+
     const { storjUri, contentHash } = storjResult.result;
+
+    if (!storjUri || !contentHash) {
+      throw new Error(
+        `Storj upload returned invalid data: storjUri=${storjUri}, contentHash=${contentHash}`,
+      );
+    }
+
     console.log("✅ Uploaded to Storj:", storjUri);
     console.log("🔐 Content hash:", contentHash);
     onProgress?.(70);

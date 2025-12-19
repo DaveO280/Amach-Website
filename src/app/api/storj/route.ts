@@ -60,13 +60,31 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             { status: 400 },
           );
         }
-        const timelineService = getStorjTimelineService();
-        result = await timelineService.storeTimelineEvent(
-          data,
-          userAddress,
-          typedEncryptionKey,
-          options,
+        console.log(
+          `📤 timeline/store: eventType=${data.eventType}, eventId=${data.id}`,
         );
+        const timelineService = getStorjTimelineService();
+        try {
+          result = await timelineService.storeTimelineEvent(
+            data,
+            userAddress,
+            typedEncryptionKey,
+            options,
+          );
+          console.log(
+            `📤 timeline/store result:`,
+            JSON.stringify(result, null, 2),
+          );
+        } catch (storeError) {
+          console.error(`❌ timeline/store error:`, storeError);
+          result = {
+            success: false,
+            error:
+              storeError instanceof Error
+                ? storeError.message
+                : "Unknown error",
+          };
+        }
         break;
       }
 

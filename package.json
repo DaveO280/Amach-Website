@@ -156,6 +156,9 @@
       "ignoreMissing": [
         "request"
       ]
+    },
+    "patchedDependencies": {
+      "viem": "patches/viem.patch"
     }
   },
   "lint-staged": {

@@ -1,0 +1,44 @@
+diff --git a/_cjs/index.js b/_cjs/index.js
+index 10ea3352afc94955a895bc7f78de114eec174689..6b932d46ca60966fe6083480aaf053629eade599 100644
+--- a/_cjs/index.js
++++ b/_cjs/index.js
+@@ -37,14 +37,16 @@ Object.defineProperty(exports, "createClient", { enumerable: true, get: function
+ Object.defineProperty(exports, "rpcSchema", { enumerable: true, get: function () { return createClient_js_1.rpcSchema; } });
+ var createPublicClient_js_1 = require("./clients/createPublicClient.js");
+ Object.defineProperty(exports, "createPublicClient", { enumerable: true, get: function () { return createPublicClient_js_1.createPublicClient; } });
+-var createTestClient_js_1 = require("./clients/createTestClient.js");
+-Object.defineProperty(exports, "createTestClient", { enumerable: true, get: function () { return createTestClient_js_1.createTestClient; } });
++// PATCHED: Removed createTestClient to prevent production build issues
++// var createTestClient_js_1 = require("./clients/createTestClient.js");
++// Object.defineProperty(exports, "createTestClient", { enumerable: true, get: function () { return createTestClient_js_1.createTestClient; } });
+ var createWalletClient_js_1 = require("./clients/createWalletClient.js");
+ Object.defineProperty(exports, "createWalletClient", { enumerable: true, get: function () { return createWalletClient_js_1.createWalletClient; } });
+ var public_js_1 = require("./clients/decorators/public.js");
+ Object.defineProperty(exports, "publicActions", { enumerable: true, get: function () { return public_js_1.publicActions; } });
+-var test_js_1 = require("./clients/decorators/test.js");
+-Object.defineProperty(exports, "testActions", { enumerable: true, get: function () { return test_js_1.testActions; } });
++// PATCHED: Removed testActions to prevent production build issues
++// var test_js_1 = require("./clients/decorators/test.js");
++// Object.defineProperty(exports, "testActions", { enumerable: true, get: function () { return test_js_1.testActions; } });
+ var wallet_js_1 = require("./clients/decorators/wallet.js");
+ Object.defineProperty(exports, "walletActions", { enumerable: true, get: function () { return wallet_js_1.walletActions; } });
+ var createTransport_js_1 = require("./clients/transports/createTransport.js");
+diff --git a/_esm/index.js b/_esm/index.js
+index 8895507f5b61d7358ce8990ad17db7d7a9890927..7d5379208bf56521e1f6c3e1e63f4bfd5ca2bbee 100644
+--- a/_esm/index.js
++++ b/_esm/index.js
+@@ -4,10 +4,12 @@ export { getContract, } from './actions/getContract.js';
+ export { WaitForCallsStatusTimeoutError } from './actions/wallet/waitForCallsStatus.js';
+ export { createClient, rpcSchema, } from './clients/createClient.js';
+ export { createPublicClient, } from './clients/createPublicClient.js';
+-export { createTestClient, } from './clients/createTestClient.js';
++// PATCHED: Removed createTestClient to prevent production build issues
++// export { createTestClient, } from './clients/createTestClient.js';
+ export { createWalletClient, } from './clients/createWalletClient.js';
+ export { publicActions, } from './clients/decorators/public.js';
+-export { testActions, } from './clients/decorators/test.js';
++// PATCHED: Removed testActions to prevent production build issues
++// export { testActions, } from './clients/decorators/test.js';
+ export { walletActions, } from './clients/decorators/wallet.js';
+ export { createTransport, } from './clients/transports/createTransport.js';
+ export { custom, } from './clients/transports/custom.js';

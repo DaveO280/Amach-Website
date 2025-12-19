@@ -488,13 +488,18 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
       );
 
       // Show top 5 metric types with aggregated information
+      console.log("[CosaintAI] About to iterate over rankedMetricsByType");
       Object.entries(rankedMetricsByType)
         .slice(0, 5)
         .forEach(([type, rankedTypeMetrics]) => {
+          console.log(`[CosaintAI] Processing type: ${type}`);
           if (rankedTypeMetrics.length === 0) return;
 
           // Get all metrics of this type for accurate date range
           const allTypeMetrics = allMetricsByType[type] || rankedTypeMetrics;
+          console.log(
+            `[CosaintAI] allTypeMetrics for ${type}: ${allTypeMetrics.length} items`,
+          );
 
           // Check if this is a cumulative metric (steps, active energy, exercise time)
           const isCumulative = isCumulativeMetric(type);
@@ -505,8 +510,14 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
 
           if (isCumulative) {
             // For cumulative metrics, aggregate by day first (sum per day), then average daily totals
+            console.log(
+              `[CosaintAI] ${type} is cumulative, starting daily aggregation`,
+            );
             const dailyTotals = new Map<string, number>();
 
+            console.log(
+              `[CosaintAI] About to iterate ${allTypeMetrics.length} metrics`,
+            );
             for (const metric of allTypeMetrics) {
               try {
                 // Safely extract date - use timestamp if startDate not available
@@ -544,9 +555,13 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
           // Calculate date range from ALL metrics of this type (not just ranked)
           // CRITICAL: Create shallow copy before sorting to prevent mutation
           // Mutating the array causes circular references in production webpack builds
+          console.log(
+            `[CosaintAI] About to sort ${allTypeMetrics.length} metrics for date range`,
+          );
           const sortedAll = [...allTypeMetrics].sort(
             (a, b) => a.timestamp - b.timestamp,
           );
+          console.log(`[CosaintAI] Sorting complete for ${type}`);
           const earliest = sortedAll[0];
           const latest = sortedAll[sortedAll.length - 1];
 

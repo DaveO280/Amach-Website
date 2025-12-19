@@ -13,7 +13,8 @@ const nextConfig = {
     "ethers",
     "zksync-sso",
     "@wagmi/core",
-    "viem",
+    // Note: viem removed from here - it needs to be bundled for client-side use
+    // and webpack aliases need to apply to replace test file imports
     "pino",
     "thread-stream",
   ],

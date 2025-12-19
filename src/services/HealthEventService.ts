@@ -696,9 +696,11 @@ export async function addHealthEventV2(
       encryptedData: "", // Empty as per V3 design (data is in Storj)
       searchTag,
       storjUri,
-      contentHash: contentHash.startsWith("0x")
+      contentHash: contentHash?.startsWith?.("0x")
         ? contentHash
-        : `0x${contentHash}`,
+        : contentHash
+          ? `0x${contentHash}`
+          : "undefined",
     });
 
     // Validate all arguments before submitting

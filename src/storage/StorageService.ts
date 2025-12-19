@@ -136,11 +136,21 @@ export class StorageService {
 
       // 2. Verify content hash if provided
       let verified = true;
-      if (expectedHash && downloadResult.contentHash !== expectedHash) {
-        console.warn(
-          `⚠️ Content hash mismatch for ${storjUri}. Expected: ${expectedHash}, Got: ${downloadResult.contentHash}`,
-        );
-        verified = false;
+      if (expectedHash && downloadResult.contentHash) {
+        // Normalize both hashes by removing '0x' prefix if present
+        const normalizedExpected = expectedHash
+          .toLowerCase()
+          .replace(/^0x/, "");
+        const normalizedGot = downloadResult.contentHash
+          .toLowerCase()
+          .replace(/^0x/, "");
+
+        if (normalizedExpected !== normalizedGot) {
+          console.warn(
+            `⚠️ Content hash mismatch for ${storjUri}. Expected: ${expectedHash}, Got: ${downloadResult.contentHash}`,
+          );
+          verified = false;
+        }
       }
 
       // 3. Convert Uint8Array back to string
@@ -172,14 +182,14 @@ export class StorageService {
   }
 
   /**
-   * Update existing health data
+   * Update existing health data (overwrites at same URI)
    *
-   * @param oldUri - URI of existing data (will be deleted after successful update)
+   * @param oldUri - URI of existing data to overwrite
    * @param newData - New data to store
    * @param userAddress - User's wallet address
    * @param encryptionKey - Wallet-derived encryption key
    * @param options - Storage options
-   * @returns New storage reference
+   * @returns Updated storage reference (same URI)
    */
   async updateHealthData<T>(
     oldUri: string,
@@ -189,28 +199,43 @@ export class StorageService {
     options: StoreOptions,
   ): Promise<StoredHealthData> {
     try {
-      // 1. Store new data
-      const newReference = await this.storeHealthData(
-        newData,
+      // 1. Serialize and encrypt new data
+      const jsonData = JSON.stringify(newData);
+      const encryptedData = encryptWithWalletKey(jsonData, encryptionKey);
+      const encryptedBytes = new TextEncoder().encode(encryptedData);
+
+      // 2. Overwrite the existing Storj file (keeps same URI)
+      const reference = await this.storjClient.overwriteEncryptedData(
+        oldUri,
+        encryptedBytes,
         userAddress,
         encryptionKey,
-        options,
+        {
+          dataType: options.dataType,
+          metadata: {
+            ...options.metadata,
+            encryptionVersion: "1",
+            encryptedAt: Date.now().toString(),
+          },
+          onProgress: options.onProgress,
+        },
       );
 
-      // 2. Delete old data (best effort, don't fail if delete fails)
-      try {
-        await this.storjClient.deleteEncryptedData(
-          oldUri,
-          userAddress,
-          encryptionKey,
-        );
-        console.log(`🗑️ Deleted old data at ${oldUri}`);
-      } catch (deleteError) {
-        console.warn(`⚠️ Failed to delete old data at ${oldUri}:`, deleteError);
-        // Continue anyway - new data was stored successfully
+      // 3. Verify encryption/decryption
+      const decryptedData = decryptWithWalletKey(encryptedData, encryptionKey);
+      if (decryptedData !== jsonData) {
+        throw new Error("Encryption verification failed after update");
       }
 
-      return newReference;
+      console.log(`✅ Updated data at ${reference.uri} (same URI preserved)`);
+
+      return {
+        storjUri: reference.uri,
+        contentHash: reference.contentHash,
+        size: reference.size,
+        uploadedAt: reference.uploadedAt,
+        dataType: reference.dataType,
+      };
     } catch (error) {
       console.error("❌ Failed to update health data:", error);
       throw new Error(

@@ -29,6 +29,7 @@ async function readContract(..._args: any[]): Promise<any> {
 export interface HealthEventData {
   eventType: string;
   data: Record<string, unknown>;
+  timestamp?: number; // Optional custom timestamp (milliseconds)
 }
 
 export interface HealthEvent {
@@ -280,15 +281,48 @@ export async function readHealthTimeline(
                   }),
                 });
 
-                const result = await response.json();
-                if (result.success && result.result) {
-                  // Store decrypted data in encryptedData field for display
-                  baseEvent.encryptedData = JSON.stringify(result.result);
-                  console.log(`✅ Fetched Storj data for event ${i}`);
+                if (!response.ok) {
+                  console.error(
+                    `❌ API response not OK for event ${i}:`,
+                    response.status,
+                    response.statusText,
+                  );
+                  // Continue with baseEvent (no encryptedData)
+                } else {
+                  const result = await response.json();
+                  if (result.success && result.result) {
+                    // Store decrypted data in encryptedData field for display
+                    // The result.result is a StorjTimelineEvent object, stringify it for storage
+                    baseEvent.encryptedData = JSON.stringify(result.result);
+
+                    // IMPORTANT: Use the Storj timestamp (actual event date) instead of blockchain timestamp
+                    // Blockchain timestamp = when event was created/modified (audit trail)
+                    // Storj timestamp = actual event date (what user selected)
+                    if (result.result.timestamp) {
+                      baseEvent.timestamp = Math.floor(
+                        result.result.timestamp / 1000,
+                      ); // Convert ms to seconds
+                    }
+
+                    console.log(`✅ Fetched Storj data for event ${i}:`, {
+                      hasEventType: !!result.result.eventType,
+                      hasData: !!result.result.data,
+                      eventType: result.result.eventType,
+                      blockchainTimestamp: Number(event.timestamp),
+                      storjTimestamp: result.result.timestamp,
+                      usingTimestamp: baseEvent.timestamp,
+                    });
+                  } else {
+                    console.warn(
+                      `⚠️ Failed to fetch Storj data for event ${i}:`,
+                      result.error || "Unknown error",
+                      result,
+                    );
+                  }
                 }
               } catch (fetchError) {
-                console.warn(
-                  `Failed to fetch Storj data for event ${i}:`,
+                console.error(
+                  `❌ Failed to fetch Storj data for event ${i}:`,
                   fetchError,
                 );
               }
@@ -515,7 +549,7 @@ export async function addHealthEventV2(
     const timelineEvent = {
       id: eventId,
       eventType: params.eventType,
-      timestamp: Date.now(),
+      timestamp: params.timestamp ?? Date.now(), // Use custom timestamp if provided, otherwise current time
       data: params.data,
     };
 

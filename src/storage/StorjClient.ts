@@ -389,6 +389,67 @@ export class StorjClient {
   }
 
   /**
+   * Overwrite existing encrypted data at the same URI (in-place update)
+   *
+   * @param existingUri - Existing Storj URI to overwrite
+   * @param encryptedData - New encrypted data to store
+   * @param userAddress - User's wallet address (for validation)
+   * @param encryptionKey - Wallet-derived encryption key (required for validation)
+   * @param options - Upload options
+   * @returns Updated storage reference with same URI
+   */
+  async overwriteEncryptedData(
+    existingUri: string,
+    encryptedData: Uint8Array,
+    userAddress: string,
+    encryptionKey: WalletEncryptionKey,
+    options: UploadOptions,
+  ): Promise<StorageReference> {
+    // Parse the existing URI to get bucket and key
+    const { bucket, key } = this.parseUri(existingUri);
+
+    // Validate bucket access
+    const expectedBucket = await this.getBucketForUser(
+      userAddress,
+      encryptionKey,
+    );
+    if (bucket !== expectedBucket) {
+      throw new Error(
+        `Bucket mismatch: expected ${expectedBucket}, got ${bucket}`,
+      );
+    }
+
+    const contentHash = this.computeHash(encryptedData);
+
+    // Overwrite the existing object at the same key
+    const command = new PutObjectCommand({
+      Bucket: bucket,
+      Key: key, // Use the SAME key from existing URI
+      Body: encryptedData,
+      ContentType: "application/octet-stream",
+      Metadata: {
+        ...options.metadata,
+        contentHash,
+        dataType: options.dataType,
+        userAddress: userAddress.toLowerCase(),
+        uploadedAt: Date.now().toString(),
+        updated: "true", // Flag to indicate this was an update
+      },
+    });
+
+    await this.client.send(command);
+
+    // Return the SAME URI (no change)
+    return {
+      uri: existingUri,
+      contentHash,
+      size: encryptedData.length,
+      uploadedAt: Date.now(),
+      dataType: options.dataType,
+    };
+  }
+
+  /**
    * Download encrypted data from Storj
    *
    * @param uri - Storj URI (storj://bucket/key)

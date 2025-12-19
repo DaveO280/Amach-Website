@@ -17,7 +17,14 @@ module.exports = {
     },
   },
   solidity: {
-    version: "0.8.20",
+    compilers: [
+      {
+        version: "0.8.20",
+      },
+      {
+        version: "0.8.22",
+      },
+    ],
   },
   networks: {
     zkSyncSepolia: {

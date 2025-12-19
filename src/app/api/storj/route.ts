@@ -23,6 +23,7 @@ export const maxDuration = 60;
  * - conversation/restore: Restore conversation memory
  * - storage/store: Generic data storage
  * - storage/retrieve: Generic data retrieval
+ * - storage/update: Update existing data (overwrites at same URI)
  * - storage/list: List user data
  * - storage/delete: Delete data
  */
@@ -172,6 +173,31 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           typedEncryptionKey,
           expectedHash,
           userAddress,
+        );
+        break;
+      }
+
+      case "storage/update": {
+        if (!data || !dataType) {
+          return NextResponse.json(
+            { error: "Data and dataType are required for storage/update" },
+            { status: 400 },
+          );
+        }
+        const oldUri = body.oldStorjUri;
+        if (!oldUri) {
+          return NextResponse.json(
+            { error: "oldStorjUri is required for storage/update" },
+            { status: 400 },
+          );
+        }
+        const storageService = getStorageService();
+        result = await storageService.updateHealthData(
+          oldUri,
+          data,
+          userAddress,
+          typedEncryptionKey,
+          { dataType, ...options },
         );
         break;
       }

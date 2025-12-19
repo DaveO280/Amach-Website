@@ -62,7 +62,25 @@ const WalletConnectButton: React.FC<WalletConnectButtonProps> = ({
   };
 
   return (
-    <div className="wallet-connect-container">
+    <div className="wallet-connect-container flex items-center gap-3">
+      {/* Basic AI button - always visible */}
+      <Button
+        className="bg-emerald-600 hover:bg-emerald-700 text-white transition-all duration-300 hover:scale-105 px-6 leading-tight whitespace-nowrap"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (onAiCompanionClick) {
+            onAiCompanionClick();
+          }
+        }}
+      >
+        <span className="flex flex-col items-center">
+          <span className="whitespace-nowrap">Try Our</span>
+          <span>AI</span>
+        </span>
+      </Button>
+
+      {/* Wallet connection/dropdown */}
       {!isConnected ? (
         <Button
           variant="outline"
@@ -93,6 +111,9 @@ const WalletConnectButton: React.FC<WalletConnectButtonProps> = ({
                   <button
                     key={item.label}
                     type="button"
+                    data-dashboard-trigger={
+                      item.label === "Dashboard" ? "" : undefined
+                    }
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();

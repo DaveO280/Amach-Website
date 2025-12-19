@@ -8,7 +8,18 @@
       "Bash(ls:*)",
       "Bash(cat:*)",
       "Bash(npx hardhat compile:*)",
-      "Bash(npx hardhat run:*)"
+      "Bash(npx hardhat run:*)",
+      "Bash(git push)",
+      "Bash(pnpm tsc:*)",
+      "Bash(cd:*)",
+      "Bash(node scripts/check-contract-version.js:*)",
+      "Bash(node check-tx-revert.js:*)",
+      "Bash(node check-reentrancy-status.js:*)",
+      "Bash(node check-reentrancy-v5-namespace.js:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(node:*)",
+      "Bash(pnpm type-check:components:*)"
     ],
     "deny": [],
     "ask": []

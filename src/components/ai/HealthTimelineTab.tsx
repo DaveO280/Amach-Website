@@ -16,17 +16,24 @@ import { usePrivyWalletService } from "@/hooks/usePrivyWalletService";
 import {
   addHealthEventV2,
   readHealthTimeline,
-  searchEventsByType,
-  deleteHealthEvent,
   type HealthEvent,
 } from "@/services/HealthEventService";
 import {
   HealthEventType,
   getEventTypeDefinition,
   getEventTypesByCategory,
-  formatEventType,
 } from "@/types/healthEventTypes";
-import { Plus, X, Search, Calendar, Eye, Trash2 } from "lucide-react";
+import { Plus, X, Eye, Filter, ChevronDown } from "lucide-react";
+import VisualTimeline from "./VisualTimeline";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface EventFieldValue {
   key: string;
@@ -58,9 +65,23 @@ export default function HealthTimelineTab(): JSX.Element {
   >("");
   const [customEventType, setCustomEventType] = useState<string>("");
   const [eventFields, setEventFields] = useState<EventFieldValue[]>([]);
-  const [searchType, setSearchType] = useState<string>("");
   const [message, setMessage] = useState<string>("");
   const [progress, setProgress] = useState(0);
+
+  // New filter states
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(
+    new Set(),
+  );
+  const [dateRange, setDateRange] = useState<string>("all");
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Edit event states
+  const [editingEventIndex, setEditingEventIndex] = useState<number | null>(
+    null,
+  );
+  const [editEventType, setEditEventType] = useState<string>("");
+  const [editEventDate, setEditEventDate] = useState<string>("");
+  const [editEventFields, setEditEventFields] = useState<EventFieldValue[]>([]);
 
   // Get event types grouped by category
   const eventTypesByCategory = useMemo(() => {
@@ -75,6 +96,87 @@ export default function HealthTimelineTab(): JSX.Element {
     if (!selectedEventType) return null;
     return getEventTypeDefinition(selectedEventType);
   }, [selectedEventType]);
+
+  // Filter events based on category and date range
+  const filteredEvents = useMemo(() => {
+    let filtered = [...events];
+
+    // Filter by category
+    if (selectedCategories.size > 0) {
+      filtered = filtered.filter((event) => {
+        try {
+          const data = JSON.parse(event.encryptedData);
+          const eventType = String(data.eventType || "").toUpperCase();
+
+          // Determine category from event type
+          let category = "general";
+          if (eventType.includes("MEDICATION")) category = "medication";
+          else if (eventType.includes("CONDITION")) category = "condition";
+          else if (eventType.includes("INJURY")) category = "injury";
+          else if (eventType.includes("ILLNESS")) category = "illness";
+          else if (
+            eventType.includes("SURGERY") ||
+            eventType.includes("PROCEDURE")
+          )
+            category = "procedure";
+          else if (eventType.includes("ALLERGY")) category = "allergy";
+          else if (
+            eventType.includes("WEIGHT") ||
+            eventType.includes("HEIGHT") ||
+            eventType.includes("BLOOD")
+          )
+            category = "measurement";
+          else if (eventType.includes("NOTE") || eventType.includes("SNAPSHOT"))
+            category = "general";
+          else if (eventType.includes("CUSTOM")) category = "custom";
+
+          return selectedCategories.has(category);
+        } catch {
+          return true;
+        }
+      });
+    }
+
+    // Filter by date range
+    if (dateRange !== "all") {
+      const now = Date.now();
+      const cutoffTime = (() => {
+        switch (dateRange) {
+          case "6months":
+            return now - 6 * 30 * 24 * 60 * 60 * 1000;
+          case "year":
+            return now - 365 * 24 * 60 * 60 * 1000;
+          case "2years":
+            return now - 2 * 365 * 24 * 60 * 60 * 1000;
+          default:
+            return 0;
+        }
+      })();
+
+      filtered = filtered.filter(
+        (event) => event.timestamp * 1000 >= cutoffTime,
+      );
+    }
+
+    return filtered;
+  }, [events, selectedCategories, dateRange]);
+
+  // Toggle category filter
+  const toggleCategory = (category: string) => {
+    const newCategories = new Set(selectedCategories);
+    if (newCategories.has(category)) {
+      newCategories.delete(category);
+    } else {
+      newCategories.add(category);
+    }
+    setSelectedCategories(newCategories);
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSelectedCategories(new Set());
+    setDateRange("all");
+  };
 
   // Update fields when event type changes
   useEffect(() => {
@@ -123,8 +225,20 @@ export default function HealthTimelineTab(): JSX.Element {
 
       const result = await readHealthTimeline(address, encryptionKey);
       if (result.success && result.events) {
-        setEvents(result.events);
-        setMessage(`Loaded ${result.events.length} event(s)`);
+        // Filter out events marked as deleted in localStorage
+        const deletedEventIds = JSON.parse(
+          localStorage.getItem("deletedEventIds") || "[]",
+        );
+        const visibleEvents = result.events.filter(
+          (event) => event.isActive && !deletedEventIds.includes(event.eventId),
+        );
+
+        console.log(
+          `📋 Total events: ${result.events.length}, Visible: ${visibleEvents.length}, Hidden: ${result.events.length - visibleEvents.length} (${deletedEventIds.length} deleted locally)`,
+        );
+
+        setEvents(visibleEvents);
+        setMessage(`Loaded ${visibleEvents.length} event(s)`);
       } else {
         setMessage(result.error || "Failed to load timeline");
       }
@@ -144,6 +258,15 @@ export default function HealthTimelineTab(): JSX.Element {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected, address]);
+
+  // Debug: Track editingEventIndex changes
+  useEffect(() => {
+    console.log("🔔 editingEventIndex changed to:", editingEventIndex);
+    console.log(
+      "🔔 Dialog should be:",
+      editingEventIndex !== null ? "OPEN" : "CLOSED",
+    );
+  }, [editingEventIndex]);
 
   const handleAddEvent = async (): Promise<void> => {
     if (!selectedEventType) {
@@ -266,27 +389,320 @@ export default function HealthTimelineTab(): JSX.Element {
     }
   };
 
-  const handleSearch = async (): Promise<void> => {
-    if (!searchType.trim() || !address) {
-      setMessage("❌ Please enter an event type to search");
+  const handleEditEvent = (eventIndex: number): void => {
+    console.log("🔍 handleEditEvent called with index:", eventIndex);
+    console.log("📊 Current state - editingEventIndex:", editingEventIndex);
+    console.log("📋 Total events in state:", events.length);
+
+    const event = events[eventIndex];
+    if (!event) {
+      console.error("❌ Event not found at index:", eventIndex);
       return;
     }
 
+    console.log("✅ Event found:", {
+      eventId: event.eventId,
+      timestamp: event.timestamp,
+      isActive: event.isActive,
+    });
+
+    // Parse the encrypted data to get event fields
+    try {
+      if (!event.encryptedData || event.encryptedData.trim().length === 0) {
+        console.error("❌ Event has no encrypted data to parse:", {
+          eventId: event.eventId,
+          hasStorjUri: !!event.storjUri,
+        });
+        throw new Error("Event has no encrypted data");
+      }
+
+      const eventData = JSON.parse(event.encryptedData);
+      console.log("📋 Event data:", eventData);
+
+      // Extract event type
+      const eventType = eventData.eventType || "UNKNOWN";
+      setEditEventType(eventType);
+
+      // Convert timestamp to date input format (YYYY-MM-DD) in local timezone
+      const eventDate = new Date(event.timestamp * 1000);
+      const year = eventDate.getFullYear();
+      const month = String(eventDate.getMonth() + 1).padStart(2, "0");
+      const day = String(eventDate.getDate()).padStart(2, "0");
+      const dateString = `${year}-${month}-${day}`;
+      setEditEventDate(dateString);
+
+      // Extract fields (exclude eventType, timestamp, id, data wrapper, and metadata)
+      const fields: EventFieldValue[] = [];
+      const excludedFields = [
+        "eventType",
+        "timestamp",
+        "data",
+        "id",
+        "metadata",
+        "attestations",
+      ];
+
+      Object.entries(eventData).forEach(([key, value]) => {
+        if (!excludedFields.includes(key)) {
+          fields.push({
+            key,
+            value: String(value),
+          });
+        }
+      });
+
+      // If there's a nested 'data' object, extract those fields too
+      if (eventData.data && typeof eventData.data === "object") {
+        Object.entries(eventData.data).forEach(([key, value]) => {
+          fields.push({
+            key,
+            value: String(value),
+          });
+        });
+      }
+
+      // If no fields found, add one empty field for editing
+      if (fields.length === 0) {
+        fields.push({ key: "", value: "" });
+      }
+
+      setEditEventFields(fields);
+      setEditingEventIndex(eventIndex);
+
+      console.log("✅ Edit state populated:", {
+        eventType,
+        date: dateString,
+        fieldsCount: fields.length,
+      });
+    } catch (error) {
+      console.error("❌ Failed to parse event data:", error);
+      // Set defaults if parsing fails
+      const eventDate = new Date(event.timestamp * 1000);
+      const year = eventDate.getFullYear();
+      const month = String(eventDate.getMonth() + 1).padStart(2, "0");
+      const day = String(eventDate.getDate()).padStart(2, "0");
+      const dateString = `${year}-${month}-${day}`;
+      setEditEventType("UNKNOWN");
+      setEditEventDate(dateString);
+      setEditEventFields([{ key: "", value: "" }]);
+      setEditingEventIndex(eventIndex);
+    }
+  };
+
+  const handleSaveEdit = async (): Promise<void> => {
+    if (editingEventIndex === null || !editEventDate || !address) return;
+
+    const event = events[editingEventIndex];
+    if (!event) return;
+
     setIsLoading(true);
-    setMessage(`Searching for ${searchType}...`);
+    setMessage("Updating event date...");
 
     try {
-      const result = await searchEventsByType(
-        address,
-        searchType,
-        walletService.signMessage,
-      );
-      if (result.success && result.events) {
-        setEvents(result.events);
-        setMessage(`✅ Found ${result.events.length} ${searchType} event(s)`);
+      // Parse the new date in local timezone and create new timestamp
+      // Date input gives us "YYYY-MM-DD", we need to parse it as local time, not UTC
+      const [year, month, day] = editEventDate.split("-").map(Number);
+      const newDate = new Date(year, month - 1, day); // month is 0-indexed
+      const newTimestamp = Math.floor(newDate.getTime() / 1000);
+
+      console.log("📅 Updating event date:", {
+        oldTimestamp: event.timestamp,
+        newTimestamp,
+        oldDate: new Date(event.timestamp * 1000).toISOString(),
+        newDate: newDate.toISOString(),
+      });
+
+      // If event has Storj URI, update the data in Storj
+      if (event.storjUri) {
+        try {
+          console.log("☁️ Updating event in Storj:", event.storjUri);
+          const { getCachedWalletEncryptionKey } =
+            await import("@/utils/walletEncryption");
+
+          const encryptionKey = await getCachedWalletEncryptionKey(
+            address,
+            walletService.signMessage,
+          );
+
+          // Step 1: Retrieve the current event data from Storj
+          const retrieveResponse = await fetch("/api/storj", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "timeline/retrieve",
+              storjUri: event.storjUri,
+              userAddress: address,
+              encryptionKey,
+            }),
+          });
+
+          if (!retrieveResponse.ok) {
+            throw new Error("Failed to retrieve event data from Storj");
+          }
+
+          const retrieveResult = await retrieveResponse.json();
+          const eventData = retrieveResult.result;
+
+          if (!eventData) {
+            throw new Error("No event data returned from Storj");
+          }
+
+          // Step 2: Update the event data with new timestamp and fields
+          // Build updated data object from edit fields
+          const updatedData: Record<string, unknown> = {};
+          editEventFields.forEach((field) => {
+            const key = field.key.trim();
+            const value = field.value.trim();
+            if (key && value) {
+              // Try to parse as number or boolean
+              if (!isNaN(Number(value)) && value !== "") {
+                updatedData[key] = Number(value);
+              } else if (value.toLowerCase() === "true") {
+                updatedData[key] = true;
+              } else if (value.toLowerCase() === "false") {
+                updatedData[key] = false;
+              } else {
+                updatedData[key] = value;
+              }
+            }
+          });
+
+          const updatedEventData = {
+            id: crypto.randomUUID(), // New ID for the updated event
+            timestamp: newTimestamp * 1000, // Convert back to milliseconds for storage
+            eventType: editEventType, // Keep the event type
+            data: updatedData, // Update with edited fields
+          };
+
+          console.log(
+            "📝 Creating new event to replace edited one:",
+            updatedEventData,
+          );
+          console.log("🔍 DEBUG - Timestamp details:", {
+            editEventDate,
+            newDate: newDate.toISOString(),
+            newTimestampSeconds: newTimestamp,
+            newTimestampMillis: newTimestamp * 1000,
+            updatedEventDataTimestamp: updatedEventData.timestamp,
+            asDate: new Date(updatedEventData.timestamp).toISOString(),
+          });
+
+          // Step 3: Deactivate the old event on blockchain (creates audit trail)
+          if (event.eventId !== undefined) {
+            console.log("🔗 Deactivating old event on blockchain...");
+            const { getActiveChain } = await import("@/lib/networkConfig");
+            const { secureHealthProfileAbi, SECURE_HEALTH_PROFILE_CONTRACT } =
+              await import("@/lib/contractConfig");
+            const { createPublicClient, http } = await import("viem");
+
+            const walletClient = await walletService.getWalletClient();
+            if (!walletClient || !walletClient.account) {
+              throw new Error("Wallet client not available");
+            }
+
+            const deactivateTxHash = await walletClient.writeContract({
+              address: SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
+              abi: secureHealthProfileAbi,
+              functionName: "deactivateHealthEvent",
+              args: [BigInt(event.eventId)],
+              chain: getActiveChain(),
+              account: walletClient.account,
+            });
+
+            console.log("⏳ Waiting for deactivation confirmation...");
+            const rpcUrl =
+              process.env.NEXT_PUBLIC_ZKSYNC_RPC_URL ||
+              "https://sepolia.era.zksync.dev";
+            const publicClient = createPublicClient({
+              chain: getActiveChain(),
+              transport: http(rpcUrl),
+            });
+
+            await publicClient.waitForTransactionReceipt({
+              hash: deactivateTxHash,
+            });
+            console.log("✅ Old event deactivated");
+
+            // Mark old event as deleted locally
+            const deletedEventIds = JSON.parse(
+              localStorage.getItem("deletedEventIds") || "[]",
+            );
+            deletedEventIds.push(event.eventId);
+            localStorage.setItem(
+              "deletedEventIds",
+              JSON.stringify(deletedEventIds),
+            );
+          }
+
+          // Step 4: Create a new event with updated data
+          console.log("☁️ Creating new event with updated data...");
+
+          const result = await addHealthEventV2(
+            {
+              eventType: updatedEventData.eventType,
+              data: updatedEventData.data,
+              timestamp: updatedEventData.timestamp, // Pass the custom timestamp
+            },
+            address,
+            walletService.signMessage,
+            walletService.getWalletClient,
+            (p) => setProgress(p),
+          );
+
+          if (!result.success) {
+            throw new Error(result.error || "Failed to create updated event");
+          }
+
+          console.log("✅ New event created with updated data");
+
+          // Step 5: Close dialog and clear edit state
+          setEditingEventIndex(null);
+          setEditEventDate("");
+          setEditEventType("");
+          setEditEventFields([]);
+
+          // Step 6: Reload timeline to show the new event
+          setMessage("✅ Event updated successfully! Reloading timeline...");
+          setTimeout(() => loadTimeline(), 2000);
+        } catch (storjError) {
+          console.error("❌ Failed to update in Storj:", storjError);
+
+          // Fallback to local-only update
+          const continueLocalOnly = confirm(
+            "Failed to update in cloud storage. Update locally only? (Cloud data will remain unchanged)",
+          );
+
+          if (!continueLocalOnly) {
+            setIsLoading(false);
+            setMessage("❌ Update cancelled");
+            return;
+          }
+
+          // Local-only update
+          const updatedEvents = [...events];
+          updatedEvents[editingEventIndex] = {
+            ...event,
+            timestamp: newTimestamp,
+          };
+          setEvents(updatedEvents);
+          setMessage("⚠️ Date updated locally only");
+        }
       } else {
-        setMessage(result.error || "No events found");
+        // No Storj URI - just update locally
+        const updatedEvents = [...events];
+        updatedEvents[editingEventIndex] = {
+          ...event,
+          timestamp: newTimestamp,
+        };
+        setEvents(updatedEvents);
+        setMessage("✅ Date updated!");
       }
+
+      console.log("✅ Event date updated");
+
+      // Close dialog
+      setEditingEventIndex(null);
+      setEditEventDate("");
     } catch (error) {
       setMessage(
         `❌ Error: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -302,20 +718,30 @@ export default function HealthTimelineTab(): JSX.Element {
       return;
     }
 
+    console.log(
+      "🗑️ handleDeleteEvent called - eventIndex:",
+      eventIndex,
+      "total events:",
+      events.length,
+    );
+
     const event = events[eventIndex];
     if (!event) {
+      console.error("❌ Event not found at index:", eventIndex);
       setMessage("❌ Event not found");
       return;
     }
 
-    if (event.eventId === undefined) {
-      setMessage("❌ Event ID not available. Please reload timeline.");
-      return;
-    }
+    console.log("📋 Event to delete:", {
+      eventId: event.eventId,
+      timestamp: event.timestamp,
+      isActive: event.isActive,
+      storjUri: event.storjUri,
+    });
 
     if (
       !confirm(
-        "Are you sure you want to delete this event? This will record the deletion on-chain (event marked as inactive).",
+        "Are you sure you want to delete this event? This will permanently delete the event data from storage and mark it as deleted on-chain.",
       )
     ) {
       return;
@@ -325,113 +751,163 @@ export default function HealthTimelineTab(): JSX.Element {
     setMessage("Deleting event...");
 
     try {
-      const result = await deleteHealthEvent(
-        event.eventId,
-        address,
-        walletService.getWalletClient,
-      );
+      // Step 1: Delete from Storj if it's a V2 event with storjUri
+      if (event.storjUri) {
+        try {
+          console.log("🗑️ Deleting event data from Storj:", event.storjUri);
+          const { getCachedWalletEncryptionKey } =
+            await import("@/utils/walletEncryption");
 
-      if (result.success) {
-        setMessage(
-          `✅ Event deleted! Transaction: ${result.txHash?.substring(0, 10)}...`,
-        );
-        // Reload timeline to show updated state
-        setTimeout(() => loadTimeline(), 2000);
-      } else {
-        setMessage(`❌ Failed: ${result.error}`);
+          const encryptionKey = await getCachedWalletEncryptionKey(
+            address,
+            walletService.signMessage,
+          );
+
+          // Call the server-side API route for deletion
+          const response = await fetch("/api/storj", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "storage/delete",
+              storjUri: event.storjUri,
+              userAddress: address,
+              encryptionKey,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(
+              errorData.error || `Delete failed: ${response.status}`,
+            );
+          }
+
+          console.log("✅ Event data deleted from Storj");
+        } catch (storjError) {
+          console.error("❌ Failed to delete from Storj:", storjError);
+
+          // Ask user if they want to continue with local deletion only
+          const continueWithLocalOnly = confirm(
+            "Failed to delete from cloud storage. Would you like to hide the event locally? (Data will remain in storage)",
+          );
+
+          if (!continueWithLocalOnly) {
+            setIsLoading(false);
+            setMessage("❌ Deletion cancelled");
+            return;
+          }
+
+          // Fall back to localStorage deletion
+          console.log("⚠️ Falling back to local-only deletion");
+        }
       }
+
+      // Step 2: Record deletion on blockchain
+      if (event.eventId !== undefined) {
+        try {
+          console.log(
+            "⛓️ Recording deletion on blockchain for eventId:",
+            event.eventId,
+          );
+          setMessage("Recording deletion on blockchain...");
+
+          const getWalletClient = walletService.getWalletClient;
+          const walletClient = await getWalletClient();
+
+          if (!walletClient || !walletClient.account) {
+            throw new Error("Wallet client or account not available");
+          }
+
+          const { SECURE_HEALTH_PROFILE_CONTRACT, secureHealthProfileAbi } =
+            await import("@/lib/contractConfig");
+          const { getActiveChain } = await import("@/lib/networkConfig");
+          const { createPublicClient, http } = await import("viem");
+
+          // Call deactivateHealthEvent on the contract
+          const txHash = await walletClient.writeContract({
+            address: SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
+            abi: secureHealthProfileAbi,
+            functionName: "deactivateHealthEvent",
+            args: [BigInt(event.eventId)],
+            chain: getActiveChain(),
+            account: walletClient.account,
+          });
+
+          console.log("📝 Deletion transaction submitted:", txHash);
+          setMessage(
+            `⏳ Deletion transaction submitted: ${txHash.substring(0, 10)}...`,
+          );
+
+          // Wait for transaction confirmation
+          const rpcUrl =
+            process.env.NEXT_PUBLIC_ZKSYNC_RPC_URL ||
+            "https://sepolia.era.zksync.dev";
+          const publicClient = createPublicClient({
+            chain: getActiveChain(),
+            transport: http(rpcUrl),
+          });
+
+          console.log("⏳ Waiting for deletion transaction confirmation...");
+          const receipt = await publicClient.waitForTransactionReceipt({
+            hash: txHash,
+          });
+
+          if (receipt.status === "success") {
+            console.log("✅ Deletion confirmed on-chain!");
+            setMessage("✅ Deletion confirmed on-chain!");
+          } else {
+            console.warn("⚠️ Deletion transaction failed on-chain");
+            setMessage("⚠️ Deletion transaction failed");
+          }
+        } catch (blockchainError) {
+          console.error(
+            "❌ Failed to record deletion on blockchain:",
+            blockchainError,
+          );
+
+          // Ask user if they want to continue with local deletion only
+          const continueWithoutBlockchain = confirm(
+            "Failed to record deletion on blockchain. Continue with local deletion only? (Event will remain active on-chain)",
+          );
+
+          if (!continueWithoutBlockchain) {
+            setIsLoading(false);
+            setMessage("❌ Deletion cancelled");
+            return;
+          }
+
+          setMessage("⚠️ Deleted locally only (not recorded on-chain)");
+        }
+      }
+
+      // Step 3: Store deletion record in localStorage (as backup)
+      const deletedEvents = JSON.parse(
+        localStorage.getItem("deletedEventIds") || "[]",
+      );
+      if (
+        event.eventId !== undefined &&
+        !deletedEvents.includes(event.eventId)
+      ) {
+        deletedEvents.push(event.eventId);
+        localStorage.setItem("deletedEventIds", JSON.stringify(deletedEvents));
+        console.log(
+          "📝 Stored deletion record in localStorage for eventId:",
+          event.eventId,
+        );
+      }
+
+      // Step 4: Remove from local state immediately
+      const updatedEvents = events.filter((_, index) => index !== eventIndex);
+      setEvents(updatedEvents);
+
+      console.log("✅ Event removed from timeline");
     } catch (error) {
+      console.error("❌ Delete error:", error);
       setMessage(
         `❌ Error: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const formatEventData = (encryptedData: string): JSX.Element => {
-    try {
-      const parsed = JSON.parse(encryptedData);
-
-      // If the parsed data has a 'data' property that's an object, flatten it
-      let data = parsed;
-      if (parsed.data && typeof parsed.data === "object") {
-        // Merge the nested 'data' object into the parent
-        data = { ...parsed, ...parsed.data };
-        delete data.data; // Remove the nested 'data' key
-      }
-
-      const entries = Object.entries(data);
-
-      // Filter out technical fields that shouldn't be displayed
-      const hiddenFields = ["eventtype", "id", "timestamp"];
-      const displayEntries = entries.filter(
-        ([key]) => !hiddenFields.includes(key.toLowerCase()),
-      );
-
-      // Separate into priority fields and other fields
-      const priorityFields = [
-        "severity",
-        "description",
-        "location",
-        "bodypart",
-        "diagnosis",
-        "medication",
-        "symptoms",
-        "treatment",
-      ];
-      const priority = displayEntries.filter(([key]) =>
-        priorityFields.includes(key.toLowerCase()),
-      );
-      const other = displayEntries.filter(
-        ([key]) => !priorityFields.includes(key.toLowerCase()),
-      );
-
-      // Helper to format value (handle objects, arrays, etc.)
-      const formatValue = (value: unknown): string => {
-        if (value === null || value === undefined) return "N/A";
-        if (typeof value === "object") {
-          return JSON.stringify(value, null, 2);
-        }
-        return String(value);
-      };
-
-      return (
-        <div className="space-y-2">
-          {/* Priority fields shown prominently */}
-          {priority.map(([key, value]) => (
-            <div key={key} className="text-sm">
-              <span className="font-semibold text-emerald-700 capitalize">
-                {key.replace(/([A-Z])/g, " $1").trim()}:
-              </span>{" "}
-              <span className="text-gray-700">{formatValue(value)}</span>
-            </div>
-          ))}
-
-          {/* Other fields */}
-          {other.length > 0 && (
-            <details className="text-sm">
-              <summary className="cursor-pointer text-emerald-600 hover:text-emerald-700 font-medium">
-                More details ({other.length})
-              </summary>
-              <div className="mt-2 space-y-1 pl-4 border-l-2 border-emerald-200">
-                {other.map(([key, value]) => (
-                  <div key={key}>
-                    <span className="font-semibold text-emerald-700 capitalize">
-                      {key.replace(/([A-Z])/g, " $1").trim()}:
-                    </span>{" "}
-                    <span className="text-gray-700 whitespace-pre-wrap">
-                      {formatValue(value)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
-        </div>
-      );
-    } catch {
-      return <span className="text-xs text-gray-500">(encrypted data)</span>;
     }
   };
 
@@ -717,134 +1193,262 @@ export default function HealthTimelineTab(): JSX.Element {
         </Card>
       )}
 
-      {/* Search */}
-      <div className="flex gap-2">
-        <Input
-          value={searchType}
-          onChange={(e) => setSearchType(e.target.value)}
-          placeholder="Search by event type (e.g., MEDICATION_STARTED)"
-          className="flex-1"
-        />
-        <Button
-          onClick={handleSearch}
-          disabled={isLoading || !searchType.trim()}
-          variant="outline"
-          className="flex items-center gap-2"
-        >
-          <Search className="h-4 w-4" />
-          Search
-        </Button>
-      </div>
-
-      {/* Events List */}
-      <div className="space-y-3">
-        {events.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50 text-emerald-300" />
-            <p className="text-gray-600">
-              No events found. Add your first health event above!
-            </p>
-          </div>
-        ) : (
-          events.map((event, index) => {
-            // Extract event type for display
-            let eventTypeDisplay = "Health Event";
-            try {
-              const data = JSON.parse(event.encryptedData);
-              if (data.eventType) {
-                eventTypeDisplay = formatEventType(String(data.eventType));
-              }
-            } catch {}
-
-            return (
-              <Card
-                key={index}
-                className={`border-emerald-200 bg-emerald-50/30 shadow-sm hover:shadow-md transition-shadow ${
-                  !event.isActive ? "opacity-60" : ""
-                }`}
+      {/* Filters Section */}
+      <Card className="border-emerald-200 bg-gradient-to-r from-emerald-50/50 to-white">
+        <CardContent className="p-4">
+          <div className="space-y-4">
+            {/* Filter Header */}
+            <div className="flex items-center justify-between">
+              <Button
+                onClick={() => setShowFilters(!showFilters)}
+                variant="ghost"
+                className="flex items-center gap-2 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-100 p-2"
               >
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 space-y-3">
-                      {/* Event Type Header */}
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`h-2 w-2 rounded-full ${
-                            event.isActive ? "bg-emerald-500" : "bg-gray-400"
-                          }`}
-                        ></div>
-                        <h3 className="font-semibold text-emerald-900 text-lg">
-                          {eventTypeDisplay}
-                        </h3>
-                        {!event.isActive && (
-                          <span className="text-xs text-gray-500 italic">
-                            (Deleted)
-                          </span>
-                        )}
-                      </div>
+                <Filter className="h-4 w-4" />
+                <span className="font-medium">Filters</span>
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${showFilters ? "rotate-180" : ""}`}
+                />
+              </Button>
 
-                      {/* Timestamp */}
-                      <div className="text-xs text-emerald-600 font-medium">
-                        {new Date(event.timestamp * 1000).toLocaleString(
-                          undefined,
-                          {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour: "numeric",
-                            minute: "2-digit",
-                          },
-                        )}
-                      </div>
+              {(selectedCategories.size > 0 || dateRange !== "all") && (
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="secondary"
+                    className="bg-emerald-100 text-emerald-800"
+                  >
+                    {selectedCategories.size > 0 &&
+                      `${selectedCategories.size} categories`}
+                    {selectedCategories.size > 0 &&
+                      dateRange !== "all" &&
+                      " • "}
+                    {dateRange !== "all" && dateRange}
+                  </Badge>
+                  <Button
+                    onClick={clearFilters}
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    Clear
+                  </Button>
+                </div>
+              )}
+            </div>
 
-                      {/* Event Data */}
-                      {event.isActive && (
-                        <div className="bg-white rounded-lg p-3 border border-emerald-100 space-y-2">
-                          {formatEventData(event.encryptedData)}
-                        </div>
-                      )}
-                      {!event.isActive && (
-                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                          <p className="text-sm text-gray-500 italic">
-                            Event data deleted. Deletion recorded on-chain.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex flex-col items-end gap-2">
-                      {/* Status Badge */}
-                      {event.isActive ? (
-                        <span className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-full font-medium whitespace-nowrap">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="text-xs bg-gray-100 text-gray-500 px-3 py-1.5 rounded-full font-medium whitespace-nowrap">
-                          Deleted
-                        </span>
-                      )}
-
-                      {/* Delete Button */}
-                      {event.isActive && (
-                        <Button
-                          onClick={() => handleDeleteEvent(index)}
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
-                          disabled={isLoading}
-                        >
-                          <Trash2 className="h-4 w-4 mr-1" />
-                          Delete
-                        </Button>
-                      )}
-                    </div>
+            {/* Filter Controls */}
+            {showFilters && (
+              <div className="space-y-4 pt-2 border-t border-emerald-100">
+                {/* Category Filters */}
+                <div>
+                  <Label className="text-sm font-semibold text-gray-700 mb-2 block">
+                    Event Categories
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                      <Button
+                        key={key}
+                        onClick={() => toggleCategory(key)}
+                        variant={
+                          selectedCategories.has(key) ? "default" : "outline"
+                        }
+                        size="sm"
+                        className={`text-xs md:text-sm ${
+                          selectedCategories.has(key)
+                            ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                            : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                        }`}
+                      >
+                        {label}
+                      </Button>
+                    ))}
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })
-        )}
-      </div>
+                </div>
+
+                {/* Date Range Filter */}
+                <div>
+                  <Label className="text-sm font-semibold text-gray-700 mb-2 block">
+                    Time Period
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: "all", label: "All Time" },
+                      { value: "6months", label: "Last 6 Months" },
+                      { value: "year", label: "Last Year" },
+                      { value: "2years", label: "Last 2 Years" },
+                    ].map(({ value, label }) => (
+                      <Button
+                        key={value}
+                        onClick={() => setDateRange(value)}
+                        variant={dateRange === value ? "default" : "outline"}
+                        size="sm"
+                        className={`text-xs md:text-sm ${
+                          dateRange === value
+                            ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                            : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                        }`}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Results Summary */}
+                <div className="text-sm text-gray-600 pt-2 border-t border-emerald-100">
+                  Showing{" "}
+                  <span className="font-semibold text-emerald-700">
+                    {filteredEvents.length}
+                  </span>{" "}
+                  of <span className="font-semibold">{events.length}</span>{" "}
+                  events
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Visual Timeline */}
+      <VisualTimeline
+        events={filteredEvents}
+        onDeleteEvent={handleDeleteEvent}
+        onEditEvent={handleEditEvent}
+        isLoading={isLoading}
+      />
+
+      {/* Edit Event Dialog */}
+      <Dialog
+        open={editingEventIndex !== null}
+        onOpenChange={(open) => {
+          console.log("🔔 Dialog onOpenChange called with:", open);
+          if (!open) {
+            setEditingEventIndex(null);
+            setEditEventDate("");
+            setEditEventType("");
+            setEditEventFields([]);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto z-[9999]">
+          <DialogHeader>
+            <DialogTitle>Edit Health Event</DialogTitle>
+            <DialogDescription>
+              Update the details of this health event
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Event Type (read-only display) */}
+            <div>
+              <Label className="text-sm font-medium">Event Type</Label>
+              <div className="mt-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-700">
+                {editEventType
+                  ? getEventTypeDefinition(editEventType).label
+                  : "Unknown"}
+              </div>
+            </div>
+
+            {/* Event Date */}
+            <div>
+              <Label htmlFor="editEventDate">Event Date</Label>
+              <Input
+                id="editEventDate"
+                type="date"
+                value={editEventDate}
+                onChange={(e) => setEditEventDate(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+
+            {/* Event Fields */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-sm font-medium">Event Details</Label>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    setEditEventFields([
+                      ...editEventFields,
+                      { key: "", value: "" },
+                    ])
+                  }
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Field
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {editEventFields.map((field, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      value={field.key}
+                      onChange={(e) => {
+                        const newFields = [...editEventFields];
+                        newFields[index].key = e.target.value;
+                        setEditEventFields(newFields);
+                      }}
+                      placeholder="Field name (e.g., severity, medication)"
+                      className="flex-1 text-sm"
+                    />
+                    <Input
+                      value={field.value}
+                      onChange={(e) => {
+                        const newFields = [...editEventFields];
+                        newFields[index].value = e.target.value;
+                        setEditEventFields(newFields);
+                      }}
+                      placeholder="Value"
+                      className="flex-1 text-sm"
+                    />
+                    {editEventFields.length > 1 && (
+                      <Button
+                        type="button"
+                        onClick={() =>
+                          setEditEventFields(
+                            editEventFields.filter((_, i) => i !== index),
+                          )
+                        }
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 w-9 p-0 text-red-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditingEventIndex(null);
+                setEditEventDate("");
+                setEditEventType("");
+                setEditEventFields([]);
+              }}
+              disabled={isLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEdit}
+              disabled={isLoading || !editEventDate}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {isLoading ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -3,6 +3,10 @@ const webpack = require("webpack");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Skip global-error page during static generation (Next.js 16 issue)
+  experimental: {
+    missingSuspenseWithCSRBailout: false,
+  },
   // Use Node.js runtime for blockchain interactions
   // Also externalize packages that have test files that shouldn't be bundled
   serverExternalPackages: [
@@ -20,6 +24,16 @@ const nextConfig = {
   webpack: (config, { isServer }) => {
     // Ignore test files and other unnecessary files from node_modules
     config.plugins = config.plugins || [];
+
+    // CRITICAL: Ignore ALL test files in viem BEFORE other rules
+    // This must come first to catch test imports early
+    config.plugins.push(
+      new webpack.IgnorePlugin({
+        resourceRegExp: /dropTransaction|testClient|test\.js/,
+        contextRegExp: /node_modules\/viem/,
+      }),
+    );
+
     config.plugins.push(
       new webpack.IgnorePlugin({
         resourceRegExp: /\.(test|spec)\.(js|ts|mjs)$/,
@@ -35,6 +49,56 @@ const nextConfig = {
       }),
     );
 
+    // Aggressively ignore ALL viem test files and directories
+    // This prevents bundling errors when viem tries to import test-only modules
+    config.plugins.push(
+      new webpack.IgnorePlugin({
+        resourceRegExp: /\/actions\/test\//,
+        contextRegExp: /node_modules\/viem/,
+      }),
+    );
+
+    // Ignore viem test decorators
+    config.plugins.push(
+      new webpack.IgnorePlugin({
+        resourceRegExp: /\/clients\/decorators\/test\.js$/,
+        contextRegExp: /node_modules\/viem/,
+      }),
+    );
+
+    // Ignore viem test client creation
+    config.plugins.push(
+      new webpack.IgnorePlugin({
+        resourceRegExp: /\/clients\/createTestClient\.js$/,
+        contextRegExp: /node_modules\/viem/,
+      }),
+    );
+
+    // Use NormalModuleReplacementPlugin to catch relative imports
+    // Match any import that resolves to viem test files
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /^.*viem.*[\/\\]actions[\/\\]test[\/\\]dropTransaction/,
+        require.resolve("./webpack-viem-test-stub.js"),
+      ),
+    );
+
+    // Replace test decorators with ES module stub
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /^.*viem.*[\/\\]clients[\/\\]decorators[\/\\]test\.js$/,
+        require.resolve("./webpack-viem-test-decorators-stub.mjs"),
+      ),
+    );
+
+    // Replace createTestClient with ES module stub
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /^.*viem.*[\/\\]clients[\/\\]createTestClient\.js$/,
+        require.resolve("./webpack-viem-createTestClient-stub.mjs"),
+      ),
+    );
+
     // Ignore README, LICENSE, and other non-code files
     config.plugins.push(
       new webpack.IgnorePlugin({
@@ -48,11 +112,73 @@ const nextConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       "health-app": path.resolve(__dirname, "./my-health-app/src"),
+      // Redirect viem test imports to stub (catch both absolute and relative paths)
+      "viem/_esm/actions/test/dropTransaction":
+        require.resolve("./webpack-viem-test-stub.js"),
+      "viem/_esm/clients/decorators/test":
+        require.resolve("./webpack-viem-test-stub.js"),
+      "viem/_esm/clients/createTestClient":
+        require.resolve("./webpack-viem-test-stub.js"),
     };
+
+    // Mark viem test files as external (prevents bundling)
+    if (!isServer) {
+      config.externals = config.externals || [];
+      if (typeof config.externals === "function") {
+        const originalExternals = config.externals;
+        config.externals = [
+          originalExternals,
+          ({ request }, callback) => {
+            if (
+              (request &&
+                typeof request === "string" &&
+                request.includes("viem") &&
+                request.includes("test")) ||
+              request.includes("dropTransaction")
+            ) {
+              return callback(null, "commonjs " + request);
+            }
+            callback();
+          },
+        ];
+      } else if (Array.isArray(config.externals)) {
+        config.externals.push(({ request }, callback) => {
+          if (
+            request &&
+            typeof request === "string" &&
+            ((request.includes("viem") && request.includes("test")) ||
+              request.includes("dropTransaction"))
+          ) {
+            return callback(null, "commonjs " + request);
+          }
+          callback();
+        });
+      }
+    }
 
     // Add my-health-app to the modules included in the build
     config.resolve.modules = config.resolve.modules || [];
     config.resolve.modules.push(path.resolve(__dirname, "./my-health-app"));
+
+    // Fix PDF.js webpack issues - PDF.js uses ESM and needs special handling
+    if (!isServer) {
+      config.module = config.module || {};
+      config.module.rules = config.module.rules || [];
+      config.module.rules.push({
+        test: /\.m?js$/,
+        include: /node_modules[\\/]pdfjs-dist/,
+        type: "javascript/auto",
+        resolve: {
+          fullySpecified: false,
+        },
+      });
+
+      // Add canvas polyfill for PDF.js
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        canvas: false,
+      };
+    }
 
     // Fix ethers.js network detection issues in Next.js
     // Only disable Node.js modules for client-side builds

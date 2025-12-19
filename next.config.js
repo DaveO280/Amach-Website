@@ -17,6 +17,8 @@ const nextConfig = {
     // and webpack aliases need to apply to replace test file imports
     "pino",
     "thread-stream",
+    // AWS SDK must be external to prevent webpack from breaking credential signing
+    "@aws-sdk/client-s3",
   ],
   // Empty turbopack config to silence Next.js 16 warning
   // We're using webpack via --webpack flag, but need this to prevent the error

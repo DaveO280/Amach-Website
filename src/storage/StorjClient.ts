@@ -71,12 +71,26 @@ export class StorjClient {
   constructor(config?: StorjConfig) {
     const resolvedConfig = config || this.getConfigFromEnv();
 
+    // Trim credentials to remove any whitespace (Vercel env var issue)
+    const accessKeyId = resolvedConfig.accessKeyId.trim();
+    const secretAccessKey = resolvedConfig.secretAccessKey.trim();
+
+    console.log("🔧 StorjClient initialization:");
+    console.log(
+      `  - Access Key ID: ${accessKeyId ? `${accessKeyId.substring(0, 4)}... (length: ${accessKeyId.length})` : "EMPTY"}`,
+    );
+    console.log(
+      `  - Secret Key: ${secretAccessKey ? "***SET*** (length: " + secretAccessKey.length + ")" : "EMPTY"}`,
+    );
+    console.log(`  - Endpoint: ${resolvedConfig.endpoint}`);
+    console.log(`  - Region: ${resolvedConfig.region || "us-east-1"}`);
+
     this.client = new S3Client({
       endpoint: resolvedConfig.endpoint,
       region: resolvedConfig.region || "us-east-1",
       credentials: {
-        accessKeyId: resolvedConfig.accessKeyId,
-        secretAccessKey: resolvedConfig.secretAccessKey,
+        accessKeyId,
+        secretAccessKey,
       },
       forcePathStyle: true, // Required for S3-compatible services
     });

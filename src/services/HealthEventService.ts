@@ -255,6 +255,10 @@ export async function readHealthTimeline(
               args: [userAddress as `0x${string}`, BigInt(i)],
             })) as string;
 
+            console.log(
+              `🔍 Event ${i}: storjUri from contract = "${storjUri}" (length: ${storjUri?.length || 0})`,
+            );
+
             if (storjUri && storjUri.length > 0) {
               // V3 event - fetch from Storj
               const contentHash = (await publicClient.readContract({
@@ -263,6 +267,10 @@ export async function readHealthTimeline(
                 functionName: "eventContentHash",
                 args: [userAddress as `0x${string}`, BigInt(i)],
               })) as string;
+
+              console.log(
+                `🔍 Event ${i}: contentHash from contract = "${contentHash}"`,
+              );
 
               baseEvent.storjUri = storjUri;
               baseEvent.contentHash = contentHash;

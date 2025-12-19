@@ -77,12 +77,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             { status: 400 },
           );
         }
-        const timelineService = getStorjTimelineService();
-        result = await timelineService.retrieveTimelineEvent(
-          storjUri,
-          typedEncryptionKey,
-          expectedHash,
+        console.log(
+          `📥 timeline/retrieve: storjUri=${storjUri}, hasExpectedHash=${!!expectedHash}`,
         );
+        const timelineService = getStorjTimelineService();
+        try {
+          result = await timelineService.retrieveTimelineEvent(
+            storjUri,
+            typedEncryptionKey,
+            expectedHash,
+          );
+          console.log(
+            `📥 timeline/retrieve result: ${result ? "found" : "null"}`,
+          );
+        } catch (retrieveError) {
+          console.error(`❌ timeline/retrieve error:`, retrieveError);
+          result = null;
+        }
         break;
       }
 

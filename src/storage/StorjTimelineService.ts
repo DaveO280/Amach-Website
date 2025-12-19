@@ -116,6 +116,7 @@ export class StorjTimelineService {
     encryptionKey: WalletEncryptionKey,
     expectedHash?: string,
   ): Promise<StorjTimelineEvent | null> {
+    console.log(`🔍 Retrieving timeline event from: ${storjUri}`);
     try {
       const result =
         await this.storageService.retrieveHealthData<StorjTimelineEvent>(
@@ -128,11 +129,14 @@ export class StorjTimelineService {
         console.warn(`⚠️ Timeline event hash mismatch: ${storjUri}`);
       }
 
+      console.log(
+        `✅ Retrieved timeline event from ${storjUri}, hasData: ${!!result.data}`,
+      );
       return result.data;
     } catch (error) {
       console.error(
         `❌ Failed to retrieve timeline event from ${storjUri}:`,
-        error,
+        error instanceof Error ? error.message : error,
       );
       return null;
     }

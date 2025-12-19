@@ -81,47 +81,24 @@ export const GuidePopup: React.FC<GuidePopupProps> = ({
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
 
-      // On mobile, center the popup and use bottom arrow pointing to target
+      // On mobile, center the popup in the VISIBLE viewport (no scrolling needed)
+      // Since we use position: fixed, we use viewport-relative coordinates (no scrollY)
       if (viewportWidth < 640) {
         // Center popup horizontally with responsive margins
         const mobileMargin = 16;
-        const popupWidth = Math.min(
-          popupRect.width,
-          viewportWidth - mobileMargin * 2,
+
+        // Center popup vertically in the visible viewport
+        // This ensures it's always visible without scrolling
+        const top = Math.max(
+          mobileMargin,
+          (viewportHeight - popupRect.height) / 2,
         );
-        const left = (viewportWidth - popupWidth) / 2;
+        const left = mobileMargin;
 
-        // Position popup in center of viewport vertically, or below target if space
-        const gap = 12;
-        let top: number;
-        let arrowEdge: "top" | "bottom" = "top";
-
-        const spaceBelow = viewportHeight - targetRect.bottom;
-        const spaceAbove = targetRect.top;
-
-        if (spaceBelow >= popupRect.height + gap) {
-          // Position below target
-          top = targetRect.bottom + scrollY + gap;
-          arrowEdge = "top";
-        } else if (spaceAbove >= popupRect.height + gap) {
-          // Position above target
-          top = targetRect.top + scrollY - popupRect.height - gap;
-          arrowEdge = "bottom";
-        } else {
-          // Center in viewport
-          top = scrollY + (viewportHeight - popupRect.height) / 2;
-          arrowEdge = "top";
-        }
-
-        // Calculate arrow position to point at target
-        const targetCenterX = targetRect.left + targetRect.width / 2;
-        const arrowOffset = Math.max(
-          20,
-          Math.min(popupWidth - 20, targetCenterX - left),
-        );
-
+        // For mobile, hide the arrow since popup is viewport-centered, not target-relative
+        // The target might be off-screen, so pointing to it doesn't make sense
         setPopupPosition({ top, left });
-        setArrowPosition({ edge: arrowEdge, offset: arrowOffset, rotation: 0 });
+        setArrowPosition({ edge: "top", offset: -100, rotation: 0 }); // offset -100 hides arrow off-screen
         setHasPositioned(true);
         return;
       }
@@ -251,14 +228,11 @@ export const GuidePopup: React.FC<GuidePopupProps> = ({
       <div
         ref={popupRef}
         className={`fixed z-[201] bg-gradient-to-br from-emerald-50 to-amber-50 rounded-lg shadow-xl border-2 border-emerald-300 animate-in fade-in zoom-in-95 duration-200 ${
-          isMobile
-            ? "mx-4 p-4 w-[calc(100vw-32px)] max-w-[calc(100vw-32px)]"
-            : "max-w-sm p-5"
+          isMobile ? "p-4 left-4 right-4" : "max-w-sm p-5"
         }`}
         style={{
           top: `${popupPosition.top}px`,
-          left: isMobile ? undefined : `${popupPosition.left}px`,
-          ...(isMobile && { left: "16px", right: "16px" }),
+          ...(!isMobile && { left: `${popupPosition.left}px` }),
         }}
       >
         {/* Arrow pointing FROM popup TO target element */}

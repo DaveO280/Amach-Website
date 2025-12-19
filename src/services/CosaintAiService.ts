@@ -211,23 +211,7 @@ export class CosaintAiService {
       let rankedMetrics: HealthMetric[] = [];
       let allHealthMetrics: HealthMetric[] = []; // Keep all metrics for date range calculation
       if (metricData && Object.keys(metricData).length > 0) {
-        const rawMetrics = this.convertToHealthMetrics(metricData);
-        // Deep clone all metrics to break any circular references
-        allHealthMetrics = rawMetrics.map((metric) => {
-          try {
-            return JSON.parse(JSON.stringify(metric));
-          } catch {
-            // If JSON stringify fails, return a safe minimal version
-            return {
-              type: metric.type,
-              value: metric.value,
-              timestamp: metric.timestamp,
-              unit: metric.unit,
-              startDate: metric.startDate,
-              endDate: metric.endDate,
-            };
-          }
-        });
+        allHealthMetrics = this.convertToHealthMetrics(metricData);
         const userContext = this.buildUserContext(
           userProfile,
           conversationHistory,
@@ -246,23 +230,7 @@ export class CosaintAiService {
         const ranked = rankMetricsByRelevance(allHealthMetrics, userContext);
 
         // Get top 100 most relevant metrics (reduce context size while keeping quality)
-        // Deep clone to break any circular references
-        rankedMetrics = getTopRelevant(ranked, 100).map((rm) => {
-          try {
-            // Deep clone the metric to break circular references
-            return JSON.parse(JSON.stringify(rm.metric));
-          } catch {
-            // If JSON stringify fails, return a safe minimal version
-            return {
-              type: rm.metric.type,
-              value: rm.metric.value,
-              timestamp: rm.metric.timestamp,
-              unit: rm.metric.unit,
-              startDate: rm.metric.startDate,
-              endDate: rm.metric.endDate,
-            };
-          }
-        });
+        rankedMetrics = getTopRelevant(ranked, 100).map((rm) => rm.metric);
 
         console.log("[CosaintAiService] Ranked metrics:", {
           topMetricsCount: rankedMetrics.length,
@@ -488,23 +456,6 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
     rankedMetrics?: HealthMetric[],
     allMetrics?: HealthMetric[], // All metrics for accurate date range calculation
   ): string {
-    // CRITICAL: Aggressively sanitize metrics at method entry to prevent ANY circular references
-    // This is a last line of defense - metrics should already be clean, but we ensure it here
-    const deepCloneMetric = (metric: HealthMetric): HealthMetric => {
-      return {
-        type: metric.type,
-        value: metric.value,
-        timestamp: metric.timestamp,
-        unit: metric.unit,
-        startDate: metric.startDate,
-        endDate: metric.endDate,
-        // Explicitly exclude metadata to avoid circular refs
-      };
-    };
-
-    const safeRankedMetrics = rankedMetrics?.map(deepCloneMetric);
-    const safeAllMetrics = allMetrics?.map(deepCloneMetric);
-
     // Build the system message including character background, health data, file context, and user profile
     let systemMessage = this.buildSystemMessage(healthData, userProfile);
     systemMessage +=
@@ -512,16 +463,12 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
 
     // Add relevance-ranked metrics if available AND we don't have coordinator results
     // (If we have coordinator results, the agents already analyzed the data properly with tiered aggregation)
-    if (
-      safeRankedMetrics &&
-      safeRankedMetrics.length > 0 &&
-      !coordinatorResult
-    ) {
+    if (rankedMetrics && rankedMetrics.length > 0 && !coordinatorResult) {
       systemMessage +=
         "\n\n📊 Top Relevant Health Metrics (AI-scored by importance):";
 
       // Group ranked metrics by type for relevance display
-      const rankedMetricsByType = safeRankedMetrics.reduce(
+      const rankedMetricsByType = rankedMetrics.reduce(
         (acc, metric) => {
           if (!acc[metric.type]) acc[metric.type] = [];
           acc[metric.type].push(metric);
@@ -531,7 +478,7 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
       );
 
       // Use all metrics (not just ranked) for accurate date range calculation
-      const allMetricsByType = (safeAllMetrics || safeRankedMetrics).reduce(
+      const allMetricsByType = (allMetrics || rankedMetrics).reduce(
         (acc, metric) => {
           if (!acc[metric.type]) acc[metric.type] = [];
           acc[metric.type].push(metric);
@@ -595,7 +542,9 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
           }
 
           // Calculate date range from ALL metrics of this type (not just ranked)
-          const sortedAll = allTypeMetrics.sort(
+          // CRITICAL: Create shallow copy before sorting to prevent mutation
+          // Mutating the array causes circular references in production webpack builds
+          const sortedAll = [...allTypeMetrics].sort(
             (a, b) => a.timestamp - b.timestamp,
           );
           const earliest = sortedAll[0];

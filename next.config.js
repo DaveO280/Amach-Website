@@ -91,10 +91,35 @@ const nextConfig = {
       ),
     );
 
-    // Replace createTestClient with ES module stub
+    // Replace createTestClient with ES module stub - multiple patterns to catch all variations
     config.plugins.push(
       new webpack.NormalModuleReplacementPlugin(
         /^.*viem.*[\/\\]clients[\/\\]createTestClient\.js$/,
+        require.resolve("./webpack-viem-createTestClient-stub.mjs"),
+      ),
+    );
+
+    // Catch relative imports from within viem package (e.g., ./clients/createTestClient.js)
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /[\/\\]clients[\/\\]createTestClient\.js$/,
+        require.resolve("./webpack-viem-createTestClient-stub.mjs"),
+      ),
+    );
+
+    // CRITICAL: Catch the exact path that Vercel production build uses
+    // The error shows: ./clients/createTestClient.js from viem/_cjs/index.js
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /node_modules[\/\\]viem[\/\\]_cjs[\/\\]clients[\/\\]createTestClient\.js$/,
+        require.resolve("./webpack-viem-createTestClient-stub.mjs"),
+      ),
+    );
+
+    // Also match for _esm variant
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /node_modules[\/\\]viem[\/\\]_esm[\/\\]clients[\/\\]createTestClient\.js$/,
         require.resolve("./webpack-viem-createTestClient-stub.mjs"),
       ),
     );
@@ -109,16 +134,42 @@ const nextConfig = {
 
     // Ignore test directories and files in node_modules
     config.resolve = config.resolve || {};
+
+    // Get the absolute path to the stub file
+    const testStubPath = require.resolve("./webpack-viem-test-stub.js");
+    const createTestClientStubPath =
+      require.resolve("./webpack-viem-createTestClient-stub.mjs");
+
+    // Get absolute path to viem's createTestClient to use as alias key
+    const viemPath = path.dirname(require.resolve("viem/package.json"));
+
     config.resolve.alias = {
       ...config.resolve.alias,
       "health-app": path.resolve(__dirname, "./my-health-app/src"),
-      // Redirect viem test imports to stub (catch both absolute and relative paths)
-      "viem/_esm/actions/test/dropTransaction":
-        require.resolve("./webpack-viem-test-stub.js"),
-      "viem/_esm/clients/decorators/test":
-        require.resolve("./webpack-viem-test-stub.js"),
-      "viem/_esm/clients/createTestClient":
-        require.resolve("./webpack-viem-test-stub.js"),
+      // Use absolute paths for viem test files - this catches relative imports
+      [path.join(viemPath, "_cjs", "clients", "createTestClient.js")]:
+        createTestClientStubPath,
+      [path.join(viemPath, "_esm", "clients", "createTestClient.js")]:
+        createTestClientStubPath,
+      [path.join(viemPath, "_cjs", "clients", "decorators", "test.js")]:
+        testStubPath,
+      [path.join(viemPath, "_esm", "clients", "decorators", "test.js")]:
+        testStubPath,
+      [path.join(viemPath, "_cjs", "actions", "test", "dropTransaction.js")]:
+        testStubPath,
+      [path.join(viemPath, "_esm", "actions", "test", "dropTransaction.js")]:
+        testStubPath,
+      // Also keep the module-style aliases
+      "viem/_esm/actions/test/dropTransaction": testStubPath,
+      "viem/_esm/clients/decorators/test": testStubPath,
+      "viem/_esm/clients/createTestClient": testStubPath,
+      "viem/_esm/clients/createTestClient.js": testStubPath,
+      "viem/_cjs/actions/test/dropTransaction": testStubPath,
+      "viem/_cjs/clients/decorators/test": testStubPath,
+      "viem/_cjs/clients/createTestClient": testStubPath,
+      "viem/_cjs/clients/createTestClient.js": testStubPath,
+      "viem/clients/createTestClient": testStubPath,
+      "viem/clients/createTestClient.js": testStubPath,
     };
 
     // Mark viem test files as external (prevents bundling)

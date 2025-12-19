@@ -7,7 +7,7 @@ interface GuidePopupProps {
   isVisible: boolean;
   onClose: () => void;
   onDontShowAgain: () => void;
-  targetElementRef: React.RefObject<HTMLElement>;
+  targetElementRef: React.RefObject<HTMLElement | null>;
   title: string;
   content: React.ReactNode;
   position?: "top" | "bottom" | "left" | "right";
@@ -29,6 +29,17 @@ export const GuidePopup: React.FC<GuidePopupProps> = ({
     offset: 0,
     rotation: 0,
   });
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile on mount and resize
+  useEffect(() => {
+    const checkMobile = (): void => {
+      setIsMobile(window.innerWidth < 640);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   useEffect(() => {
     if (!isVisible || !targetElementRef.current || !popupRef.current) {
@@ -42,7 +53,54 @@ export const GuidePopup: React.FC<GuidePopupProps> = ({
       const popupRect = popupRef.current.getBoundingClientRect();
       const scrollY = window.scrollY;
       const scrollX = window.scrollX;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
 
+      // On mobile, center the popup and use bottom arrow pointing to target
+      if (viewportWidth < 640) {
+        // Center popup horizontally with responsive margins
+        const mobileMargin = 16;
+        const popupWidth = Math.min(
+          popupRect.width,
+          viewportWidth - mobileMargin * 2,
+        );
+        const left = (viewportWidth - popupWidth) / 2;
+
+        // Position popup in center of viewport vertically, or below target if space
+        const gap = 12;
+        let top: number;
+        let arrowEdge: "top" | "bottom" = "top";
+
+        const spaceBelow = viewportHeight - targetRect.bottom;
+        const spaceAbove = targetRect.top;
+
+        if (spaceBelow >= popupRect.height + gap) {
+          // Position below target
+          top = targetRect.bottom + scrollY + gap;
+          arrowEdge = "top";
+        } else if (spaceAbove >= popupRect.height + gap) {
+          // Position above target
+          top = targetRect.top + scrollY - popupRect.height - gap;
+          arrowEdge = "bottom";
+        } else {
+          // Center in viewport
+          top = scrollY + (viewportHeight - popupRect.height) / 2;
+          arrowEdge = "top";
+        }
+
+        // Calculate arrow position to point at target
+        const targetCenterX = targetRect.left + targetRect.width / 2;
+        const arrowOffset = Math.max(
+          20,
+          Math.min(popupWidth - 20, targetCenterX - left),
+        );
+
+        setPopupPosition({ top, left });
+        setArrowPosition({ edge: arrowEdge, offset: arrowOffset, rotation: 0 });
+        return;
+      }
+
+      // Desktop positioning logic
       // Calculate target center in viewport coordinates
       const targetCenterX = targetRect.left + targetRect.width / 2;
       const targetCenterY = targetRect.top + targetRect.height / 2;
@@ -55,9 +113,9 @@ export const GuidePopup: React.FC<GuidePopupProps> = ({
       let arrowOffset = 0;
 
       // Try to position popup to the right of target first
-      const spaceOnRight = window.innerWidth - targetRect.right;
+      const spaceOnRight = viewportWidth - targetRect.right;
       const spaceOnLeft = targetRect.left;
-      const spaceOnBottom = window.innerHeight - targetRect.bottom;
+      const spaceOnBottom = viewportHeight - targetRect.bottom;
 
       // Determine best position based on available space
       // Arrow edge is the edge of the popup that faces the target
@@ -108,8 +166,6 @@ export const GuidePopup: React.FC<GuidePopupProps> = ({
       }
 
       // Keep popup within viewport
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
       const padding = 10;
 
       if (left < padding) left = padding;
@@ -164,13 +220,18 @@ export const GuidePopup: React.FC<GuidePopupProps> = ({
     <>
       {/* Backdrop - very subtle so users can see target elements */}
       <div className="fixed inset-0 z-[200] bg-black/10" onClick={onClose} />
-      {/* Popup */}
+      {/* Popup - responsive sizing for mobile */}
       <div
         ref={popupRef}
-        className="fixed z-[201] bg-gradient-to-br from-emerald-50 to-amber-50 rounded-lg shadow-xl border-2 border-emerald-300 max-w-sm p-5 animate-in fade-in zoom-in-95 duration-200"
+        className={`fixed z-[201] bg-gradient-to-br from-emerald-50 to-amber-50 rounded-lg shadow-xl border-2 border-emerald-300 animate-in fade-in zoom-in-95 duration-200 ${
+          isMobile
+            ? "mx-4 p-4 w-[calc(100vw-32px)] max-w-[calc(100vw-32px)]"
+            : "max-w-sm p-5"
+        }`}
         style={{
           top: `${popupPosition.top}px`,
-          left: `${popupPosition.left}px`,
+          left: isMobile ? undefined : `${popupPosition.left}px`,
+          ...(isMobile && { left: "16px", right: "16px" }),
         }}
       >
         {/* Arrow pointing FROM popup TO target element */}
@@ -259,16 +320,16 @@ export const GuidePopup: React.FC<GuidePopupProps> = ({
           </svg>
         )}
 
-        <div className="flex items-start justify-between mb-3">
-          <h3 className="font-semibold text-emerald-900 text-base leading-tight">
+        <div className="flex items-start justify-between mb-3 gap-2">
+          <h3 className="font-semibold text-emerald-900 text-base sm:text-base leading-tight flex-1 min-w-0">
             {title}
           </h3>
           <button
             onClick={onClose}
-            className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 rounded-full p-1 transition-colors ml-2 flex-shrink-0"
+            className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 rounded-full p-1.5 sm:p-1 transition-colors flex-shrink-0 touch-manipulation"
             aria-label="Close"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5 sm:h-4 sm:w-4" />
           </button>
         </div>
 
@@ -276,8 +337,9 @@ export const GuidePopup: React.FC<GuidePopupProps> = ({
           {content}
         </div>
 
-        <div className="flex items-center justify-between gap-3 pt-3 border-t border-emerald-200">
-          <label className="flex items-center gap-2 text-xs text-emerald-700 cursor-pointer hover:text-emerald-900 transition-colors">
+        {/* Mobile: stack vertically, Desktop: horizontal layout */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 border-t border-emerald-200">
+          <label className="flex items-center gap-2 text-xs text-emerald-700 cursor-pointer hover:text-emerald-900 transition-colors order-2 sm:order-1">
             <input
               type="checkbox"
               onChange={(e) => {
@@ -285,13 +347,13 @@ export const GuidePopup: React.FC<GuidePopupProps> = ({
                   onDontShowAgain();
                 }
               }}
-              className="rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500 focus:ring-2"
+              className="rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500 focus:ring-2 h-4 w-4"
             />
             <span>Don&apos;t show me this again</span>
           </label>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-md transition-all duration-300 hover:scale-105 shadow-sm"
+            className="w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-sm sm:text-xs font-medium rounded-md transition-all duration-300 sm:hover:scale-105 shadow-sm touch-manipulation order-1 sm:order-2"
           >
             Got it
           </button>

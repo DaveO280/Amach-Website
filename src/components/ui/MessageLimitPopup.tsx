@@ -32,12 +32,12 @@ export const MessageLimitPopup: React.FC<MessageLimitPopupProps> = ({
     <>
       {/* Backdrop */}
       <div className="fixed inset-0 z-[200] bg-black/20" onClick={onClose} />
-      {/* Popup */}
-      <div className="fixed inset-0 z-[201] flex items-center justify-center p-4">
-        <div className="bg-gradient-to-br from-emerald-50 to-amber-50 rounded-lg shadow-xl border-2 border-emerald-300 max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex-1">
-              <h3 className="font-semibold text-emerald-900 text-lg mb-2">
+      {/* Popup - responsive padding and sizing */}
+      <div className="fixed inset-0 z-[201] flex items-center justify-center p-3 sm:p-4">
+        <div className="bg-gradient-to-br from-emerald-50 to-amber-50 rounded-lg shadow-xl border-2 border-emerald-300 max-w-md w-full p-4 sm:p-6 animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-emerald-900 text-base sm:text-lg mb-2">
                 {isBlocked
                   ? "📊 Message Limit Reached"
                   : "⚠️ Message Limit Warning"}
@@ -56,7 +56,7 @@ export const MessageLimitPopup: React.FC<MessageLimitPopupProps> = ({
                   whitelist access.
                 </p>
               )}
-              <p className="text-sm text-emerald-700 mb-4">
+              <p className="text-sm text-emerald-700 mb-3 sm:mb-4">
                 {isWarning
                   ? "Connect your wallet for unlimited access to AI insights and personalized health recommendations."
                   : "Connect your wallet to continue chatting, or request whitelist access by emailing us."}
@@ -64,18 +64,18 @@ export const MessageLimitPopup: React.FC<MessageLimitPopupProps> = ({
             </div>
             <button
               onClick={onClose}
-              className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 rounded-full p-1 transition-colors ml-2 flex-shrink-0"
+              className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 rounded-full p-1.5 sm:p-1 transition-colors flex-shrink-0 touch-manipulation"
               aria-label="Close"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2.5 sm:gap-3">
             {isBlocked && (
               <a
                 href={mailtoLink}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-md transition-all duration-300 hover:scale-105 shadow-sm"
+                className="flex items-center justify-center gap-2 px-4 py-3 sm:py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-sm font-medium rounded-md transition-all duration-300 sm:hover:scale-105 shadow-sm touch-manipulation"
               >
                 <Mail className="h-4 w-4" />
                 Email for Whitelist Consideration
@@ -83,10 +83,10 @@ export const MessageLimitPopup: React.FC<MessageLimitPopupProps> = ({
             )}
             <button
               onClick={onClose}
-              className={`px-4 py-2.5 text-sm font-medium rounded-md transition-all duration-300 shadow-sm ${
+              className={`px-4 py-3 sm:py-2.5 text-sm font-medium rounded-md transition-all duration-300 shadow-sm touch-manipulation ${
                 isBlocked
-                  ? "bg-white border-2 border-emerald-600 text-emerald-700 hover:bg-emerald-50"
-                  : "bg-emerald-600 hover:bg-emerald-700 text-white hover:scale-105"
+                  ? "bg-white border-2 border-emerald-600 text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100"
+                  : "bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white sm:hover:scale-105"
               }`}
             >
               {isBlocked ? "Got it" : "Continue"}

@@ -19,7 +19,12 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(node:*)",
-      "Bash(pnpm type-check:components:*)"
+      "Bash(pnpm type-check:components:*)",
+      "Bash(delete_dead_code.bat)",
+      "Bash(cmd /c delete_dead_code.bat:*)",
+      "Bash(rm:*)",
+      "Bash(npm run build:*)",
+      "Bash(git restore:*)"
     ],
     "deny": [],
     "ask": []

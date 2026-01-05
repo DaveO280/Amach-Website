@@ -1,9 +1,20 @@
 /**
  * Secure Health Data Encryption System
  *
+ * @deprecated FOR HEALTH PROFILE DATA ONLY - DO NOT USE FOR NEW FEATURES
+ *
+ * This encryption system is specifically designed for on-chain health profiles.
+ * It uses wallet address-based key derivation to avoid signature popups during onboarding.
+ *
+ * FOR NEW FEATURES: Use walletEncryption.ts instead (timeline, chat, storage, etc.)
+ *
+ * WHY TWO SYSTEMS EXIST:
+ * - Profile data: Small, on-chain, needs UX-friendly access (no constant signatures)
+ * - Timeline/Chat: Large, off-chain (Storj), benefits from signature-based security
+ *
  * Architecture:
  * 1. Store encrypted data ON-CHAIN (not hashes)
- * 2. Use AES-256-GCM with proper key derivation
+ * 2. Use AES-256-GCM with proper key derivation (no signatures required)
  * 3. Support ZK-proofs without revealing raw data
  * 4. Enable protocol access while maintaining privacy
  */

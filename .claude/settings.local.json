@@ -24,7 +24,9 @@
       "Bash(cmd /c delete_dead_code.bat:*)",
       "Bash(rm:*)",
       "Bash(npm run build:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(tree:*)",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Documentation management configuration - defines which docs are living (kept) vs stale (purged)",
+
+  "livingDocs": {
+    "description": "Essential documentation that gets updated with protocol changes",
+    "files": [
+      "README.md",
+      "CONTRIBUTING.md",
+      "CODE_OF_CONDUCT.md",
+      "DEPLOYMENT.md"
+    ]
+  },
+
+  "staleDocs": {
+    "description": "Documentation patterns that indicate temporary/debug files (auto-purged)",
+    "patterns": [
+      "CHECK_*.md",
+      "DEBUG_*.md",
+      "DIAGNOSE_*.md",
+      "FIX_*.md",
+      "TEST_*.md",
+      "TROUBLESHOOT_*.md",
+      "MIGRATION_*.md",
+      "V[0-9]*_*.md",
+      "*_SUMMARY*.md",
+      "*_ANALYSIS*.md",
+      "*_INVESTIGATION*.md",
+      "*_DEBUGGING*.md",
+      "*_NOTES*.md",
+      "*_TEMP*.md",
+      "*_OLD*.md",
+      "*_BACKUP*.md",
+      "*_WIP*.md"
+    ]
+  },
+
+  "exceptions": {
+    "description": "Files matching stale patterns but should be kept",
+    "files": []
+  },
+
+  "autoClean": {
+    "description": "Automatic cleanup behavior",
+    "enabled": true,
+    "confirmBeforeDelete": true,
+    "maxAgeInDays": null,
+    "comment": "Set maxAgeInDays to auto-delete stale docs older than X days (null = delete all matching patterns)"
+  }
+}

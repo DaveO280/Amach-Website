@@ -107,6 +107,10 @@ pnpm build            # Build for production
 pnpm type-check       # Run TypeScript checks
 pnpm lint             # Run ESLint
 pnpm test             # Run tests (when available)
+
+# Documentation management
+pnpm validate-docs    # Check for stale documentation
+pnpm clean-docs       # Auto-remove stale docs (DEBUG_*, FIX_*, etc.)
 ```
 
 ### Environment Variables
@@ -179,6 +183,22 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 3. Follow TypeScript and React best practices
 4. Write clear commit messages
 5. Test your changes thoroughly
+
+### Living Documentation Philosophy
+
+This project uses a **living documentation** approach:
+
+- **4 core docs only**: README, CONTRIBUTING, CODE_OF_CONDUCT, DEPLOYMENT
+- **Automatic cleanup**: Pre-commit hooks validate documentation health
+- **Stale docs purged**: Debug/migration/analysis files auto-deleted
+- **Inline docs preferred**: JSDoc in code beats separate markdown files
+
+To maintain documentation health:
+
+- Run `pnpm validate-docs` to check for stale docs
+- Run `pnpm clean-docs` to auto-remove stale docs
+- Pre-commit hooks automatically prevent stale docs from being committed
+- Configure patterns in [.docs-config.json](.docs-config.json)
 
 ## Code of Conduct
 

@@ -33,7 +33,7 @@ export interface HealthEventData {
 }
 
 export interface HealthEvent {
-  eventId?: number; // Event ID from blockchain (array index)
+  eventId?: string | number; // Event ID - stable identifier (address-index) or legacy numeric index
   timestamp: number;
   searchTag: string;
   encryptedData: string;
@@ -234,8 +234,12 @@ export async function readHealthTimeline(
 
       for (let i = 0; i < events.length; i++) {
         const event = events[i];
+        // Use blockchain index as stable ID (more reliable than array index which changes on delete)
+        // This ensures deletions are properly tracked even after re-indexing
+        const stableEventId = `${userAddress.toLowerCase()}-${i}`;
+
         const baseEvent: HealthEvent = {
-          eventId: i,
+          eventId: stableEventId,
           timestamp: Number(event.timestamp),
           searchTag: event.searchTag,
           encryptedData: event.encryptedData,

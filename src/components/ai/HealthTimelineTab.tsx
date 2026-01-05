@@ -65,6 +65,7 @@ export default function HealthTimelineTab(): JSX.Element {
   >("");
   const [customEventType, setCustomEventType] = useState<string>("");
   const [eventFields, setEventFields] = useState<EventFieldValue[]>([]);
+  const [eventDate, setEventDate] = useState<string>(""); // Date for new events (YYYY-MM-DD)
   const [message, setMessage] = useState<string>("");
   const [progress, setProgress] = useState(0);
 
@@ -321,9 +322,21 @@ export default function HealthTimelineTab(): JSX.Element {
           ? customEventType.trim().toUpperCase().replace(/\s+/g, "_")
           : selectedEventType;
 
+      // Parse custom event date if provided
+      let customTimestamp: number | undefined;
+      if (eventDate) {
+        const [year, month, day] = eventDate.split("-").map(Number);
+        const dateObj = new Date(year, month - 1, day); // month is 0-indexed
+        customTimestamp = dateObj.getTime(); // milliseconds
+      }
+
       // Use addHealthEventV2 with Storj
       const result = await addHealthEventV2(
-        { eventType: eventTypeString, data },
+        {
+          eventType: eventTypeString,
+          data,
+          timestamp: customTimestamp, // Pass custom timestamp if provided
+        },
         address,
         walletService.signMessage,
         getWalletClient,
@@ -338,6 +351,7 @@ export default function HealthTimelineTab(): JSX.Element {
         setSelectedEventType("");
         setCustomEventType("");
         setEventFields([{ key: "", value: "" }]);
+        setEventDate(""); // Clear event date
         setShowAddForm(false);
         setProgress(0);
 
@@ -823,12 +837,18 @@ export default function HealthTimelineTab(): JSX.Element {
           const { getActiveChain } = await import("@/lib/networkConfig");
           const { createPublicClient, http } = await import("viem");
 
+          // Extract blockchain index from eventId (format: "address-index")
+          const blockchainIndex =
+            typeof event.eventId === "string"
+              ? parseInt(event.eventId.split("-").pop() || "0", 10)
+              : event.eventId || 0;
+
           // Call deactivateHealthEvent on the contract
           const txHash = await walletClient.writeContract({
             address: SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
             abi: secureHealthProfileAbi,
             functionName: "deactivateHealthEvent",
-            args: [BigInt(event.eventId)],
+            args: [BigInt(blockchainIndex)],
             chain: getActiveChain(),
             account: walletClient.account,
           });
@@ -1056,6 +1076,22 @@ export default function HealthTimelineTab(): JSX.Element {
                 </p>
               </div>
             )}
+
+            {/* Event Date Input */}
+            <div>
+              <Label htmlFor="eventDate">Event Date</Label>
+              <Input
+                id="eventDate"
+                type="date"
+                value={eventDate}
+                onChange={(e) => setEventDate(e.target.value)}
+                max={new Date().toISOString().split("T")[0]} // Prevent future dates
+                className="mt-1"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                When did this event occur? Leave empty to use current date/time.
+              </p>
+            </div>
 
             {/* Dynamic Fields */}
             <div>

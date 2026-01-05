@@ -1,8 +1,22 @@
 /**
- * StorjClient - S3-compatible client for Storj decentralized storage
+ * @module StorjClient
+ * @description S3-compatible client for Storj decentralized storage
  *
- * Handles encrypted health data uploads/downloads with integrity verification.
- * Uses AWS S3 SDK with Storj's S3-compatible gateway.
+ * ## Security Model
+ * - Each wallet gets deterministic bucket (address + encryption key hash)
+ * - All data encrypted client-side before upload (walletEncryption)
+ * - Bucket validation prevents cross-user access
+ * - Server credentials used for S3 operations (Storj requirement)
+ *
+ * ## Usage
+ * ```typescript
+ * const client = StorjClient.createClient();
+ * const ref = await client.uploadEncryptedData(address, data, encryptionKey, options);
+ * const result = await client.downloadEncryptedData(ref.uri, address, encryptionKey);
+ * ```
+ *
+ * @see walletEncryption.ts for encryption
+ * @see storjAccessControl.ts for bucket validation
  */
 
 import {

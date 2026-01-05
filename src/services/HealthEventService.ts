@@ -1,7 +1,21 @@
-// Health Event Service - Production service for managing health timeline events
-// ⚠️ MIGRATION IN PROGRESS: This service is being refactored to use Privy wallet service
-// TODO: Replace wagmi/SSO code with viem + Privy implementation
-// For now, functions are stubbed to prevent build errors
+/**
+ * @module HealthEventService
+ * @description Health timeline event management with encrypted Storj storage
+ *
+ * ## Architecture
+ * 1. Create event → Encrypt with walletEncryption → Upload to Storj
+ * 2. Store Storj URI + content hash on blockchain (permanent reference)
+ * 3. Retrieve: Read URI from blockchain → Fetch from Storj → Decrypt
+ *
+ * ## Key Functions
+ * - `addHealthEventV2()` - Create new timeline event with custom date
+ * - `readHealthTimeline()` - Load all events from blockchain + Storj
+ * - `updateHealthEvent()` - Update existing event (re-upload to Storj)
+ *
+ * @see walletEncryption.ts for encryption details
+ * @see StorjTimelineService.ts for storage implementation
+ * @see HealthTimelineTab.tsx for UI implementation
+ */
 
 import {
   SECURE_HEALTH_PROFILE_CONTRACT,

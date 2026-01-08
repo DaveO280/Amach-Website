@@ -39,8 +39,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       process.env.VENICE_MODEL_NAME ||
       "zai-org-glm-4.7";
 
-    // Enhanced logging for debugging
-    console.log("[Venice API Route] Environment check:", {
+    // Enhanced logging for debugging - using console.error to ensure visibility in production
+    console.error("[Venice API Route] Environment check:", {
       timestamp: new Date().toISOString(),
       elapsedMs: Date.now() - startTime,
       hasApiKey: Boolean(apiKey),
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    console.log("[Venice API Route] Sending request to Venice:", {
+    console.error("[Venice API Route] Sending request to Venice:", {
       timestamp: new Date().toISOString(),
       elapsedMs: Date.now() - startTime,
       endpoint: `${apiEndpoint}/chat/completions`,
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         signal: timeoutSignal,
       });
 
-      console.log("[Venice API Route] Venice API response received:", {
+      console.error("[Venice API Route] Venice API response received:", {
         timestamp: new Date().toISOString(),
         elapsedMs: Date.now() - startTime,
         fetchDuration: Date.now() - fetchStartTime,
@@ -156,7 +156,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       const data = await response.json();
-      console.log("[Venice API Route] Response processed:", {
+      console.error("[Venice API Route] Response processed - SUCCESS:", {
         timestamp: new Date().toISOString(),
         elapsedMs: Date.now() - startTime,
         hasChoices: Boolean(data?.choices),

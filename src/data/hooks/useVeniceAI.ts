@@ -30,7 +30,7 @@ async function fetchVeniceAI({
 }: VeniceAIRequest): Promise<VeniceAIResponse> {
   // Use environment variable or fallback to default
   const modelName =
-    process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.6";
+    process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.7";
   const response = await axios.post("/api/venice", {
     messages: [{ role: "user", content: prompt }],
     max_tokens: maxTokens,
@@ -46,7 +46,7 @@ async function fetchVeniceAI({
     process.env.NODE_ENV === "development" &&
     sanitizedContent !== rawContent
   ) {
-    // eslint-disable-next-line no-console
+     
     console.debug("[useVeniceAI] Sanitized response", {
       rawPreview: rawContent.slice(0, 200),
       sanitizedPreview: sanitizedContent.slice(0, 200),

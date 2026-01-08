@@ -23,7 +23,7 @@ const GoalsTab: React.FC = (): JSX.Element => {
       VeniceApiService.fromEnv
         ? VeniceApiService.fromEnv()
         : new VeniceApiService(
-            process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.6",
+            process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.7",
           ),
     [],
   );

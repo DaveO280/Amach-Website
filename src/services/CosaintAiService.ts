@@ -998,7 +998,7 @@ Keep responses conversational and natural. If you mention research, weave it int
   static createFromEnv(): CosaintAiService {
     // Create the Venice API service instance with the correct configuration
     const veniceApi = new VeniceApiService(
-      process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.6",
+      process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.7",
       process.env.NODE_ENV === "development",
     );
 

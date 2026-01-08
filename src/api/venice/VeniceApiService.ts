@@ -114,7 +114,7 @@ export class VeniceApiService {
   static fromEnv(): VeniceApiService {
     const debugMode = process.env.NODE_ENV === "development";
     const modelName =
-      process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.6";
+      process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.7";
     return new VeniceApiService(modelName, debugMode);
   }
 

@@ -959,13 +959,18 @@ Keep responses conversational and natural. If you mention research, weave it int
 
   /**
    * Format conversation history for the prompt
+   * Limits to last 6 messages (3 exchanges) to reduce token usage and prevent timeouts
    */
   private formatConversationHistory(
     history: Array<{ role: "user" | "assistant"; content: string }>,
   ): string {
     if (!history || history.length === 0) return "";
 
-    return history
+    // Only include last 6 messages (3 user-assistant exchanges) to keep prompts manageable
+    // This prevents timeouts on Vercel's 60-second limit while maintaining recent context
+    const recentHistory = history.slice(-6);
+
+    return recentHistory
       .map((msg) => {
         const role = msg.role === "user" ? "User" : "Cosaint";
         return `${role}: ${msg.content}`;

@@ -1,5 +1,6 @@
 "use client";
 
+import { HealthScoreCards } from "@/components/ai/HealthScoreCards";
 import HealthStatCards from "@/components/ai/HealthStatCards";
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { useWalletService } from "@/hooks/useWalletService";
@@ -13,6 +14,7 @@ import { ChevronDown, ChevronUp, X } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import CosaintChatUI from "./ai/CosaintChatUI";
 import GoalsTab from "./ai/GoalsTab";
+import HealthReport from "./ai/HealthReport";
 import HealthTimelineTab from "./ai/HealthTimelineTab";
 import ProfileInputModal from "./ai/ProfileInputModal";
 import { GuidePopup } from "./ui/GuidePopup";
@@ -513,8 +515,15 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                     </div>
 
                     {showStats && (
-                      <div className="mb-4">
+                      <div className="mb-4 space-y-4">
+                        {/* Health Scores */}
+                        {userProfile && <HealthScoreCards />}
+
+                        {/* Health Stats */}
                         <HealthStatCards />
+
+                        {/* Generate Health Analysis Button */}
+                        <HealthReport />
                       </div>
                     )}
                   </div>

@@ -959,23 +959,102 @@ Keep responses conversational and natural. If you mention research, weave it int
 
   /**
    * Format conversation history for the prompt
-   * Limits to last 6 messages (3 exchanges) to reduce token usage and prevent timeouts
+   * Uses rolling summary strategy: summarize older messages, keep recent 6 in full
+   * This maintains long-term context while preventing timeout issues
    */
   private formatConversationHistory(
     history: Array<{ role: "user" | "assistant"; content: string }>,
   ): string {
     if (!history || history.length === 0) return "";
 
-    // Only include last 6 messages (3 user-assistant exchanges) to keep prompts manageable
-    // This prevents timeouts on Vercel's 60-second limit while maintaining recent context
-    const recentHistory = history.slice(-6);
+    // If conversation is short, send everything
+    if (history.length <= 6) {
+      return history
+        .map((msg) => {
+          const role = msg.role === "user" ? "User" : "Cosaint";
+          return `${role}: ${msg.content}`;
+        })
+        .join("\n\n");
+    }
 
-    return recentHistory
+    // For longer conversations: summarize older messages, keep recent 6 in full
+    const olderMessages = history.slice(0, -6);
+    const recentMessages = history.slice(-6);
+
+    const summary = this.summarizeOlderMessages(olderMessages);
+    const recentFormatted = recentMessages
       .map((msg) => {
         const role = msg.role === "user" ? "User" : "Cosaint";
         return `${role}: ${msg.content}`;
       })
       .join("\n\n");
+
+    return `${summary}\n\n---\n\nRecent conversation:\n${recentFormatted}`;
+  }
+
+  /**
+   * Summarize older conversation messages into compact context
+   * Extracts key topics and user questions without full message content
+   */
+  private summarizeOlderMessages(
+    messages: Array<{ role: "user" | "assistant"; content: string }>,
+  ): string {
+    if (messages.length === 0) return "";
+
+    // Extract user questions (truncated for brevity)
+    const userQuestions = messages
+      .filter((msg) => msg.role === "user")
+      .map((msg) => msg.content.substring(0, 100).trim())
+      .filter((content) => content.length > 0);
+
+    // Identify health topics mentioned
+    const topicsSet = new Set<string>();
+    const topicKeywords: Record<string, string[]> = {
+      exercise: [
+        "exercise",
+        "workout",
+        "activity",
+        "steps",
+        "walking",
+        "running",
+      ],
+      sleep: ["sleep", "rest", "insomnia", "tired"],
+      diet: ["diet", "nutrition", "food", "eating", "calories"],
+      cardiovascular: [
+        "heart",
+        "cardiovascular",
+        "blood pressure",
+        "hrv",
+        "cardio",
+      ],
+      weight: ["weight", "bmi", "mass"],
+      stress: ["stress", "anxiety", "mental health"],
+      "lab results": ["lab", "blood test", "results", "cholesterol", "glucose"],
+    };
+
+    messages.forEach((msg) => {
+      const lowerContent = msg.content.toLowerCase();
+      Object.entries(topicKeywords).forEach(([topic, keywords]) => {
+        if (keywords.some((keyword) => lowerContent.includes(keyword))) {
+          topicsSet.add(topic);
+        }
+      });
+    });
+
+    const topics = Array.from(topicsSet);
+
+    // Build compact summary
+    let summary = "Previous conversation context:";
+
+    if (topics.length > 0) {
+      summary += `\n- Topics discussed: ${topics.join(", ")}`;
+    }
+
+    if (userQuestions.length > 0) {
+      summary += `\n- User asked about: ${userQuestions.slice(0, 3).join("; ")}${userQuestions.length > 3 ? "..." : ""}`;
+    }
+
+    return summary;
   }
 
   /**

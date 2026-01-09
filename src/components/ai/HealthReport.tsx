@@ -144,22 +144,26 @@ const HealthReport: React.FC = () => {
           >
             Generate Health Analysis
           </Button>
-          <div className="mt-4 p-4 bg-white rounded-lg border border-emerald-100">
+          <div className="mt-4 p-6 bg-gradient-to-br from-amber-50 via-white to-emerald-50 rounded-lg border border-amber-200/50 shadow-sm">
             {sectionQueries.map((query) => {
               const { section, data, isPending, error } = query;
               return (
-                <div key={section} className="mb-6">
-                  <p className="text-emerald-900 text-lg">
+                <div key={section} className="mb-6 last:mb-0">
+                  <p className="text-emerald-900 text-lg font-semibold mb-2">
                     {section.charAt(0).toUpperCase() + section.slice(1)}{" "}
                     Analysis
                   </p>
-                  {isPending && <p className="text-gray-500">Generating...</p>}
+                  {isPending && (
+                    <p className="text-amber-600/70">Generating...</p>
+                  )}
                   {error && (
                     <p className="text-red-500">Error generating analysis.</p>
                   )}
                   {data && (
                     <div className="mt-2">
-                      <p className="text-gray-700">{data.content}</p>
+                      <p className="text-amber-900/90 leading-relaxed">
+                        {data.content}
+                      </p>
                     </div>
                   )}
                 </div>

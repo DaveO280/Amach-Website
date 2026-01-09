@@ -26,7 +26,7 @@ const sanitizeAssistantResponse = (raw: string): string => {
 
 async function fetchVeniceAI({
   prompt,
-  maxTokens = 600, // Reduced from 2000 to stay within 60s Vercel timeout
+  maxTokens = 2000,
 }: VeniceAIRequest): Promise<VeniceAIResponse> {
   // Use environment variable or fallback to default
   const modelName =

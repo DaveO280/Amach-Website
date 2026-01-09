@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Use Node.js runtime for longer timeout (60s on hobby plan vs 30s for edge)
+// Use Node.js runtime for longer timeout
 export const runtime = "nodejs";
-export const maxDuration = 60; // Maximum allowed on Vercel hobby plan
+export const maxDuration = 300; // 5 minutes - adjust based on your Vercel plan limits
 
 const REQUEST_TIMEOUT_MS = Number(
   process.env.VENICE_REQUEST_TIMEOUT_MS ?? "120000",
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Forward the request to Venice API
     const requestBody = {
       messages: body.messages || [],
-      max_tokens: body.maxTokens || body.max_tokens || 800, // Reduced to stay within 60s timeout
+      max_tokens: body.maxTokens || body.max_tokens || 4000, // Increased default token limit
       temperature: body.temperature || 0.7,
       model: modelName,
       stream: false,

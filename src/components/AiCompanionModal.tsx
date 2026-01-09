@@ -1,6 +1,5 @@
 "use client";
 
-import { HealthScoreCards } from "@/components/ai/HealthScoreCards";
 import HealthStatCards from "@/components/ai/HealthStatCards";
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { useWalletService } from "@/hooks/useWalletService";
@@ -516,13 +515,10 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
 
                     {showStats && (
                       <div className="mb-4 space-y-4">
-                        {/* Health Scores */}
-                        {userProfile && <HealthScoreCards />}
-
                         {/* Health Stats */}
                         <HealthStatCards />
 
-                        {/* Generate Health Analysis Button */}
+                        {/* Health Scores and Generate Health Analysis Button */}
                         <HealthReport />
                       </div>
                     )}

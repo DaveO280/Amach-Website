@@ -16,7 +16,7 @@ import {
   getDailyHealthScores,
   clearDailyHealthScores,
 } from "@/utils/dailyHealthScoreCalculator";
-import { extractDatePart } from "@/utils/dataDeduplicator";
+import { extractDatePart, deduplicateData } from "@/utils/dataDeduplicator";
 import { processSleepData } from "@/utils/sleepDataProcessor";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useWalletConnection } from "../hooks/useWalletConnection";
@@ -365,26 +365,48 @@ export default function HealthDataContextWrapper({
     };
 
     // Process each metric using IndexedDB data
+    // IMPORTANT: Deduplicate data BEFORE processing to ensure accurate values
     const steps = processCumulativeData(
-      metricData["HKQuantityTypeIdentifierStepCount"] || [],
+      deduplicateData(
+        metricData["HKQuantityTypeIdentifierStepCount"] || [],
+        "HKQuantityTypeIdentifierStepCount",
+      ),
     );
     const exercise = processCumulativeData(
-      metricData["HKQuantityTypeIdentifierAppleExerciseTime"] || [],
+      deduplicateData(
+        metricData["HKQuantityTypeIdentifierAppleExerciseTime"] || [],
+        "HKQuantityTypeIdentifierAppleExerciseTime",
+      ),
     );
     const heartRate = processHeartRateData(
-      metricData["HKQuantityTypeIdentifierHeartRate"] || [],
+      deduplicateData(
+        metricData["HKQuantityTypeIdentifierHeartRate"] || [],
+        "HKQuantityTypeIdentifierHeartRate",
+      ),
     );
     const hrv = processHeartRateData(
-      metricData["HKQuantityTypeIdentifierHeartRateVariabilitySDNN"] || [],
+      deduplicateData(
+        metricData["HKQuantityTypeIdentifierHeartRateVariabilitySDNN"] || [],
+        "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+      ),
     );
     const restingHR = processHeartRateData(
-      metricData["HKQuantityTypeIdentifierRestingHeartRate"] || [],
+      deduplicateData(
+        metricData["HKQuantityTypeIdentifierRestingHeartRate"] || [],
+        "HKQuantityTypeIdentifierRestingHeartRate",
+      ),
     );
     const respiratory = processRespiratoryData(
-      metricData["HKQuantityTypeIdentifierRespiratoryRate"] || [],
+      deduplicateData(
+        metricData["HKQuantityTypeIdentifierRespiratoryRate"] || [],
+        "HKQuantityTypeIdentifierRespiratoryRate",
+      ),
     );
     const activeEnergy = processCumulativeData(
-      metricData["HKQuantityTypeIdentifierActiveEnergyBurned"] || [],
+      deduplicateData(
+        metricData["HKQuantityTypeIdentifierActiveEnergyBurned"] || [],
+        "HKQuantityTypeIdentifierActiveEnergyBurned",
+      ),
     );
 
     // Calculate metrics from processed data

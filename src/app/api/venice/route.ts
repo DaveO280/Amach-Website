@@ -64,7 +64,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Forward the request to Venice API
     const requestBody = {
       messages: body.messages || [],
-      max_tokens: body.maxTokens || body.max_tokens || 4000, // Increased default token limit
+      max_tokens: body.maxTokens || body.max_tokens || 800, // Reduced to stay within 60s timeout
       temperature: body.temperature || 0.7,
       model: modelName,
       stream: false,

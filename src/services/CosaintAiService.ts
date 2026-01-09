@@ -517,9 +517,6 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
 
           // Get all metrics of this type for accurate date range
           const allTypeMetrics = allMetricsByType[type] || rankedTypeMetrics;
-          console.log(
-            `[CosaintAI] allTypeMetrics for ${type}: ${allTypeMetrics.length} items`,
-          );
 
           // Check if this is a cumulative metric (steps, active energy, exercise time)
           const isCumulative = isCumulativeMetric(type);

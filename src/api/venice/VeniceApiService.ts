@@ -18,7 +18,7 @@ const DEFAULT_ENDPOINT_PATH = "/api/venice";
 // Only use localhost if explicitly set via env var
 const DEFAULT_BASE_URL = "";
 const DEFAULT_CLIENT_TIMEOUT_MS = Number(
-  process.env.NEXT_PUBLIC_VENICE_CLIENT_TIMEOUT_MS ?? "130000",
+  process.env.NEXT_PUBLIC_VENICE_CLIENT_TIMEOUT_MS ?? "230000", // 3m50s - below server 4min timeout
 );
 
 export class VeniceApiService {

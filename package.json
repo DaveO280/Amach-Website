@@ -63,7 +63,7 @@
     "framer-motion": "^12.23.25",
     "jszip": "^3.10.1",
     "lucide-react": "^0.344.0",
-    "next": "^16.0.7",
+    "next": "^16.1.1",
     "node-fetch": "^3.3.2",
     "papaparse": "^5.5.3",
     "pdf-lib": "^1.17.1",
@@ -116,7 +116,7 @@
     "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",
     "eslint": "^9.39.1",
-    "eslint-config-next": "16.0.7",
+    "eslint-config-next": "16.1.1",
     "eslint-config-prettier": "^9.1.2",
     "eslint-define-config": "^2.1.0",
     "eslint-plugin-prettier": "^5.5.4",
@@ -152,12 +152,17 @@
       "cookie": "^0.7.2",
       "brace-expansion": "^2.0.1",
       "tmp": "^0.2.3",
-      "next": "^16.0.7"
+      "next": "^16.1.1",
+      "qs": ">=6.14.1",
+      "preact": ">=10.28.2"
     },
     "peerDependencyRules": {
       "ignoreMissing": [
         "request"
       ]
+    },
+    "_comment": {
+      "request": "The 'request' package has SSRF vulnerability (CVE-2023-28155) but is only used in dev/test via @nomiclabs/hardhat-waffle. It's deprecated and has no patched version. This is acceptable risk as it never runs in production."
     },
     "patchedDependencies": {
       "viem": "patches/viem.patch"

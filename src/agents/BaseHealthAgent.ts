@@ -1,5 +1,6 @@
 import type { VeniceApiService } from "@/api/venice/VeniceApiService";
 import { logger } from "@/utils/logger";
+import { logPromptToFile } from "@/utils/promptLogger";
 
 import type {
   AgentDataQualityAssessment,
@@ -115,14 +116,27 @@ OUTPUT STRUCTURE:
     );
 
     try {
+      const systemPrompt = this.getEnhancedSystemPrompt();
       console.log(`🔍 [${this.name}] Calling Venice API`, {
         promptLength: prompt.length,
-        systemPromptLength: this.getEnhancedSystemPrompt().length,
-        totalPromptLength:
-          this.getEnhancedSystemPrompt().length + prompt.length,
+        systemPromptLength: systemPrompt.length,
+        totalPromptLength: systemPrompt.length + prompt.length,
         dataQuality: dataQuality.score,
         hasData: Boolean(relevantData),
       });
+
+      // Log full prompts for debugging
+      console.log(`📝 [${this.name}] FULL SYSTEM PROMPT:\n${systemPrompt}`);
+      console.log(`📝 [${this.name}] FULL USER PROMPT:\n${prompt}`);
+
+      // Save prompts to downloadable file for easier reading (development only)
+      if (process.env.NODE_ENV === "development") {
+        try {
+          await logPromptToFile(this.name, systemPrompt, prompt);
+        } catch (error) {
+          console.warn(`[${this.name}] Could not log prompt to file:`, error);
+        }
+      }
 
       const response = await this.veniceService.generateCompletion({
         systemPrompt: this.getEnhancedSystemPrompt(),

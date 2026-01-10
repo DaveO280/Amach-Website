@@ -17,11 +17,28 @@ const sanitizeAssistantResponse = (raw: string): string => {
     return raw;
   }
 
-  let withoutThink = raw.replace(/<think>[\s\S]*?<\/think>/gi, "");
-  withoutThink = withoutThink.replace(/<think>[\s\S]*$/gi, "");
-  withoutThink = withoutThink.replace(/<\/?think>/gi, "");
+  // Remove <think> tags
+  let sanitized = raw.replace(/<think>[\s\S]*?<\/think>/gi, "");
+  sanitized = sanitized.replace(/<think>[\s\S]*$/gi, "");
+  sanitized = sanitized.replace(/<\/?think>/gi, "");
 
-  return withoutThink.trimStart();
+  // Remove LaTeX math formatting (inline: $...$ and display: $$...$$)
+  sanitized = sanitized.replace(/\$\$[\s\S]*?\$\$/g, (match) => {
+    // For display math, extract content and return plain text
+    return match
+      .slice(2, -2)
+      .replace(/\\text\{([^}]+)\}/g, "$1")
+      .replace(/[\\{}^_]/g, "");
+  });
+  sanitized = sanitized.replace(/\$([^$]+)\$/g, (_match, content) => {
+    // For inline math, extract content and return plain text
+    return content
+      .replace(/\\text\{([^}]+)\}/g, "$1")
+      .replace(/[\\{}^_]/g, "")
+      .trim();
+  });
+
+  return sanitized.trimStart();
 };
 
 async function fetchVeniceAI({

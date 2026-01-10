@@ -6,6 +6,8 @@ import { WalletSummaryWidget } from "../../components/WalletSummaryWidget";
 import { WalletSetupWizard } from "../../components/WalletSetupWizard";
 import HealthDashboardModal from "../../components/HealthDashboardModal";
 import AiCompanionModal from "../../components/AiCompanionModal";
+import { StorageManagementSection } from "../../components/storage/StorageManagementSection";
+import { QuarterlyAggregateGenerator } from "../../components/health/QuarterlyAggregateGenerator";
 import React, { useCallback, useEffect, useState } from "react";
 import { useWalletService } from "../../hooks/useWalletService";
 import { useHealthDataContext } from "../../components/HealthDataContextWrapper";
@@ -37,6 +39,7 @@ export default function WalletPage(): JSX.Element {
     refreshProfile,
     disconnect,
     getHealthProfile,
+    signMessage,
   } = useWalletService();
   const {
     isDashboardOpen,
@@ -370,6 +373,22 @@ export default function WalletPage(): JSX.Element {
               <div className="p-4 border border-gray-200 rounded-lg bg-white">
                 <HealthProfileManager />
               </div>
+
+              {/* Storage Management */}
+              {address && signMessage && (
+                <StorageManagementSection
+                  userAddress={address}
+                  signMessage={signMessage}
+                />
+              )}
+
+              {/* Quarterly Aggregate Generator */}
+              {address && signMessage && (
+                <QuarterlyAggregateGenerator
+                  userAddress={address}
+                  signMessage={signMessage}
+                />
+              )}
             </div>
           </div>
         )}

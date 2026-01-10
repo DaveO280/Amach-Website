@@ -29,6 +29,10 @@ import {
 } from "@/utils/analysisDiagnostics";
 import { isCumulativeMetric } from "@/utils/dataDeduplicator";
 import { extractDatePart } from "@/utils/dataDeduplicator";
+import {
+  buildTemporalContext,
+  formatTemporalContext,
+} from "@/utils/temporalContext";
 
 /**
  * Efficiently get min/max timestamps from a large array without sorting
@@ -478,6 +482,23 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
   ): string {
     // Build the system message including character background, health data, file context, and user profile
     let systemMessage = this.buildSystemMessage(healthData, userProfile);
+
+    // Add temporal context (current date, data timespan, seasonal context)
+    const timestampRange = allMetrics ? getTimestampRange(allMetrics) : null;
+    const dataStartDate = timestampRange
+      ? new Date(timestampRange.min)
+      : undefined;
+    const dataEndDate = timestampRange
+      ? new Date(timestampRange.max)
+      : undefined;
+
+    const temporalContext = buildTemporalContext(
+      healthData,
+      dataStartDate,
+      dataEndDate,
+    );
+    systemMessage += "\n\n" + formatTemporalContext(temporalContext);
+
     systemMessage +=
       "\n\nFollow-up instruction: Always address the user's latest question or concern first, use the conversation history to avoid repeating full introductions or already acknowledged profile details, and consolidate duplicate findings instead of listing the same metric multiple times.";
 

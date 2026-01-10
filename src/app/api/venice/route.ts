@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300; // 5 minutes - adjust based on your Vercel plan limits
 
 const REQUEST_TIMEOUT_MS = Number(
-  process.env.VENICE_REQUEST_TIMEOUT_MS ?? "120000",
+  process.env.VENICE_REQUEST_TIMEOUT_MS ?? "240000", // 4 minutes - matches maxDuration minus buffer
 );
 
 export async function OPTIONS(): Promise<NextResponse> {

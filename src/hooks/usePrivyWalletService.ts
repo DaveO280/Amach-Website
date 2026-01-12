@@ -39,7 +39,7 @@ export interface HealthProfileData {
 }
 import type { WalletContextVault } from "@/types/contextVault";
 import { trackingService } from "@/utils/trackingService";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 
 // Static import - PrivyProvider handles SSR automatically
 import { usePrivy, useSignMessage, useWallets } from "@privy-io/react-auth";
@@ -242,26 +242,60 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
   );
 
   // Get wallet-derived encryption key
+  // Use ref to maintain stable reference during signature popup (prevents React error #300)
+  const signMessageRef = useRef(signMessage);
+  signMessageRef.current = signMessage;
+  const addressRef = useRef(address);
+  addressRef.current = address;
+
+  // Track if signature request is in progress to prevent concurrent requests
+  const signatureRequestInProgressRef = useRef(false);
+
   const getWalletDerivedEncryptionKey = useCallback(async (): Promise<
     import("@/utils/walletEncryption").WalletEncryptionKey
   > => {
-    if (!address) {
+    const currentAddress = addressRef.current;
+    if (!currentAddress) {
       throw new Error("No wallet connected");
     }
 
-    console.log(
-      "🔑 getWalletDerivedEncryptionKey: Starting key derivation for",
-      address,
-    );
+    // Prevent concurrent signature requests that could cause React hook order issues
+    if (signatureRequestInProgressRef.current) {
+      console.log("⏳ Signature request already in progress, waiting...");
+      // Wait for existing request to complete (max 30 seconds)
+      const maxWait = 30000;
+      const startTime = Date.now();
+      while (
+        signatureRequestInProgressRef.current &&
+        Date.now() - startTime < maxWait
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      if (signatureRequestInProgressRef.current) {
+        throw new Error("Signature request timeout - please try again");
+      }
+      // Retry after waiting
+      return getWalletDerivedEncryptionKey();
+    }
+
+    signatureRequestInProgressRef.current = true;
 
     try {
+      console.log(
+        "🔑 getWalletDerivedEncryptionKey: Starting key derivation for",
+        currentAddress,
+      );
+
+      // Defer signature request to next tick to avoid React render conflicts
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
       const { getCachedWalletEncryptionKey } =
         await import("@/utils/walletEncryption");
 
       console.log("🔑 Attempting signature-based key derivation with Privy...");
       const encryptionKey = await getCachedWalletEncryptionKey(
-        address,
-        signMessage,
+        currentAddress,
+        signMessageRef.current,
       );
 
       console.log("✅ Successfully derived key using Privy wallet signature");
@@ -270,8 +304,10 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
       const errorMessage = error instanceof Error ? error.message : "";
       console.error("❌ Failed to derive encryption key:", errorMessage);
       throw error;
+    } finally {
+      signatureRequestInProgressRef.current = false;
     }
-  }, [address, signMessage]);
+  }, []); // Empty deps - use refs to access current values
 
   // Connect method
   const connect = useCallback(async (): Promise<{
@@ -875,116 +911,157 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
 
   // Get decrypted profile
   // Optionally accepts a profile parameter to avoid React state timing issues
+  // Use ref to track if decryption is in progress to prevent recursive calls
+  const decryptionInProgressRef = useRef(false);
+
   const getDecryptedProfile = useCallback(
     async (
       profileOverride?: EncryptedHealthProfile,
     ): Promise<HealthProfileData | null> => {
       if (!address) return null;
 
-      // Use provided profile or fall back to state (helps with production timing issues)
-      const profileToUse = profileOverride || healthProfile;
-
-      // Priority 1: Decrypt from blockchain-loaded healthProfile state (includes weight from localStorage)
-      // This is the preferred method since it has the latest data including weight
-      console.log("🔍 getDecryptedProfile check:", {
-        hasHealthProfile: !!healthProfile,
-        hasProfileOverride: !!profileOverride,
-        hasNonce: !!profileToUse?.nonce,
-        nonceValue: profileToUse?.nonce,
-        address,
-      });
-
-      if (profileToUse && profileToUse.nonce) {
-        try {
-          console.log(
-            "🔓 Decrypting profile from blockchain-loaded state (includes weight)...",
-          );
-          const { decryptHealthData } =
-            await import("@/utils/secureHealthEncryption");
-
-          const onChainProfile = {
-            encryptedBirthDate: profileToUse.encryptedBirthDate,
-            encryptedSex: profileToUse.encryptedSex,
-            encryptedHeight: profileToUse.encryptedHeight,
-            encryptedWeight: profileToUse.encryptedWeight || "",
-            encryptedEmail: profileToUse.encryptedEmail,
-            dataHash: profileToUse.dataHash,
-            timestamp: profileToUse.timestamp,
-            version: profileToUse.version,
-            nonce: profileToUse.nonce,
-          };
-
-          const decryptedData = await decryptHealthData(
-            onChainProfile,
-            address,
-            undefined,
-          );
-
-          if (decryptedData) {
-            return {
-              birthDate: decryptedData.birthDate,
-              sex: decryptedData.sex,
-              height: decryptedData.height,
-              weight: decryptedData.weight,
-              email: decryptedData.email,
-              isActive: profileToUse.isActive,
-              version: profileToUse.version,
-              timestamp: profileToUse.timestamp,
-            };
-          }
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : "Unknown error";
-          console.error(
-            "❌ Failed to decrypt from blockchain state:",
-            errorMessage,
-            error,
-          );
-          // Fall through to localStorage fallback
-        }
-      } else {
-        // Profile loaded but missing nonce - try to reload from blockchain
-        if (profileToUse && !profileToUse.nonce) {
-          console.warn(
-            "⚠️ Profile loaded but nonce is missing. Attempting to reload from blockchain...",
-          );
-          try {
-            await loadHealthProfileFromBlockchain();
-            // Wait a bit for state to update, then retry
-            await new Promise((resolve) => setTimeout(resolve, 200));
-            // Retry decryption - the state should be updated now
-            return getDecryptedProfile();
-          } catch (reloadError) {
-            console.error("❌ Failed to reload profile:", reloadError);
-          }
-        } else if (!healthProfile) {
-          console.warn(
-            "⚠️ No health profile loaded. Attempting to load from blockchain...",
-          );
-          try {
-            await loadHealthProfileFromBlockchain();
-            // Wait a bit for state to update, then retry
-            await new Promise((resolve) => setTimeout(resolve, 200));
-            // Retry decryption - the state should be updated now
-            return getDecryptedProfile();
-          } catch (loadError) {
-            console.error("❌ Failed to load profile:", loadError);
-          }
-        }
-      }
-
-      // Priority 2: Fall back to old localStorage format (for backward compatibility)
-      const storageKey = `health_profile_${address}`;
-      const stored = localStorage.getItem(storageKey);
-
-      if (!stored) {
-        console.log("🔍 No encrypted profile found in localStorage");
+      // Prevent recursive calls that could cause React hook order issues
+      if (decryptionInProgressRef.current) {
+        console.warn(
+          "⏳ Decryption already in progress, skipping recursive call",
+        );
         return null;
       }
 
+      decryptionInProgressRef.current = true;
+
       try {
+        // Use provided profile or fall back to state (helps with production timing issues)
+        const profileToUse = profileOverride || healthProfile;
+
+        // Priority 1: Decrypt from blockchain-loaded healthProfile state (includes weight from localStorage)
+        // This is the preferred method since it has the latest data including weight
+        console.log("🔍 getDecryptedProfile check:", {
+          hasHealthProfile: !!healthProfile,
+          hasProfileOverride: !!profileOverride,
+          hasNonce: !!profileToUse?.nonce,
+          nonceValue: profileToUse?.nonce,
+          address,
+        });
+
+        if (profileToUse && profileToUse.nonce) {
+          try {
+            console.log(
+              "🔓 Decrypting profile from blockchain-loaded state (includes weight)...",
+            );
+            const { decryptHealthData } =
+              await import("@/utils/secureHealthEncryption");
+
+            const onChainProfile = {
+              encryptedBirthDate: profileToUse.encryptedBirthDate,
+              encryptedSex: profileToUse.encryptedSex,
+              encryptedHeight: profileToUse.encryptedHeight,
+              encryptedWeight: profileToUse.encryptedWeight || "",
+              encryptedEmail: profileToUse.encryptedEmail,
+              dataHash: profileToUse.dataHash,
+              timestamp: profileToUse.timestamp,
+              version: profileToUse.version,
+              nonce: profileToUse.nonce,
+            };
+
+            const decryptedData = await decryptHealthData(
+              onChainProfile,
+              address,
+              undefined,
+            );
+
+            if (decryptedData) {
+              return {
+                birthDate: decryptedData.birthDate,
+                sex: decryptedData.sex,
+                height: decryptedData.height,
+                weight: decryptedData.weight,
+                email: decryptedData.email,
+                isActive: profileToUse.isActive,
+                version: profileToUse.version,
+                timestamp: profileToUse.timestamp,
+              };
+            }
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : "Unknown error";
+            console.error(
+              "❌ Failed to decrypt from blockchain state:",
+              errorMessage,
+              error,
+            );
+            // Fall through to localStorage fallback
+          }
+        } else {
+          // Profile loaded but missing nonce - try to reload from blockchain
+          if (profileToUse && !profileToUse.nonce) {
+            console.warn(
+              "⚠️ Profile loaded but nonce is missing. Attempting to reload from blockchain...",
+            );
+            try {
+              await loadHealthProfileFromBlockchain();
+              // Wait a bit for state to update, then retry
+              await new Promise((resolve) => setTimeout(resolve, 200));
+              // Retry decryption - the state should be updated now
+              // Pass the newly loaded profile to avoid recursive state issues
+              decryptionInProgressRef.current = false;
+              const reloadResult = await loadHealthProfileFromBlockchain();
+              if (reloadResult.success && reloadResult.profile) {
+                return getDecryptedProfile(reloadResult.profile);
+              }
+              return null;
+            } catch (reloadError) {
+              console.error("❌ Failed to reload profile:", reloadError);
+            }
+          } else if (!healthProfile) {
+            console.warn(
+              "⚠️ No health profile loaded. Attempting to load from blockchain...",
+            );
+            try {
+              await loadHealthProfileFromBlockchain();
+              // Wait a bit for state to update, then retry
+              await new Promise((resolve) => setTimeout(resolve, 200));
+              // Retry decryption - the state should be updated now
+              // Pass the newly loaded profile to avoid recursive state issues
+              decryptionInProgressRef.current = false;
+              const loadResult = await loadHealthProfileFromBlockchain();
+              if (loadResult.success && loadResult.profile) {
+                return getDecryptedProfile(loadResult.profile);
+              }
+              return null;
+            } catch (loadError) {
+              console.error("❌ Failed to load profile:", loadError);
+            }
+          }
+        }
+
+        // Priority 2: Fall back to old localStorage format (for backward compatibility)
+        const storageKey = `health_profile_${address}`;
+        const stored = localStorage.getItem(storageKey);
+
+        if (!stored) {
+          console.log("🔍 No encrypted profile found in localStorage");
+          return null;
+        }
+
         const encryptedProfile = JSON.parse(stored);
-        const walletEncryptionKey = await getWalletDerivedEncryptionKey();
+
+        // Defer signature request to avoid React hook order issues when popup appears
+        // This ensures the signature popup doesn't appear during a render cycle
+        const walletEncryptionKey = await new Promise<
+          import("@/utils/walletEncryption").WalletEncryptionKey
+        >((resolve, reject) => {
+          // Defer to next event loop tick to avoid render conflicts
+          setTimeout(async () => {
+            try {
+              const key = await getWalletDerivedEncryptionKey();
+              resolve(key);
+            } catch (error) {
+              reject(error);
+            }
+          }, 0);
+        });
+
         const { decryptWithWalletKey } =
           await import("@/utils/walletEncryption");
 
@@ -1067,9 +1144,11 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
       } catch (error) {
         console.error("❌ Failed to decrypt stored profile:", error);
         return null;
+      } finally {
+        decryptionInProgressRef.current = false;
       }
     },
-    [address, getWalletDerivedEncryptionKey, healthProfile],
+    [address, healthProfile, getWalletDerivedEncryptionKey],
   );
 
   // Verify profile

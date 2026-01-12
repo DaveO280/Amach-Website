@@ -6,7 +6,7 @@ import { getStorjSyncService } from "@/storage";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 10; // 10 seconds - Vercel Hobby plan limit
 
 /**
  * API endpoint for Storj operations

@@ -3,6 +3,7 @@
 import axios, {
   AxiosError,
   AxiosInstance,
+  AxiosRequestConfig,
   AxiosResponse,
   InternalAxiosRequestConfig,
 } from "axios";
@@ -17,9 +18,12 @@ const DEFAULT_ENDPOINT_PATH = "/api/venice";
 // Use empty string for relative URLs in browser (like useVeniceAI does)
 // Only use localhost if explicitly set via env var
 const DEFAULT_BASE_URL = "";
-const DEFAULT_CLIENT_TIMEOUT_MS = Number(
-  process.env.NEXT_PUBLIC_VENICE_CLIENT_TIMEOUT_MS ?? "230000", // 3m50s - below server 4min timeout
-);
+// Remove artificial timeout limits - let Venice API handle its own timeouts
+// Only use timeout if explicitly set in environment variable
+const DEFAULT_CLIENT_TIMEOUT_MS = process.env
+  .NEXT_PUBLIC_VENICE_CLIENT_TIMEOUT_MS
+  ? Number(process.env.NEXT_PUBLIC_VENICE_CLIENT_TIMEOUT_MS)
+  : undefined; // No timeout by default
 
 export class VeniceApiService {
   private client: AxiosInstance;
@@ -54,14 +58,20 @@ export class VeniceApiService {
     }
 
     // For client-side usage, point to our API route
-    this.client = axios.create({
+    // Only set timeout if explicitly configured
+    const axiosConfig: AxiosRequestConfig = {
       baseURL,
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      timeout: DEFAULT_CLIENT_TIMEOUT_MS,
-    });
+    };
+
+    if (DEFAULT_CLIENT_TIMEOUT_MS !== undefined) {
+      axiosConfig.timeout = DEFAULT_CLIENT_TIMEOUT_MS;
+    }
+
+    this.client = axios.create(axiosConfig);
 
     // Request logging interceptor
     this.client.interceptors.request.use(
@@ -185,24 +195,13 @@ export class VeniceApiService {
         );
       }
 
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          reject(
-            new Error(
-              `Request timed out after ${this.client.defaults.timeout}ms`,
-            ),
-          );
-        }, this.client.defaults.timeout);
-      });
-
+      // Remove artificial timeout - let the request complete naturally
+      // Only use timeout if explicitly configured in axios client
       const responsePromise = this.retryOperation(() =>
         this.client.post(this.endpointPath, requestBody),
       );
 
-      const response = (await Promise.race<AxiosResponse>([
-        responsePromise,
-        timeoutPromise,
-      ])) as AxiosResponse;
+      const response = await responsePromise;
 
       // Enhanced debugging for response structure
       console.log(`[VeniceApiService] Response received [${requestId}]`, {
@@ -275,21 +274,36 @@ export class VeniceApiService {
 
       console.log(`[VeniceApiService] Native fetch request to: ${url}`);
 
-      // Use native fetch with long timeout for mobile
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes
-
-      const response = await fetch(url, {
+      // Use native fetch without artificial timeout limits
+      // Only add timeout if explicitly configured
+      const fetchOptions: RequestInit = {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
         body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
+      };
 
-      clearTimeout(timeoutId);
+      // Only add abort signal if timeout is configured
+      let timeoutId: NodeJS.Timeout | undefined;
+      if (DEFAULT_CLIENT_TIMEOUT_MS !== undefined) {
+        const controller = new AbortController();
+        timeoutId = setTimeout(
+          () => controller.abort(),
+          DEFAULT_CLIENT_TIMEOUT_MS,
+        );
+        fetchOptions.signal = controller.signal;
+      }
+
+      let response: Response;
+      try {
+        response = await fetch(url, fetchOptions);
+        if (timeoutId) clearTimeout(timeoutId);
+      } catch (error) {
+        if (timeoutId) clearTimeout(timeoutId);
+        throw error;
+      }
 
       console.log(`[VeniceApiService] Native fetch response received`, {
         status: response.status,

@@ -4,9 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const maxDuration = 300; // 5 minutes - allows for longer AI processing
 
-const REQUEST_TIMEOUT_MS = Number(
-  process.env.VENICE_REQUEST_TIMEOUT_MS ?? "290000", // 290 seconds - 5 minutes minus buffer
-);
+// Remove artificial timeout limits - let Venice API handle its own timeouts
+// Only use timeout if explicitly set in environment variable
+const REQUEST_TIMEOUT_MS = process.env.VENICE_REQUEST_TIMEOUT_MS
+  ? Number(process.env.VENICE_REQUEST_TIMEOUT_MS)
+  : undefined; // No timeout by default
 
 export async function OPTIONS(): Promise<NextResponse> {
   return NextResponse.json(
@@ -113,11 +115,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       // Forward the request to Venice API
-      const timeoutSignal = AbortSignal.timeout(
-        Math.max(1000, Math.min(REQUEST_TIMEOUT_MS, 240000)),
-      );
-
-      const response = await fetch(`${apiEndpoint}/chat/completions`, {
+      // Only add timeout signal if explicitly configured
+      const fetchOptions: RequestInit = {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -125,9 +124,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           Accept: "application/json",
         },
         body: JSON.stringify(requestBody),
-        // Add timeout for edge runtime
-        signal: timeoutSignal,
-      });
+      };
+
+      // Only add timeout if explicitly set
+      if (REQUEST_TIMEOUT_MS) {
+        fetchOptions.signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+      }
+
+      const response = await fetch(
+        `${apiEndpoint}/chat/completions`,
+        fetchOptions,
+      );
 
       console.error("[Venice API Route] Venice API response received:", {
         timestamp: new Date().toISOString(),
@@ -209,9 +216,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         return NextResponse.json(
           {
             error: "Venice API request timed out",
-            details: `No response within ${Math.round(
-              Math.min(REQUEST_TIMEOUT_MS, 240000) / 1000,
-            )} seconds.`,
+            details: REQUEST_TIMEOUT_MS
+              ? `No response within ${Math.round(REQUEST_TIMEOUT_MS / 1000)} seconds.`
+              : "Request was aborted.",
           },
           { status: 504 },
         );

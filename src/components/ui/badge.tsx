@@ -24,12 +24,18 @@ const badgeVariants = cva(
 );
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends
+    React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof badgeVariants> {}
 
 function Badge({ className, variant, ...props }: BadgeProps): JSX.Element {
+  // Filter out non-DOM props to prevent React warnings
+  const { isActive: _isActive, ...domProps } = props as BadgeProps & {
+    isActive?: boolean;
+  };
+
   return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+    <div className={cn(badgeVariants({ variant }), className)} {...domProps} />
   );
 }
 

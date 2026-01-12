@@ -26,7 +26,12 @@
       "Bash(npm run build:*)",
       "Bash(git restore:*)",
       "Bash(tree:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(dir:*)",
+      "Bash(curl:*)",
+      "Bash(powershell -Command \"Start-Process npm -ArgumentList ''run'',''dev'' -WindowStyle Hidden\")",
+      "Bash(npx tsx:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []

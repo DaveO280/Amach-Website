@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useWalletService } from "@/hooks/useWalletService";
+import { usePrivy } from "@privy-io/react-auth";
 import {
   AlertCircle,
   CheckCircle,
@@ -65,6 +66,58 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     hasClaimed: boolean;
     amount: string;
   } | null>(null);
+  // Pending transaction state
+  const [pendingTx, setPendingTx] = useState<{
+    txHash: string;
+    stepId: string;
+  } | null>(null);
+  // Track if a signature request is in progress to prevent modal from closing
+  const signatureInProgressRef = React.useRef(false);
+
+  // Monitor for signature requests by checking if Privy modal is open
+  // Also track when signature was last active to prevent immediate closing
+  const lastSignatureTimeRef = React.useRef<number>(0);
+
+  React.useEffect(() => {
+    const checkPrivyModal = (): void => {
+      // Check if Privy modal is open by looking for its DOM elements
+      const privyModal =
+        document.querySelector("[data-privy-modal]") ||
+        document.querySelector('[class*="privy-modal"]') ||
+        document.querySelector('[id*="privy"]') ||
+        document.querySelector('[class*="Privy"]');
+
+      // Also check for Privy overlay/backdrop
+      const privyOverlay =
+        document.querySelector('[class*="privy-overlay"]') ||
+        document.querySelector('[class*="PrivyOverlay"]');
+
+      const isPrivyOpen =
+        (privyModal && privyModal.getAttribute("aria-hidden") !== "true") ||
+        (privyOverlay && privyOverlay.getAttribute("aria-hidden") !== "true");
+
+      if (isPrivyOpen) {
+        signatureInProgressRef.current = true;
+        lastSignatureTimeRef.current = Date.now();
+      } else {
+        // Only clear if enough time has passed since last signature activity
+        // This prevents the modal from closing immediately after signature popup closes
+        const timeSinceLastSignature =
+          Date.now() - lastSignatureTimeRef.current;
+        if (timeSinceLastSignature > 2000) {
+          // 2 second cooldown
+          signatureInProgressRef.current = false;
+        }
+      }
+    };
+
+    // Check periodically while modal is open
+    const interval = isOpen ? setInterval(checkPrivyModal, 200) : null;
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isOpen]);
 
   // Email and profile data
   const [email, setEmail] = useState("");
@@ -90,6 +143,20 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
   // Get address - Privy service has getAddress() method
   const address = walletService.getAddress();
 
+  // Get Privy user to access email for auto-population
+  const { user: privyUser } = usePrivy();
+
+  // Auto-populate email from Privy user when available
+  React.useEffect(() => {
+    const privyEmail = privyUser?.email?.address;
+    if (privyEmail && !email) {
+      console.log("📧 Auto-populating email from Privy user:", privyEmail);
+      setEmail(privyEmail);
+      // Also set in profile data
+      setProfileData((prev) => ({ ...prev, email: privyEmail }));
+    }
+  }, [privyUser?.email?.address, email]);
+
   // Get methods that may not exist in both services
   const verifyProfileZKsync =
     "verifyProfileZKsync" in walletService
@@ -97,7 +164,6 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       : async (
           email: string,
         ): Promise<{ success: boolean; txHash?: string; error?: string }> => {
-           
           void email; // Suppress unused parameter warning
           return {
             success: false,
@@ -200,22 +266,19 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     }
   }, [isOpen]);
 
-  // Check if profile already exists and skip to verification step
-  // Also check allocation eligibility (only once on mount)
-  // IMPORTANT: Only run this check ONCE when the modal opens with a connected wallet
+  // Check if profile already exists and skip to appropriate step
+  // This runs when the modal opens to detect what's already been completed
   useEffect(() => {
     let isMounted = true;
 
     const checkExistingProfile = async (): Promise<void> => {
-      // Only run ONCE when modal is open AND we have a connection
-      // Don't run during wallet creation flow (when currentStepIndex is 0 or 1)
-      // Don't run if we've already checked
+      // Only run when modal is open AND we have a connection
+      // Don't run if we've already checked (to prevent infinite loops)
       if (
         !isConnected ||
         !address ||
         !isMounted ||
         !isOpen ||
-        currentStepIndex <= 1 ||
         hasCheckedProfileRef.current
       ) {
         return;
@@ -224,14 +287,18 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       // Mark that we've checked (before async operations to prevent race conditions)
       hasCheckedProfileRef.current = true;
 
+      console.log("🔍 Checking for existing profile and completed steps...");
+
       try {
+        // Check if profile exists on blockchain
         const result = await loadProfileFromBlockchain();
-        if (result.success && isMounted) {
+
+        if (result.success && result.profile && isMounted) {
           console.log(
-            "✅ Profile already exists - checking verification status",
+            "✅ Profile already exists on blockchain - marking steps as complete",
           );
 
-          // Mark profile-related steps as complete
+          // Mark all steps up to profile creation as complete
           updateStepStatus("email-verification", "complete");
           updateStepStatus("create-wallet", "complete");
           updateStepStatus("deployer-funding", "complete");
@@ -258,12 +325,18 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                   "✅ Tokens already claimed - marking step as complete",
                 );
                 updateStepStatus("claim-tokens", "complete");
+                // Jump to final step (all complete)
+                const finalStepIndex = steps.length - 1;
+                if (isMounted) {
+                  setCurrentStepIndex(finalStepIndex);
+                }
+                return;
               }
               // Jump to claim tokens step
               const claimStepIndex = steps.findIndex(
                 (s) => s.id === "claim-tokens",
               );
-              if (claimStepIndex >= 0) {
+              if (claimStepIndex >= 0 && isMounted) {
                 setCurrentStepIndex(claimStepIndex);
               }
               return;
@@ -272,18 +345,46 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
           // Not verified yet, go to verification step
           console.log(
-            "ℹ️ Profile exists but not verified - go to verification",
+            "ℹ️ Profile exists but not verified - going to verification step",
           );
           updateStepStatus("verify-profile", "active");
           const verifyStepIndex = steps.findIndex(
             (s) => s.id === "verify-profile",
           );
-          if (verifyStepIndex >= 0) {
+          if (verifyStepIndex >= 0 && isMounted) {
             setCurrentStepIndex(verifyStepIndex);
+          }
+        } else {
+          // No profile found - check what steps might still be complete
+          console.log("ℹ️ No profile found - checking wallet status");
+
+          // If wallet is connected, at least wallet creation is done
+          if (isConnected && address) {
+            updateStepStatus("email-verification", "complete");
+            updateStepStatus("create-wallet", "complete");
+
+            // Check if wallet has balance (funding might be done)
+            const balanceResult = await walletService.getBalance();
+            if (balanceResult.success && balanceResult.balance) {
+              const balance = parseFloat(balanceResult.balance);
+              if (balance > 0) {
+                console.log("✅ Wallet has balance - funding step complete");
+                updateStepStatus("deployer-funding", "complete");
+                // Move to profile creation step
+                const profileStepIndex = steps.findIndex(
+                  (s) => s.id === "create-profile",
+                );
+                if (profileStepIndex >= 0 && isMounted) {
+                  setCurrentStepIndex(profileStepIndex);
+                }
+              }
+            }
           }
         }
       } catch (error) {
-        console.log("ℹ️ No existing profile found - starting fresh");
+        console.log("ℹ️ Error checking existing profile:", error);
+        // Don't mark as checked if there was an error, so it can retry
+        hasCheckedProfileRef.current = false;
       }
 
       // Check allocation eligibility once more for good measure
@@ -292,13 +393,16 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       }
     };
 
-    void checkExistingProfile();
+    // Run check when modal opens
+    if (isOpen && isConnected && address) {
+      void checkExistingProfile();
+    }
 
     return (): void => {
       isMounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]); // Only run when modal opens - removed isConnected and address from dependencies
+  }, [isOpen, isConnected, address]); // Run when modal opens or connection changes
 
   // Smart session detection - skip wallet creation if already connected
   useEffect(() => {
@@ -782,6 +886,46 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     }
   }, [walletAddress, address, moveToNextStep, updateStepStatus]);
 
+  // Helper function to poll for transaction confirmation
+  const waitForTransactionConfirmation = useCallback(
+    async (txHash: string, maxAttempts = 30): Promise<boolean> => {
+      try {
+        const { createPublicClient, http } = await import("viem");
+        const { getActiveChain } = await import("@/lib/networkConfig");
+
+        const publicClient = createPublicClient({
+          chain: getActiveChain(),
+          transport: http(),
+        });
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          try {
+            const receipt = await publicClient.getTransactionReceipt({
+              hash: txHash as `0x${string}`,
+            });
+
+            if (receipt && receipt.status === "success") {
+              console.log("✅ Transaction confirmed:", txHash);
+              return true;
+            }
+          } catch (error) {
+            // Transaction not yet confirmed, continue polling
+            if (attempt < maxAttempts - 1) {
+              await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds
+            }
+          }
+        }
+
+        console.warn("⚠️ Transaction confirmation timeout:", txHash);
+        return false;
+      } catch (error) {
+        console.error("❌ Error checking transaction:", error);
+        return false;
+      }
+    },
+    [],
+  );
+
   // Step 4: Create Profile
   const handleCreateProfile = async (): Promise<void> => {
     try {
@@ -819,74 +963,129 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       };
 
       const result = await updateHealthProfile(healthData);
-      if (!result.success) {
+      if (!result.success || !result.txHash) {
         throw new Error(result.error || "Failed to create profile");
       }
 
-      console.log("✅ Profile created! Transaction:", result.txHash);
-      console.log("⏳ Waiting for blockchain confirmation (5 seconds)...");
+      console.log("✅ Profile transaction submitted:", result.txHash);
 
+      // Set pending state - this will show the notification and keep modal open
+      setPendingTx({ txHash: result.txHash, stepId: "create-profile" });
+      updateStepStatus("create-profile", "loading");
+
+      // Poll for transaction confirmation
+      const confirmed = await waitForTransactionConfirmation(result.txHash);
+
+      if (!confirmed) {
+        throw new Error(
+          "Transaction submitted but confirmation timed out. Please check the transaction status manually.",
+        );
+      }
+
+      console.log("✅ Profile transaction confirmed - reloading profile...");
+
+      // Reload profile from blockchain to update UI
+      const loadResult = await loadProfileFromBlockchain();
+      if (loadResult.success) {
+        console.log("✅ Profile reloaded - UI should update now");
+      } else {
+        console.warn("⚠️ Profile reload failed:", loadResult.error);
+      }
+
+      // Clear pending state
+      setPendingTx(null);
       updateStepStatus("create-profile", "complete");
 
-      // Wait for blockchain transaction to be confirmed (5 seconds)
-      // This ensures the profile exists on-chain before verification
-      setTimeout(async () => {
-        console.log(
-          "✅ Blockchain confirmation complete - reloading profile...",
-        );
-
-        // Reload profile from blockchain to update UI
-        const loadResult = await loadProfileFromBlockchain();
-        if (loadResult.success) {
-          console.log("✅ Profile reloaded - UI should update now");
-        } else {
-          console.warn("⚠️ Profile reload failed:", loadResult.error);
-        }
-
-        // Check if user is already verified before auto-calling verification
-        const allocationResponse = await fetch(
-          `/api/verification/allocation-info?wallet=${address}`,
-        );
-        if (allocationResponse.ok) {
-          const allocationData = await allocationResponse.json();
-          if (
-            allocationData.userAllocation &&
-            allocationData.userAllocation.isVerified
-          ) {
-            console.log(
-              "✅ User already verified - skipping auto-verification",
-            );
-            updateStepStatus("verify-profile", "complete");
-            // Check if tokens were already claimed
-            if (allocationData.userAllocation.hasClaimed) {
-              console.log(
-                "✅ Tokens already claimed - marking step as complete",
-              );
-              updateStepStatus("claim-tokens", "complete");
-            }
-            // Jump to claim tokens
-            const claimStepIndex = steps.findIndex(
-              (s) => s.id === "claim-tokens",
-            );
-            if (claimStepIndex >= 0) {
-              setCurrentStepIndex(claimStepIndex);
-            }
-            return;
+      // Check if user is already verified before auto-calling verification
+      const allocationResponse = await fetch(
+        `/api/verification/allocation-info?wallet=${address}`,
+      );
+      if (allocationResponse.ok) {
+        const allocationData = await allocationResponse.json();
+        if (
+          allocationData.userAllocation &&
+          allocationData.userAllocation.isVerified
+        ) {
+          console.log("✅ User already verified - skipping auto-verification");
+          updateStepStatus("verify-profile", "complete");
+          // Check if tokens were already claimed
+          if (allocationData.userAllocation.hasClaimed) {
+            console.log("✅ Tokens already claimed - marking step as complete");
+            updateStepStatus("claim-tokens", "complete");
           }
+          // Jump to claim tokens
+          const claimStepIndex = steps.findIndex(
+            (s) => s.id === "claim-tokens",
+          );
+          if (claimStepIndex >= 0) {
+            setCurrentStepIndex(claimStepIndex);
+          }
+          return;
         }
+      }
 
-        // Not verified yet, proceed to verification step
+      // Not verified yet, proceed to verification step
+      // Don't auto-call handleVerifyProfile - let user click the button
+      setTimeout(() => {
         moveToNextStep();
-        void handleVerifyProfile();
-      }, 5000); // Increased from 1000ms to 5000ms
+        // Don't auto-call handleVerifyProfile - let user click the button
+      }, 1000);
     } catch (err) {
       console.error("Profile creation error:", err);
 
-      // Check if it's a wallet timeout error (Privy modal didn't show)
+      // Clear pending state on error
+      setPendingTx(null);
+
+      // Check if it's a signature timeout error
       const errorMessage = err instanceof Error ? err.message : String(err);
+      const isSignatureTimeout =
+        errorMessage.includes("Signature request timed out") ||
+        errorMessage.includes("Failed to derive encryption key");
       const isWalletTimeout =
         errorMessage.includes("Wallet timeout") ||
-        errorMessage.includes("timeout");
+        (errorMessage.includes("timeout") && !isSignatureTimeout);
+
+      // If it's a signature timeout, check if the profile transaction was actually confirmed
+      // The profile might have been created successfully, but encryption key derivation failed
+      if (isSignatureTimeout) {
+        console.warn(
+          "⚠️ Encryption key derivation timed out - checking if profile was created...",
+        );
+
+        // Check if profile exists on-chain (transaction might have succeeded)
+        try {
+          const checkResult = await loadProfileFromBlockchain();
+          if (checkResult.success && checkResult.profile) {
+            console.log(
+              "✅ Profile WAS created successfully! Encryption key derivation just timed out.",
+            );
+
+            // Mark profile creation as complete since the transaction was confirmed
+            updateStepStatus("create-profile", "complete");
+
+            // Clear error - profile is created, encryption key can be derived later
+            setError(null);
+
+            // Proceed to next step, but don't auto-call verification
+            // Let the user see the completion state and decide
+            setTimeout(() => {
+              moveToNextStep();
+              // Don't auto-call handleVerifyProfile - let user click the button
+            }, 1000);
+            return;
+          }
+        } catch (checkError) {
+          console.error("Error checking profile:", checkError);
+        }
+
+        // If we get here, profile wasn't created - show error
+        setError(
+          "⚠️ Profile creation may have failed due to signature timeout.\n\n" +
+            "Please try again. If the issue persists, check the transaction status on the blockchain explorer.",
+        );
+        updateStepStatus("create-profile", "error");
+        return;
+      }
 
       if (isWalletTimeout) {
         setError(
@@ -914,28 +1113,77 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       updateStepStatus("verify-profile", "loading");
       setError(null);
 
+      // Validate email is present
+      if (!email || email.trim() === "") {
+        throw new Error(
+          "Email address is required for verification.\n\n" +
+            "Please enter your email address in the email verification step, or ensure you're logged in with an email account.",
+        );
+      }
+
       // Use the unified wallet service method
       const verifyResult = await verifyProfileZKsync(email);
 
-      if (!verifyResult.success) {
-        throw new Error(verifyResult.error || "Failed to verify profile");
+      if (!verifyResult.success || !verifyResult.txHash) {
+        const errorMsg = verifyResult.error || "Failed to verify profile";
+
+        // Provide helpful error message for email already in use
+        if (
+          errorMsg.includes("Email is already in use") ||
+          errorMsg.includes("email already in use")
+        ) {
+          throw new Error(
+            `Email ${email} is already verified on the blockchain.\n\n` +
+              `If you're using Gmail aliases (e.g., user+test1@gmail.com), try a different alias like user+test2@gmail.com.\n\n` +
+              `Each email address can only be verified once.`,
+          );
+        }
+
+        throw new Error(errorMsg);
       }
 
-      console.log("✅ Profile verification successful:", verifyResult.txHash);
-      console.log("⏳ Waiting for blockchain confirmation (5 seconds)...");
+      console.log(
+        "✅ Profile verification transaction submitted:",
+        verifyResult.txHash,
+      );
 
-      // Wait for transaction to be confirmed on blockchain
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+      // Set pending state - this will show the notification and keep modal open
+      setPendingTx({ txHash: verifyResult.txHash, stepId: "verify-profile" });
+      updateStepStatus("verify-profile", "loading");
+
+      // Poll for transaction confirmation
+      const confirmed = await waitForTransactionConfirmation(
+        verifyResult.txHash,
+      );
+
+      if (!confirmed) {
+        throw new Error(
+          "Transaction submitted but confirmation timed out. Please check the transaction status manually.",
+        );
+      }
 
       console.log("✅ Verification confirmed - moving to token claim");
+
+      // Clear pending state
+      setPendingTx(null);
       updateStepStatus("verify-profile", "complete");
 
+      // Keep signature protection active for a bit longer to prevent modal from closing
+      // This gives time for any post-signature state updates to complete
+      lastSignatureTimeRef.current = Date.now();
+
+      // Move to token claim step, but don't auto-claim
+      // Let the user see the completion state and decide
       setTimeout(() => {
         moveToNextStep();
-        void handleClaimTokens();
+        // Don't auto-call handleClaimTokens - let user click the button
       }, 1000);
     } catch (err) {
       console.error("Profile verification error:", err);
+
+      // Clear pending state on error
+      setPendingTx(null);
+
       setError(
         err instanceof Error
           ? err.message
@@ -1033,10 +1281,8 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       console.log("✅ Token claim confirmed - allocation complete!");
       updateStepStatus("claim-tokens", "complete");
 
-      // Show celebration and complete onboarding
-      setTimeout(() => {
-        onComplete();
-      }, 2000);
+      // Don't auto-close - let user click "Complete Setup" button manually
+      // The congratulations message will be shown in the UI
     } catch (err) {
       console.error("Token claim error:", err);
       setError(
@@ -1056,6 +1302,19 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     const step = currentStep;
 
     if (step.status === "complete") {
+      // For claim-tokens step, show "Complete Setup" button instead of just "Complete!"
+      if (step.id === "claim-tokens") {
+        return (
+          <Button
+            onClick={() => onComplete()}
+            className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
+          >
+            <CheckCircle className="h-5 w-5 mr-2" />
+            Complete Setup
+          </Button>
+        );
+      }
+      // For other steps, show completion indicator
       return (
         <div className="flex items-center justify-center text-emerald-600 py-4">
           <CheckCircle className="h-6 w-6 mr-2" />
@@ -1068,7 +1327,9 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       return (
         <Button disabled className="w-full py-6 bg-emerald-600">
           <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-          Processing...
+          {pendingTx
+            ? "Waiting for blockchain confirmation..."
+            : "Processing..."}
         </Button>
       );
     }
@@ -1333,16 +1594,27 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         // Check if user has allocation
         if (allocationInfo && !allocationInfo.hasAllocation) {
           return (
-            <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
-              <p className="text-amber-800">
-                ⚠️ No token allocation available for this wallet. You may be
-                outside the first 5,000 users.
-              </p>
+            <div className="space-y-4">
+              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                <p className="text-emerald-800 font-medium mb-2">
+                  ✅ Profile verification complete!
+                </p>
+                <p className="text-emerald-700 text-sm">
+                  Your health profile has been successfully verified on the
+                  blockchain.
+                </p>
+              </div>
+              <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                <p className="text-amber-800">
+                  ⚠️ No token allocation available for this wallet. You may be
+                  outside the first 5,000 users.
+                </p>
+              </div>
               <Button
                 onClick={() => onComplete()}
                 className="w-full mt-4 py-4 bg-emerald-600 hover:bg-emerald-700 text-white"
               >
-                Continue Without Tokens
+                Complete Setup
               </Button>
             </div>
           );
@@ -1350,9 +1622,18 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
         return (
           <div className="space-y-4">
+            <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+              <p className="text-emerald-800 font-medium mb-2">
+                ✅ Profile verification complete!
+              </p>
+              <p className="text-emerald-700 text-sm">
+                Your health profile has been successfully verified on the
+                blockchain.
+              </p>
+            </div>
             {allocationInfo && (
-              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
-                <p className="text-emerald-800">
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-blue-800">
                   🎉 You are eligible for{" "}
                   <strong>{allocationInfo.amount} testnet AHP tokens</strong>!
                 </p>
@@ -1380,19 +1661,55 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
   const handleOpenChange = useCallback(
     (open: boolean): void => {
+      // Prevent closing if there's a pending transaction
+      if (!open && pendingTx) {
+        console.log("⚠️ Cannot close modal while transaction is pending");
+        return;
+      }
+      // Prevent closing if there's an error (user should see the error message)
+      if (!open && error) {
+        console.log(
+          "⚠️ Cannot close modal while there's an error - clear error first",
+        );
+        return;
+      }
+      // Prevent closing if a signature request is in progress (Privy popup is open)
+      if (!open && signatureInProgressRef.current) {
+        console.log("⚠️ Cannot close modal while signature popup is open");
+        return;
+      }
       // Only call onClose if dialog is being closed
       // Don't check isOpen here to avoid dependency loop
       if (!open) {
         onClose();
       }
     },
-    [onClose],
+    [onClose, pendingTx, error],
   );
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto p-0 bg-gradient-to-br from-amber-50 via-white to-emerald-50">
         <div className="p-6 sm:p-8">
+          {/* Pending Transaction Notification */}
+          {pendingTx && (
+            <Alert className="mb-6 border-amber-300 bg-amber-50">
+              <Loader2 className="h-5 w-5 animate-spin text-amber-600" />
+              <AlertDescription className="text-amber-800">
+                <div className="font-semibold mb-1">
+                  Transaction Processing...
+                </div>
+                <div className="text-sm">
+                  Blockchain transactions can take a while. Your transaction is
+                  processing. Please wait...
+                </div>
+                <div className="text-xs mt-2 font-mono break-all">
+                  TX: {pendingTx.txHash}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
           <DialogHeader className="mb-8">
             <DialogTitle className="text-3xl font-bold text-center text-emerald-900">
               Setting Up Your Health Wallet

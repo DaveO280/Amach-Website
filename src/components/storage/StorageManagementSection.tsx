@@ -30,6 +30,7 @@ import {
   type WalletEncryptionKey,
 } from "@/utils/walletEncryption";
 import { useState, useEffect } from "react";
+import React from "react";
 import { Database, Trash2, Info, AlertCircle, CheckCircle } from "lucide-react";
 
 interface StorageManagementSectionProps {
@@ -46,7 +47,7 @@ interface StorageStats {
 export function StorageManagementSection({
   userAddress,
   signMessage,
-}: StorageManagementSectionProps) {
+}: StorageManagementSectionProps): JSX.Element {
   const {
     status,
     performCompletePruning,
@@ -58,17 +59,20 @@ export function StorageManagementSection({
     useState<WalletEncryptionKey | null>(null);
   const [isLoadingKey, setIsLoadingKey] = useState(false);
   const [keyError, setKeyError] = useState<string>("");
+  const keyRequestAttemptedRef = React.useRef(false);
 
   const [stats, setStats] = useState<StorageStats | null>(null);
   const [snapshotInfo, setSnapshotInfo] = useState<string>("");
   const [selectedDataType, setSelectedDataType] = useState<string>("all");
   const [isLoadingStats, setIsLoadingStats] = useState(false);
 
-  // Initialize encryption key
+  // Initialize encryption key - only once per address change
   useEffect(() => {
-    if (!userAddress || encryptionKey) return;
+    if (!userAddress || encryptionKey || keyRequestAttemptedRef.current) return;
 
-    const initKey = async () => {
+    const initKey = async (): Promise<void> => {
+      // Mark that we've attempted to get the key to prevent retries
+      keyRequestAttemptedRef.current = true;
       setIsLoadingKey(true);
       setKeyError("");
 
@@ -92,22 +96,31 @@ export function StorageManagementSection({
           error,
         );
         setKeyError(errorMsg);
+        // Don't retry automatically - user can click retry button
       } finally {
         setIsLoadingKey(false);
       }
     };
 
     void initKey();
-  }, [userAddress, signMessage, encryptionKey]);
+  }, [userAddress, signMessage]);
+
+  // Reset attempt flag when address changes
+  useEffect(() => {
+    keyRequestAttemptedRef.current = false;
+    setEncryptionKey(null);
+    setKeyError("");
+  }, [userAddress]);
 
   // Fetch initial stats when key is ready
   useEffect(() => {
     if (!encryptionKey) return;
 
     void handleRefreshStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [encryptionKey]);
 
-  const handleRefreshStats = async () => {
+  const handleRefreshStats = async (): Promise<void> => {
     if (!encryptionKey) return;
 
     setIsLoadingStats(true);
@@ -158,7 +171,7 @@ export function StorageManagementSection({
     }
   };
 
-  const handlePrune = async (dataType: string) => {
+  const handlePrune = async (dataType: string): Promise<void> => {
     if (!encryptionKey) {
       alert("Encryption key not available. Please reconnect your wallet.");
       return;
@@ -247,9 +260,27 @@ export function StorageManagementSection({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
+                onClick={async () => {
                   setKeyError("");
                   setEncryptionKey(null);
+                  keyRequestAttemptedRef.current = false;
+                  setIsLoadingKey(true);
+
+                  try {
+                    const key = await getWalletDerivedEncryptionKey(
+                      userAddress,
+                      signMessage,
+                    );
+                    setEncryptionKey(key);
+                  } catch (error) {
+                    const errorMsg =
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to get encryption key";
+                    setKeyError(errorMsg);
+                  } finally {
+                    setIsLoadingKey(false);
+                  }
                 }}
                 className="mt-2"
               >

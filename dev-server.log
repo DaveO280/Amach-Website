@@ -1,0 +1,28 @@
+
+> amach-health@0.1.0 dev
+> next dev --experimental-https --webpack
+
+⚠ Self-signed certificates are currently an experimental feature, use with caution.
+  Using already generated self signed certificate
+⚠ Port 3000 is in use by process 121920, using available port 3001 instead.
+⚠ Invalid next.config.js options detected: 
+⚠     Unrecognized key(s) in object: 'missingSuspenseWithCSRBailout' at "experimental"
+⚠ See more info here: https://nextjs.org/docs/messages/invalid-next-config
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of c:\Users\ogara\pnpm-lock.yaml as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * c:\Users\ogara\AmachHealth(S)\Amach-Website\pnpm-lock.yaml
+
+▲ Next.js 16.1.1 (webpack)
+- Local:         https://localhost:3001
+- Network:       https://172.26.192.1:3001
+- Environments: .env.local, .env
+- Experiments (use with caution):
+  ? missingSuspenseWithCSRBailout (invalid experimental key)
+
+✓ Starting...
+⨯ Unable to acquire lock at c:\Users\ogara\AmachHealth(S)\Amach-Website\.next\dev\lock, is another instance of next dev running?
+  Suggestion: If you intended to restart next dev, terminate the other process, and then try again.
+[?25h

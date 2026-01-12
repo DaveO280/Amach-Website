@@ -198,15 +198,28 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         }
 
         // Request signature - this will open the Privy modal
-        const result = await privySignMessage(
-          { message },
-          {
-            address,
-            uiOptions: {
-              title: "Sign Message for Encryption Key",
-              description:
-                "Sign this message to derive your encryption key for decrypting your health profile. This signature is only used to generate your encryption key and is not shared. Please click 'Approve' to continue.",
-            },
+        // Wrap in setTimeout to defer to next event loop tick and prevent React render conflicts
+        const result = await new Promise<{ signature: string }>(
+          (resolve, reject) => {
+            // Defer signature request to avoid React hook order issues when modal appears
+            setTimeout(async () => {
+              try {
+                const signatureResult = await privySignMessage(
+                  { message },
+                  {
+                    address,
+                    uiOptions: {
+                      title: "Sign Message for Encryption Key",
+                      description:
+                        "Sign this message to derive your encryption key for decrypting your health profile. This signature is only used to generate your encryption key and is not shared. Please click 'Approve' to continue.",
+                    },
+                  },
+                );
+                resolve(signatureResult);
+              } catch (error) {
+                reject(error);
+              }
+            }, 0);
           },
         );
 
@@ -1148,6 +1161,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         decryptionInProgressRef.current = false;
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [address, healthProfile, getWalletDerivedEncryptionKey],
   );
 

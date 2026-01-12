@@ -1,10 +1,11 @@
 import HealthDataContextWrapper from "@/components/HealthDataContextWrapper";
 import PrivyProvider from "@/components/PrivyProvider";
+import { PrivyErrorBoundary } from "@/components/PrivyErrorBoundary";
 import QueryProvider from "@/components/QueryProvider";
 import { SelectionProvider } from "@/store/selectionStore/provider";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import React from "react";
+import React, { Suspense } from "react";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
 import ErudaLoader from "@/components/ErudaLoader";
@@ -42,13 +43,17 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ErudaLoader />
-        <PrivyProvider>
-          <QueryProvider>
-            <HealthDataContextWrapper>
-              <SelectionProvider>{children}</SelectionProvider>
-            </HealthDataContextWrapper>
-          </QueryProvider>
-        </PrivyProvider>
+        <PrivyErrorBoundary>
+          <Suspense fallback={<div>Loading...</div>}>
+            <PrivyProvider>
+              <QueryProvider>
+                <HealthDataContextWrapper>
+                  <SelectionProvider>{children}</SelectionProvider>
+                </HealthDataContextWrapper>
+              </QueryProvider>
+            </PrivyProvider>
+          </Suspense>
+        </PrivyErrorBoundary>
         <Analytics />
       </body>
     </html>

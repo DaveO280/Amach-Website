@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Use Node.js runtime for longer timeout
 export const runtime = "nodejs";
-export const maxDuration = 10; // 10 seconds - Vercel Hobby plan limit (upgrade to Pro for 300s)
+export const maxDuration = 300; // 5 minutes - allows for longer AI processing
 
 const REQUEST_TIMEOUT_MS = Number(
-  process.env.VENICE_REQUEST_TIMEOUT_MS ?? "9000", // 9 seconds - matches maxDuration minus buffer
+  process.env.VENICE_REQUEST_TIMEOUT_MS ?? "290000", // 290 seconds - 5 minutes minus buffer
 );
 
 export async function OPTIONS(): Promise<NextResponse> {

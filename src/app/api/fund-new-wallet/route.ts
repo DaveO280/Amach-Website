@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 // 1. Upgrading to Pro plan (allows 300s)
 // 2. Using a queue system (e.g., Vercel Queue or external service)
 // 3. Splitting into separate endpoints (send tx, then poll for confirmation separately)
-export const maxDuration = 10; // 10 seconds - Vercel Hobby plan limit (upgrade to Pro for 300s)
+export const maxDuration = 60; // 60 seconds - allows for blockchain transactions
 
 import { ethers } from "ethers";
 

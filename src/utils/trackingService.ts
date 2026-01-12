@@ -118,7 +118,7 @@ class TrackingService {
       walletAddress,
       deviceInfo,
       source: window.location.origin,
-      proofDetails: "Profile verified on-chain via ZKsync SSO",
+      proofDetails: "Profile verified on-chain via Privy wallet",
       blockNumber: Date.now(), // Use timestamp as block number for now
     });
   }

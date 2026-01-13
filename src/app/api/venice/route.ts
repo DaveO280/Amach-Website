@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Use Node.js runtime for longer timeout
 export const runtime = "nodejs";
-export const maxDuration = 300; // 5 minutes - allows for longer AI processing
+// Vercel Hobby plan: max 60s, Pro plan: max 300s
+export const maxDuration = 60; // 60 seconds - maximum allowed on Hobby plan
 
 // Remove artificial timeout limits - let Venice API handle its own timeouts
 // Only use timeout if explicitly set in environment variable

@@ -204,6 +204,10 @@ export class VeniceApiService {
       const response = await responsePromise;
 
       // Enhanced debugging for response structure
+      const firstChoice = response.data?.choices?.[0];
+      const message = firstChoice?.message;
+      const content = message?.content;
+
       console.log(`[VeniceApiService] Response received [${requestId}]`, {
         timestamp: new Date().toISOString(),
         elapsedMs: Date.now() - startTime,
@@ -211,19 +215,41 @@ export class VeniceApiService {
         hasData: Boolean(response.data),
         hasChoices: Boolean(response.data?.choices),
         choicesLength: response.data?.choices?.length,
-        hasFirstChoice: Boolean(response.data?.choices?.[0]),
-        hasMessage: Boolean(response.data?.choices?.[0]?.message),
-        hasContent: Boolean(response.data?.choices?.[0]?.message?.content),
-        contentLength:
-          response.data?.choices?.[0]?.message?.content?.length || 0,
-        contentPreview:
-          response.data?.choices?.[0]?.message?.content?.substring(0, 100),
-        rawResponse: JSON.stringify(response.data).substring(0, 500),
+        hasFirstChoice: Boolean(firstChoice),
+        firstChoiceType: typeof firstChoice,
+        firstChoiceKeys: firstChoice ? Object.keys(firstChoice) : [],
+        hasMessage: Boolean(message),
+        messageType: typeof message,
+        messageKeys: message ? Object.keys(message) : [],
+        hasContent: Boolean(content),
+        contentType: typeof content,
+        contentLength: content?.length || 0,
+        contentValue: content,
+        contentPreview: content?.substring?.(0, 100),
+        rawResponse: JSON.stringify(response.data).substring(0, 1000),
       });
 
-      if (response.data?.choices?.[0]?.message?.content) {
-        return response.data.choices[0].message.content;
+      // Handle different response formats
+      // Standard format: choices[0].message.content
+      if (content !== undefined && content !== null) {
+        // Allow empty string content (some models may return empty responses)
+        return String(content);
       }
+
+      // Alternative format: choices[0].text (some models use 'text' instead of 'message.content')
+      if (firstChoice?.text !== undefined && firstChoice?.text !== null) {
+        return String(firstChoice.text);
+      }
+
+      // Alternative format: choices[0].delta?.content (streaming format, but we're not streaming)
+      if (
+        firstChoice?.delta?.content !== undefined &&
+        firstChoice?.delta?.content !== null
+      ) {
+        return String(firstChoice.delta.content);
+      }
+
+      // Check for error in response
       if (response.data?.error) {
         console.error(
           `[VeniceApiService] API returned error [${requestId}]`,
@@ -231,13 +257,24 @@ export class VeniceApiService {
         );
         throw new Error(String(response.data.error));
       }
+
+      // Log full structure for debugging
       console.error(
         `[VeniceApiService] Invalid response format [${requestId}]`,
         {
           data: response.data,
+          firstChoice: firstChoice,
+          message: message,
+          content: content,
+          fullResponse: JSON.stringify(response.data, null, 2).substring(
+            0,
+            2000,
+          ),
         },
       );
-      throw new Error("Invalid response format from Venice API");
+      throw new Error(
+        "Invalid response format from Venice API: missing content in choices[0]",
+      );
     } catch (error) {
       console.error(`[VeniceApiService] Request failed [${requestId}]`, {
         timestamp: new Date().toISOString(),

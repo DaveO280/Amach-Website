@@ -106,11 +106,68 @@ const HealthReport: React.FC = () => {
     { section: "energy", ...energyAI },
   ] as const;
 
+  // Log section status changes for debugging
+  React.useEffect(() => {
+    const queries = [
+      { section: "overall", ...overallAI },
+      { section: "activity", ...activityAI },
+      { section: "sleep", ...sleepAI },
+      { section: "heart", ...heartAI },
+      { section: "energy", ...energyAI },
+    ];
+
+    queries.forEach(({ section, data, error, isPending }) => {
+      if (error) {
+        console.error(`[HealthReport] ${section} section error:`, error);
+      } else if (data) {
+        const isEmpty = !data.content || data.content.trim().length === 0;
+        console.log(`[HealthReport] ${section} section status:`, {
+          hasContent: Boolean(data.content),
+          contentLength: data.content?.length || 0,
+          isEmpty,
+        });
+        if (isEmpty) {
+          console.warn(
+            `[HealthReport] ⚠️ ${section} section returned empty content`,
+          );
+        }
+      } else if (!isPending) {
+        console.warn(
+          `[HealthReport] ${section} section: no data, no error, not pending`,
+        );
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    overallAI.data,
+    activityAI.data,
+    sleepAI.data,
+    heartAI.data,
+    energyAI.data,
+    overallAI.error,
+    activityAI.error,
+    sleepAI.error,
+    heartAI.error,
+    energyAI.error,
+    overallAI.isPending,
+    activityAI.isPending,
+    sleepAI.isPending,
+    heartAI.isPending,
+    energyAI.isPending,
+  ]);
+
   // Handler to trigger all queries
   const handleGenerateAnalysis = (): void => {
     if (!metrics || !healthScoresObj) {
       return;
     }
+
+    console.log("[HealthReport] Generating analysis for all sections", {
+      sections: sectionQueries.map((s) => s.section),
+      hasMetrics: Boolean(metrics),
+      hasHealthScores: Boolean(healthScoresObj),
+      hasProfile: Boolean(promptProfile),
+    });
 
     sectionQueries.forEach(({ section, mutate }) => {
       const prompt = buildHealthAnalysisPrompt(
@@ -119,6 +176,10 @@ const HealthReport: React.FC = () => {
         healthScoresObj,
         promptProfile,
       );
+      console.log(`[HealthReport] Triggering ${section} analysis`, {
+        promptLength: prompt.length,
+        promptPreview: prompt.substring(0, 200),
+      });
       mutate({ prompt });
     });
   };
@@ -147,6 +208,9 @@ const HealthReport: React.FC = () => {
           <div className="mt-4 p-6 bg-gradient-to-br from-amber-50 via-white to-emerald-50 rounded-lg border border-amber-200/50 shadow-sm">
             {sectionQueries.map((query) => {
               const { section, data, isPending, error } = query;
+              const hasEmptyContent =
+                data && (!data.content || data.content.trim().length === 0);
+
               return (
                 <div key={section} className="mb-6 last:mb-0">
                   <p className="text-emerald-900 text-lg font-semibold mb-2">
@@ -157,9 +221,26 @@ const HealthReport: React.FC = () => {
                     <p className="text-amber-600/70">Generating...</p>
                   )}
                   {error && (
-                    <p className="text-red-500">Error generating analysis.</p>
+                    <div className="text-red-500">
+                      <p className="font-semibold">
+                        Error generating analysis.
+                      </p>
+                      <p className="text-sm mt-1">
+                        {error.message || String(error)}
+                      </p>
+                    </div>
                   )}
-                  {data && (
+                  {hasEmptyContent && (
+                    <div className="text-amber-600">
+                      <p className="font-semibold">
+                        ⚠️ Analysis returned empty response.
+                      </p>
+                      <p className="text-sm mt-1">
+                        The AI service returned no content. Please try again.
+                      </p>
+                    </div>
+                  )}
+                  {data && !hasEmptyContent && (
                     <div className="mt-2">
                       <p className="text-amber-900/90 leading-relaxed">
                         {data.content}

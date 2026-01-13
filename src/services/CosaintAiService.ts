@@ -33,6 +33,11 @@ import {
   buildTemporalContext,
   formatTemporalContext,
 } from "@/utils/temporalContext";
+import { formatToolsForPrompt } from "@/ai/tools/ToolDefinitions";
+import { ToolResponseParser } from "@/ai/tools/ToolResponseParser";
+import { ToolExecutor } from "@/ai/tools/ToolExecutor";
+import { IndexedDBDataSource } from "@/data/sources/IndexedDBDataSource";
+import type { ToolCall } from "@/ai/tools/ToolExecutor";
 
 /**
  * Efficiently get min/max timestamps from a large array without sorting
@@ -58,6 +63,10 @@ const RESPONSE_FORMAT_GUIDELINES = `
 
 Be informative and analytical. Weave metrics into flowing, detailed sentences that explain context and significance. Compare their numbers to age/sex norms to show what's working well or needs attention. Connect how different metrics influence each other. Stay measured and grounded in the data—let the numbers speak for themselves without excessive enthusiasm.
 `;
+
+// Feature flag for tool use - set via environment variable
+const ENABLE_TOOL_USE = process.env.NEXT_PUBLIC_ENABLE_TOOL_USE === "true";
+
 export class CosaintAiService {
   private veniceApi: VeniceApiService;
   private characteristics: CharacteristicsLoader;
@@ -398,7 +407,7 @@ export class CosaintAiService {
         userMessage: userMessage.substring(0, 100),
       });
 
-      const response = await this.veniceApi.generateVeniceResponse(
+      let response = await this.veniceApi.generateVeniceResponse(
         prompt,
         4000, // High token limit for Qwen's thinking + response with multi-agent context
       );
@@ -421,8 +430,80 @@ export class CosaintAiService {
         return this.getFallbackResponse(userMessage);
       }
 
+      // Tool execution loop (if enabled)
+      if (ENABLE_TOOL_USE && ToolResponseParser.hasToolCalls(response)) {
+        console.log(
+          "[CosaintAiService] Tool calls detected, executing tools...",
+        );
+        let iterationCount = 0;
+        const maxIterations = 3; // Prevent infinite loops
+        let conversationContext = userMessage;
+
+        while (
+          iterationCount < maxIterations &&
+          response &&
+          ToolResponseParser.hasToolCalls(response)
+        ) {
+          iterationCount++;
+          console.log(
+            `[CosaintAiService] Tool execution iteration ${iterationCount}`,
+          );
+
+          // Extract tool calls
+          const toolCalls = ToolResponseParser.parseToolCalls(response);
+          console.log(
+            `[CosaintAiService] Found ${toolCalls.length} tool call(s):`,
+            toolCalls.map((tc) => tc.tool),
+          );
+          console.log(
+            "[CosaintAiService] Tool call details:",
+            JSON.stringify(toolCalls, null, 2),
+          );
+
+          // Execute tools directly on client (IndexedDB is browser-only)
+          const toolResults = await Promise.all(
+            toolCalls.map((call) => this.executeTool(call)),
+          );
+
+          // Format results for AI
+          const resultsText = this.formatToolResults(toolResults);
+          console.log(
+            "[CosaintAiService] Tool execution complete, sending results to AI",
+          );
+
+          // Update context with tool results and get new response
+          conversationContext = `${conversationContext}\n\n[Tool Execution Results]\n${resultsText}\n\nBased on these results, provide your analysis.`;
+
+          const followUpPrompt = `${prompt}\n\n${conversationContext}\n\nPlease provide your analysis based on the tool results above.`;
+          const newResponse = await this.veniceApi.generateVeniceResponse(
+            followUpPrompt,
+            4000,
+          );
+
+          if (!newResponse) {
+            console.warn(
+              "[CosaintAiService] No response from AI after tool execution",
+            );
+            break;
+          }
+
+          response = newResponse;
+
+          // If no more tool calls, break
+          if (!ToolResponseParser.hasToolCalls(response)) {
+            break;
+          }
+        }
+
+        if (iterationCount >= maxIterations) {
+          console.warn(
+            "[CosaintAiService] Max tool iterations reached, returning last response",
+          );
+        }
+      }
+
       console.log("✅ [CosaintAiService] Returning successful response");
-      return response;
+      return response || this.getFallbackResponse(userMessage);
     } catch (error) {
       console.error("❌ [CosaintAiService] Error generating AI response:", {
         error: error instanceof Error ? error.message : String(error),
@@ -859,6 +940,11 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
 
 Keep responses conversational and natural. If you mention research, weave it into the conversation without formal citations. When health reports or data are available, provide thoughtful analysis of the notable findings.`;
 
+    // Add tool definitions if tool use is enabled
+    if (ENABLE_TOOL_USE) {
+      systemMessage += formatToolsForPrompt();
+    }
+
     // Add user profile context if available
     if (userProfile) {
       const derivedAge =
@@ -1178,5 +1264,153 @@ ${summary}`;
           .map((line) => line.replace(/^[-*]\s*/, "").trim())
           .filter((line) => line.length > 0)
       : [];
+  }
+
+  /**
+   * Execute a tool call directly on the client (IndexedDB is browser-only)
+   */
+  private async executeTool(
+    toolCall: ToolCall,
+  ): Promise<{
+    success: boolean;
+    tool: string;
+    data?: unknown;
+    error?: string;
+  }> {
+    try {
+      // Create data source and executor on client side where IndexedDB is available
+      const dataSource = new IndexedDBDataSource();
+      const executor = new ToolExecutor(dataSource);
+      const result = await executor.execute(toolCall);
+
+      return {
+        success: result.success,
+        tool: result.tool,
+        data: result.data,
+        error: result.error,
+      };
+    } catch (error) {
+      console.error("[CosaintAiService] Tool execution error:", error);
+      return {
+        success: false,
+        tool: toolCall.tool,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  /**
+   * Format tool results for AI consumption
+   */
+  private formatToolResults(
+    results: Array<{
+      success: boolean;
+      tool: string;
+      data?: unknown;
+      error?: string;
+    }>,
+  ): string {
+    return results
+      .map((result, i) => {
+        if (!result.success) {
+          return `Tool ${i + 1} (${result.tool}): Error - ${result.error}`;
+        }
+
+        // Format data nicely
+        let dataStr = "";
+        try {
+          // Check if data has a structure we can summarize
+          const data = result.data as { data?: unknown[]; metadata?: unknown };
+
+          if (
+            data &&
+            typeof data === "object" &&
+            "data" in data &&
+            Array.isArray(data.data)
+          ) {
+            const dataArray = data.data;
+            const metadata = data.metadata || {};
+
+            // For large datasets, provide a summary instead of truncating
+            if (dataArray.length > 100) {
+              // Sample first and last few points, plus summary stats
+              const sampleSize = 10;
+              const firstSample = dataArray.slice(0, sampleSize);
+              const lastSample = dataArray.slice(-sampleSize);
+
+              // Calculate summary statistics if it's time-series data
+              let summary = "";
+              if (
+                dataArray.length > 0 &&
+                typeof dataArray[0] === "object" &&
+                dataArray[0] !== null &&
+                "value" in dataArray[0]
+              ) {
+                const values = dataArray
+                  .map((d: unknown) => {
+                    const item = d as { value?: number | string };
+                    if (typeof item.value === "number") return item.value;
+                    if (typeof item.value === "string")
+                      return parseFloat(item.value);
+                    return 0;
+                  })
+                  .filter((v) => !isNaN(v) && v > 0);
+                if (values.length > 0) {
+                  const avg = values.reduce((a, b) => a + b, 0) / values.length;
+                  const min = Math.min(...values);
+                  const max = Math.max(...values);
+                  summary = `\nSummary: ${values.length} data points, avg: ${avg.toFixed(2)}, min: ${min.toFixed(2)}, max: ${max.toFixed(2)}`;
+                }
+              }
+
+              dataStr = JSON.stringify(
+                {
+                  metadata,
+                  totalRecords: dataArray.length,
+                  sample: {
+                    first: firstSample,
+                    last: lastSample,
+                  },
+                  summary,
+                  note: `Showing first ${sampleSize} and last ${sampleSize} of ${dataArray.length} total records. Full data available on request.`,
+                },
+                null,
+                2,
+              );
+            } else {
+              // For smaller datasets, return full data
+              dataStr = JSON.stringify(result.data, null, 2);
+            }
+
+            // Still limit total length to avoid token overflow (but much higher limit)
+            const maxLength = 10000; // Increased from 2000
+            if (dataStr.length > maxLength) {
+              dataStr =
+                dataStr.substring(0, maxLength) +
+                `\n... (truncated at ${maxLength} chars, total was ${dataStr.length} chars)`;
+            }
+          } else {
+            // For non-array data, use original logic with higher limit
+            dataStr = JSON.stringify(result.data, null, 2);
+            const maxLength = 10000;
+            if (dataStr.length > maxLength) {
+              dataStr =
+                dataStr.substring(0, maxLength) +
+                `\n... (truncated at ${maxLength} chars)`;
+            }
+          }
+        } catch {
+          dataStr = String(result.data);
+        }
+
+        // Log the size of data being sent to AI
+        console.log(`[CosaintAiService] Tool result size for ${result.tool}:`, {
+          length: dataStr.length,
+          truncated: dataStr.includes("truncated"),
+        });
+
+        return `Tool ${i + 1} (${result.tool}):\n${dataStr}`;
+      })
+      .join("\n\n");
   }
 }

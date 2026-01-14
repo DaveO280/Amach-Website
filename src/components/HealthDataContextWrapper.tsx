@@ -78,6 +78,8 @@ interface HealthDataContextType {
   reports: ParsedReportSummary[];
   addParsedReports: (reports: ParsedReportSummary[]) => void;
   clearReports: () => void;
+  removeReport: (index: number) => void;
+  updateReport: (index: number, updates: Partial<ParsedReportSummary>) => void;
   userProfile: HealthContext["userProfile"];
   setUserProfile: (profile: HealthContext["userProfile"]) => void;
   chatHistory: ChatMessage[];
@@ -854,6 +856,24 @@ export default function HealthDataContextWrapper({
   const clearReports = (): void => {
     setHealthContext((prev) => ({ ...prev, reports: [] }));
   };
+  const removeReport = (index: number): void => {
+    setHealthContext((prev) => {
+      const updatedReports = prev.reports?.filter((_, i) => i !== index) ?? [];
+      return { ...prev, reports: updatedReports };
+    });
+  };
+  const updateReport = (
+    index: number,
+    updates: Partial<ParsedReportSummary>,
+  ): void => {
+    setHealthContext((prev) => {
+      const updatedReports =
+        prev.reports?.map((report, i) =>
+          i === index ? { ...report, ...updates } : report,
+        ) ?? [];
+      return { ...prev, reports: updatedReports };
+    });
+  };
   const setUserProfile = (profile: HealthContext["userProfile"]): void => {
     setHealthContext((prev) => ({ ...prev, userProfile: profile }));
   };
@@ -893,6 +913,8 @@ export default function HealthDataContextWrapper({
         reports: healthContext.reports ?? [],
         addParsedReports,
         clearReports,
+        removeReport,
+        updateReport,
         userProfile: healthContext.userProfile,
         setUserProfile,
         chatHistory: healthContext.chatHistory,

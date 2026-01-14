@@ -14,33 +14,62 @@ const REGION_PATTERNS: Record<string, RegExp> = {
   rightLeg: /\bright leg\b/i,
 };
 
-const NUMBER_REGEX = /-?\d+(?:\.\d+)?/;
-
-function extractNumber(text: string | undefined): number | undefined {
-  if (!text) return undefined;
-  const match = text.match(NUMBER_REGEX);
-  if (!match) return undefined;
-  const parsed = Number.parseFloat(match[0]);
-  return Number.isNaN(parsed) ? undefined : parsed;
-}
+// Removed extractNumber - using specific regex patterns instead
 
 function normalizeLine(line: string): string {
   return line.replace(/\s+/g, " ").trim();
 }
 
 function inferScanDate(text: string): string | undefined {
-  const dateRegex =
-    /\b(20\d{2}|19\d{2})[-/.](0[1-9]|1[0-2])[-/.](0[1-9]|[12]\d|3[01])\b/g;
-  const matches = text.match(dateRegex);
-  if (matches && matches.length > 0) {
-    return matches[0];
+  // Look for "Measured:" followed by a date (this is the scan date)
+  const measuredMatch = text.match(
+    /measured[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
+  );
+  if (measuredMatch) {
+    return measuredMatch[1];
   }
 
+  // Look for scan date patterns near "Body Composition" or "Report:"
+  const reportDateMatch = text.match(
+    /(?:report|scan|measured)[:\s]+(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)?\s*,?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
+  );
+  if (reportDateMatch) {
+    return reportDateMatch[1];
+  }
+
+  // Fallback: look for dates in 2024/2025 range (likely scan dates, not birth dates)
+  const recentDateRegex =
+    /\b(20(?:2[4-9]|[3-9]\d))[-/.](0[1-9]|1[0-2])[-/.](0[1-9]|[12]\d|3[01])\b/g;
+  const recentMatches = text.match(recentDateRegex);
+  if (recentMatches && recentMatches.length > 0) {
+    // Prefer dates that appear after "Measured" or "Report"
+    const measuredIndex = text.toLowerCase().indexOf("measured");
+    if (measuredIndex > 0) {
+      const afterMeasured = text.substring(measuredIndex);
+      const afterMatch = afterMeasured.match(recentDateRegex);
+      if (afterMatch && afterMatch.length > 0) {
+        return afterMatch[0];
+      }
+    }
+    return recentMatches[0];
+  }
+
+  // Last resort: any date in MM/DD/YYYY or YYYY-MM-DD format
   const altRegex =
     /\b(0?[1-9]|1[0-2])[-/.](0?[1-9]|[12]\d|3[01])[-/.](20\d{2}|19\d{2})\b/g;
   const altMatches = text.match(altRegex);
   if (altMatches && altMatches.length > 0) {
-    return altMatches[0];
+    // Prefer later dates (more likely to be scan dates)
+    const dates = altMatches.map((d) => {
+      const parts = d.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+      if (parts) {
+        const year = parseInt(parts[3]);
+        return { date: d, year };
+      }
+      return { date: d, year: 0 };
+    });
+    dates.sort((a, b) => b.year - a.year);
+    return dates[0].date;
   }
   return undefined;
 }
@@ -51,30 +80,105 @@ function inferConfidence(score: number, maxScore: number): number {
 }
 
 function parseRegionLine(region: string, line: string): DexaRegionMetrics {
-  const tokens = line.split(/\s+/);
-  const numbers = tokens
-    .map((token) => extractNumber(token))
-    .filter((value): value is number => value !== undefined);
-
   const metrics: DexaRegionMetrics = { region };
 
-  if (numbers.length > 0) {
-    metrics.bodyFatPercent = numbers[0];
+  // Skip lines that look like addresses or phone numbers
+  if (/\d{4,}\s+[A-Z][a-z]+/.test(line) || /\(___\)/.test(line)) {
+    return metrics; // Return empty metrics for address/phone lines
   }
-  if (numbers.length > 1) {
-    metrics.leanMassKg = numbers[1];
+
+  // Extract Tissue %Fat for regions - look for pattern like "Android: 26.1 %"
+  const fatPercentMatch = line.match(/tissue\s*%?\s*fat[:\s]*(\d+(?:\.\d+)?)/i);
+  if (fatPercentMatch) {
+    const value = parseFloat(fatPercentMatch[1]);
+    if (value >= 0 && value <= 100) {
+      metrics.bodyFatPercent = value;
+    }
   }
-  if (numbers.length > 2) {
-    metrics.fatMassKg = numbers[2];
+
+  // Extract fat mass in lbs - look for "Fat (lbs)" or "Fat Mass (lbs)"
+  const fatMassMatch = line.match(
+    /fat\s*(?:mass)?\s*\(?lbs?\)?[:\s]*(\d+(?:\.\d+)?)/i,
+  );
+  if (fatMassMatch) {
+    const lbs = parseFloat(fatMassMatch[1]);
+    if (lbs >= 0 && lbs <= 500) {
+      // Reasonable range
+      metrics.fatMassKg = lbs * 0.453592; // Convert lbs to kg
+    }
   }
-  if (numbers.length > 3) {
-    metrics.boneDensityGPerCm2 = numbers[3];
+
+  // Extract lean mass in lbs - look for "Lean (lbs)" or "Lean Mass (lbs)"
+  const leanMassMatch = line.match(
+    /lean\s*(?:mass)?\s*\(?lbs?\)?[:\s]*(\d+(?:\.\d+)?)/i,
+  );
+  if (leanMassMatch) {
+    const lbs = parseFloat(leanMassMatch[1]);
+    if (lbs >= 0 && lbs <= 500) {
+      // Reasonable range
+      metrics.leanMassKg = lbs * 0.453592; // Convert lbs to kg
+    }
   }
-  if (numbers.length > 4) {
-    metrics.tScore = numbers[4];
+
+  // Extract BMD - look for "BMD (g/cm²)" or "bmd[:\s]*(\d+(?:\.\d+)?)"
+  const bmdMatch = line.match(/bmd\s*\(?g\/cm[²2]\)?[:\s]*(\d+(?:\.\d+)?)/i);
+  if (bmdMatch) {
+    const value = parseFloat(bmdMatch[1]);
+    if (value >= 0 && value <= 3) {
+      // Reasonable BMD range
+      metrics.boneDensityGPerCm2 = value;
+    }
   }
-  if (numbers.length > 5) {
-    metrics.zScore = numbers[5];
+
+  // Extract T-score - look for "T-score" or "T-score"
+  const tScoreMatch = line.match(/t[-\s]?score[:\s]*(-?\d+(?:\.\d+)?)/i);
+  if (tScoreMatch) {
+    const value = parseFloat(tScoreMatch[1]);
+    if (value >= -10 && value <= 10) {
+      // Reasonable T-score range
+      metrics.tScore = value;
+    }
+  }
+
+  // Extract Z-score - look for "Z-score" or "Z-score"
+  const zScoreMatch = line.match(/z[-\s]?score[:\s]*(-?\d+(?:\.\d+)?)/i);
+  if (zScoreMatch) {
+    const value = parseFloat(zScoreMatch[1]);
+    if (value >= -10 && value <= 10) {
+      // Reasonable Z-score range
+      metrics.zScore = value;
+    }
+  }
+
+  // For structured table rows, try to parse from table format
+  // Format: "Region   Tissue (%Fat)   Centile Total Mass (lbs) Fat (lbs) Lean (lbs) BMC (lbs)"
+  // Example: "Android   26.1   -   11.4   2.9   8.3   0.1"
+  if (region && !metrics.bodyFatPercent && !metrics.leanMassKg) {
+    // Try to match region name followed by numbers
+    const regionPattern = new RegExp(`${region}\\s+(-?\\d+(?:\\.\\d+)?)`, "i");
+    const regionMatch = line.match(regionPattern);
+    if (regionMatch) {
+      // This is likely a table row - try to extract from structured format
+      // Pattern: region name, %fat, centile, total mass, fat mass, lean mass
+      const tableMatch = line.match(
+        /^(\w+)\s+(-?\d+(?:\.\d+)?)\s+([-\d]+)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/i,
+      );
+      if (tableMatch) {
+        const percentFat = parseFloat(tableMatch[2]);
+        const fatMassLbs = parseFloat(tableMatch[5]);
+        const leanMassLbs = parseFloat(tableMatch[6]);
+
+        if (percentFat >= 0 && percentFat <= 100) {
+          metrics.bodyFatPercent = percentFat;
+        }
+        if (fatMassLbs >= 0 && fatMassLbs <= 500) {
+          metrics.fatMassKg = fatMassLbs * 0.453592;
+        }
+        if (leanMassLbs >= 0 && leanMassLbs <= 500) {
+          metrics.leanMassKg = leanMassLbs * 0.453592;
+        }
+      }
+    }
   }
 
   return metrics;
@@ -119,12 +223,28 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
 
   lines.forEach((line) => {
     if (!totalBodyFatPercent) {
-      const match = line.match(
-        /(total (body )?fat(?: percent|\s*%| percentage)?[:\s]*)(\d+(?:\.\d+)?)/i,
+      // Look for "Tissue (%Fat)" pattern - more specific
+      const tissueFatMatch = line.match(
+        /tissue\s*\(?%?\s*fat\)?[:\s]*(\d+(?:\.\d+)?)/i,
       );
-      if (match) {
-        totalBodyFatPercent = Number.parseFloat(match[3]);
-        scoreHits += 1;
+      if (tissueFatMatch) {
+        const value = Number.parseFloat(tissueFatMatch[1]);
+        if (value >= 0 && value <= 100) {
+          totalBodyFatPercent = value;
+          scoreHits += 1;
+        }
+      } else {
+        // Fallback to general pattern
+        const match = line.match(
+          /(total (body )?fat(?: percent|\s*%| percentage)?[:\s]*)(\d+(?:\.\d+)?)/i,
+        );
+        if (match) {
+          const value = Number.parseFloat(match[3]);
+          if (value >= 0 && value <= 100) {
+            totalBodyFatPercent = value;
+            scoreHits += 1;
+          }
+        }
       }
     }
 
@@ -205,19 +325,135 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
 
   const regions: DexaRegionMetrics[] = [];
 
-  lines.forEach((line) => {
-    Object.entries(REGION_PATTERNS).forEach(([region, pattern]) => {
-      if (pattern.test(line)) {
-        const existing = regions.find((entry) => entry.region === region);
-        const metrics = parseRegionLine(region, line);
-        if (existing) {
-          Object.assign(existing, metrics);
-        } else {
-          regions.push(metrics);
+  // First, try to find structured table data (more reliable)
+  // Look for the "Total Body Tissue Quantitation" table
+  let inTable = false;
+  let tableStartIndex = -1;
+
+  lines.forEach((line, index) => {
+    // Check if we're entering the composition table
+    if (
+      line.toLowerCase().includes("tissue quantitation") ||
+      line.toLowerCase().includes("composition (enhanced analysis)")
+    ) {
+      inTable = true;
+      tableStartIndex = index;
+      return;
+    }
+
+    // Check if we're leaving the table (hit another section)
+    if (
+      inTable &&
+      (line.toLowerCase().includes("trend:") ||
+        line.toLowerCase().includes("graph") ||
+        line.toLowerCase().includes("page:"))
+    ) {
+      inTable = false;
+      return;
+    }
+
+    // Parse table rows
+    if (inTable && index > tableStartIndex + 2) {
+      // Skip header rows
+      // Table format: "Region   Tissue (%Fat)   Centile Total Mass (lbs) Fat (lbs) Lean (lbs) BMC (lbs)"
+      // Examples:
+      //   "Arm Right   20.3   -   11.0   2.1   8.3   0.5"
+      //   "Total   23.4   60   161.9   36.3   118.5   7.1"
+
+      // Map region names from table to our region names
+      const regionMap: Record<string, string> = {
+        "arm right": "arms",
+        "arm left": "arms",
+        "arms total": "arms",
+        "leg right": "legs",
+        "leg left": "legs",
+        "legs total": "legs",
+        trunk: "trunk",
+        android: "android",
+        gynoid: "gynoid",
+        total: "total",
+      };
+
+      // Check each possible region name
+      for (const [patternName, region] of Object.entries(regionMap)) {
+        const pattern = new RegExp(
+          `^${patternName.replace(/\s+/g, "\\s+")}\\s+`,
+          "i",
+        );
+        if (pattern.test(line)) {
+          // This looks like a table row - extract numbers
+          const numbers = line.match(/-?\d+(?:\.\d+)?/g);
+          if (numbers && numbers.length >= 3) {
+            const existing = regions.find((entry) => entry.region === region);
+            const metrics: DexaRegionMetrics = { region };
+
+            // Parse based on table format: %Fat, Centile, Total Mass, Fat, Lean, BMC
+            const percentFat = parseFloat(numbers[0]);
+            if (percentFat >= 0 && percentFat <= 100) {
+              metrics.bodyFatPercent = percentFat;
+            }
+
+            // Skip centile (numbers[1] if it's a dash or number), get Fat and Lean
+            if (numbers.length >= 5) {
+              const fatLbs = parseFloat(numbers[3]);
+              const leanLbs = parseFloat(numbers[4]);
+
+              if (fatLbs >= 0 && fatLbs <= 500) {
+                metrics.fatMassKg = fatLbs * 0.453592;
+              }
+              if (leanLbs >= 0 && leanLbs <= 500) {
+                metrics.leanMassKg = leanLbs * 0.453592;
+              }
+            }
+
+            // Only add if we extracted valid data
+            if (
+              metrics.bodyFatPercent !== undefined ||
+              metrics.leanMassKg !== undefined ||
+              metrics.fatMassKg !== undefined
+            ) {
+              if (existing) {
+                Object.assign(existing, metrics);
+              } else {
+                regions.push(metrics);
+              }
+            }
+          }
+          break; // Found a match, stop checking other patterns
         }
       }
-    });
+    }
   });
+
+  // Fallback: parse individual region lines if table parsing didn't work
+  if (regions.length === 0) {
+    lines.forEach((line) => {
+      // Skip address lines
+      if (/\d{4,}\s+[A-Z][a-z]+/.test(line) || /\(___\)/.test(line)) {
+        return;
+      }
+
+      Object.entries(REGION_PATTERNS).forEach(([region, pattern]) => {
+        if (pattern.test(line)) {
+          const existing = regions.find((entry) => entry.region === region);
+          const metrics = parseRegionLine(region, line);
+
+          // Only add if we actually extracted valid data
+          if (
+            metrics.bodyFatPercent !== undefined ||
+            metrics.leanMassKg !== undefined ||
+            metrics.fatMassKg !== undefined
+          ) {
+            if (existing) {
+              Object.assign(existing, metrics);
+            } else {
+              regions.push(metrics);
+            }
+          }
+        }
+      });
+    });
+  }
 
   const confidence = inferConfidence(
     scoreHits + (regions.length > 0 ? 1 : 0),

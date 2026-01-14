@@ -50,8 +50,13 @@ function sanitizeName(rawName: string): string {
 }
 
 const LINE_PATTERNS: RegExp[] = [
+  // Quest Diagnostics format: "CHOLESTEROL, TOTAL   237 H  05/26/25  <200 mg/dL   Z4M"
+  /^(?<name>[A-Z][A-Z0-9\s,()\/\-]+?)\s+(?<value>-?\d+(?:\.\d+)?|<[\d.]+)\s*(?<flags>\b[H|L]\b)?\s*(?:\d{2}\/\d{2}\/\d{2})?\s*(?<reference>[<>]?\d+(?:\.\d+)?\s*[-–]?\s*\d*(?:\.\d+)?\s*[A-Za-z%\/\-\d]+)?\s*(?<lab>[A-Z0-9]+)?$/,
+  // Standard format: "NAME: VALUE UNIT (reference)"
   /^(?<name>[A-Za-z0-9%\/\-\s]+?)[:\-]\s*(?<value>-?\d+(?:\.\d+)?)\s*(?<unit>[A-Za-z%\/\-\d]*)\s*(?:\((?<reference>[^)]+)\))?(?<flags>\s*(?:H|L|↑|↓|high|low|critical[^;]*)?)$/i,
+  // Alternative format: "NAME VALUE UNIT FLAGS REFERENCE"
   /^(?<name>[A-Za-z0-9%\/\-\s]+?)\s+(?<value>-?\d+(?:\.\d+)?)\s*(?<unit>[A-Za-z%\/\-\d]*)\s*(?<flags>\b(?:H|L|↑|↓|high|low|critical[^;]*)\b)?\s*(?<reference>(?:\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*(?:to|-)\s*\d+(?:\.\d+)?|[A-Za-z%\/\s\d]+))?$/i,
+  // Reference range format
   /^(?<name>[A-Za-z0-9%\/\-\s]+?)\s+(?<value>-?\d+(?:\.\d+)?)\s*(?<unit>[A-Za-z%\/\-\d]*)\s*(?:Reference\s*Range[:\s]*(?<reference>[A-Za-z0-9%\/\-\s]+))?(?<flags>\s*(?:H|L|↑|↓|high|low|critical[^;]*)?)$/i,
 ];
 
@@ -59,28 +64,68 @@ function parseLine(line: string): BloodworkMetric | null {
   const trimmed = line.trim();
   if (trimmed.length === 0) return null;
 
+  // Skip header lines and disclaimers
+  if (
+    trimmed.includes("Result   Value") ||
+    trimmed.includes("Reference Range") ||
+    trimmed.includes("We advise having") ||
+    trimmed.includes("Page:") ||
+    trimmed.includes("of 12") ||
+    trimmed.match(/^\d+\s+of\s+\d+$/) ||
+    trimmed.length > 500 // Skip very long lines (likely disclaimers)
+  ) {
+    return null;
+  }
+
   for (const pattern of LINE_PATTERNS) {
     const match = trimmed.match(pattern);
     if (match && match.groups) {
       const name = sanitizeName(match.groups.name ?? "");
-      if (!name) continue;
+      if (!name || name.length < 2) continue;
 
-      const rawValue = match.groups.value;
-      const unit = match.groups.unit?.trim() || undefined;
-      const reference = match.groups.reference?.trim() || undefined;
+      // Skip if name looks like a date or page number
+      if (
+        name.match(/^\d{1,2}\/\d{1,2}\/\d{2,4}$/) ||
+        name.match(/^\d+\s+of\s+\d+$/)
+      ) {
+        continue;
+      }
+
+      let rawValue = match.groups.value;
+      let unit = match.groups.unit?.trim();
+      let reference = match.groups.reference?.trim();
       const flagText = match.groups.flags?.trim();
+
+      // Handle Quest format where reference might be in the reference group
+      if (!unit && reference) {
+        // Try to extract unit from reference (e.g., "<200 mg/dL" -> unit is "mg/dL")
+        const unitMatch = reference.match(/([A-Za-z%\/\-\d]+)$/);
+        if (unitMatch) {
+          unit = unitMatch[1];
+          // Remove unit from reference, keep just the range
+          reference = reference.replace(/\s*[A-Za-z%\/\-\d]+$/, "").trim();
+        }
+      }
+
+      // Handle "<value" format (e.g., "<3.0")
+      if (rawValue?.startsWith("<")) {
+        rawValue = rawValue.substring(1);
+      }
 
       const value = rawValue ? Number.parseFloat(rawValue) : undefined;
       const flag = flagText ? determineFlag(flagText) : undefined;
 
-      return {
-        name,
-        value: Number.isFinite(value) ? value : undefined,
-        valueText: rawValue,
-        unit,
-        referenceRange: reference,
-        flag,
-      };
+      // Only return if we have at least a name and value
+      if (name && (value !== undefined || rawValue)) {
+        return {
+          name,
+          value: Number.isFinite(value) ? value : undefined,
+          valueText: rawValue,
+          unit,
+          referenceRange: reference,
+          flag,
+        };
+      }
     }
   }
 
@@ -122,12 +167,69 @@ export function parseBloodworkReport(
   const metrics: BloodworkMetric[] = [];
   const notes: string[] = [];
 
+  let currentPanel = "general";
+
   lines.forEach((line) => {
+    // Skip header sections
+    if (
+      line.includes("Result   Value   Reference Range") ||
+      line.includes("We advise having your results reviewed") ||
+      line.includes("Page:") ||
+      line.match(/^\d+\s+of\s+\d+$/)
+    ) {
+      return;
+    }
+
+    // Detect panel headers
+    const lowerLine = line.toLowerCase();
+    if (
+      lowerLine.includes("cardiovascular health") ||
+      lowerLine.includes("cholesterol")
+    ) {
+      currentPanel = "lipid";
+    } else if (
+      lowerLine.includes("metabolic") ||
+      lowerLine.includes("diabetes") ||
+      lowerLine.includes("glucose")
+    ) {
+      currentPanel = "metabolic";
+    } else if (lowerLine.includes("thyroid")) {
+      currentPanel = "thyroid";
+    } else if (
+      lowerLine.includes("hormone") ||
+      lowerLine.includes("testosterone")
+    ) {
+      currentPanel = "hormone";
+    } else if (
+      lowerLine.includes("inflammation") ||
+      lowerLine.includes("crp")
+    ) {
+      currentPanel = "inflammation";
+    } else if (
+      lowerLine.includes("hematology") ||
+      lowerLine.includes("cbc") ||
+      lowerLine.includes("blood health")
+    ) {
+      currentPanel = "hematology";
+    } else if (lowerLine.includes("liver")) {
+      currentPanel = "liver";
+    } else if (lowerLine.includes("kidney") || lowerLine.includes("urinary")) {
+      currentPanel = "kidney";
+    }
+
     const metric = parseLine(line);
     if (metric) {
+      metric.panel = currentPanel;
       metrics.push(metric);
-    } else if (line.toLowerCase().includes("reference") || line.length > 40) {
-      notes.push(line);
+    } else if (
+      line.length > 100 &&
+      !line.includes("Result") &&
+      !line.includes("Value")
+    ) {
+      // Only add to notes if it's a meaningful note, not raw PDF text
+      if (!line.includes("We advise") && !line.includes("Page:")) {
+        notes.push(line);
+      }
     }
   });
 

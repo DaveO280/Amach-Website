@@ -28,6 +28,7 @@ import {
   logAnalysisDiagnostics,
 } from "@/utils/analysisDiagnostics";
 import { isCumulativeMetric } from "@/utils/dataDeduplicator";
+import { formatReportsForAI } from "@/utils/reportFormatters";
 import { extractDatePart } from "@/utils/dataDeduplicator";
 import {
   buildTemporalContext,
@@ -835,41 +836,16 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
       }
     }
 
-    if (reports && reports.length > 0) {
-      const reportLines = reports.slice(0, 5).map((summary) => {
-        const report = summary.report;
-        if (report.type === "dexa") {
-          return `- DEXA (${summary.extractedAt}): Total fat ${report.totalBodyFatPercent ?? "n/a"}%, visceral rating ${report.visceralFatRating ?? "n/a"}, regions captured: ${report.regions
-            .map((r) => r.region)
-            .slice(0, 5)
-            .join(", ")}`;
-        }
-        if (report.type === "bloodwork") {
-          const highFlags = report.metrics.filter(
-            (metric) => metric.flag && metric.flag !== "normal",
-          );
-          return `- Bloodwork (${summary.extractedAt}): ${report.metrics.length} metrics, notable flags: ${
-            highFlags.length
-              ? highFlags
-                  .slice(0, 4)
-                  .map(
-                    (metric) =>
-                      `${metric.name}${metric.flag ? ` (${metric.flag})` : ""}`,
-                  )
-                  .join(", ")
-              : "none"
-          }`;
-        }
-        return `- Report (${summary.extractedAt})`;
-      });
-      systemMessage += `\n\nStructured reports available:\n${reportLines.join("\n")}`;
-      if (reports.length > 5) {
-        systemMessage += `\n- ...and ${reports.length - 5} more reports`;
-      }
-    }
-
     // Add uploaded file summaries if present
-    if (uploadedFiles && uploadedFiles.length > 0) {
+    // Prefer structured reports over full PDF text for better efficiency
+    if (reports && reports.length > 0) {
+      // Use structured reports if available (much more efficient than full PDF text)
+      systemMessage += `\n\nYou have access to the following structured health reports for this user:\n`;
+      const formattedReports = formatReportsForAI(reports);
+      systemMessage += formattedReports;
+      systemMessage += `\n\nThese reports contain all relevant metrics extracted from uploaded PDFs. Use this structured data for analysis instead of requesting the full PDF text.`;
+    } else if (uploadedFiles && uploadedFiles.length > 0) {
+      // Fallback to full file content only if no structured reports are available
       systemMessage += `\n\nYou also have access to the following uploaded files for this user:\n`;
       uploadedFiles.forEach((file) => {
         systemMessage += `- ${file.summary}\n`;
@@ -1269,9 +1245,7 @@ ${summary}`;
   /**
    * Execute a tool call directly on the client (IndexedDB is browser-only)
    */
-  private async executeTool(
-    toolCall: ToolCall,
-  ): Promise<{
+  private async executeTool(toolCall: ToolCall): Promise<{
     success: boolean;
     tool: string;
     data?: unknown;

@@ -4,13 +4,14 @@ import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { Button } from "@/components/ui/button";
 import { useAi } from "@/store/aiStore";
 import { parseHealthReport } from "@/utils/reportParsers";
-import { Send, X } from "lucide-react";
+import { Send, X, FileText } from "lucide-react";
 import Papa from "papaparse";
 import React, { useEffect, useRef, useState } from "react";
 import { healthDataStore } from "../../data/store/healthDataStore";
 import { parsePDF } from "../../utils/pdfParser";
 import { useWalletService } from "@/hooks/useWalletService";
 import { MessageLimitPopup } from "@/components/ui/MessageLimitPopup";
+import { ReportParserViewer } from "./ReportParserViewer";
 
 // Define types for our message interface
 interface MessageType {
@@ -47,6 +48,9 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     removeUploadedFile,
     addParsedReports,
     clearChatHistory,
+    reports,
+    removeReport,
+    updateReport,
   } = useHealthDataContext();
 
   // Add state for upload form
@@ -73,6 +77,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   const [autoExpandOnSend, setAutoExpandOnSend] = useState(true);
   const [messageCount, setMessageCount] = useState(0);
   const [showMessageLimitPopup, setShowMessageLimitPopup] = useState(false);
+  const [showReportViewer, setShowReportViewer] = useState(false);
 
   const AUTO_EXPAND_STORAGE_KEY = "cosaintAutoExpandOnSend";
   const MESSAGE_COUNT_STORAGE_KEY = "cosaintMessageCountNoWallet";
@@ -253,13 +258,15 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
 
   // Load a saved file into chat context
   const loadSavedFileIntoContext = async (fileId: string): Promise<void> => {
+    setIsProcessingFile(true);
     try {
       const file = await healthDataStore.getUploadedFile(fileId);
       if (file) {
         const parsedReports =
           file.parsedContent && typeof file.parsedContent === "string"
-            ? parseHealthReport(file.parsedContent, {
+            ? await parseHealthReport(file.parsedContent, {
                 sourceName: file.fileName,
+                useAI: true,
               })
             : [];
 
@@ -294,6 +301,8 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       }
     } catch (error) {
       console.error("❌ Failed to load saved file:", error);
+    } finally {
+      setIsProcessingFile(false);
     }
   };
 
@@ -412,6 +421,10 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         return;
       }
 
+      console.log(
+        `[FileUpload] Starting upload: ${file.name} (${file.size} bytes)`,
+      );
+
       // Parse the file content based on file type
       let parsedContent: {
         content: string;
@@ -421,8 +434,12 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       };
 
       if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
+        console.log(`[FileUpload] Parsing PDF file...`);
         // Use PDF parser for PDF files
         const pdfResult = await parsePDF(file);
+        console.log(
+          `[FileUpload] PDF parsed: ${pdfResult.pageCount} pages, ${pdfResult.text.length} characters`,
+        );
         parsedContent = {
           content: pdfResult.text,
           type: "pdf",
@@ -430,18 +447,49 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           metadata: pdfResult.metadata,
         };
       } else {
+        console.log(`[FileUpload] Parsing text file...`);
         // Use regular parser for other file types
         parsedContent = await parseFileContent(file);
+        console.log(
+          `[FileUpload] Text parsed: ${parsedContent.content.length} characters`,
+        );
       }
 
       // Add the parsed file to context
+      console.log(
+        `[FileUpload] Extracting structured reports from parsed content...`,
+      );
       const parsedReports =
         parsedContent.type === "pdf" || parsedContent.type === "text"
-          ? parseHealthReport(parsedContent.content, {
+          ? await parseHealthReport(parsedContent.content, {
               inferredType: inferReportType(file.name),
               sourceName: file.name,
+              useAI: true, // Use AI parsing for better extraction
             })
           : [];
+
+      console.log(
+        `[FileUpload] Extracted ${parsedReports.length} report(s):`,
+        parsedReports.map((r) => {
+          if (r.report.type === "bloodwork") {
+            return {
+              type: r.report.type,
+              hasMetrics: r.report.metrics?.length || 0,
+              hasRegions: "N/A",
+            };
+          } else {
+            // Must be dexa
+            return {
+              type: r.report.type,
+              hasMetrics: "N/A",
+              hasRegions:
+                r.report.type === "dexa"
+                  ? r.report.regions?.length || 0
+                  : "N/A",
+            };
+          }
+        }),
+      );
 
       if (parsedReports.length) {
         addParsedReports(parsedReports);
@@ -622,6 +670,12 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                 {uploadError && (
                   <div className="mb-2 text-xs text-red-600">{uploadError}</div>
                 )}
+                {isProcessingFile && (
+                  <div className="mb-2 flex items-center gap-2 text-xs text-emerald-700">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent"></div>
+                    <span>Parsing file and extracting structured data...</span>
+                  </div>
+                )}
                 <div className="flex justify-end">
                   <Button
                     type="submit"
@@ -705,17 +759,28 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
 
       {!isExpanded && uploadedFiles.length > 0 && !uploadsHidden && (
         <div className="mb-4">
-          <h4 className="mb-2 font-semibold text-emerald-800">
-            Uploaded Files
-          </h4>
-          <div className="mb-2 flex justify-end">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setUploadsHidden(true)}
-            >
-              Hide Uploads
-            </Button>
+          <div className="mb-2 flex items-center justify-between">
+            <h4 className="font-semibold text-emerald-800">Uploaded Files</h4>
+            <div className="flex gap-2">
+              {reports && reports.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowReportViewer(true)}
+                  className="flex items-center gap-1"
+                >
+                  <FileText className="h-3 w-3" />
+                  View Parsed Reports ({reports.length})
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setUploadsHidden(true)}
+              >
+                Hide Uploads
+              </Button>
+            </div>
           </div>
           <ul className="flex flex-row flex-wrap gap-2">
             {uploadedFiles.map((file, idx) => (
@@ -742,7 +807,18 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       )}
 
       {!isExpanded && uploadedFiles.length > 0 && uploadsHidden && (
-        <div className="mb-4 flex justify-end">
+        <div className="mb-4 flex justify-end gap-2">
+          {reports && reports.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowReportViewer(true)}
+              className="flex items-center gap-1"
+            >
+              <FileText className="h-3 w-3" />
+              View Parsed Reports ({reports.length})
+            </Button>
+          )}
           <Button
             size="sm"
             variant="secondary"
@@ -750,6 +826,26 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           >
             Show Uploads
           </Button>
+        </div>
+      )}
+
+      {/* Report Parser Viewer Modal */}
+      {showReportViewer && reports && reports.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="w-full max-w-6xl h-[90vh] bg-white rounded-lg shadow-xl">
+            <ReportParserViewer
+              reports={reports}
+              onClose={() => setShowReportViewer(false)}
+              onDeleteReport={(index) => {
+                removeReport(index);
+                // If we deleted the last report, close the viewer
+                if (reports.length <= 1) {
+                  setShowReportViewer(false);
+                }
+              }}
+              onUpdateReport={updateReport}
+            />
+          </div>
         </div>
       )}
 
@@ -791,7 +887,17 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       )}
 
       <div className={chatHistoryClasses}>
-        {messages.length === 0 ? (
+        {isProcessingFile ? (
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent"></div>
+            <p className="text-lg font-medium text-emerald-700">
+              Processing file...
+            </p>
+            <p className="mt-2 text-sm text-emerald-600">
+              Parsing PDF and extracting structured data with AI
+            </p>
+          </div>
+        ) : messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center text-gray-500">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
               <span className="text-2xl">🌿</span>

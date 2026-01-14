@@ -64,14 +64,44 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    type VeniceChatRequestBody = {
+      messages: unknown[];
+      max_tokens: number;
+      temperature: number;
+      model: string;
+      stream: boolean;
+      response_format?: unknown;
+      top_p?: number;
+      frequency_penalty?: number;
+      presence_penalty?: number;
+      seed?: number;
+    };
+
     // Forward the request to Venice API
-    const requestBody = {
+    const requestBody: VeniceChatRequestBody = {
       messages: body.messages || [],
-      max_tokens: body.maxTokens || body.max_tokens || 4000, // Increased default token limit
-      temperature: body.temperature || 0.7,
+      // Use nullish coalescing so callers can intentionally pass 0 (e.g., temperature: 0)
+      max_tokens: (body.maxTokens ?? body.max_tokens ?? 4000) as number, // Increased default token limit
+      temperature: (body.temperature ?? 0.7) as number,
       model: modelName,
       stream: false,
     };
+
+    // Optional JSON-mode / structured outputs (OpenAI-compatible)
+    // Pass through if provided by caller.
+    if (body.response_format) {
+      requestBody.response_format = body.response_format;
+    } else if (body.responseFormat) {
+      requestBody.response_format = body.responseFormat;
+    }
+
+    // Optional sampling params (pass-through)
+    if (typeof body.top_p === "number") requestBody.top_p = body.top_p;
+    if (typeof body.frequency_penalty === "number")
+      requestBody.frequency_penalty = body.frequency_penalty;
+    if (typeof body.presence_penalty === "number")
+      requestBody.presence_penalty = body.presence_penalty;
+    if (typeof body.seed === "number") requestBody.seed = body.seed;
 
     // Validate request body
     if (

@@ -67,4 +67,6 @@ export type ParsedHealthReport = DexaReportData | BloodworkReportData;
 export interface ParsedReportSummary {
   report: ParsedHealthReport;
   extractedAt: string;
+  storjUri?: string; // Storj URI if report has been saved to Storj
+  savedToStorjAt?: string; // ISO timestamp when saved to Storj
 }

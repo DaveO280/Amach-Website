@@ -40,6 +40,7 @@ export default function WalletPage(): JSX.Element {
     disconnect,
     getHealthProfile,
     signMessage,
+    getWalletClient,
   } = useWalletService();
   const {
     isDashboardOpen,
@@ -379,6 +380,7 @@ export default function WalletPage(): JSX.Element {
                 <StorageManagementSection
                   userAddress={address}
                   signMessage={signMessage}
+                  getWalletClient={getWalletClient}
                 />
               )}
 

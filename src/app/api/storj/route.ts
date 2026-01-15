@@ -3,6 +3,7 @@ import { getStorageService } from "@/storage";
 import { getStorjTimelineService } from "@/storage";
 import { getStorjConversationService } from "@/storage";
 import { getStorjSyncService } from "@/storage";
+import { getStorjReportService } from "@/storage/StorjReportService";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 
 export const runtime = "nodejs";
@@ -255,6 +256,86 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           typedEncryptionKey,
         );
         result = { success: true };
+        break;
+      }
+
+      // Report operations (FHIR)
+      case "report/store": {
+        if (!data) {
+          return NextResponse.json(
+            { error: "Report data is required for report/store" },
+            { status: 400 },
+          );
+        }
+        const reportService = getStorjReportService();
+        try {
+          const stored = await reportService.storeReport(
+            data,
+            userAddress,
+            typedEncryptionKey,
+            options,
+          );
+          // Verify decryptability immediately after store (or reuse)
+          let verifiedDecrypt = false;
+          if (stored?.success && stored?.storjUri) {
+            const reportType = data?.report?.type ?? data?.type;
+            if (reportType === "bloodwork") {
+              verifiedDecrypt = Boolean(
+                await reportService.retrieveBloodworkReport(
+                  stored.storjUri,
+                  typedEncryptionKey,
+                ),
+              );
+            } else {
+              verifiedDecrypt = Boolean(
+                await reportService.retrieveDexaReport(
+                  stored.storjUri,
+                  typedEncryptionKey,
+                ),
+              );
+            }
+          }
+          result = { ...stored, verifiedDecrypt };
+        } catch (storeError) {
+          console.error(`❌ report/store error:`, storeError);
+          result = {
+            success: false,
+            error:
+              storeError instanceof Error
+                ? storeError.message
+                : "Unknown error",
+          };
+        }
+        break;
+      }
+
+      case "report/retrieve": {
+        if (!storjUri) {
+          return NextResponse.json(
+            { error: "storjUri is required for report/retrieve" },
+            { status: 400 },
+          );
+        }
+        const reportType = body?.reportType as string | undefined;
+        const reportService = getStorjReportService();
+        try {
+          if (reportType === "bloodwork") {
+            result = await reportService.retrieveBloodworkReport(
+              storjUri,
+              typedEncryptionKey,
+              body?.rawText,
+            );
+          } else {
+            result = await reportService.retrieveDexaReport(
+              storjUri,
+              typedEncryptionKey,
+              body?.rawText,
+            );
+          }
+        } catch (retrieveError) {
+          console.error(`❌ report/retrieve error:`, retrieveError);
+          result = null;
+        }
         break;
       }
 

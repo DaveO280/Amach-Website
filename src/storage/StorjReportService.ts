@@ -16,12 +16,15 @@ import {
   convertFhirToBloodwork,
 } from "@/utils/fhir/bloodworkToFhir";
 import type { FhirDiagnosticReport } from "@/utils/fhir/dexaToFhir";
+import { createHash } from "crypto";
 
 export interface ReportStorageResult {
   success: boolean;
   storjUri?: string;
   contentHash?: string;
   reportId?: string;
+  duplicate?: boolean;
+  verifiedDecrypt?: boolean;
   error?: string;
 }
 
@@ -42,6 +45,125 @@ export class StorjReportService {
     this.storageService = storageService || new StorageService();
   }
 
+  private stableStringify(value: unknown): string {
+    const seen = new WeakSet<object>();
+    const normalize = (v: unknown): unknown => {
+      if (v === null) return null;
+      if (typeof v !== "object") return v;
+      if (seen.has(v as object)) return "[Circular]";
+      seen.add(v as object);
+
+      if (Array.isArray(v)) return v.map((x) => normalize(x));
+
+      const obj = v as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const key of Object.keys(obj).sort()) {
+        out[key] = normalize(obj[key]);
+      }
+      return out;
+    };
+    return JSON.stringify(normalize(value));
+  }
+
+  private hashString(input: string): string {
+    return createHash("sha256").update(input).digest("hex");
+  }
+
+  private fingerprintDexa(report: DexaReportData): string {
+    const normalized = {
+      type: "dexa",
+      scanDate: report.scanDate || "",
+      source: report.source || "",
+      totalBodyFatPercent: report.totalBodyFatPercent ?? null,
+      totalLeanMassKg: report.totalLeanMassKg ?? null,
+      visceralFatRating: report.visceralFatRating ?? null,
+      visceralFatAreaCm2: report.visceralFatAreaCm2 ?? null,
+      visceralFatVolumeCm3: report.visceralFatVolumeCm3 ?? null,
+      boneDensityTotal: report.boneDensityTotal ?? null,
+      androidGynoidRatio: report.androidGynoidRatio ?? null,
+      regions: [...(report.regions || [])]
+        .map((r) => ({
+          region: r.region,
+          bodyFatPercent: r.bodyFatPercent ?? null,
+          leanMassKg: r.leanMassKg ?? null,
+          fatMassKg: r.fatMassKg ?? null,
+          boneDensityGPerCm2: r.boneDensityGPerCm2 ?? null,
+          tScore: r.tScore ?? null,
+          zScore: r.zScore ?? null,
+        }))
+        .sort((a, b) => a.region.localeCompare(b.region)),
+    };
+    return this.hashString(this.stableStringify(normalized));
+  }
+
+  private fingerprintBloodwork(report: BloodworkReportData): string {
+    const normalizedMetrics = [...(report.metrics || [])]
+      .map((m) => ({
+        name: m.name,
+        value: m.value ?? null,
+        valueText: m.valueText ?? null,
+        unit: m.unit ?? null,
+        referenceRange: m.referenceRange ?? null,
+        flag: m.flag ?? null,
+        panel: m.panel ?? null,
+      }))
+      .sort((a, b) => {
+        const ak = `${a.panel ?? ""}|${a.name}|${a.unit ?? ""}|${a.value ?? ""}|${a.referenceRange ?? ""}|${a.flag ?? ""}`;
+        const bk = `${b.panel ?? ""}|${b.name}|${b.unit ?? ""}|${b.value ?? ""}|${b.referenceRange ?? ""}|${b.flag ?? ""}`;
+        return ak.localeCompare(bk);
+      });
+
+    const normalized = {
+      type: "bloodwork",
+      reportDate: report.reportDate || "",
+      laboratory: report.laboratory || "",
+      source: report.source || "",
+      metrics: normalizedMetrics,
+    };
+    return this.hashString(this.stableStringify(normalized));
+  }
+
+  private getFingerprint(report: DexaReportData | BloodworkReportData): string {
+    return report.type === "dexa"
+      ? this.fingerprintDexa(report)
+      : this.fingerprintBloodwork(report);
+  }
+
+  private async findDuplicate(
+    userAddress: string,
+    encryptionKey: WalletEncryptionKey,
+    dataType: string,
+    fingerprint: string,
+  ): Promise<{
+    storjUri: string;
+    contentHash: string;
+    reportId?: string;
+  } | null> {
+    const existing = await this.storageService.listUserData(
+      userAddress,
+      encryptionKey,
+      dataType,
+    );
+
+    for (const ref of existing) {
+      const md = ref.metadata || {};
+      const fp =
+        md.reportfingerprint ||
+        md.reportFingerprint ||
+        md.report_fingerprint ||
+        "";
+      if (fp && fp === fingerprint) {
+        const rid = md.reportid || md.reportId;
+        return {
+          storjUri: ref.uri,
+          contentHash: ref.contentHash,
+          reportId: rid,
+        };
+      }
+    }
+    return null;
+  }
+
   /**
    * Store a DEXA report to Storj in FHIR format
    *
@@ -59,6 +181,26 @@ export class StorjReportService {
   ): Promise<ReportStorageResult> {
     try {
       console.log(`💾 Storing DEXA report to Storj (FHIR format)...`);
+
+      const fingerprint = this.getFingerprint(report);
+      const duplicate = await this.findDuplicate(
+        userAddress,
+        encryptionKey,
+        "dexa-report-fhir",
+        fingerprint,
+      );
+      if (duplicate) {
+        console.log(
+          `♻️ Duplicate DEXA report detected, reusing: ${duplicate.storjUri}`,
+        );
+        return {
+          success: true,
+          storjUri: duplicate.storjUri,
+          contentHash: duplicate.contentHash,
+          reportId: duplicate.reportId,
+          duplicate: true,
+        };
+      }
 
       // Convert to FHIR format
       const fhirReport = convertDexaToFhir(
@@ -79,13 +221,14 @@ export class StorjReportService {
           {
             dataType: "dexa-report-fhir",
             metadata: {
-              reportId,
-              reportType: "dexa",
+              reportid: reportId,
+              reporttype: "dexa",
               format: "fhir-r4",
-              scanDate: report.scanDate || "",
+              reportfingerprint: fingerprint,
+              scandate: report.scanDate || "",
               source: report.source || "",
               confidence: report.confidence.toString(),
-              regionCount: report.regions?.length?.toString() || "0",
+              regioncount: report.regions?.length?.toString() || "0",
               ...options?.metadata,
             },
             onProgress: options?.onProgress,
@@ -121,6 +264,26 @@ export class StorjReportService {
     try {
       console.log(`💾 Storing Bloodwork report to Storj (FHIR format)...`);
 
+      const fingerprint = this.getFingerprint(report);
+      const duplicate = await this.findDuplicate(
+        userAddress,
+        encryptionKey,
+        "bloodwork-report-fhir",
+        fingerprint,
+      );
+      if (duplicate) {
+        console.log(
+          `♻️ Duplicate bloodwork report detected, reusing: ${duplicate.storjUri}`,
+        );
+        return {
+          success: true,
+          storjUri: duplicate.storjUri,
+          contentHash: duplicate.contentHash,
+          reportId: duplicate.reportId,
+          duplicate: true,
+        };
+      }
+
       const fhirReport = convertBloodworkToFhir(
         report,
         options?.patientId,
@@ -137,13 +300,14 @@ export class StorjReportService {
           {
             dataType: "bloodwork-report-fhir",
             metadata: {
-              reportId,
-              reportType: "bloodwork",
+              reportid: reportId,
+              reporttype: "bloodwork",
               format: "fhir-r4",
-              reportDate: report.reportDate || "",
+              reportfingerprint: fingerprint,
+              reportdate: report.reportDate || "",
               source: report.source || "",
               confidence: report.confidence.toString(),
-              metricCount: report.metrics?.length?.toString() || "0",
+              metriccount: report.metrics?.length?.toString() || "0",
               ...options?.metadata,
             },
             onProgress: options?.onProgress,

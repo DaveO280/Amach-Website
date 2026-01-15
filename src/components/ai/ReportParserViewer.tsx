@@ -5,9 +5,10 @@ import type { ParsedReportSummary } from "@/types/reportData";
 import { formatReportsForAI } from "@/utils/reportFormatters";
 import { Button } from "@/components/ui/button";
 import { X, Upload, CheckCircle, AlertCircle } from "lucide-react";
-import { getStorjReportService } from "@/storage/StorjReportService";
 import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
 import { useWalletService } from "@/hooks/useWalletService";
+import { generateSearchTag, getUserSecret } from "@/utils/searchableEncryption";
+import { getChainEventTypeForReportType } from "@/utils/storjChainMarkerRegistry";
 
 interface ReportParserViewerProps {
   reports: ParsedReportSummary[];
@@ -39,7 +40,173 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
     message: string;
     storjUri?: string;
   } | null>(null);
-  const { isConnected, address, signMessage } = useWalletService();
+  const { isConnected, address, signMessage, getWalletClient } =
+    useWalletService();
+
+  const getLocalChainMapKey = (): string =>
+    address
+      ? `storj_report_chain_map_${address.toLowerCase()}`
+      : "storj_report_chain_map_noaddr";
+
+  const saveChainMapping = (
+    storjUri: string,
+    eventId: number,
+    txHash: string,
+  ): void => {
+    try {
+      const key = getLocalChainMapKey();
+      const existing = JSON.parse(localStorage.getItem(key) || "{}") as Record<
+        string,
+        { eventId: number; txHash: string }
+      >;
+      existing[storjUri] = { eventId, txHash };
+      localStorage.setItem(key, JSON.stringify(existing));
+    } catch {
+      // ignore
+    }
+  };
+
+  const formatContentHash = (hash: string): `0x${string}` => {
+    const h = hash.startsWith("0x") ? hash : `0x${hash}`;
+    return h as `0x${string}`;
+  };
+
+  const findExistingEventIdByStorjUri = async (
+    storjUri: string,
+  ): Promise<number | null> => {
+    if (!address) return null;
+    const { SECURE_HEALTH_PROFILE_CONTRACT, secureHealthProfileAbi } =
+      await import("@/lib/contractConfig");
+    const { getActiveChain } = await import("@/lib/networkConfig");
+    const { createPublicClient, http } = await import("viem");
+    const rpcUrl =
+      process.env.NEXT_PUBLIC_ZKSYNC_RPC_URL ||
+      "https://sepolia.era.zksync.dev";
+    const publicClient = createPublicClient({
+      chain: getActiveChain(),
+      transport: http(rpcUrl),
+    });
+
+    const count = (await publicClient.readContract({
+      address: SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
+      abi: secureHealthProfileAbi,
+      functionName: "getEventCount",
+      args: [address as `0x${string}`],
+    })) as bigint;
+
+    const n = Number(count);
+    for (let i = 0; i < n; i++) {
+      const uri = (await publicClient.readContract({
+        address: SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
+        abi: secureHealthProfileAbi,
+        functionName: "eventStorjUri",
+        args: [address as `0x${string}`, BigInt(i)],
+      })) as string;
+      if (uri === storjUri) return i;
+    }
+    return null;
+  };
+
+  const recordReportUploadOnChain = async (params: {
+    storjUri: string;
+    contentHash: string;
+    reportType: "dexa" | "bloodwork";
+  }): Promise<{
+    created: boolean;
+    eventId: number | null;
+    txHash?: string;
+  }> => {
+    if (!address || !signMessage) return { created: false, eventId: null };
+
+    // Avoid duplicate on-chain markers for the same Storj URI
+    const existing = await findExistingEventIdByStorjUri(params.storjUri);
+    if (existing !== null) {
+      return { created: false, eventId: existing };
+    }
+
+    const walletClient = await getWalletClient();
+    if (!walletClient) {
+      throw new Error("Wallet client not available");
+    }
+
+    const { SECURE_HEALTH_PROFILE_CONTRACT, secureHealthProfileAbi } =
+      await import("@/lib/contractConfig");
+    const { getActiveChain } = await import("@/lib/networkConfig");
+    const { createPublicClient, http } = await import("viem");
+    const rpcUrl =
+      process.env.NEXT_PUBLIC_ZKSYNC_RPC_URL ||
+      "https://sepolia.era.zksync.dev";
+    const publicClient = createPublicClient({
+      chain: getActiveChain(),
+      transport: http(rpcUrl),
+    });
+
+    // Predict eventId by reading current count (events are appended)
+    const countBefore = (await publicClient.readContract({
+      address: SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
+      abi: secureHealthProfileAbi,
+      functionName: "getEventCount",
+      args: [address as `0x${string}`],
+    })) as bigint;
+    const predictedEventId = Number(countBefore);
+
+    const userSecret = await getUserSecret({
+      address,
+      signMessage,
+    });
+    const chainEventType = getChainEventTypeForReportType(params.reportType);
+    if (!chainEventType) {
+      throw new Error(
+        `No chain eventType registered for reportType: ${params.reportType}`,
+      );
+    }
+    const searchTag = generateSearchTag(chainEventType, userSecret);
+
+    const formattedHash = formatContentHash(params.contentHash);
+    if (formattedHash.length !== 66) {
+      throw new Error(
+        `Invalid contentHash length: expected 66 chars (0x + 64 hex), got ${formattedHash.length}`,
+      );
+    }
+
+    const txHash = await walletClient.writeContract({
+      address: SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
+      abi: secureHealthProfileAbi,
+      functionName: "addHealthEventWithStorj",
+      args: ["", searchTag as `0x${string}`, params.storjUri, formattedHash],
+      chain: getActiveChain(),
+      account: walletClient.account ?? (address as `0x${string}`),
+      gas: 2000000n,
+    });
+
+    await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+    saveChainMapping(params.storjUri, predictedEventId, txHash);
+    return { created: true, eventId: predictedEventId, txHash };
+  };
+
+  const verifyDecryptFromStorj = async (params: {
+    storjUri: string;
+    reportType: "dexa" | "bloodwork";
+    encryptionKey: unknown;
+  }): Promise<boolean> => {
+    if (!address) return false;
+    const resp = await fetch("/api/storj", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "report/retrieve",
+        userAddress: address,
+        encryptionKey: params.encryptionKey,
+        storjUri: params.storjUri,
+        reportType: params.reportType,
+      }),
+    });
+
+    if (!resp.ok) return false;
+    const payload = await resp.json();
+    return Boolean(payload?.success && payload?.result);
+  };
 
   // Update selected index when reports change
   React.useEffect(() => {
@@ -108,8 +275,6 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
                       address,
                       signMessage,
                     );
-                    const reportService = getStorjReportService();
-
                     let successCount = savedCount; // Start with already saved count
                     let failCount = 0;
                     let newlySaved = 0;
@@ -122,19 +287,44 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
                         continue;
                       }
 
-                      const result = await reportService.storeReport(
-                        report,
-                        address,
-                        encryptionKey,
-                        {
-                          metadata: {
-                            uploadedAt: new Date().toISOString(),
-                            source: "report-viewer",
+                      const resp = await fetch("/api/storj", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          action: "report/store",
+                          userAddress: address,
+                          encryptionKey,
+                          data: report,
+                          options: {
+                            metadata: {
+                              uploadedAt: new Date().toISOString(),
+                              source: "report-viewer",
+                            },
                           },
-                        },
-                      );
+                        }),
+                      });
 
-                      if (result.success && result.storjUri) {
+                      const payload = await resp.json();
+                      const result = payload?.result;
+
+                      if (result?.success && result?.storjUri) {
+                        const contentHash =
+                          (result?.contentHash as string | undefined) ||
+                          (result?.existingContentHash as string | undefined) ||
+                          "";
+                        if (!contentHash) {
+                          throw new Error(
+                            "Storj save succeeded but no contentHash was returned; cannot record on-chain marker.",
+                          );
+                        }
+
+                        // Record on-chain upload marker (timeline-style) after Storj save
+                        await recordReportUploadOnChain({
+                          storjUri: result.storjUri,
+                          contentHash,
+                          reportType: report.report.type,
+                        });
+
                         successCount++;
                         newlySaved++;
                         // Update the report with Storj URI
@@ -381,24 +571,64 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
                                   address,
                                   signMessage,
                                 );
-                              const reportService = getStorjReportService();
-
-                              const result = await reportService.storeReport(
-                                selectedReport,
-                                address,
-                                encryptionKey,
-                                {
-                                  metadata: {
-                                    uploadedAt: new Date().toISOString(),
-                                    source: "report-viewer",
+                              const resp = await fetch("/api/storj", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  action: "report/store",
+                                  userAddress: address,
+                                  encryptionKey,
+                                  data: selectedReport,
+                                  options: {
+                                    metadata: {
+                                      uploadedAt: new Date().toISOString(),
+                                      source: "report-viewer",
+                                    },
                                   },
-                                },
-                              );
+                                }),
+                              });
 
-                              if (result.success && result.storjUri) {
+                              const payload = await resp.json();
+                              const result = payload?.result;
+
+                              if (result?.success && result?.storjUri) {
+                                const contentHash =
+                                  (result?.contentHash as string | undefined) ||
+                                  (result?.existingContentHash as
+                                    | string
+                                    | undefined) ||
+                                  "";
+                                if (!contentHash) {
+                                  throw new Error(
+                                    "Storj save succeeded but no contentHash was returned; cannot record on-chain marker.",
+                                  );
+                                }
+
+                                // Record on-chain upload marker (timeline-style) after Storj save
+                                await recordReportUploadOnChain({
+                                  storjUri: result.storjUri,
+                                  contentHash,
+                                  reportType: selectedReport.report.type,
+                                });
+
+                                const verified =
+                                  typeof result?.verifiedDecrypt === "boolean"
+                                    ? result.verifiedDecrypt
+                                    : await verifyDecryptFromStorj({
+                                        storjUri: result.storjUri,
+                                        reportType: selectedReport.report.type,
+                                        encryptionKey,
+                                      });
+
                                 setSaveStatus({
                                   success: true,
-                                  message: "Saved to Storj!",
+                                  message: verified
+                                    ? result?.duplicate
+                                      ? "Already saved (verified decrypt)!"
+                                      : "Saved to Storj (verified decrypt)!"
+                                    : result?.duplicate
+                                      ? "Already saved (decrypt verify failed)"
+                                      : "Saved to Storj (decrypt verify failed)",
                                   storjUri: result.storjUri,
                                 });
 

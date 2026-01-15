@@ -52,6 +52,7 @@ export interface StorageReference {
   size: number;
   uploadedAt: number;
   dataType: string;
+  metadata?: Record<string, string>;
 }
 
 export interface UploadOptions {
@@ -581,15 +582,19 @@ export class StorjClient {
 
           try {
             const headResponse = await this.client.send(headCommand);
+            const md = headResponse.Metadata || {};
+            // S3 metadata keys are normalized to lowercase by most SDKs/providers.
+            // Support both legacy camelCase and normalized lowercase variants.
+            const contentHash = md.contenthash || md.contentHash || "";
+            const uploadedAtRaw = md.uploadedat || md.uploadedAt || "0";
+            const dataTypeValue = md.datatype || md.dataType || "unknown";
             references.push({
               uri: `storj://${bucketName}/${obj.Key}`,
-              contentHash: headResponse.Metadata?.contentHash || "",
+              contentHash,
               size: obj.Size || 0,
-              uploadedAt: parseInt(
-                headResponse.Metadata?.uploadedAt || "0",
-                10,
-              ),
-              dataType: headResponse.Metadata?.dataType || "unknown",
+              uploadedAt: parseInt(uploadedAtRaw, 10),
+              dataType: dataTypeValue,
+              metadata: md,
             });
           } catch {
             // Skip objects we can't get metadata for

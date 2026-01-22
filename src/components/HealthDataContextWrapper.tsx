@@ -12,6 +12,7 @@ import {
 import { HealthDataByType, ProcessingState } from "@/types/healthData";
 import {
   calculateAndStoreDailyHealthScores,
+  calculateAndStoreDailyHealthScoresFromProcessed,
   calculateDailyHealthScores,
   getDailyHealthScores,
   clearDailyHealthScores,
@@ -20,6 +21,7 @@ import { extractDatePart } from "@/utils/dataDeduplicator";
 import { processSleepData } from "@/utils/sleepDataProcessor";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useWalletConnection } from "../hooks/useWalletConnection";
+import { healthDataProcessor } from "@/data/processors/HealthDataProcessor";
 import {
   normalizeUserProfile,
   type NormalizedUserProfile,
@@ -34,6 +36,7 @@ import type {
 } from "@/types/contextVault";
 import { buildContextVaultSnapshot } from "@/utils/contextVault";
 import { useWalletService } from "@/hooks/useWalletService";
+import { healthDataStore } from "@/data/store/healthDataStore";
 
 // Profile type
 interface ProfileData extends NormalizedUserProfile {}
@@ -78,6 +81,8 @@ interface HealthDataContextType {
   reports: ParsedReportSummary[];
   addParsedReports: (reports: ParsedReportSummary[]) => void;
   clearReports: () => void;
+  removeReport: (index: number) => void;
+  updateReport: (index: number, patch: Partial<ParsedReportSummary>) => void;
   userProfile: HealthContext["userProfile"];
   setUserProfile: (profile: HealthContext["userProfile"]) => void;
   chatHistory: ChatMessage[];
@@ -163,6 +168,11 @@ export default function HealthDataContextWrapper({
 
   // Get wallet connection data
   const { isConnected, profile: walletProfile } = useWalletConnection();
+
+  // Load long-range processed aggregates on startup (enables fast charts / tool-use without reprocessing raw data).
+  useEffect(() => {
+    void healthDataProcessor.loadFromDb();
+  }, []);
 
   // Optionally, update processingState based on query status
   useEffect(() => {
@@ -713,11 +723,28 @@ export default function HealthDataContextWrapper({
             console.log(
               "🔄 [Daily Scores] Cleared old scores, recalculating...",
             );
-            // Use the async function that handles both calculation and storage
-            return calculateAndStoreDailyHealthScores(
-              healthDataResults as HealthDataResults,
-              profile,
-            );
+            // Prefer processed aggregates if available (avoids missing-category days when raw is trimmed)
+            return healthDataStore.getProcessedData().then((processed) => {
+              if (processed) {
+                return calculateAndStoreDailyHealthScoresFromProcessed(
+                  {
+                    dailyAggregates:
+                      processed.dailyAggregates as unknown as Record<
+                        string,
+                        Map<string, import("@/agents/types").MetricSample>
+                      >,
+                    sleepData:
+                      processed.sleepData as import("@/utils/sleepDataProcessor").DailyProcessedSleepData[],
+                  },
+                  profile,
+                );
+              }
+              // Fallback: raw-based calculation
+              return calculateAndStoreDailyHealthScores(
+                healthDataResults as HealthDataResults,
+                profile,
+              );
+            });
           })
           .then((dailyScores: unknown[]) => {
             console.log(
@@ -832,6 +859,23 @@ export default function HealthDataContextWrapper({
   const clearReports = (): void => {
     setHealthContext((prev) => ({ ...prev, reports: [] }));
   };
+  const removeReport = (index: number): void => {
+    setHealthContext((prev) => ({
+      ...prev,
+      reports: (prev.reports ?? []).filter((_, i) => i !== index),
+    }));
+  };
+  const updateReport = (
+    index: number,
+    patch: Partial<ParsedReportSummary>,
+  ): void => {
+    setHealthContext((prev) => ({
+      ...prev,
+      reports: (prev.reports ?? []).map((r, i) =>
+        i === index ? { ...r, ...patch } : r,
+      ),
+    }));
+  };
   const setUserProfile = (profile: HealthContext["userProfile"]): void => {
     setHealthContext((prev) => ({ ...prev, userProfile: profile }));
   };
@@ -871,6 +915,8 @@ export default function HealthDataContextWrapper({
         reports: healthContext.reports ?? [],
         addParsedReports,
         clearReports,
+        removeReport,
+        updateReport,
         userProfile: healthContext.userProfile,
         setUserProfile,
         chatHistory: healthContext.chatHistory,

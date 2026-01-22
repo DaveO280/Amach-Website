@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Use Node.js runtime for longer timeout (60s on hobby plan vs 30s for edge)
+// Use Node.js runtime for longer timeout
 export const runtime = "nodejs";
-export const maxDuration = 60; // Maximum allowed on Vercel hobby plan
+// Vercel Hobby plan: max 60s, Pro plan: max 300s
+export const maxDuration = 60; // 60 seconds - maximum allowed on Hobby plan
 
-const REQUEST_TIMEOUT_MS = Number(
-  process.env.VENICE_REQUEST_TIMEOUT_MS ?? "120000",
-);
+// Remove artificial timeout limits - let Venice API handle its own timeouts
+// Only use timeout if explicitly set in environment variable
+const REQUEST_TIMEOUT_MS = process.env.VENICE_REQUEST_TIMEOUT_MS
+  ? Number(process.env.VENICE_REQUEST_TIMEOUT_MS)
+  : undefined; // No timeout by default
 
 export async function OPTIONS(): Promise<NextResponse> {
   return NextResponse.json(
@@ -33,10 +36,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Get API credentials from environment variables (server-side only)
     const apiKey = process.env.VENICE_API_KEY;
     const apiEndpoint = "https://api.venice.ai/api/v1";
-    const modelName = process.env.VENICE_MODEL_NAME || "zai-org-glm-4.7";
+    // Read from NEXT_PUBLIC_ var first for consistency with client, fallback to server-only var
+    const modelName =
+      process.env.NEXT_PUBLIC_VENICE_MODEL_NAME ||
+      process.env.VENICE_MODEL_NAME ||
+      "zai-org-glm-4.7";
 
-    // Enhanced logging for debugging
-    console.log("[Venice API Route] Environment check:", {
+    // Enhanced logging for debugging - using console.error to ensure visibility in production
+    console.error("[Venice API Route] Environment check:", {
       timestamp: new Date().toISOString(),
       elapsedMs: Date.now() - startTime,
       hasApiKey: Boolean(apiKey),
@@ -57,14 +64,59 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    type VeniceChatRequestBody = {
+      messages: unknown[];
+      max_tokens: number;
+      temperature: number;
+      model: string;
+      stream: boolean;
+      response_format?: unknown;
+      venice_parameters?: Record<string, unknown>;
+      top_p?: number;
+      frequency_penalty?: number;
+      presence_penalty?: number;
+      seed?: number;
+    };
+
     // Forward the request to Venice API
-    const requestBody = {
+    const requestBody: VeniceChatRequestBody = {
       messages: body.messages || [],
-      max_tokens: body.maxTokens || body.max_tokens || 4000, // Increased default token limit
-      temperature: body.temperature || 0.7,
+      // Use nullish coalescing so callers can intentionally pass 0 (e.g., temperature: 0)
+      max_tokens: (body.maxTokens ?? body.max_tokens ?? 4000) as number, // Increased default token limit
+      temperature: (body.temperature ?? 0.7) as number,
       model: modelName,
       stream: false,
     };
+
+    // Venice-specific parameters (server-side defaults with pass-through override).
+    // Docs: https://docs.venice.ai/overview/about-venice
+    const incomingVeniceParams =
+      (body.venice_parameters as Record<string, unknown> | undefined) ??
+      (body.veniceParameters as Record<string, unknown> | undefined);
+    requestBody.venice_parameters =
+      incomingVeniceParams ??
+      ({
+        // Hide reasoning/thinking output when supported by the model.
+        strip_thinking_response: true,
+        // Avoid including Venice system prompts in responses when supported.
+        include_venice_system_prompt: false,
+      } satisfies Record<string, unknown>);
+
+    // Optional JSON-mode / structured outputs (OpenAI-compatible)
+    // Pass through if provided by caller.
+    if (body.response_format) {
+      requestBody.response_format = body.response_format;
+    } else if (body.responseFormat) {
+      requestBody.response_format = body.responseFormat;
+    }
+
+    // Optional sampling params (pass-through)
+    if (typeof body.top_p === "number") requestBody.top_p = body.top_p;
+    if (typeof body.frequency_penalty === "number")
+      requestBody.frequency_penalty = body.frequency_penalty;
+    if (typeof body.presence_penalty === "number")
+      requestBody.presence_penalty = body.presence_penalty;
+    if (typeof body.seed === "number") requestBody.seed = body.seed;
 
     // Validate request body
     if (
@@ -86,13 +138,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    console.log("[Venice API Route] Sending request to Venice:", {
+    console.error("[Venice API Route] Sending request to Venice:", {
       timestamp: new Date().toISOString(),
       elapsedMs: Date.now() - startTime,
       endpoint: `${apiEndpoint}/chat/completions`,
       model: modelName,
       messageCount: requestBody.messages?.length || 0,
       maxTokens: requestBody.max_tokens,
+      hasVeniceParams: Boolean(requestBody.venice_parameters),
     });
 
     try {
@@ -109,11 +162,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       // Forward the request to Venice API
-      const timeoutSignal = AbortSignal.timeout(
-        Math.max(1000, Math.min(REQUEST_TIMEOUT_MS, 240000)),
-      );
-
-      const response = await fetch(`${apiEndpoint}/chat/completions`, {
+      // Only add timeout signal if explicitly configured
+      const fetchOptions: RequestInit = {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -121,11 +171,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           Accept: "application/json",
         },
         body: JSON.stringify(requestBody),
-        // Add timeout for edge runtime
-        signal: timeoutSignal,
-      });
+      };
 
-      console.log("[Venice API Route] Venice API response received:", {
+      // Only add timeout if explicitly set
+      if (REQUEST_TIMEOUT_MS) {
+        fetchOptions.signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+      }
+
+      const response = await fetch(
+        `${apiEndpoint}/chat/completions`,
+        fetchOptions,
+      );
+
+      console.error("[Venice API Route] Venice API response received:", {
         timestamp: new Date().toISOString(),
         elapsedMs: Date.now() - startTime,
         fetchDuration: Date.now() - fetchStartTime,
@@ -152,7 +210,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       const data = await response.json();
-      console.log("[Venice API Route] Response processed:", {
+      console.error("[Venice API Route] Response processed - SUCCESS:", {
         timestamp: new Date().toISOString(),
         elapsedMs: Date.now() - startTime,
         hasChoices: Boolean(data?.choices),
@@ -205,9 +263,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         return NextResponse.json(
           {
             error: "Venice API request timed out",
-            details: `No response within ${Math.round(
-              Math.min(REQUEST_TIMEOUT_MS, 240000) / 1000,
-            )} seconds.`,
+            details: REQUEST_TIMEOUT_MS
+              ? `No response within ${Math.round(REQUEST_TIMEOUT_MS / 1000)} seconds.`
+              : "Request was aborted.",
           },
           { status: 504 },
         );

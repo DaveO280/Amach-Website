@@ -20,14 +20,19 @@ import {
 
 interface SleepAnalysisChartProps {
   data: HealthDataPoint[];
+  processedData?: DailyProcessedSleepData[];
   height?: number;
 }
 
 export const SleepAnalysisChart = ({
   data,
+  processedData: processedOverride,
   height = 300,
 }: SleepAnalysisChartProps): React.ReactElement => {
-  const processedData = processSleepData(data);
+  const processedData =
+    processedOverride && processedOverride.length > 0
+      ? processedOverride
+      : processSleepData(data);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   // Helper function to format minutes as hours

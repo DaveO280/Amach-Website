@@ -2,15 +2,28 @@
 
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAi } from "@/store/aiStore";
 import { parseHealthReport } from "@/utils/reportParsers";
-import { Send, X } from "lucide-react";
+import { Send, FileText } from "lucide-react";
 import Papa from "papaparse";
 import React, { useEffect, useRef, useState } from "react";
 import { healthDataStore } from "../../data/store/healthDataStore";
 import { parsePDF } from "../../utils/pdfParser";
 import { useWalletService } from "@/hooks/useWalletService";
 import { MessageLimitPopup } from "@/components/ui/MessageLimitPopup";
+import { ReportParserViewer } from "./ReportParserViewer";
+import { getCachedWalletEncryptionKey } from "@/utils/walletEncryption";
+import type { ParsedReportSummary } from "@/types/reportData";
+import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
+import { generateSearchTag, getUserSecret } from "@/utils/searchableEncryption";
+import { getChainEventTypeForReportType } from "@/utils/storjChainMarkerRegistry";
 
 // Define types for our message interface
 interface MessageType {
@@ -36,7 +49,8 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     useMultiAgent,
     setUseMultiAgent,
   } = useAi();
-  const { isConnected } = useWalletService();
+  const walletService = useWalletService();
+  const { isConnected, address, signMessage } = walletService;
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -47,15 +61,15 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     removeUploadedFile,
     addParsedReports,
     clearChatHistory,
+    reports,
+    removeReport,
+    updateReport,
   } = useHealthDataContext();
 
   // Add state for upload form
-  const [showUploadForm, setShowUploadForm] = useState(false);
   const [uploadRawData, setUploadRawData] = useState("");
   const [uploadError, setUploadError] = useState("");
   const [isProcessingFile, setIsProcessingFile] = useState(false);
-  // Local state to hide uploads in chat UI
-  const [uploadsHidden, setUploadsHidden] = useState(false);
   // State for saved files from IndexedDB
   const [savedFiles, setSavedFiles] = useState<
     Array<{
@@ -67,12 +81,50 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       lastAccessed: string;
     }>
   >([]);
-  const [showSavedFiles, setShowSavedFiles] = useState(false);
   const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [autoExpandOnSend, setAutoExpandOnSend] = useState(true);
   const [messageCount, setMessageCount] = useState(0);
   const [showMessageLimitPopup, setShowMessageLimitPopup] = useState(false);
+  const [showReportViewer, setShowReportViewer] = useState(false);
+
+  // Dev-only: quick way to adjust Quick-mode token budget without using the console.
+  const isDev = process.env.NODE_ENV === "development";
+  const [quickMaxTokensUi, setQuickMaxTokensUi] = useState<string>(() => {
+    if (!isDev) return "";
+    try {
+      return window.localStorage.getItem("cosaint_quick_max_tokens") || "";
+    } catch {
+      return "";
+    }
+  });
+
+  // File manager UI (keeps chat uncluttered)
+  const [showFileManager, setShowFileManager] = useState(false);
+  const [fileManagerTab, setFileManagerTab] = useState<
+    "attached" | "saved" | "storj" | "upload"
+  >("attached");
+
+  // Import parsed reports directly from Storj (skip re-parsing)
+  const [storjImportError, setStorjImportError] = useState<string>("");
+  const [storjImportLoading, setStorjImportLoading] = useState(false);
+  const [storjImportSuccess, setStorjImportSuccess] = useState<string>("");
+  const [storjReports, setStorjReports] = useState<
+    Array<{
+      uri: string;
+      dataType: string;
+      contentHash?: string;
+      uploadedAt?: string;
+      sizeBytes?: number;
+      metadata?: Record<string, string>;
+    }>
+  >([]);
+  const [selectedStorjUris, setSelectedStorjUris] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [savingReportsToStorj, setSavingReportsToStorj] = useState(false);
+  const [saveReportsError, setSaveReportsError] = useState<string>("");
+  const ENABLE_STORJ_SAVE_UI = process.env.NODE_ENV === "development";
 
   const AUTO_EXPAND_STORAGE_KEY = "cosaintAutoExpandOnSend";
   const MESSAGE_COUNT_STORAGE_KEY = "cosaintMessageCountNoWallet";
@@ -126,6 +178,361 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       return "bloodwork";
     }
     return undefined;
+  };
+
+  const getMeta = (
+    md: Record<string, string> | undefined,
+    key: string,
+  ): string | undefined => {
+    if (!md) return undefined;
+    const lowerKey = key.toLowerCase();
+    return md[key] ?? md[lowerKey];
+  };
+
+  const loadStorjReportsList = async (): Promise<void> => {
+    if (!address) {
+      setStorjImportError("Connect your wallet to import saved reports.");
+      return;
+    }
+
+    setStorjImportLoading(true);
+    setStorjImportError("");
+    setStorjImportSuccess("");
+    setStorjReports([]);
+    setSelectedStorjUris(new Set());
+
+    try {
+      const encryptionKey = await getCachedWalletEncryptionKey(
+        address,
+        signMessage,
+      );
+
+      const fetchList = async (dataType: string) => {
+        const res = await fetch("/api/storj", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "storage/list",
+            userAddress: address,
+            encryptionKey,
+            dataType,
+          }),
+        });
+        const json = (await res.json()) as {
+          success?: boolean;
+          result?: unknown;
+          error?: string;
+        };
+        if (!res.ok || json.success === false) {
+          throw new Error(
+            json.error || `Failed to list Storj reports (${dataType})`,
+          );
+        }
+        return (
+          (json.result as Array<{
+            uri: string;
+            metadata?: Record<string, string>;
+            contentHash?: string;
+            uploadedAt?: string;
+            sizeBytes?: number;
+          }>) || []
+        );
+      };
+
+      const [bloodwork, dexa] = await Promise.all([
+        fetchList("bloodwork-report-fhir"),
+        fetchList("dexa-report-fhir"),
+      ]);
+
+      const merged = [
+        ...bloodwork.map((r) => ({ ...r, dataType: "bloodwork-report-fhir" })),
+        ...dexa.map((r) => ({ ...r, dataType: "dexa-report-fhir" })),
+      ].sort((a, b) => {
+        const aMs = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
+        const bMs = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
+        return bMs - aMs;
+      });
+
+      setStorjReports(merged);
+    } catch (e) {
+      setStorjImportError(
+        e instanceof Error ? e.message : "Failed to load reports from Storj",
+      );
+    } finally {
+      setStorjImportLoading(false);
+    }
+  };
+
+  const toggleSelectedStorjUri = (uri: string): void => {
+    setSelectedStorjUris((prev) => {
+      const next = new Set(prev);
+      if (next.has(uri)) next.delete(uri);
+      else next.add(uri);
+      return next;
+    });
+  };
+
+  const importSelectedStorjReports = async (): Promise<void> => {
+    if (!address) {
+      setStorjImportError("Connect your wallet to import saved reports.");
+      return;
+    }
+    if (selectedStorjUris.size === 0) {
+      setStorjImportError("Select a report to import.");
+      return;
+    }
+
+    setStorjImportLoading(true);
+    setStorjImportError("");
+    setStorjImportSuccess("");
+
+    try {
+      const encryptionKey = await getCachedWalletEncryptionKey(
+        address,
+        signMessage,
+      );
+
+      const selectedList = Array.from(selectedStorjUris);
+      const results: ParsedReportSummary[] = [];
+
+      for (const storjUri of selectedList) {
+        const selected = storjReports.find((r) => r.uri === storjUri);
+        const reportType =
+          getMeta(selected?.metadata, "reporttype") ||
+          (selected?.dataType === "bloodwork-report-fhir"
+            ? "bloodwork"
+            : "dexa");
+
+        const res = await fetch("/api/storj", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "report/retrieve",
+            userAddress: address,
+            encryptionKey,
+            storjUri,
+            reportType,
+          }),
+        });
+
+        const json = (await res.json()) as {
+          success?: boolean;
+          result?: unknown;
+          error?: string;
+        };
+
+        if (!res.ok || json.success === false) {
+          throw new Error(
+            json.error || `Failed to retrieve report: ${storjUri}`,
+          );
+        }
+
+        const report = json.result as ParsedReportSummary["report"] | null;
+        if (!report) {
+          throw new Error("Storj returned no report data");
+        }
+
+        results.push({
+          report,
+          extractedAt: new Date().toISOString(),
+          storjUri,
+          savedToStorjAt: selected?.uploadedAt || new Date().toISOString(),
+        });
+      }
+
+      addParsedReports(results);
+      // Make it obvious these are now part of the chat context by showing them in the Uploaded Files pills.
+      const existingStorjUris = new Set(
+        uploadedFiles
+          .map((f) => f.rawData?.["storjUri"])
+          .filter((v): v is string => typeof v === "string" && v.length > 0),
+      );
+
+      let attachedCount = 0;
+      for (const r of results) {
+        if (!r.storjUri || existingStorjUris.has(r.storjUri)) continue;
+        existingStorjUris.add(r.storjUri);
+        attachedCount += 1;
+
+        const date =
+          r.report.type === "bloodwork"
+            ? r.report.reportDate
+            : r.report.scanDate;
+        const source = r.report.source ? String(r.report.source) : "";
+
+        addUploadedFile({
+          type: "storj",
+          summary: `Storj: ${r.report.type.toUpperCase()}${date ? ` • ${date}` : ""}${source ? ` • ${source}` : ""}`,
+          date: new Date().toISOString(),
+          rawData: {
+            importedFromStorj: true,
+            storjUri: r.storjUri,
+            reportType: r.report.type,
+            reportDate: date,
+            source,
+          },
+          parsedReports: [r],
+        });
+      }
+
+      setStorjImportSuccess(
+        `Imported ${results.length} report(s) — ${attachedCount} added to chat context.`,
+      );
+      setSelectedStorjUris(new Set());
+      setShowReportViewer(true);
+      setShowFileManager(false);
+      setFileManagerTab("attached");
+    } catch (e) {
+      setStorjImportError(
+        e instanceof Error ? e.message : "Failed to import report from Storj",
+      );
+    } finally {
+      setStorjImportLoading(false);
+    }
+  };
+
+  const formatContentHash = (hash: string): `0x${string}` => {
+    const h = hash.startsWith("0x") ? hash : `0x${hash}`;
+    return h as `0x${string}`;
+  };
+
+  const recordReportUploadOnChain = async (params: {
+    storjUri: string;
+    contentHash: string;
+    reportType: "dexa" | "bloodwork";
+  }): Promise<void> => {
+    if (!address) throw new Error("Wallet not connected");
+    const walletClient = await walletService.getWalletClient();
+    if (!walletClient) throw new Error("Failed to get wallet client");
+
+    const { SECURE_HEALTH_PROFILE_CONTRACT, secureHealthProfileAbi } =
+      await import("@/lib/contractConfig");
+    const { getActiveChain } = await import("@/lib/networkConfig");
+    const { createPublicClient, http } = await import("viem");
+    const rpcUrl =
+      process.env.NEXT_PUBLIC_ZKSYNC_RPC_URL ||
+      "https://sepolia.era.zksync.dev";
+    const publicClient = createPublicClient({
+      chain: getActiveChain(),
+      transport: http(rpcUrl),
+    });
+
+    const userSecret = await getUserSecret({
+      address,
+      signMessage,
+    });
+
+    const chainEventType = getChainEventTypeForReportType(params.reportType);
+    if (!chainEventType) {
+      throw new Error(
+        `No chain eventType registered for reportType: ${params.reportType}`,
+      );
+    }
+    const searchTag = generateSearchTag(chainEventType, userSecret);
+    const formattedHash = formatContentHash(params.contentHash);
+    if (formattedHash.length !== 66) {
+      throw new Error(
+        `Invalid contentHash length: expected 66 chars (0x + 64 hex), got ${formattedHash.length}`,
+      );
+    }
+
+    const txHash = await walletClient.writeContract({
+      address: SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
+      abi: secureHealthProfileAbi,
+      functionName: "addHealthEventWithStorj",
+      args: ["", searchTag as `0x${string}`, params.storjUri, formattedHash],
+      chain: getActiveChain(),
+      account: walletClient.account ?? (address as `0x${string}`),
+      gas: 2000000n,
+    });
+
+    await publicClient.waitForTransactionReceipt({ hash: txHash });
+  };
+
+  const saveAllParsedReportsToStorj = async (): Promise<void> => {
+    if (!ENABLE_STORJ_SAVE_UI) return;
+    if (!isConnected || !address) {
+      setSaveReportsError("Connect your wallet to save reports to Storj.");
+      return;
+    }
+    if (reports.length === 0) {
+      setSaveReportsError("No parsed reports available to save.");
+      return;
+    }
+
+    const unsaved = reports
+      .map((r, idx) => ({ r, idx }))
+      .filter(({ r }) => !r.storjUri);
+
+    if (unsaved.length === 0) {
+      setSaveReportsError("");
+      setShowReportViewer(true);
+      return;
+    }
+
+    setSavingReportsToStorj(true);
+    setSaveReportsError("");
+
+    try {
+      // Derive key once for the whole batch
+      const encryptionKey = await getWalletDerivedEncryptionKey(
+        address,
+        signMessage,
+      );
+
+      for (const { r, idx } of unsaved) {
+        const resp = await fetch("/api/storj", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "report/store",
+            userAddress: address,
+            encryptionKey,
+            data: r,
+            options: {
+              metadata: {
+                uploadedAt: new Date().toISOString(),
+                source: "chat-ui",
+              },
+            },
+          }),
+        });
+
+        const payload = await resp.json();
+        const result = payload?.result;
+
+        if (result?.success && result?.storjUri) {
+          const contentHash =
+            (result?.contentHash as string | undefined) ||
+            (result?.existingContentHash as string | undefined) ||
+            "";
+          if (!contentHash) {
+            throw new Error(
+              "Storj save succeeded but no contentHash was returned; cannot record on-chain marker.",
+            );
+          }
+
+          await recordReportUploadOnChain({
+            storjUri: result.storjUri,
+            contentHash,
+            reportType: r.report.type,
+          });
+
+          updateReport(idx, {
+            storjUri: result.storjUri,
+            savedToStorjAt: new Date().toISOString(),
+          });
+        } else {
+          throw new Error(result?.error || "Failed to save report to Storj");
+        }
+      }
+
+      setShowReportViewer(true);
+    } catch (e) {
+      setSaveReportsError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSavingReportsToStorj(false);
+    }
   };
 
   // Scroll to the bottom when messages change
@@ -251,15 +658,27 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     }
   };
 
+  useEffect(() => {
+    if (!showFileManager) return;
+    if (fileManagerTab === "saved") {
+      void loadSavedFiles();
+    }
+    if (fileManagerTab === "storj" && isConnected) {
+      void loadStorjReportsList();
+    }
+  }, [showFileManager, fileManagerTab, isConnected]);
+
   // Load a saved file into chat context
   const loadSavedFileIntoContext = async (fileId: string): Promise<void> => {
+    setIsProcessingFile(true);
     try {
       const file = await healthDataStore.getUploadedFile(fileId);
       if (file) {
         const parsedReports =
           file.parsedContent && typeof file.parsedContent === "string"
-            ? parseHealthReport(file.parsedContent, {
+            ? await parseHealthReport(file.parsedContent, {
                 sourceName: file.fileName,
+                useAI: true,
               })
             : [];
 
@@ -294,6 +713,8 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       }
     } catch (error) {
       console.error("❌ Failed to load saved file:", error);
+    } finally {
+      setIsProcessingFile(false);
     }
   };
 
@@ -412,6 +833,10 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         return;
       }
 
+      console.log(
+        `[FileUpload] Starting upload: ${file.name} (${file.size} bytes)`,
+      );
+
       // Parse the file content based on file type
       let parsedContent: {
         content: string;
@@ -421,8 +846,12 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       };
 
       if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
+        console.log(`[FileUpload] Parsing PDF file...`);
         // Use PDF parser for PDF files
         const pdfResult = await parsePDF(file);
+        console.log(
+          `[FileUpload] PDF parsed: ${pdfResult.pageCount} pages, ${pdfResult.text.length} characters`,
+        );
         parsedContent = {
           content: pdfResult.text,
           type: "pdf",
@@ -430,18 +859,49 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           metadata: pdfResult.metadata,
         };
       } else {
+        console.log(`[FileUpload] Parsing text file...`);
         // Use regular parser for other file types
         parsedContent = await parseFileContent(file);
+        console.log(
+          `[FileUpload] Text parsed: ${parsedContent.content.length} characters`,
+        );
       }
 
       // Add the parsed file to context
+      console.log(
+        `[FileUpload] Extracting structured reports from parsed content...`,
+      );
       const parsedReports =
         parsedContent.type === "pdf" || parsedContent.type === "text"
-          ? parseHealthReport(parsedContent.content, {
+          ? await parseHealthReport(parsedContent.content, {
               inferredType: inferReportType(file.name),
               sourceName: file.name,
+              useAI: true, // Use AI parsing for better extraction
             })
           : [];
+
+      console.log(
+        `[FileUpload] Extracted ${parsedReports.length} report(s):`,
+        parsedReports.map((r) => {
+          if (r.report.type === "bloodwork") {
+            return {
+              type: r.report.type,
+              hasMetrics: r.report.metrics?.length || 0,
+              hasRegions: "N/A",
+            };
+          } else {
+            // Must be dexa
+            return {
+              type: r.report.type,
+              hasMetrics: "N/A",
+              hasRegions:
+                r.report.type === "dexa"
+                  ? r.report.regions?.length || 0
+                  : "N/A",
+            };
+          }
+        }),
+      );
 
       if (parsedReports.length) {
         addParsedReports(parsedReports);
@@ -483,7 +943,8 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         // Don't fail the upload if IndexedDB save fails
       }
 
-      setShowUploadForm(false);
+      setShowFileManager(false);
+      setFileManagerTab("attached");
       setUploadRawData("");
       console.log(
         `✅ File uploaded successfully: ${file.name} (${parsedContent.type})`,
@@ -512,7 +973,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-1">
             <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-              Analysis mode
+              Chat mode
             </span>
             <div className="flex flex-col gap-1">
               <div className="inline-flex w-fit rounded-lg border border-emerald-200 bg-white shadow-sm relative group">
@@ -525,7 +986,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                       : "text-emerald-700 hover:bg-emerald-50"
                   }`}
                 >
-                  Standard (faster)
+                  Quick (general advice)
                 </button>
                 <button
                   type="button"
@@ -537,19 +998,78 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                       : "text-emerald-700 hover:bg-emerald-50"
                   } ${!isConnected ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
-                  Deep multi-agent (slower)
+                  Deep (uses your health data)
                 </button>
                 {!isConnected && (
                   <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-emerald-900/95 text-white text-xs rounded-md invisible group-hover:visible pointer-events-none whitespace-nowrap z-50">
-                    🔒 Create a wallet to unlock multi-agent
+                    🔒 Create a wallet to unlock Deep mode
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 -mb-0.5 border-4 border-transparent border-b-emerald-900/95"></div>
                   </div>
                 )}
               </div>
-              <span className="text-[11px] text-amber-700">
-                Multi-agent runs all specialists before Cosaint replies and may
-                take a few extra seconds.
-              </span>
+              {!useMultiAgent ? (
+                <span className="text-[11px] text-amber-700">
+                  Quick mode uses chat history only (no health data/reports).
+                  Switch to Deep for personalized, data-informed answers.
+                </span>
+              ) : (
+                <span className="text-[11px] text-amber-700">
+                  Deep mode uses your connected health data/reports and runs
+                  specialists before Cosaint replies (slower).
+                </span>
+              )}
+
+              {isDev && !useMultiAgent && (
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-700">
+                  <span className="font-medium">Quick debug max_tokens:</span>
+                  {[
+                    { label: "1500", value: "1500" },
+                    { label: "4000", value: "4000" },
+                    { label: "8000", value: "8000" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`rounded border px-2 py-0.5 ${
+                        (quickMaxTokensUi || "1500") === opt.value
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                          : "border-slate-200 bg-white hover:bg-slate-50"
+                      }`}
+                      onClick={() => {
+                        try {
+                          window.localStorage.setItem(
+                            "cosaint_quick_max_tokens",
+                            opt.value,
+                          );
+                          setQuickMaxTokensUi(opt.value);
+                        } catch {
+                          // ignore
+                        }
+                      }}
+                      title="Sets localStorage.cosaint_quick_max_tokens"
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                    onClick={() => {
+                      try {
+                        window.localStorage.removeItem(
+                          "cosaint_quick_max_tokens",
+                        );
+                        setQuickMaxTokensUi("");
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    title="Clears localStorage.cosaint_quick_max_tokens"
+                  >
+                    reset
+                  </button>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex flex-col gap-1"></div>
@@ -576,18 +1096,172 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
 
         {!isExpanded && (
           <div className="flex flex-col items-start gap-2">
-            <Button
-              ref={uploadFileButtonRef}
-              size="sm"
-              className="w-fit bg-emerald-600 text-white hover:bg-emerald-700"
-              onClick={() => setShowUploadForm((v) => !v)}
-            >
-              {showUploadForm ? "Cancel" : "Upload File to Context"}
-            </Button>
-            {showUploadForm && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                ref={uploadFileButtonRef}
+                size="sm"
+                className="w-fit bg-emerald-600 text-white hover:bg-emerald-700"
+                onClick={() => {
+                  setShowFileManager(true);
+                  setFileManagerTab("upload");
+                  setUploadError("");
+                  setStorjImportError("");
+                  setStorjImportSuccess("");
+                  setSaveReportsError("");
+                }}
+              >
+                Upload File to Context
+              </Button>
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-fit"
+                onClick={() => {
+                  setShowFileManager(true);
+                  setFileManagerTab("attached");
+                  setUploadError("");
+                  setStorjImportError("");
+                  setStorjImportSuccess("");
+                  setSaveReportsError("");
+                }}
+              >
+                Manage files
+                <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-800">
+                  {uploadedFiles.length} attached
+                </span>
+              </Button>
+
+              {reports.length > 0 && (
+                <span className="text-xs text-emerald-800">
+                  Parsed reports:{" "}
+                  <span className="font-semibold">{reports.length}</span>
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <Dialog
+        open={showFileManager}
+        onOpenChange={(open) => {
+          setShowFileManager(open);
+          if (!open) {
+            setStorjImportError("");
+            setStorjImportSuccess("");
+            setUploadError("");
+            setSaveReportsError("");
+          }
+        }}
+      >
+        <DialogContent
+          preventOutsideClose
+          className="max-w-3xl max-h-[85vh] overflow-y-auto bg-white text-gray-900"
+        >
+          <DialogHeader>
+            <DialogTitle>File Manager</DialogTitle>
+          </DialogHeader>
+
+          <Tabs
+            value={fileManagerTab}
+            onValueChange={(v) =>
+              setFileManagerTab(v as "attached" | "saved" | "storj" | "upload")
+            }
+          >
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="attached">
+                Attached ({uploadedFiles.length})
+              </TabsTrigger>
+              <TabsTrigger value="upload">Upload</TabsTrigger>
+              <TabsTrigger value="saved">
+                Saved ({savedFiles.length})
+              </TabsTrigger>
+              <TabsTrigger value="storj" disabled={!isConnected}>
+                Storj
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="attached" className="mt-4 space-y-3">
+              {saveReportsError && (
+                <div className="text-xs text-red-700">{saveReportsError}</div>
+              )}
+
+              {uploadedFiles.length === 0 ? (
+                <div className="text-sm text-gray-600">
+                  No files attached to chat yet.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs text-gray-600">
+                      These files are available to Cosaint during chat.
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {reports && reports.length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setShowReportViewer(true)}
+                          className="flex items-center gap-1"
+                        >
+                          <FileText className="h-3 w-3" />
+                          View Parsed Reports ({reports.length})
+                        </Button>
+                      )}
+                      {ENABLE_STORJ_SAVE_UI &&
+                        isConnected &&
+                        reports.length > 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={
+                              savingReportsToStorj ||
+                              reports.filter((r) => !r.storjUri).length === 0
+                            }
+                            onClick={() => void saveAllParsedReportsToStorj()}
+                            title="Save all parsed reports (DEXA/Bloodwork) to Storj and record on-chain markers"
+                          >
+                            {savingReportsToStorj
+                              ? "Saving..."
+                              : `Save ${reports.filter((r) => !r.storjUri).length} to Storj`}
+                          </Button>
+                        )}
+                    </div>
+                  </div>
+
+                  <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
+                    {uploadedFiles.map((file, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between rounded border bg-white px-3 py-2 text-sm"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium">
+                            {file.summary}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Attached {new Date(file.date).toLocaleString()}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => removeUploadedFile(idx)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="upload" className="mt-4 space-y-3">
               <form
                 onSubmit={handleUploadSubmit}
-                className="w-full max-w-md rounded-lg border border-emerald-100 bg-emerald-50 p-3"
+                className="rounded-lg border border-emerald-100 bg-emerald-50 p-3"
               >
                 <div className="mb-2">
                   <label className="mb-1 block text-xs font-semibold">
@@ -622,6 +1296,12 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                 {uploadError && (
                   <div className="mb-2 text-xs text-red-600">{uploadError}</div>
                 )}
+                {isProcessingFile && (
+                  <div className="mb-2 flex items-center gap-2 text-xs text-emerald-700">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent"></div>
+                    <span>Parsing file and extracting structured data...</span>
+                  </div>
+                )}
                 <div className="flex justify-end">
                   <Button
                     type="submit"
@@ -633,48 +1313,35 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                   </Button>
                 </div>
               </form>
-            )}
-          </div>
-        )}
-      </div>
+            </TabsContent>
 
-      {!isExpanded && (
-        <div className="w-full max-w-md">
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-fit"
-            onClick={() => {
-              setShowSavedFiles(!showSavedFiles);
-              if (!showSavedFiles) {
-                loadSavedFiles();
-              }
-            }}
-          >
-            {showSavedFiles ? "Hide" : "Show"} Saved Files ({savedFiles.length})
-          </Button>
-
-          {showSavedFiles && (
-            <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-3">
-              <h3 className="mb-2 text-sm font-semibold">Saved Files</h3>
+            <TabsContent value="saved" className="mt-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-semibold">Saved Files</div>
+                <Button size="sm" variant="outline" onClick={loadSavedFiles}>
+                  Refresh
+                </Button>
+              </div>
               {savedFiles.length === 0 ? (
-                <p className="text-xs text-gray-600">No saved files found.</p>
+                <div className="text-sm text-gray-600">
+                  No saved files found.
+                </div>
               ) : (
-                <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+                <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
                   {savedFiles.map((file) => (
                     <div
                       key={file.id}
-                      className="flex items-center justify-between rounded border bg-white p-2 text-xs"
+                      className="flex items-center justify-between rounded border bg-white p-2 text-sm"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-medium">
                           {file.fileName}
                         </div>
-                        <div className="text-gray-500">
+                        <div className="text-xs text-gray-500">
                           {file.fileType} • {(file.fileSize / 1024).toFixed(1)}{" "}
                           KB
                         </div>
-                        <div className="text-gray-400">
+                        <div className="text-xs text-gray-400">
                           {new Date(file.uploadedAt).toLocaleDateString()}
                         </div>
                       </div>
@@ -684,7 +1351,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                           variant="outline"
                           onClick={() => loadSavedFileIntoContext(file.id)}
                         >
-                          Load
+                          Load to chat
                         </Button>
                         <Button
                           size="sm"
@@ -698,58 +1365,125 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                   ))}
                 </div>
               )}
-            </div>
-          )}
-        </div>
-      )}
+            </TabsContent>
 
-      {!isExpanded && uploadedFiles.length > 0 && !uploadsHidden && (
-        <div className="mb-4">
-          <h4 className="mb-2 font-semibold text-emerald-800">
-            Uploaded Files
-          </h4>
-          <div className="mb-2 flex justify-end">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setUploadsHidden(true)}
-            >
-              Hide Uploads
-            </Button>
+            <TabsContent value="storj" className="mt-4 space-y-3">
+              {!isConnected ? (
+                <div className="text-sm text-gray-600">
+                  Connect your wallet to import saved reports from Storj.
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={loadStorjReportsList}
+                      disabled={storjImportLoading}
+                    >
+                      {storjImportLoading ? "Loading..." : "Refresh list"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={importSelectedStorjReports}
+                      disabled={
+                        storjImportLoading || selectedStorjUris.size === 0
+                      }
+                      className="bg-emerald-600 text-white hover:bg-emerald-700"
+                    >
+                      {storjImportLoading
+                        ? "Importing..."
+                        : `Import selected (${selectedStorjUris.size})`}
+                    </Button>
+                  </div>
+
+                  {storjImportError && (
+                    <div className="text-xs text-red-700">
+                      {storjImportError}
+                    </div>
+                  )}
+                  {storjImportSuccess && (
+                    <div className="text-xs text-emerald-800">
+                      {storjImportSuccess}
+                    </div>
+                  )}
+
+                  <div className="max-h-64 overflow-y-auto rounded border border-gray-100">
+                    {storjReports.length === 0 ? (
+                      <div className="p-2 text-xs text-gray-600">
+                        {storjImportLoading
+                          ? "Loading saved reports..."
+                          : "No saved reports found yet."}
+                      </div>
+                    ) : (
+                      storjReports.map((r) => {
+                        const reportType =
+                          getMeta(r.metadata, "reporttype") ||
+                          (r.dataType === "bloodwork-report-fhir"
+                            ? "bloodwork"
+                            : "dexa");
+                        const date =
+                          getMeta(r.metadata, "scandate") ||
+                          getMeta(r.metadata, "reportdate") ||
+                          r.uploadedAt ||
+                          "";
+                        const label = `${reportType.toUpperCase()}${date ? ` • ${date}` : ""}`;
+
+                        return (
+                          <button
+                            key={r.uri}
+                            type="button"
+                            onClick={() => toggleSelectedStorjUri(r.uri)}
+                            className={`w-full px-2 py-2 text-left text-xs hover:bg-emerald-50 ${
+                              selectedStorjUris.has(r.uri)
+                                ? "bg-emerald-50 border-l-4 border-emerald-600"
+                                : ""
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedStorjUris.has(r.uri)}
+                                onChange={() => toggleSelectedStorjUri(r.uri)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-3.5 w-3.5 accent-emerald-600"
+                              />
+                              <div className="font-semibold text-emerald-900">
+                                {label}
+                              </div>
+                            </div>
+                            <div className="truncate text-[11px] text-gray-600">
+                              {r.uri}
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </>
+              )}
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* Report Parser Viewer Modal */}
+      {showReportViewer && reports && reports.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="w-full max-w-6xl h-[90vh] bg-white rounded-lg shadow-xl">
+            <ReportParserViewer
+              reports={reports}
+              onClose={() => setShowReportViewer(false)}
+              onDeleteReport={(index) => {
+                removeReport(index);
+                // If we deleted the last report, close the viewer
+                if (reports.length <= 1) {
+                  setShowReportViewer(false);
+                }
+              }}
+              onUpdateReport={updateReport}
+            />
           </div>
-          <ul className="flex flex-row flex-wrap gap-2">
-            {uploadedFiles.map((file, idx) => (
-              <li
-                key={idx}
-                className="flex min-w-0 max-w-[200px] items-center rounded-full bg-emerald-50 px-2 py-1 text-xs"
-                style={{ lineHeight: 1.2 }}
-              >
-                <span className="max-w-[140px] truncate font-medium text-emerald-900">
-                  {file.summary}
-                </span>
-                <button
-                  type="button"
-                  className="ml-1 rounded p-1 text-emerald-700 hover:bg-emerald-200"
-                  aria-label="Remove file"
-                  onClick={() => removeUploadedFile(idx)}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {!isExpanded && uploadedFiles.length > 0 && uploadsHidden && (
-        <div className="mb-4 flex justify-end">
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => setUploadsHidden(false)}
-          >
-            Show Uploads
-          </Button>
         </div>
       )}
 
@@ -791,7 +1525,17 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       )}
 
       <div className={chatHistoryClasses}>
-        {messages.length === 0 ? (
+        {isProcessingFile ? (
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent"></div>
+            <p className="text-lg font-medium text-emerald-700">
+              Processing file...
+            </p>
+            <p className="mt-2 text-sm text-emerald-600">
+              Parsing PDF and extracting structured data with AI
+            </p>
+          </div>
+        ) : messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center text-gray-500">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
               <span className="text-2xl">🌿</span>

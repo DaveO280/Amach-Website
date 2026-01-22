@@ -13,6 +13,7 @@ import {
   validateHealthExportFile,
   XMLStreamParser,
 } from "../data/parsers/XMLStreamParser";
+import { healthDataProcessor } from "@/data/processors/HealthDataProcessor";
 import {
   ActiveEnergyMetric,
   DataSource,
@@ -30,6 +31,7 @@ import {
 } from "../data/types/healthMetrics";
 import { useSelection } from "../store/selectionStore";
 import { TimeFrame } from "../types/healthData";
+import type { HealthDataByType } from "@/types/healthData";
 
 const HealthDataSelector: () => React.ReactElement = () => {
   const {
@@ -449,6 +451,15 @@ const HealthDataSelector: () => React.ReactElement = () => {
           (sum, arr) => sum + arr.length,
           0,
         ),
+      );
+
+      // Compute and persist long-range aggregates ("bins") BEFORE saving raw data.
+      // Raw IndexedDB storage will be limited to a recent window for performance,
+      // while processed aggregates preserve long-range charts/queries.
+      updateProcessingProgress(90, "Computing long-range aggregates...");
+      await healthDataProcessor.processRawData(
+        healthDataResults as unknown as HealthDataByType,
+        true,
       );
 
       saveHealthData(healthDataResults as Record<MetricType, HealthMetric[]>);

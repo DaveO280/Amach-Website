@@ -1,6 +1,6 @@
+import type { MetricSample } from "@/agents/types";
 import type { HealthGoal, HealthScore } from "../../types/HealthContext";
 import type { DailyHealthScores } from "../../utils/dailyHealthScoreCalculator";
-import type { MetricSample } from "@/agents/types";
 import {
   HealthDataResults,
   HealthMetric,
@@ -15,6 +15,34 @@ const GOALS_STORE = "goals";
 const DAILY_SCORES_STORE = "daily-scores";
 const UPLOADED_FILES_STORE = "uploaded-files";
 const PROCESSED_DATA_STORE = "processed-data"; // New store for pre-aggregated data
+
+// Keep raw IndexedDB samples recent for performance; long-range is preserved in processed aggregates.
+const RAW_RETENTION_DAYS = 180; // ~6 months
+
+function trimRawToRecentWindow(data: HealthDataResults): HealthDataResults {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - RAW_RETENTION_DAYS);
+  const cutoffMs = cutoff.getTime();
+
+  const trimmed: HealthDataResults = {};
+
+  for (const [metricType, metrics] of Object.entries(data)) {
+    // Sleep and some records can straddle boundaries; include if either start OR end is within window.
+    trimmed[metricType as keyof HealthDataResults] = (metrics || []).filter(
+      (m) => {
+        const startMs = new Date(m.startDate).getTime();
+        const endMs = new Date((m.endDate as string) || m.startDate).getTime();
+        if (Number.isNaN(startMs) && Number.isNaN(endMs)) return false;
+        return (
+          (Number.isNaN(startMs) ? false : startMs >= cutoffMs) ||
+          (Number.isNaN(endMs) ? false : endMs >= cutoffMs)
+        );
+      },
+    ) as HealthMetric[];
+  }
+
+  return trimmed;
+}
 
 interface HealthDataStore {
   id: string;
@@ -167,84 +195,96 @@ class HealthDataStoreService {
     console.log("✅ [IndexedDB Debug] Data validation passed");
 
     const db = await this.initDB();
+
+    // Get existing data first
+    const existingData = (await this.getHealthData()) || {};
+
+    console.log("🔍 [IndexedDB Debug] Existing data:", {
+      metrics: Object.keys(existingData),
+      counts: Object.entries(existingData).map(([k, v]) => `${k}: ${v.length}`),
+    });
+
+    // Merge and deduplicate OUTSIDE the transaction to avoid blocking UI
+    const mergedData: HealthDataResults = { ...existingData };
+
+    // Lightweight deduplication: Skip new records with dates that already exist
+    // This prevents overlapping uploads from duplicating data
+    console.log(
+      "🔍 [IndexedDB Debug] Checking for overlapping dates in new data",
+    );
+
+    for (const [metricType, newMetrics] of Object.entries(data)) {
+      const existingMetrics = existingData[metricType] || [];
+      console.log(`📝 [IndexedDB Debug] Processing ${metricType}:`, {
+        existing: existingMetrics.length,
+        new: newMetrics.length,
+      });
+
+      // Build a Set of existing dates for fast lookup (O(1) instead of O(n))
+      const existingDates = new Set(existingMetrics.map((m) => m.startDate));
+
+      // Only add new metrics that don't have overlapping dates
+      const nonOverlappingMetrics = newMetrics.filter(
+        (m) => !existingDates.has(m.startDate),
+      );
+
+      console.log(
+        `   🔍 Found ${newMetrics.length - nonOverlappingMetrics.length} overlapping records (skipped)`,
+      );
+
+      // Merge existing data with only non-overlapping new data
+      mergedData[metricType] = [
+        ...existingMetrics,
+        ...nonOverlappingMetrics,
+      ] as HealthMetric[];
+
+      console.log(
+        `   ✅ Merged: ${mergedData[metricType].length} total records`,
+      );
+
+      // Yield to UI thread every metric type
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    console.log("🔀 [IndexedDB Debug] Final merged data:", {
+      metrics: Object.keys(mergedData),
+      counts: Object.entries(mergedData).map(([k, v]) => `${k}: ${v.length}`),
+    });
+
+    // Trim raw samples to a recent window to keep IndexedDB lean and UI fast.
+    const trimmedMergedData = trimRawToRecentWindow(mergedData);
+
+    console.log("✂️ [IndexedDB Debug] Trimmed raw data window:", {
+      retentionDays: RAW_RETENTION_DAYS,
+      counts: Object.entries(trimmedMergedData).map(
+        ([k, v]) => `${k}: ${v.length}`,
+      ),
+    });
+
+    // Now save in a quick transaction
     return new Promise<void>((resolve, reject): void => {
       const transaction = db.transaction([STORE_NAME], "readwrite");
       const store = transaction.objectStore(STORE_NAME);
 
-      // First, get existing data to merge with
-      const getRequest = store.get("current");
-
-      getRequest.onsuccess = (): void => {
-        const existingResult = getRequest.result as HealthDataStore | undefined;
-        const existingData = existingResult?.data || {};
-
-        console.log("🔍 [IndexedDB Debug] Existing data:", {
-          metrics: Object.keys(existingData),
-          counts: Object.entries(existingData).map(
-            ([k, v]) => `${k}: ${v.length}`,
-          ),
-        });
-
-        // Merge new data with existing data
-        const mergedData: HealthDataResults = { ...existingData };
-
-        // Process all metric types synchronously
-        Object.entries(data).forEach(([metricType, newMetrics]) => {
-          const existingMetrics = existingData[metricType] || [];
-          console.log(`📝 [IndexedDB Debug] Processing ${metricType}:`, {
-            existing: existingMetrics.length,
-            new: newMetrics.length,
-          });
-
-          const combinedMetrics = [...existingMetrics, ...newMetrics];
-
-          // Efficient deduplication using Set for O(n) performance
-          const seenKeys = new Set<string>();
-          const uniqueMetrics = combinedMetrics.filter((metric) => {
-            const key = `${metric.startDate}-${metric.value}-${metric.type}`;
-            if (seenKeys.has(key)) {
-              return false;
-            }
-            seenKeys.add(key);
-            return true;
-          });
-
-          console.log(`   ✅ After dedup: ${uniqueMetrics.length} records`);
-          mergedData[metricType as keyof HealthDataResults] = uniqueMetrics;
-        });
-
-        console.log("🔀 [IndexedDB Debug] Final merged data:", {
-          metrics: Object.keys(mergedData),
-          counts: Object.entries(mergedData).map(
-            ([k, v]) => `${k}: ${v.length}`,
-          ),
-        });
-
-        // Save the merged data
-        const healthData: HealthDataStore = {
-          id: "current",
-          data: mergedData,
-          lastUpdated: new Date().toISOString(),
-        };
-
-        const putRequest = store.put(healthData);
-        putRequest.onsuccess = (): void => {
-          console.log(
-            "✅ [IndexedDB Debug] Data saved successfully to IndexedDB!",
-          );
-          resolve();
-        };
-        putRequest.onerror = (): void => {
-          console.error(
-            "❌ [IndexedDB Debug] Error saving to IndexedDB:",
-            putRequest.error,
-          );
-          reject(putRequest.error);
-        };
+      const healthData: HealthDataStore = {
+        id: "current",
+        data: trimmedMergedData,
+        lastUpdated: new Date().toISOString(),
       };
 
-      getRequest.onerror = (): void => {
-        reject(getRequest.error);
+      const putRequest = store.put(healthData);
+      putRequest.onsuccess = (): void => {
+        console.log(
+          "✅ [IndexedDB Debug] Data saved successfully to IndexedDB!",
+        );
+        resolve();
+      };
+      putRequest.onerror = (): void => {
+        console.error(
+          "❌ [IndexedDB Debug] Error saving to IndexedDB:",
+          putRequest.error,
+        );
+        reject(putRequest.error);
       };
     });
   }

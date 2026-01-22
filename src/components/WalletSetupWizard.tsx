@@ -97,7 +97,6 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       : async (
           email: string,
         ): Promise<{ success: boolean; txHash?: string; error?: string }> => {
-           
           void email; // Suppress unused parameter warning
           return {
             success: false,
@@ -1391,7 +1390,10 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto p-0 bg-gradient-to-br from-amber-50 via-white to-emerald-50">
+      <DialogContent
+        preventOutsideClose
+        className="max-w-6xl max-h-[90vh] overflow-y-auto p-0 bg-gradient-to-br from-amber-50 via-white to-emerald-50"
+      >
         <div className="p-6 sm:p-8">
           <DialogHeader className="mb-8">
             <DialogTitle className="text-3xl font-bold text-center text-emerald-900">

@@ -84,9 +84,11 @@ export function aggregateDailyValues(
     if (samples.length === 0) continue;
 
     const values = samples.map((s) => s.value);
-    const aggregatedValue = isCumulative
-      ? values.reduce((sum, v) => sum + v, 0) // SUM for cumulative
-      : values.reduce((sum, v) => sum + v, 0) / values.length; // AVERAGE for others
+    const sum = values.reduce((acc, v) => acc + v, 0);
+    const avg = sum / values.length;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const aggregatedValue = isCumulative ? sum : avg;
 
     // Use the first sample's timestamp for the day (midnight)
     const dayStart = new Date(dateKey + "T00:00:00");
@@ -99,6 +101,11 @@ export function aggregateDailyValues(
         sampleCount: samples.length,
         aggregationType: isCumulative ? "sum" : "average",
         originalSamples: samples.length,
+        // Useful for charts and sanity checks
+        sum,
+        avg,
+        min,
+        max,
       },
     });
   }

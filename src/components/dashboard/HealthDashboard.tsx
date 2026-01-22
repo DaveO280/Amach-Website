@@ -1,10 +1,14 @@
 "use client";
 
+import type { MetricSample } from "@/agents/types";
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { Alert } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { healthDataProcessor } from "@/data/processors/HealthDataProcessor";
+import type { HealthData, HealthDataPoint } from "@/types/healthData";
+import type { DailyProcessedSleepData } from "@/utils/sleepDataProcessor";
 import { Activity, Download, Heart, Lock, Moon } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { HealthScoreCards } from "../ai/HealthScoreCards";
 import { HealthScoreTrends } from "../ai/HealthScoreTrends";
 import { Button } from "../ui/button";
@@ -31,33 +35,120 @@ export const HealthDashboard: () => JSX.Element = () => {
   const [isDownloading] = useState(false);
   const { metrics, metricData, processingState } = useHealthDataContext();
 
-  // Memoize raw data arrays for charts
-  const heartRateRaw = useMemo(
-    () => metricData["HKQuantityTypeIdentifierHeartRate"] || [],
-    [metricData],
+  const toHealthData = useCallback(
+    (samples: MetricSample[], metricType: string): HealthData[] => {
+      return samples.map((s) => {
+        const meta = (s.metadata || {}) as Record<string, unknown>;
+        const min = typeof meta.min === "number" ? String(meta.min) : undefined;
+        const max = typeof meta.max === "number" ? String(meta.max) : undefined;
+        return {
+          startDate: s.timestamp.toISOString(),
+          endDate: s.timestamp.toISOString(),
+          value: String(s.value),
+          unit: s.unit,
+          type: metricType,
+          min,
+          max,
+        };
+      });
+    },
+    [],
   );
-  const hrvRaw = useMemo(
-    () => metricData["HKQuantityTypeIdentifierHeartRateVariabilitySDNN"] || [],
-    [metricData],
-  );
-  const stepCountRaw = useMemo(
-    () => metricData["HKQuantityTypeIdentifierStepCount"] || [],
-    [metricData],
-  );
-  const distanceRaw = useMemo(
-    () => metricData["HKQuantityTypeIdentifierDistanceWalkingRunning"] || [],
-    [metricData],
-  );
-  const activeEnergyRaw = useMemo(
-    () => metricData["HKQuantityTypeIdentifierActiveEnergyBurned"] || [],
-    [metricData],
-  );
-  const exerciseTimeRaw = useMemo(
-    () => metricData["HKQuantityTypeIdentifierAppleExerciseTime"] || [],
-    [metricData],
-  );
-  const sleepRaw = useMemo(
-    () => metricData["HKCategoryTypeIdentifierSleepAnalysis"] || [],
+
+  // Prefer long-range processed aggregates (persisted) when available.
+  // Raw IndexedDB data may be trimmed to a recent window for performance.
+  const heartRateForCharts = useMemo(() => {
+    const samples = healthDataProcessor.getDataForVisualization(
+      "HKQuantityTypeIdentifierHeartRate",
+      { aggregationLevel: "daily" },
+    );
+    if (samples.length > 0)
+      return toHealthData(samples, "HKQuantityTypeIdentifierHeartRate");
+    return (metricData["HKQuantityTypeIdentifierHeartRate"] ||
+      []) as HealthData[];
+  }, [metricData, toHealthData]);
+
+  const hrvForCharts = useMemo(() => {
+    const samples = healthDataProcessor.getDataForVisualization(
+      "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+      { aggregationLevel: "daily" },
+    );
+    if (samples.length > 0)
+      return toHealthData(
+        samples,
+        "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+      );
+    return (metricData["HKQuantityTypeIdentifierHeartRateVariabilitySDNN"] ||
+      []) as HealthData[];
+  }, [metricData, toHealthData]);
+
+  const stepCountForCharts = useMemo(() => {
+    const samples = healthDataProcessor.getDataForVisualization(
+      "HKQuantityTypeIdentifierStepCount",
+      { aggregationLevel: "daily" },
+    );
+    if (samples.length > 0)
+      return toHealthData(samples, "HKQuantityTypeIdentifierStepCount");
+    return (metricData["HKQuantityTypeIdentifierStepCount"] ||
+      []) as HealthData[];
+  }, [metricData, toHealthData]);
+
+  const distanceForCharts = useMemo(() => {
+    const samples = healthDataProcessor.getDataForVisualization(
+      "HKQuantityTypeIdentifierDistanceWalkingRunning",
+      { aggregationLevel: "daily" },
+    );
+    if (samples.length > 0)
+      return toHealthData(
+        samples,
+        "HKQuantityTypeIdentifierDistanceWalkingRunning",
+      );
+    return (metricData["HKQuantityTypeIdentifierDistanceWalkingRunning"] ||
+      []) as HealthData[];
+  }, [metricData, toHealthData]);
+
+  const activeEnergyForCharts = useMemo(() => {
+    const samples = healthDataProcessor.getDataForVisualization(
+      "HKQuantityTypeIdentifierActiveEnergyBurned",
+      { aggregationLevel: "daily" },
+    );
+    if (samples.length > 0)
+      return toHealthData(
+        samples,
+        "HKQuantityTypeIdentifierActiveEnergyBurned",
+      );
+    return (metricData["HKQuantityTypeIdentifierActiveEnergyBurned"] ||
+      []) as HealthData[];
+  }, [metricData, toHealthData]);
+
+  const exerciseTimeForCharts = useMemo(() => {
+    const samples = healthDataProcessor.getDataForVisualization(
+      "HKQuantityTypeIdentifierAppleExerciseTime",
+      { aggregationLevel: "daily" },
+    );
+    if (samples.length > 0)
+      return toHealthData(samples, "HKQuantityTypeIdentifierAppleExerciseTime");
+    return (metricData["HKQuantityTypeIdentifierAppleExerciseTime"] ||
+      []) as HealthData[];
+  }, [metricData, toHealthData]);
+
+  const sleepRawCount = (
+    metricData["HKCategoryTypeIdentifierSleepAnalysis"] || []
+  ).length;
+
+  const [sleepDailyProcessed, setSleepDailyProcessed] = useState<
+    DailyProcessedSleepData[]
+  >([]);
+
+  useEffect(() => {
+    const sleep = healthDataProcessor.getSleepData();
+    setSleepDailyProcessed(sleep.length > 0 ? sleep : []);
+  }, [sleepRawCount]);
+
+  const sleepRawFallback = useMemo(
+    () =>
+      (metricData["HKCategoryTypeIdentifierSleepAnalysis"] ||
+        []) as HealthDataPoint[],
     [metricData],
   );
 
@@ -237,11 +328,11 @@ export const HealthDashboard: () => JSX.Element = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
-                <HeartRateChart data={heartRateRaw} height={400} />
+                <HeartRateChart data={heartRateForCharts} height={400} />
               </CardContent>
             </Card>
 
-            {heartRateRaw.length > 0 && (
+            {heartRateForCharts.length > 0 && (
               <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
                 <CardHeader className="border-b border-amber-50/20">
                   <CardTitle className="text-emerald-900 text-xl font-bold">
@@ -253,12 +344,12 @@ export const HealthDashboard: () => JSX.Element = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
-                  <HRDistributionChart data={heartRateRaw} height={400} />
+                  <HRDistributionChart data={heartRateForCharts} height={400} />
                 </CardContent>
               </Card>
             )}
 
-            {hrvRaw.length > 0 && (
+            {hrvForCharts.length > 0 && (
               <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
                 <CardHeader className="border-b border-amber-50/20">
                   <CardTitle className="text-emerald-900 text-xl font-bold">
@@ -269,7 +360,7 @@ export const HealthDashboard: () => JSX.Element = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
-                  <HRVChart data={hrvRaw} height={400} />
+                  <HRVChart data={hrvForCharts} height={400} />
                 </CardContent>
               </Card>
             )}
@@ -286,11 +377,11 @@ export const HealthDashboard: () => JSX.Element = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
-                <StepCountChart data={stepCountRaw} height={400} />
+                <StepCountChart data={stepCountForCharts} height={400} />
               </CardContent>
             </Card>
 
-            {distanceRaw.length > 0 && (
+            {distanceForCharts.length > 0 && (
               <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
                 <CardHeader className="border-b border-amber-50/20">
                   <CardTitle className="text-emerald-900 text-xl font-bold">
@@ -301,12 +392,12 @@ export const HealthDashboard: () => JSX.Element = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
-                  <DistanceChart data={distanceRaw} height={400} />
+                  <DistanceChart data={distanceForCharts} height={400} />
                 </CardContent>
               </Card>
             )}
 
-            {activeEnergyRaw.length > 0 && (
+            {activeEnergyForCharts.length > 0 && (
               <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
                 <CardHeader className="border-b border-amber-50/20">
                   <CardTitle className="text-emerald-900 text-xl font-bold">
@@ -317,12 +408,15 @@ export const HealthDashboard: () => JSX.Element = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
-                  <ActiveEnergyChart data={activeEnergyRaw} height={400} />
+                  <ActiveEnergyChart
+                    data={activeEnergyForCharts}
+                    height={400}
+                  />
                 </CardContent>
               </Card>
             )}
 
-            {exerciseTimeRaw.length > 0 && (
+            {exerciseTimeForCharts.length > 0 && (
               <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
                 <CardHeader className="border-b border-amber-50/20">
                   <CardTitle className="text-emerald-900 text-xl font-bold">
@@ -333,14 +427,18 @@ export const HealthDashboard: () => JSX.Element = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
-                  <ExerciseTimeChart data={exerciseTimeRaw} height={400} />
+                  <ExerciseTimeChart
+                    data={exerciseTimeForCharts}
+                    height={400}
+                  />
                 </CardContent>
               </Card>
             )}
           </TabsContent>
 
           <TabsContent value="sleep" className="space-y-6">
-            {sleepRaw.length > 0 && (
+            {(sleepDailyProcessed.length > 0 ||
+              sleepRawFallback.length > 0) && (
               <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
                 <CardHeader className="border-b border-amber-50/20">
                   <CardTitle className="text-emerald-900 text-xl font-bold">
@@ -351,7 +449,15 @@ export const HealthDashboard: () => JSX.Element = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
-                  <SleepAnalysisChart data={sleepRaw} height={400} />
+                  <SleepAnalysisChart
+                    data={sleepRawFallback}
+                    processedData={
+                      sleepDailyProcessed.length > 0
+                        ? sleepDailyProcessed
+                        : undefined
+                    }
+                    height={400}
+                  />
                 </CardContent>
               </Card>
             )}

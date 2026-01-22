@@ -3,6 +3,7 @@
 import axios, {
   AxiosError,
   AxiosInstance,
+  AxiosRequestConfig,
   AxiosResponse,
   InternalAxiosRequestConfig,
 } from "axios";
@@ -17,9 +18,12 @@ const DEFAULT_ENDPOINT_PATH = "/api/venice";
 // Use empty string for relative URLs in browser (like useVeniceAI does)
 // Only use localhost if explicitly set via env var
 const DEFAULT_BASE_URL = "";
-const DEFAULT_CLIENT_TIMEOUT_MS = Number(
-  process.env.NEXT_PUBLIC_VENICE_CLIENT_TIMEOUT_MS ?? "130000",
-);
+// Remove artificial timeout limits - let Venice API handle its own timeouts
+// Only use timeout if explicitly set in environment variable
+const DEFAULT_CLIENT_TIMEOUT_MS = process.env
+  .NEXT_PUBLIC_VENICE_CLIENT_TIMEOUT_MS
+  ? Number(process.env.NEXT_PUBLIC_VENICE_CLIENT_TIMEOUT_MS)
+  : undefined; // No timeout by default
 
 export class VeniceApiService {
   private client: AxiosInstance;
@@ -54,14 +58,20 @@ export class VeniceApiService {
     }
 
     // For client-side usage, point to our API route
-    this.client = axios.create({
+    // Only set timeout if explicitly configured
+    const axiosConfig: AxiosRequestConfig = {
       baseURL,
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      timeout: DEFAULT_CLIENT_TIMEOUT_MS,
-    });
+    };
+
+    if (DEFAULT_CLIENT_TIMEOUT_MS !== undefined) {
+      axiosConfig.timeout = DEFAULT_CLIENT_TIMEOUT_MS;
+    }
+
+    this.client = axios.create(axiosConfig);
 
     // Request logging interceptor
     this.client.interceptors.request.use(
@@ -185,26 +195,20 @@ export class VeniceApiService {
         );
       }
 
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          reject(
-            new Error(
-              `Request timed out after ${this.client.defaults.timeout}ms`,
-            ),
-          );
-        }, this.client.defaults.timeout);
-      });
-
+      // Remove artificial timeout - let the request complete naturally
+      // Only use timeout if explicitly configured in axios client
       const responsePromise = this.retryOperation(() =>
         this.client.post(this.endpointPath, requestBody),
       );
 
-      const response = (await Promise.race<AxiosResponse>([
-        responsePromise,
-        timeoutPromise,
-      ])) as AxiosResponse;
+      const response = await responsePromise;
 
       // Enhanced debugging for response structure
+      const firstChoice = response.data?.choices?.[0];
+      const message = firstChoice?.message;
+      const content = message?.content;
+      const reasoningContent = message?.reasoning_content;
+
       console.log(`[VeniceApiService] Response received [${requestId}]`, {
         timestamp: new Date().toISOString(),
         elapsedMs: Date.now() - startTime,
@@ -212,19 +216,66 @@ export class VeniceApiService {
         hasData: Boolean(response.data),
         hasChoices: Boolean(response.data?.choices),
         choicesLength: response.data?.choices?.length,
-        hasFirstChoice: Boolean(response.data?.choices?.[0]),
-        hasMessage: Boolean(response.data?.choices?.[0]?.message),
-        hasContent: Boolean(response.data?.choices?.[0]?.message?.content),
-        contentLength:
-          response.data?.choices?.[0]?.message?.content?.length || 0,
-        contentPreview:
-          response.data?.choices?.[0]?.message?.content?.substring(0, 100),
-        rawResponse: JSON.stringify(response.data).substring(0, 500),
+        hasFirstChoice: Boolean(firstChoice),
+        firstChoiceType: typeof firstChoice,
+        firstChoiceKeys: firstChoice ? Object.keys(firstChoice) : [],
+        hasMessage: Boolean(message),
+        messageType: typeof message,
+        messageKeys: message ? Object.keys(message) : [],
+        hasContent: Boolean(content),
+        contentType: typeof content,
+        contentLength: content?.length || 0,
+        contentValue: content,
+        contentPreview: content?.substring?.(0, 100),
+        hasReasoningContent: Boolean(reasoningContent),
+        reasoningContentType: typeof reasoningContent,
+        reasoningContentLength: reasoningContent?.length || 0,
+        reasoningContentPreview: reasoningContent?.substring?.(0, 100),
+        rawResponse: JSON.stringify(response.data).substring(0, 1000),
       });
 
-      if (response.data?.choices?.[0]?.message?.content) {
-        return response.data.choices[0].message.content;
+      // GLM 4.7 workaround: Model puts meta-analysis in reasoning_content
+      // With increased token limit (900 -> 1500), it should complete the response
+      // Just return reasoning_content if content is empty
+      if (
+        typeof reasoningContent === "string" &&
+        reasoningContent.length > 100
+      ) {
+        const c = String(content || "");
+        if (c.trim().length === 0) {
+          console.log(
+            "✅ [VeniceApiService] Using reasoning_content (content field empty)",
+          );
+          return reasoningContent;
+        }
       }
+
+      // Handle different response formats
+      // Standard format: choices[0].message.content
+      if (content !== undefined && content !== null) {
+        // If content is empty but reasoning_content exists, prefer reasoning_content.
+        const c = String(content);
+        if (c.trim().length === 0 && typeof reasoningContent === "string") {
+          const r = String(reasoningContent);
+          if (r.trim().length > 0) return r;
+        }
+        return c;
+      }
+
+      // Alternative format: choices[0].text (some models use 'text' instead of 'message.content')
+      if (firstChoice?.text !== undefined && firstChoice?.text !== null) {
+        return String(firstChoice.text);
+      }
+
+      // Alternative format: choices[0].delta?.content (streaming format, but we're not streaming)
+      if (
+        firstChoice?.delta?.content !== undefined &&
+        firstChoice?.delta?.content !== null
+      ) {
+        return String(firstChoice.delta.content);
+      }
+
+      // Check for error in response
       if (response.data?.error) {
         console.error(
           `[VeniceApiService] API returned error [${requestId}]`,
@@ -232,13 +283,24 @@ export class VeniceApiService {
         );
         throw new Error(String(response.data.error));
       }
+
+      // Log full structure for debugging
       console.error(
         `[VeniceApiService] Invalid response format [${requestId}]`,
         {
           data: response.data,
+          firstChoice: firstChoice,
+          message: message,
+          content: content,
+          fullResponse: JSON.stringify(response.data, null, 2).substring(
+            0,
+            2000,
+          ),
         },
       );
-      throw new Error("Invalid response format from Venice API");
+      throw new Error(
+        "Invalid response format from Venice API: missing content in choices[0]",
+      );
     } catch (error) {
       console.error(`[VeniceApiService] Request failed [${requestId}]`, {
         timestamp: new Date().toISOString(),
@@ -275,21 +337,36 @@ export class VeniceApiService {
 
       console.log(`[VeniceApiService] Native fetch request to: ${url}`);
 
-      // Use native fetch with long timeout for mobile
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes
-
-      const response = await fetch(url, {
+      // Use native fetch without artificial timeout limits
+      // Only add timeout if explicitly configured
+      const fetchOptions: RequestInit = {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
         body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
+      };
 
-      clearTimeout(timeoutId);
+      // Only add abort signal if timeout is configured
+      let timeoutId: NodeJS.Timeout | undefined;
+      if (DEFAULT_CLIENT_TIMEOUT_MS !== undefined) {
+        const controller = new AbortController();
+        timeoutId = setTimeout(
+          () => controller.abort(),
+          DEFAULT_CLIENT_TIMEOUT_MS,
+        );
+        fetchOptions.signal = controller.signal;
+      }
+
+      let response: Response;
+      try {
+        response = await fetch(url, fetchOptions);
+        if (timeoutId) clearTimeout(timeoutId);
+      } catch (error) {
+        if (timeoutId) clearTimeout(timeoutId);
+        throw error;
+      }
 
       console.log(`[VeniceApiService] Native fetch response received`, {
         status: response.status,

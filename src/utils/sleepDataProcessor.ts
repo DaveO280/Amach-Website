@@ -127,16 +127,29 @@ export const processSleepData = (
 
   sleepSessions.forEach((sessionRecords) => {
     try {
+      // Guardrails for malformed Apple Health exports (occasionally includes absurdly-long segments)
+      // If a single segment is longer than this, it's almost certainly bad data and would blow up charts.
+      const MAX_REASONABLE_SLEEP_SEGMENT_MINUTES = 24 * 60; // 24h
+      const MAX_REASONABLE_SLEEP_SESSION_MINUTES = 36 * 60; // 36h (hard cap to prevent multi-day merges)
+
       // Sort records by start time
       const sortedRecords = [...sessionRecords].sort(
         (a, b) =>
           new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
       );
 
-      // Get overall session boundaries (first start time to last end time)
+      // Get overall session boundaries (earliest start time to latest end time)
       const sessionStart = sortedRecords[0].startDate;
-      const sessionEnd = sortedRecords[sortedRecords.length - 1]
-        .endDate as string;
+      const sessionEnd =
+        sortedRecords.reduce<string>((latestEnd, record) => {
+          const candidateEnd = (record.endDate as string) || record.startDate;
+          if (!latestEnd) return candidateEnd;
+          const candidateMs = new Date(candidateEnd).getTime();
+          const latestMs = new Date(latestEnd).getTime();
+          if (Number.isNaN(candidateMs)) return latestEnd;
+          if (Number.isNaN(latestMs)) return candidateEnd;
+          return candidateMs > latestMs ? candidateEnd : latestEnd;
+        }, "") || (sortedRecords[sortedRecords.length - 1].endDate as string);
 
       // Session start and end dates for reference
       const startDate = new Date(sessionStart);
@@ -155,8 +168,18 @@ export const processSleepData = (
         sessionDurationMs / (1000 * 60),
       );
 
-      // Skip if session is too short (less than 30 minutes)
-      if (sessionDurationMinutes < 30) {
+      // Hard cap: if we somehow got a multi-day "session", drop it instead of corrupting charts.
+      if (
+        Number.isNaN(sessionDurationMinutes) ||
+        sessionDurationMinutes <= 0 ||
+        sessionDurationMinutes > MAX_REASONABLE_SLEEP_SESSION_MINUTES
+      ) {
+        return;
+      }
+
+      // Skip if session is too short (less than 15 minutes)
+      // (Allows naps while still filtering obvious noise.)
+      if (sessionDurationMinutes < 15) {
         // Log skipped short sleep session
         return;
       }
@@ -187,6 +210,16 @@ export const processSleepData = (
         const endTime = new Date(record.endDate as string);
         const durationMs = endTime.getTime() - startTime.getTime();
         const durationMinutes = Math.round(durationMs / (1000 * 60));
+
+        // Skip malformed segments (negative or absurd duration)
+        if (
+          Number.isNaN(startTime.getTime()) ||
+          Number.isNaN(endTime.getTime()) ||
+          durationMinutes <= 0 ||
+          durationMinutes > MAX_REASONABLE_SLEEP_SEGMENT_MINUTES
+        ) {
+          return;
+        }
 
         // Handle in-bed records
         if (record.value === SleepStage.InBed || record.value === "inBed") {
@@ -387,30 +420,9 @@ export const extractDatePart = (dateString: string): string => {
 };
 
 // Update the determinePrimaryDay function
-const determinePrimaryDay = (startTime: string, endTime: string): string => {
-  const start = new Date(startTime);
-  const end = new Date(endTime);
-
-  // If the sleep doesn't cross midnight, use the start date
-  if (extractDatePart(startTime) === extractDatePart(endTime)) {
-    return extractDatePart(startTime);
-  }
-
-  // For overnight sessions, determine which day contains more of the sleep
-  // Calculate midnight after the sleep started
-  const midnightAfterStart = new Date(start);
-  midnightAfterStart.setHours(24, 0, 0, 0);
-
-  // Calculate time before and after midnight
-  const msBeforeMidnight = midnightAfterStart.getTime() - start.getTime();
-  const msAfterMidnight = end.getTime() - midnightAfterStart.getTime();
-
-  // If more sleep occurred after midnight, use the end date
-  if (msAfterMidnight > msBeforeMidnight) {
-    return extractDatePart(endTime);
-  }
-
-  // Otherwise, use the start date
+const determinePrimaryDay = (startTime: string, _endTime: string): string => {
+  // Attribute a sleep session to the day the user fell asleep.
+  // This also aligns naps (midday sessions) naturally to the day they occurred.
   return extractDatePart(startTime);
 };
 
@@ -418,48 +430,122 @@ const determinePrimaryDay = (startTime: string, endTime: string): string => {
 const groupSleepSessions = (
   records: HealthDataPoint[],
 ): HealthDataPoint[][] => {
-  // Sort records by start time
   const sortedRecords = [...records].sort(
     (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
   );
 
+  // Nap/session splitting rules:
+  // - If there is a ≥120 minute gap between sleep-stage records AND there are NO InBed markers
+  //   overlapping that gap, start a new session.
+  // - If there are no InBed markers at all, fall back to splitting on the ≥120 minute gap alone.
+  const NAP_GAP_THRESHOLD_MS = 120 * 60 * 1000;
+  const MAX_REASONABLE_INBED_MARKER_MS = 24 * 60 * 60 * 1000; // 24h
+  const MAX_REASONABLE_SLEEP_SEGMENT_MS = 24 * 60 * 60 * 1000; // 24h
+
+  const isInBedRecord = (record: HealthDataPoint): boolean =>
+    record.value === SleepStage.InBed || record.value === "inBed";
+
+  const inBedRanges = sortedRecords
+    .filter(isInBedRecord)
+    .map((r) => ({
+      start: new Date(r.startDate),
+      end: new Date((r.endDate as string) || r.startDate),
+    }))
+    .filter(
+      (r) => !Number.isNaN(r.start.getTime()) && !Number.isNaN(r.end.getTime()),
+    );
+
+  const inBedRangesReasonable = inBedRanges.filter((r) => {
+    const dur = r.end.getTime() - r.start.getTime();
+    return dur > 0 && dur <= MAX_REASONABLE_INBED_MARKER_MS;
+  });
+
+  const hasAnyInBedMarkers = inBedRangesReasonable.length > 0;
+
+  const hasInBedBridgeAcrossGap = (gapStart: Date, gapEnd: Date): boolean => {
+    // "Still in bed" bridge check:
+    // Only treat as continuous sleep if an InBed marker starts BEFORE the gap and ends AFTER it.
+    // This avoids next-night InBed markers (which start late in the gap) falsely preventing splits.
+    return inBedRangesReasonable.some(
+      (r) =>
+        r.start.getTime() <= gapStart.getTime() &&
+        r.end.getTime() >= gapEnd.getTime(),
+    );
+  };
+
   const sessions: HealthDataPoint[][] = [];
   let currentSession: HealthDataPoint[] = [];
-  let lastEndTime: Date | null = null;
-
-  // Time gap threshold for considering records part of the same session (in milliseconds)
-  // 4 hour gap means these are separate sleep sessions
-  const sessionGapThreshold = 4 * 60 * 60 * 1000;
+  let currentSessionMaxEndTime: Date | null = null;
+  let lastNonInBedEndTime: Date | null = null;
 
   sortedRecords.forEach((record) => {
     const startTime = new Date(record.startDate);
     const endTime = new Date((record.endDate as string) || record.startDate);
+    const inBed = isInBedRecord(record);
 
-    // Start a new session if:
-    // 1. This is the first record, OR
-    // 2. There's a significant gap between this record and the last session's end
-    // 3. The current record is an inBed record and we don't have an active session
-    if (
-      currentSession.length === 0 ||
-      !lastEndTime ||
-      startTime.getTime() - lastEndTime.getTime() > sessionGapThreshold ||
-      (record.value === SleepStage.InBed && currentSession.length === 0)
-    ) {
-      // Save previous session if it exists
-      if (currentSession.length > 0) {
-        sessions.push([...currentSession]);
-      }
-
-      // Start a new session
-      currentSession = [record];
-    } else {
-      // Add to current session
-      currentSession.push(record);
+    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+      return;
     }
 
-    // Update last end time if this record extends it
-    if (!lastEndTime || endTime > lastEndTime) {
-      lastEndTime = endTime;
+    // Drop absurd segments early so they can't:
+    // - poison session boundaries, or
+    // - accidentally bridge gaps and merge unrelated nights.
+    const segMs = endTime.getTime() - startTime.getTime();
+    if (segMs <= 0 || segMs > MAX_REASONABLE_SLEEP_SEGMENT_MS) {
+      return;
+    }
+
+    // Start the very first session
+    if (currentSession.length === 0) {
+      currentSession = [record];
+      currentSessionMaxEndTime = endTime;
+      if (!inBed) {
+        lastNonInBedEndTime = endTime;
+      }
+      return;
+    }
+
+    // Decide if we should split BEFORE adding this record.
+    // We only split when we encounter a non-InBed record, because InBed markers alone
+    // are not reliable indicators of a distinct sleep session.
+    let shouldSplit = false;
+    if (!inBed) {
+      const referenceEnd = lastNonInBedEndTime ?? currentSessionMaxEndTime;
+      if (referenceEnd) {
+        const gapMs = startTime.getTime() - referenceEnd.getTime();
+        if (gapMs >= NAP_GAP_THRESHOLD_MS) {
+          if (!hasAnyInBedMarkers) {
+            shouldSplit = true;
+          } else {
+            const inBedBridgesGap = hasInBedBridgeAcrossGap(
+              referenceEnd,
+              startTime,
+            );
+            shouldSplit = !inBedBridgesGap;
+          }
+        }
+      }
+    }
+
+    if (shouldSplit) {
+      sessions.push([...currentSession]);
+      currentSession = [record];
+      currentSessionMaxEndTime = endTime;
+      lastNonInBedEndTime = inBed ? null : endTime;
+      return;
+    }
+
+    // Add to current session
+    currentSession.push(record);
+
+    // Track max end time for the session
+    if (!currentSessionMaxEndTime || endTime > currentSessionMaxEndTime) {
+      currentSessionMaxEndTime = endTime;
+    }
+
+    // Track last end time of a non-InBed record (used to compute meaningful gaps)
+    if (!inBed && (!lastNonInBedEndTime || endTime > lastNonInBedEndTime)) {
+      lastNonInBedEndTime = endTime;
     }
   });
 

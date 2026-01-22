@@ -53,6 +53,60 @@ export function generateBucketName(
 }
 
 /**
+ * Legacy bucket name (v0) derived from wallet address only.
+ * Used for recovery/migration of older test data.
+ *
+ * SECURITY: Only use in server routes that verify wallet ownership (signature).
+ */
+export function generateLegacyAddressBucketName(
+  walletAddress: string,
+  bucketPrefix: string = "amach-health",
+): string {
+  const normalizedAddress = walletAddress.toLowerCase();
+  const bucketHash = createHash("sha256")
+    .update(normalizedAddress)
+    .digest("hex")
+    .substring(0, 16);
+  return `${bucketPrefix}-${bucketHash}`;
+}
+
+/**
+ * Some legacy environments hashed the address *without* the 0x prefix.
+ * We probe both variants during legacy recovery.
+ */
+export function generateLegacyAddressBucketNameNo0x(
+  walletAddress: string,
+  bucketPrefix: string = "amach-health",
+): string {
+  const normalized = walletAddress.toLowerCase().replace(/^0x/, "");
+  const bucketHash = createHash("sha256")
+    .update(normalized)
+    .digest("hex")
+    .substring(0, 16);
+  return `${bucketPrefix}-${bucketHash}`;
+}
+
+/**
+ * Legacy bucket variants that used wallet address + a key fragment, but not necessarily
+ * the same fragment length as the current implementation.
+ *
+ * SECURITY: Only use in server routes that verify wallet ownership (signature).
+ */
+export function generateLegacyKeyedBucketName(
+  walletAddress: string,
+  keyMaterial: string,
+  bucketPrefix: string = "amach-health",
+): string {
+  const normalizedAddress = walletAddress.toLowerCase();
+  const bucketMaterial = `${normalizedAddress}-${keyMaterial}`;
+  const bucketHash = createHash("sha256")
+    .update(bucketMaterial)
+    .digest("hex")
+    .substring(0, 16);
+  return `${bucketPrefix}-${bucketHash}`;
+}
+
+/**
  * Generate bucket name and validation info from wallet address + encryption key
  *
  * @param walletAddress - User's wallet address

@@ -60,16 +60,13 @@ export function buildHealthAnalysisPrompt(
       : "Profile incomplete.",
   };
 
-  return `As Cosaint, your holistic health companion, provide a detailed analysis of the following health metric:
+  return `As Cosaint, your holistic health companion, provide a single, concise paragraph analysis of the following health metric:
 
 ${sectionPrompts[section]}
 
-For this analysis:
-1. Explain how the specific metrics contribute to the score
-2. Compare the metrics to optimal ranges for someone of your age and sex
-3. Discuss what this reveals about your current health status
-4. Consider how your age, sex, height, and weight affect these metrics
-5. Provide actionable insights for improvement based on your specific profile
-
-Write in a warm, encouraging tone using second person ("you"). Focus on providing clear, evidence-based insights while maintaining a supportive approach.`;
+Rules:
+- Return ONLY the final paragraph. Do NOT include analysis, planning, constraint checklists, or any other meta text.
+- Do NOT use bullet points, numbered lists, or headings.
+- Keep it under 900 characters.
+- Do NOT include <think> tags.`;
 }

@@ -87,6 +87,121 @@ function parseLine(line: string): BloodworkMetric | null {
   return null;
 }
 
+function extractQuestStyleMetricsFromBlob(rawText: string): BloodworkMetric[] {
+  // Some PDF text extractions collapse tables into very long "page" lines.
+  // This extracts Quest-style metrics directly from the full blob.
+  //
+  // Examples in blob:
+  // "CHOLESTEROL, TOTAL   237 H  05/26/25  <200 mg/dL   Z4M"
+  // "VITAMIN D, 25-OH, D3   46  05/26/25  ng/mL   AMD"
+  // "BUN/CREATININE RATIO   SEE NOTE:  05/26/25  6-22 (calc)   NL1"
+
+  const metrics: BloodworkMetric[] = [];
+  const seen = new Set<string>();
+
+  const normalizeName = (s: string): string =>
+    sanitizeName(s.replace(/\s+/g, " ").trim());
+
+  const parseValue = (
+    raw: string,
+  ): { value?: number; valueText?: string; flagFromValue?: BloodworkFlag } => {
+    const t = raw.trim();
+    if (!t) return {};
+    const cleaned = t.replace(/^</, "");
+    const n = Number.parseFloat(cleaned);
+    if (Number.isFinite(n)) return { value: n, valueText: t };
+    return { valueText: t };
+  };
+
+  const flagFromHL = (hl: string | undefined): BloodworkFlag | undefined => {
+    if (!hl) return undefined;
+    if (hl === "H") return "high";
+    if (hl === "L") return "low";
+    return undefined;
+  };
+
+  // We rely on table-like spacing (2+ spaces between "columns") to avoid greedy name capture.
+  // We strongly anchor on the Lab code at the end (Z4M / NL1 / AMD / etc).
+  const nameToken = "(?<name>[A-Z][A-Z0-9,()\\/\\-]*(?: [A-Z0-9,()\\/\\-]+)*)";
+  const valueToken =
+    "(?<value><[\\d.]+|-?[\\d.]+|SEE NOTE:|SEE NOTE|NOT REPORTED|Not Reported|PENDING|Pending)";
+  const hlToken = "(?<hl>\\b[HL]\\b)?";
+  const dateToken = "(?<date>\\d{2}\\/\\d{2}\\/\\d{2})";
+  const labToken = "(?<lab>[A-Z0-9]{2,4})";
+
+  // Ref-with-unit variant: "<200 mg/dL" or "0.40-4.50 mIU/L" or "<5.0 calc"
+  const refWithUnitToken =
+    "(?<ref>(?:<|>|<=|>=)?[\\d.]+(?:\\s*[-–]\\s*[\\d.]+)?(?:\\s*\\(calc\\))?\\s*[A-Za-z%\\/\\-\\d.]+)";
+
+  // Unit-only variant: "ng/mL"
+  const unitOnlyToken = "(?<unit>[A-Za-z%\\/\\-\\d.]+)";
+
+  const reWithRef = new RegExp(
+    `${nameToken}\\s{2,}${valueToken}\\s*${hlToken}\\s{2,}${dateToken}\\s{2,}${refWithUnitToken}\\s{2,}${labToken}`,
+    "g",
+  );
+  const reUnitOnly = new RegExp(
+    `${nameToken}\\s{2,}${valueToken}\\s*${hlToken}\\s{2,}${dateToken}\\s{2,}${unitOnlyToken}\\s{2,}${labToken}`,
+    "g",
+  );
+
+  const consumeMatch = (groups: Record<string, string | undefined>): void => {
+    if (!groups.name || !groups.value) return;
+    const name = normalizeName(groups.name);
+    if (!name || name.length < 2) return;
+
+    const { value, valueText } = parseValue(groups.value);
+    const flag = flagFromHL(groups.hl);
+
+    let unit: string | undefined;
+    let referenceRange: string | undefined;
+
+    if (groups.ref) {
+      const ref = groups.ref.trim();
+      // Split out unit when it's present as the last token (e.g., "<200 mg/dL")
+      const unitMatch = ref.match(/([A-Za-z%\/\-\d.]+)$/);
+      if (unitMatch) {
+        const maybeUnit = unitMatch[1];
+        // Only treat as unit if it looks unit-ish (has letters or a slash)
+        if (/[A-Za-z]/.test(maybeUnit) || maybeUnit.includes("/")) {
+          unit = maybeUnit;
+          const rangePart = ref.slice(0, ref.length - maybeUnit.length).trim();
+          referenceRange = rangePart.length > 0 ? rangePart : undefined;
+        } else {
+          referenceRange = ref;
+        }
+      } else {
+        referenceRange = ref;
+      }
+    } else if (groups.unit) {
+      unit = groups.unit.trim();
+    }
+
+    const key = `${name}|${valueText || ""}|${unit || ""}|${referenceRange || ""}|${flag || ""}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    metrics.push({
+      name,
+      value,
+      valueText,
+      unit,
+      referenceRange,
+      flag,
+      panel: extractPanel(name, rawText),
+    });
+  };
+
+  for (const match of rawText.matchAll(reWithRef)) {
+    consumeMatch(match.groups as Record<string, string | undefined>);
+  }
+  for (const match of rawText.matchAll(reUnitOnly)) {
+    consumeMatch(match.groups as Record<string, string | undefined>);
+  }
+
+  return metrics;
+}
+
 export function looksLikeBloodworkReport(rawText: string): boolean {
   const lower = rawText.toLowerCase();
   const keywords = [
@@ -134,6 +249,15 @@ export function parseBloodworkReport(
   metrics.forEach((metric) => {
     metric.panel = extractPanel(metric.name, rawText);
   });
+
+  // If PDF text is collapsed into giant lines, parseLine() can miss everything.
+  // Try blob extraction as a backstop.
+  if (metrics.length === 0) {
+    const blobMetrics = extractQuestStyleMetricsFromBlob(rawText);
+    if (blobMetrics.length > 0) {
+      metrics.push(...blobMetrics);
+    }
+  }
 
   const panels = metrics.reduce<Record<string, BloodworkMetric[]>>(
     (acc, metric) => {

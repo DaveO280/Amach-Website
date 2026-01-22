@@ -4,6 +4,14 @@ import { getStorjTimelineService } from "@/storage";
 import { getStorjConversationService } from "@/storage";
 import { getStorjSyncService } from "@/storage";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
+import { getKeyDerivationMessage } from "@/utils/walletEncryption";
+import { verifyMessage } from "viem";
+import { StorjClient } from "@/storage/StorjClient";
+import {
+  generateLegacyAddressBucketName,
+  generateLegacyAddressBucketNameNo0x,
+  generateLegacyKeyedBucketName,
+} from "@/utils/storjAccessControl";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -237,6 +245,128 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           userAddress,
           typedEncryptionKey,
           dataType,
+        );
+        break;
+      }
+
+      case "storage/list-legacy": {
+        const signature = body?.signature as string | undefined;
+        if (!signature) {
+          return NextResponse.json(
+            { error: "signature is required for storage/list-legacy" },
+            { status: 400 },
+          );
+        }
+
+        const message = getKeyDerivationMessage(userAddress);
+        const ok = await verifyMessage({
+          address: userAddress as `0x${string}`,
+          message,
+          signature: signature as `0x${string}`,
+        });
+        if (!ok) {
+          return NextResponse.json(
+            { error: "Invalid signature for wallet address" },
+            { status: 401 },
+          );
+        }
+
+        const envPrefix = process.env.STORJ_BUCKET_PREFIX || "amach-health";
+        const prefixCandidates = Array.from(
+          new Set([envPrefix, "amach-health", "amachhealth", "amach"]),
+        );
+
+        // Probe multiple historical formulas. We include:
+        // - address-only legacy buckets
+        // - keyed buckets with different key fragment sizes (some old versions varied this)
+        const key = typedEncryptionKey.key || "";
+        const keyFragments = Array.from(
+          new Set(
+            [
+              key.substring(0, 16),
+              key.substring(0, 32),
+              key.substring(0, 64),
+              key, // full key (rare, but probe)
+            ].filter((s) => s && s.length > 0),
+          ),
+        );
+
+        const bucketCandidates = prefixCandidates.flatMap((bucketPrefix) => [
+          generateLegacyAddressBucketName(userAddress, bucketPrefix),
+          generateLegacyAddressBucketNameNo0x(userAddress, bucketPrefix),
+          ...keyFragments.map((frag) =>
+            generateLegacyKeyedBucketName(userAddress, frag, bucketPrefix),
+          ),
+        ]);
+
+        const storjClient = StorjClient.createClient();
+        const filterDataType =
+          dataType && dataType !== "all" ? (dataType as string) : undefined;
+
+        let chosenBucket: string | null = null;
+        let items: unknown[] = [];
+        const candidateCounts: Array<{ bucket: string; count: number }> = [];
+
+        for (const b of bucketCandidates) {
+          // Always list without S3 prefix filtering to support legacy key layouts.
+          const listedAll = await storjClient.listBucketByName(b, undefined);
+          const listed = filterDataType
+            ? listedAll.filter((it) => it.dataType === filterDataType)
+            : listedAll;
+          candidateCounts.push({ bucket: b, count: listed.length });
+          if (!chosenBucket && listed.length > 0) {
+            chosenBucket = b;
+            items = listed;
+          }
+        }
+
+        result = {
+          bucketPrefix: envPrefix,
+          prefixCandidates,
+          keyFragments: keyFragments.map((s) => s.slice(0, 12) + "…"),
+          bucketCandidates,
+          candidateCounts,
+          chosenBucket,
+          items,
+        };
+        break;
+      }
+
+      case "storage/retrieve-legacy": {
+        const signature = body?.signature as string | undefined;
+        if (!storjUri) {
+          return NextResponse.json(
+            { error: "storjUri is required for storage/retrieve-legacy" },
+            { status: 400 },
+          );
+        }
+        if (!signature) {
+          return NextResponse.json(
+            { error: "signature is required for storage/retrieve-legacy" },
+            { status: 400 },
+          );
+        }
+
+        const message = getKeyDerivationMessage(userAddress);
+        const ok = await verifyMessage({
+          address: userAddress as `0x${string}`,
+          message,
+          signature: signature as `0x${string}`,
+        });
+        if (!ok) {
+          return NextResponse.json(
+            { error: "Invalid signature for wallet address" },
+            { status: 401 },
+          );
+        }
+
+        const storageService = getStorageService();
+        // IMPORTANT: pass userAddress as undefined so StorjClient does NOT run bucket ownership validation.
+        result = await storageService.retrieveHealthData(
+          storjUri,
+          typedEncryptionKey,
+          expectedHash,
+          undefined,
         );
         break;
       }

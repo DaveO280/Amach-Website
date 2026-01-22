@@ -3,8 +3,16 @@
 
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { CosaintAiService } from "@/services/CosaintAiService";
+import { chatHistoryStore } from "@/data/store/chatHistoryStore";
+import { getCachedWalletEncryptionKey } from "@/utils/walletEncryption";
 import React, { createContext, useContext, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
+import { useWalletService } from "@/hooks/useWalletService";
+import { conversationMemoryStore } from "@/data/store/conversationMemoryStore";
+import {
+  extractConcernsFromConversation,
+  extractGoalsFromConversation,
+} from "@/utils/contextExtractor";
 
 // Define types for our messages and context
 interface Message {
@@ -84,11 +92,17 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     addChatMessage,
     reports,
   } = useHealthDataContext();
+  const walletService = useWalletService();
+  const { isConnected, address, signMessage } = walletService;
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [aiService, setAiService] = useState<CosaintAiService | null>(null);
   const [useMultiAgent, setUseMultiAgent] = useState<boolean>(false);
+
+  // Throttle background Storj sync so we don't spam uploads.
+  // (Module-level would also work, but we keep it instance-local.)
+  const [lastConversationSyncAtMs, setLastConversationSyncAtMs] = useState(0);
 
   // Initialize the AI service
   const getAIService = async (): Promise<CosaintAiService> => {
@@ -108,6 +122,7 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     try {
       setIsLoading(true);
       setError(null);
+      const userId = address || "local-anon";
 
       // Create a new message
       const newMessage: Message = {
@@ -124,6 +139,26 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         content: message,
         timestamp: new Date().toISOString(),
       });
+
+      // Persist to IndexedDB thread store (non-blocking but awaited so prompt context is correct)
+      let threadInfo: {
+        threadId: string;
+        startedNewThread: boolean;
+        previousThreadId?: string;
+      } | null = null;
+      try {
+        threadInfo = await chatHistoryStore.appendMessage({
+          userId,
+          role: "user",
+          content: message,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.warn(
+          "[aiStore] Failed to persist user message to IndexedDB:",
+          e,
+        );
+      }
 
       // Get the AI service
       console.log("[aiStore] Getting AI service...");
@@ -143,8 +178,41 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       };
 
       const conversationHistoryToSend = [
-        ...chatHistory.map(({ role, content }) => ({ role, content })),
-        { role: "user" as const, content: message },
+        ...(await chatHistoryStore
+          .buildConversationHistoryForPrompt({
+            userId,
+            newUserMessage: message,
+            maxChars: useMultiAgent ? 4500 : 2200,
+          })
+          .then((r) => {
+            if (process.env.NODE_ENV === "development") {
+              const totalChars = r.messages.reduce(
+                (sum, m) => sum + (m.content?.length || 0),
+                0,
+              );
+              console.log("[ChatContext] Selected history for prompt", {
+                threadId: r.threadId,
+                sameTopic: r.sameTopic,
+                messageCount: r.messages.length,
+                totalChars,
+              });
+            }
+            // Ensure we don't accidentally include the current user message in history;
+            // CosaintAiService appends it once as "User: ...".
+            const msgs = r.messages;
+            if (
+              msgs.length > 0 &&
+              msgs[msgs.length - 1]?.role === "user" &&
+              msgs[msgs.length - 1]?.content === message
+            ) {
+              return msgs.slice(0, -1);
+            }
+            return msgs;
+          })
+          .catch(() => [
+            ...chatHistory.map(({ role, content }) => ({ role, content })),
+            { role: "user" as const, content: message },
+          ])),
       ];
 
       // Send the message to the AI
@@ -213,6 +281,133 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         content: finalResponse,
         timestamp: new Date().toISOString(),
       });
+
+      // Persist assistant response to IndexedDB thread store
+      try {
+        await chatHistoryStore.appendMessage({
+          userId,
+          role: "assistant",
+          content: finalResponse,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.warn(
+          "[aiStore] Failed to persist assistant message to IndexedDB:",
+          e,
+        );
+      }
+
+      // Compact conversation memory updates (IndexedDB) — keep it small to avoid prompt bloat.
+      // We update memory when a new thread starts (meaning we likely shifted topics / closed a session).
+      if (threadInfo?.startedNewThread && threadInfo.previousThreadId) {
+        try {
+          const prev = await chatHistoryStore.getThreadById(
+            threadInfo.previousThreadId,
+          );
+          if (prev && prev.messages.length > 0) {
+            // Build a tiny "session summary" from the tail of the previous thread.
+            const tail = prev.messages.slice(-10);
+            const tailText = tail
+              .map((m) => `${m.role}: ${m.content}`)
+              .join("\n");
+            const goals = extractGoalsFromConversation(
+              tail.map((m) => ({
+                role: m.role,
+                content: m.content,
+                timestamp: m.timestamp,
+              })),
+            );
+            const concerns = extractConcernsFromConversation(
+              tail.map((m) => ({
+                role: m.role,
+                content: m.content,
+                timestamp: m.timestamp,
+              })),
+            );
+
+            await conversationMemoryStore.initialize();
+            // Store goals/concerns as deduped critical facts (small, stable strings).
+            for (const g of goals.slice(-5)) {
+              await conversationMemoryStore.addCriticalFact(userId, {
+                id: uuidv4(),
+                category: "goal",
+                value: g.text,
+                context: "From recent chat",
+                dateIdentified: new Date().toISOString(),
+                isActive: true,
+                source: "ai-extracted",
+                storageLocation: "local",
+                confidence: 0.6,
+              });
+            }
+            for (const c of concerns.slice(-5)) {
+              await conversationMemoryStore.addCriticalFact(userId, {
+                id: uuidv4(),
+                category: "concern",
+                value: c,
+                context: "From recent chat",
+                dateIdentified: new Date().toISOString(),
+                isActive: true,
+                source: "ai-extracted",
+                storageLocation: "local",
+                confidence: 0.6,
+              });
+            }
+
+            const topics = Array.from(
+              new Set(
+                prev.topicKeywords
+                  .slice(0, 8)
+                  .map((t) => t.toLowerCase())
+                  .filter(Boolean),
+              ),
+            );
+            const summaryText = tailText.slice(0, 420);
+            await conversationMemoryStore.addSessionSummary(userId, {
+              id: uuidv4(),
+              date: new Date().toISOString(),
+              summary: summaryText,
+              topics,
+              importance: "medium",
+              extractedFacts: [],
+              messageCount: prev.messages.length,
+            });
+          }
+        } catch (e) {
+          console.warn("[aiStore] Failed to update conversation memory:", e);
+        }
+      }
+
+      // Opportunistic long-term sync: sync structured conversation memory snapshot to Storj
+      // This is intentionally lightweight and non-blocking for chat UX.
+      if (isConnected && address) {
+        void (async (): Promise<void> => {
+          try {
+            // throttle to at most once per 5 minutes
+            const now = Date.now();
+            if (now - lastConversationSyncAtMs < 5 * 60_000) {
+              return;
+            }
+            const encryptionKey = await getCachedWalletEncryptionKey(
+              address,
+              signMessage,
+            );
+            await fetch("/api/storj", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "conversation/sync",
+                userAddress: address,
+                encryptionKey,
+                options: { background: true },
+              }),
+            });
+            setLastConversationSyncAtMs(now);
+          } catch (e) {
+            console.warn("[aiStore] Conversation sync to Storj failed:", e);
+          }
+        })();
+      }
     } catch (err) {
       console.error("❌ [aiStore] AI Chat Error:", err);
       console.error("❌ [aiStore] Error details:", {

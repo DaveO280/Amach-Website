@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStorageService } from "@/storage";
 import { getStorjTimelineService } from "@/storage";
 import { getStorjConversationService } from "@/storage";
-import { getStorjSyncService } from "@/storage";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 import { getKeyDerivationMessage } from "@/utils/walletEncryption";
 import { verifyMessage } from "viem";
 import { StorjClient } from "@/storage/StorjClient";
+import type { ConversationMemory } from "@/types/conversationMemory";
 import {
   generateLegacyAddressBucketName,
   generateLegacyAddressBucketNameNo0x,
@@ -160,8 +160,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       case "conversation/sync": {
-        const syncService = getStorjSyncService();
-        result = await syncService.syncConversationMemory(
+        // NOTE: Server routes cannot read browser IndexedDB.
+        // Client must send the ConversationMemory snapshot in `data`.
+        if (!data) {
+          return NextResponse.json(
+            {
+              error:
+                "Conversation memory snapshot is required for conversation/sync",
+            },
+            { status: 400 },
+          );
+        }
+        const conversationService = getStorjConversationService();
+        result = await conversationService.syncMemoryToStorj(
+          data as ConversationMemory,
           userAddress,
           typedEncryptionKey,
           options,
@@ -170,12 +182,91 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       case "conversation/restore": {
-        const syncService = getStorjSyncService();
-        result = await syncService.restoreConversationMemory(
-          userAddress,
-          typedEncryptionKey,
-          storjUri,
-        );
+        // Restore returns the ConversationMemory snapshot to the client, which can save it to IndexedDB.
+        const conversationService = getStorjConversationService();
+
+        let history;
+        if (storjUri) {
+          history = await conversationService.retrieveConversationHistory(
+            storjUri,
+            typedEncryptionKey,
+          );
+        } else {
+          const snapshots =
+            await conversationService.listUserConversationHistory(
+              userAddress,
+              typedEncryptionKey,
+            );
+          if (!snapshots.length) {
+            return NextResponse.json(
+              { error: "No conversation history found on Storj" },
+              { status: 404 },
+            );
+          }
+          const latest = snapshots.sort(
+            (a, b) => b.uploadedAt - a.uploadedAt,
+          )[0];
+          history = await conversationService.retrieveConversationHistory(
+            latest.storjUri,
+            typedEncryptionKey,
+          );
+        }
+
+        if (!history) {
+          return NextResponse.json(
+            { error: "Failed to retrieve conversation history from Storj" },
+            { status: 500 },
+          );
+        }
+
+        const memory: ConversationMemory = {
+          userId: history.userId,
+          criticalFacts: history.criticalFacts.map((f) => ({
+            id: f.id,
+            category:
+              f.category as ConversationMemory["criticalFacts"][0]["category"],
+            value: f.value,
+            context: f.context,
+            dateIdentified: f.dateIdentified,
+            isActive: f.isActive,
+            source: "blockchain" as const,
+            storageLocation: f.storageLocation as
+              | "local"
+              | "blockchain"
+              | "both",
+            blockchainTxHash: f.blockchainTxHash,
+          })),
+          importantSessions: history.sessions
+            .filter(
+              (s) => s.importance === "critical" || s.importance === "high",
+            )
+            .map((s) => ({
+              id: s.id,
+              date: new Date(s.startedAt).toISOString(),
+              summary: s.summary || "",
+              topics: s.topics,
+              importance: s.importance,
+              extractedFacts: s.extractedFacts || [],
+              messageCount: s.messageCount,
+            })),
+          recentSessions: history.sessions
+            .filter((s) => s.importance === "medium" || s.importance === "low")
+            .map((s) => ({
+              id: s.id,
+              date: new Date(s.startedAt).toISOString(),
+              summary: s.summary || "",
+              topics: s.topics,
+              importance: s.importance,
+              extractedFacts: s.extractedFacts || [],
+              messageCount: s.messageCount,
+            })),
+          preferences: history.preferences as ConversationMemory["preferences"],
+          lastUpdated: new Date(history.lastSyncedAt).toISOString(),
+          totalSessions: history.sessions.length,
+          totalFactsExtracted: history.criticalFacts.length,
+        };
+
+        result = { success: true, memory };
         break;
       }
 

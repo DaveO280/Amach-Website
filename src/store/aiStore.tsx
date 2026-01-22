@@ -392,6 +392,14 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               address,
               signMessage,
             );
+            // Load latest ConversationMemory snapshot from IndexedDB and send it to the server for upload.
+            await conversationMemoryStore.initialize();
+            const memory = await conversationMemoryStore.getMemory(address);
+            if (!memory) {
+              // Nothing to sync yet.
+              setLastConversationSyncAtMs(now);
+              return;
+            }
             await fetch("/api/storj", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -399,6 +407,7 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 action: "conversation/sync",
                 userAddress: address,
                 encryptionKey,
+                data: memory,
                 options: { background: true },
               }),
             });

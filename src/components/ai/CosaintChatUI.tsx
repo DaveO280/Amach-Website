@@ -24,6 +24,8 @@ import type { ParsedReportSummary } from "@/types/reportData";
 import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
 import { generateSearchTag, getUserSecret } from "@/utils/searchableEncryption";
 import { getChainEventTypeForReportType } from "@/utils/storjChainMarkerRegistry";
+import { conversationMemoryStore } from "@/data/store/conversationMemoryStore";
+import type { ConversationMemory } from "@/types/conversationMemory";
 
 // Define types for our message interface
 interface MessageType {
@@ -90,6 +92,16 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
 
   // Dev-only: quick way to adjust Quick-mode token budget without using the console.
   const isDev = process.env.NODE_ENV === "development";
+  const [showDevTools, setShowDevTools] = useState<boolean>(() => {
+    if (!isDev) return false;
+    try {
+      const raw = window.localStorage.getItem("cosaint_show_dev_tools");
+      if (raw === null) return true;
+      return raw === "true";
+    } catch {
+      return true;
+    }
+  });
   const [quickMaxTokensUi, setQuickMaxTokensUi] = useState<string>(() => {
     if (!isDev) return "";
     try {
@@ -98,6 +110,62 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       return "";
     }
   });
+  const [devMemorySyncLoading, setDevMemorySyncLoading] = useState(false);
+  const [devMemorySyncError, setDevMemorySyncError] = useState<string>("");
+  const [devMemorySyncResult, setDevMemorySyncResult] = useState<{
+    storjUri?: string;
+    contentHash?: string;
+    raw?: unknown;
+  } | null>(null);
+  const [devStorjHistoryLoading, setDevStorjHistoryLoading] = useState(false);
+  const [devStorjHistoryError, setDevStorjHistoryError] = useState<string>("");
+  const [devStorjHistoryItems, setDevStorjHistoryItems] = useState<
+    Array<{
+      uri: string;
+      contentHash: string;
+      size: number;
+      uploadedAt: number;
+      dataType: string;
+      metadata?: Record<string, string>;
+    }>
+  >([]);
+  const [devStorjHistorySelected, setDevStorjHistorySelected] = useState<{
+    uri: string;
+    json: string;
+  } | null>(null);
+  const [devStorjRestoreLoading, setDevStorjRestoreLoading] = useState(false);
+  const [devStorjRestoreError, setDevStorjRestoreError] = useState<string>("");
+  const [devStorjRestoreOk, setDevStorjRestoreOk] = useState<string>("");
+  const [devVeniceSessionTestLoading, setDevVeniceSessionTestLoading] =
+    useState(false);
+  const [devVeniceSessionTestError, setDevVeniceSessionTestError] =
+    useState<string>("");
+  const [devVeniceSessionTestResult, setDevVeniceSessionTestResult] = useState<{
+    secret: string;
+    firstResponse: string;
+    secondResponse: string;
+    passed: boolean;
+  } | null>(null);
+
+  const closeDevMemorySync = (): void => {
+    setDevMemorySyncLoading(false);
+    setDevMemorySyncError("");
+    setDevMemorySyncResult(null);
+  };
+  const closeDevStorjViewer = (): void => {
+    setDevStorjHistoryLoading(false);
+    setDevStorjHistoryError("");
+    setDevStorjHistoryItems([]);
+    setDevStorjHistorySelected(null);
+    setDevStorjRestoreLoading(false);
+    setDevStorjRestoreError("");
+    setDevStorjRestoreOk("");
+  };
+  const closeDevVeniceSessionTest = (): void => {
+    setDevVeniceSessionTestLoading(false);
+    setDevVeniceSessionTestError("");
+    setDevVeniceSessionTestResult(null);
+  };
 
   // File manager UI (keeps chat uncluttered)
   const [showFileManager, setShowFileManager] = useState(false);
@@ -153,6 +221,374 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       setShowMessageLimitPopup(false);
     }
   }, [isConnected]);
+
+  const devSyncConversationMemoryToStorj = async (opts?: {
+    force?: boolean;
+    seedIfMissing?: boolean;
+  }): Promise<void> => {
+    if (!isDev) return;
+
+    try {
+      setDevMemorySyncLoading(true);
+      setDevMemorySyncError("");
+      setDevMemorySyncResult(null);
+
+      if (!isConnected || !address) {
+        setDevMemorySyncError("Connect a wallet to sync memory to Storj.");
+        return;
+      }
+
+      const encryptionKey = await getCachedWalletEncryptionKey(
+        address,
+        signMessage,
+      );
+
+      await conversationMemoryStore.initialize();
+      const memoryFromDb: ConversationMemory | null =
+        await conversationMemoryStore.getMemory(address);
+      const memory: ConversationMemory | null =
+        memoryFromDb ||
+        (opts?.seedIfMissing
+          ? {
+              userId: address,
+              criticalFacts: [],
+              importantSessions: [],
+              recentSessions: [],
+              preferences: {},
+              lastUpdated: new Date().toISOString(),
+              totalSessions: 0,
+              totalFactsExtracted: 0,
+            }
+          : null);
+      if (!memory) {
+        setDevMemorySyncError(
+          "No local conversation memory found yet. Use “seed + sync” to test Storj without waiting for a thread rollover.",
+        );
+        return;
+      }
+
+      console.log("[DevMemorySync] Syncing ConversationMemory to Storj", {
+        userId: address,
+        hasLocalMemory: !!memoryFromDb,
+        seeded: !!opts?.seedIfMissing && !memoryFromDb,
+        sessions:
+          (memory.importantSessions?.length || 0) +
+          (memory.recentSessions?.length || 0),
+        facts: memory.criticalFacts?.length || 0,
+        force: !!opts?.force,
+      });
+
+      const resp = await fetch("/api/storj", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "conversation/sync",
+          userAddress: address,
+          encryptionKey,
+          data: memory,
+          options: {
+            background: false,
+            ...(opts?.force
+              ? { metadata: { devForceAt: new Date().toISOString() } }
+              : {}),
+          },
+        }),
+      });
+
+      const payload = (await resp.json()) as {
+        success?: boolean;
+        error?: string;
+        result?: { success?: boolean; storjUri?: string; contentHash?: string };
+      };
+
+      if (
+        !resp.ok ||
+        payload?.success === false ||
+        payload?.result?.success === false
+      ) {
+        throw new Error(payload?.error || "Storj sync failed");
+      }
+
+      setDevMemorySyncResult({
+        storjUri: payload?.result?.storjUri,
+        contentHash: payload?.result?.contentHash,
+        raw: payload,
+      });
+
+      console.log("[DevMemorySync] Sync result", payload);
+    } catch (e) {
+      setDevMemorySyncError(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setDevMemorySyncLoading(false);
+    }
+  };
+
+  const devListStorjConversationHistory = async (): Promise<void> => {
+    if (!isDev) return;
+    try {
+      setDevStorjHistoryLoading(true);
+      setDevStorjHistoryError("");
+      setDevStorjHistorySelected(null);
+      setDevStorjRestoreError("");
+      setDevStorjRestoreOk("");
+
+      if (!isConnected || !address) {
+        setDevStorjHistoryError("Connect a wallet to list Storj history.");
+        return;
+      }
+
+      const encryptionKey = await getCachedWalletEncryptionKey(
+        address,
+        signMessage,
+      );
+
+      const resp = await fetch("/api/storj", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "storage/list",
+          userAddress: address,
+          encryptionKey,
+          dataType: "conversation-history",
+        }),
+      });
+      const payload = (await resp.json()) as {
+        success?: boolean;
+        error?: string;
+        result?: unknown;
+      };
+      if (!resp.ok || payload?.success === false) {
+        throw new Error(payload?.error || "Failed to list Storj items");
+      }
+
+      const items = (
+        Array.isArray(payload?.result) ? payload.result : []
+      ) as Array<{
+        uri: string;
+        contentHash: string;
+        size: number;
+        uploadedAt: number;
+        dataType: string;
+        metadata?: Record<string, string>;
+      }>;
+
+      items.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+      setDevStorjHistoryItems(items);
+      console.log("[DevStorjHistory] Listed conversation-history snapshots", {
+        count: items.length,
+      });
+    } catch (e) {
+      setDevStorjHistoryError(e instanceof Error ? e.message : "List failed");
+    } finally {
+      setDevStorjHistoryLoading(false);
+    }
+  };
+
+  const devViewStorjConversationHistory = async (item: {
+    uri: string;
+    contentHash?: string;
+  }): Promise<void> => {
+    if (!isDev) return;
+    try {
+      setDevStorjHistoryLoading(true);
+      setDevStorjHistoryError("");
+      setDevStorjHistorySelected(null);
+
+      if (!isConnected || !address) {
+        setDevStorjHistoryError("Connect a wallet to view Storj history.");
+        return;
+      }
+
+      const encryptionKey = await getCachedWalletEncryptionKey(
+        address,
+        signMessage,
+      );
+
+      const resp = await fetch("/api/storj", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "storage/retrieve",
+          userAddress: address,
+          encryptionKey,
+          storjUri: item.uri,
+          expectedHash: item.contentHash,
+        }),
+      });
+      const payload = (await resp.json()) as {
+        success?: boolean;
+        error?: string;
+        result?: { data?: unknown };
+      };
+      if (!resp.ok || payload?.success === false) {
+        throw new Error(payload?.error || "Failed to retrieve Storj item");
+      }
+
+      const data = payload?.result?.data ?? payload?.result;
+      const json = JSON.stringify(data, null, 2);
+      setDevStorjHistorySelected({ uri: item.uri, json });
+      console.log("[DevStorjHistory] Retrieved snapshot", { uri: item.uri });
+    } catch (e) {
+      setDevStorjHistoryError(e instanceof Error ? e.message : "View failed");
+    } finally {
+      setDevStorjHistoryLoading(false);
+    }
+  };
+
+  const devRestoreConversationMemoryFromStorj = async (storjUri?: string) => {
+    if (!isDev) return;
+    try {
+      setDevStorjRestoreLoading(true);
+      setDevStorjRestoreError("");
+      setDevStorjRestoreOk("");
+
+      if (!isConnected || !address) {
+        setDevStorjRestoreError("Connect a wallet to restore memory.");
+        return;
+      }
+
+      const encryptionKey = await getCachedWalletEncryptionKey(
+        address,
+        signMessage,
+      );
+
+      const resp = await fetch("/api/storj", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "conversation/restore",
+          userAddress: address,
+          encryptionKey,
+          storjUri,
+        }),
+      });
+      const payload = (await resp.json()) as {
+        success?: boolean;
+        error?: string;
+        result?: { success?: boolean; memory?: ConversationMemory };
+      };
+      if (
+        !resp.ok ||
+        payload?.success === false ||
+        payload?.result?.success === false
+      ) {
+        throw new Error(payload?.error || "Restore failed");
+      }
+
+      const memory = payload?.result?.memory;
+      if (!memory) {
+        throw new Error("Restore succeeded but no memory payload returned");
+      }
+
+      await conversationMemoryStore.initialize();
+      await conversationMemoryStore.saveMemory(memory);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("conversation-memory-updated"));
+      }
+
+      setDevStorjRestoreOk(
+        `Restored memory from ${storjUri ? "selected snapshot" : "latest snapshot"}`,
+      );
+      console.log("[DevStorjHistory] Restored ConversationMemory", {
+        from: storjUri ?? "latest",
+      });
+    } catch (e) {
+      setDevStorjRestoreError(
+        e instanceof Error ? e.message : "Restore failed",
+      );
+    } finally {
+      setDevStorjRestoreLoading(false);
+    }
+  };
+
+  const devTestVeniceApiSessionMemory = async (): Promise<void> => {
+    if (!isDev) return;
+    try {
+      setDevVeniceSessionTestLoading(true);
+      setDevVeniceSessionTestError("");
+      setDevVeniceSessionTestResult(null);
+
+      const secret = `alpha-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+
+      const common = {
+        temperature: 0,
+        max_tokens: 120,
+        venice_parameters: {
+          disable_thinking: true,
+          strip_thinking_response: true,
+          include_venice_system_prompt: false,
+        },
+      };
+
+      // Call 1: ask the model to remember a secret (in this request only).
+      const r1 = await fetch("/api/venice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: "user",
+              content: `Reply only with "ACK". Remember this exact string for the *next message in this same conversation*: ${secret}`,
+            },
+          ],
+          ...common,
+        }),
+      });
+      const j1 = (await r1.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+        error?: string;
+      };
+      const firstResponse = String(
+        j1?.choices?.[0]?.message?.content ?? "",
+      ).trim();
+
+      // Call 2: DO NOT send previous messages. If Venice API is stateful, it should still recall.
+      const r2 = await fetch("/api/venice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: "user",
+              content:
+                "What exact string did I ask you to remember? Reply only with the string.",
+            },
+          ],
+          ...common,
+        }),
+      });
+      const j2 = (await r2.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+        error?: string;
+      };
+      const secondResponse = String(
+        j2?.choices?.[0]?.message?.content ?? "",
+      ).trim();
+
+      const passed = secondResponse.includes(secret);
+      setDevVeniceSessionTestResult({
+        secret,
+        firstResponse,
+        secondResponse,
+        passed,
+      });
+
+      console.log("[DevVeniceSessionTest] result", {
+        secret,
+        firstResponse,
+        secondResponse,
+        passed,
+      });
+    } catch (e) {
+      setDevVeniceSessionTestError(
+        e instanceof Error ? e.message : "Test failed",
+      );
+    } finally {
+      setDevVeniceSessionTestLoading(false);
+    }
+  };
 
   // Ensure multi-agent is disabled when wallet is not connected
   useEffect(() => {
@@ -1019,55 +1455,378 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                 </span>
               )}
 
-              {isDev && !useMultiAgent && (
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-700">
-                  <span className="font-medium">Quick debug max_tokens:</span>
-                  {[
-                    { label: "1500", value: "1500" },
-                    { label: "4000", value: "4000" },
-                    { label: "8000", value: "8000" },
-                  ].map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      className={`rounded border px-2 py-0.5 ${
-                        (quickMaxTokensUi || "1500") === opt.value
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                          : "border-slate-200 bg-white hover:bg-slate-50"
-                      }`}
-                      onClick={() => {
-                        try {
-                          window.localStorage.setItem(
-                            "cosaint_quick_max_tokens",
-                            opt.value,
-                          );
-                          setQuickMaxTokensUi(opt.value);
-                        } catch {
-                          // ignore
-                        }
-                      }}
-                      title="Sets localStorage.cosaint_quick_max_tokens"
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
-                    onClick={() => {
-                      try {
-                        window.localStorage.removeItem(
-                          "cosaint_quick_max_tokens",
-                        );
-                        setQuickMaxTokensUi("");
-                      } catch {
-                        // ignore
-                      }
-                    }}
-                    title="Clears localStorage.cosaint_quick_max_tokens"
-                  >
-                    reset
-                  </button>
+              {isDev && (
+                <div className="mt-2 rounded border border-emerald-200 bg-white/70 p-2 text-[11px] text-slate-700">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold text-emerald-800">
+                      Dev tools
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                        onClick={() => {
+                          const next = !showDevTools;
+                          setShowDevTools(next);
+                          try {
+                            window.localStorage.setItem(
+                              "cosaint_show_dev_tools",
+                              String(next),
+                            );
+                          } catch {
+                            // ignore
+                          }
+                        }}
+                      >
+                        {showDevTools ? "hide" : "show"}
+                      </button>
+                      {showDevTools && (
+                        <button
+                          type="button"
+                          className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                          onClick={() => {
+                            closeDevMemorySync();
+                            closeDevStorjViewer();
+                            closeDevVeniceSessionTest();
+                          }}
+                          title="Clear/close all dev panels"
+                        >
+                          close all
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {showDevTools && (
+                    <div className="mt-2 flex flex-col gap-3">
+                      {!useMultiAgent && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">
+                            Quick debug max_tokens:
+                          </span>
+                          {[
+                            { label: "1500", value: "1500" },
+                            { label: "4000", value: "4000" },
+                            { label: "8000", value: "8000" },
+                          ].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              className={`rounded border px-2 py-0.5 ${
+                                (quickMaxTokensUi || "1500") === opt.value
+                                  ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                                  : "border-slate-200 bg-white hover:bg-slate-50"
+                              }`}
+                              onClick={() => {
+                                try {
+                                  window.localStorage.setItem(
+                                    "cosaint_quick_max_tokens",
+                                    opt.value,
+                                  );
+                                  setQuickMaxTokensUi(opt.value);
+                                } catch {
+                                  // ignore
+                                }
+                              }}
+                              title="Sets localStorage.cosaint_quick_max_tokens"
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                            onClick={() => {
+                              try {
+                                window.localStorage.removeItem(
+                                  "cosaint_quick_max_tokens",
+                                );
+                                setQuickMaxTokensUi("");
+                              } catch {
+                                // ignore
+                              }
+                            }}
+                            title="Clears localStorage.cosaint_quick_max_tokens"
+                          >
+                            reset
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">Dev: memory sync</span>
+                        <button
+                          type="button"
+                          className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
+                          disabled={devMemorySyncLoading}
+                          onClick={() =>
+                            void devSyncConversationMemoryToStorj()
+                          }
+                        >
+                          {devMemorySyncLoading
+                            ? "syncing..."
+                            : "sync to Storj"}
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
+                          disabled={devMemorySyncLoading}
+                          onClick={() =>
+                            void devSyncConversationMemoryToStorj({
+                              force: true,
+                            })
+                          }
+                        >
+                          force
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
+                          disabled={devMemorySyncLoading}
+                          onClick={() =>
+                            void devSyncConversationMemoryToStorj({
+                              seedIfMissing: true,
+                            })
+                          }
+                        >
+                          seed + sync
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                          onClick={closeDevMemorySync}
+                          title="Clear memory sync status"
+                        >
+                          close
+                        </button>
+                        {!isConnected && (
+                          <span className="text-slate-500">connect wallet</span>
+                        )}
+                        {devMemorySyncError && (
+                          <span className="text-rose-700">
+                            {devMemorySyncError}
+                          </span>
+                        )}
+                        {devMemorySyncResult?.storjUri && (
+                          <span className="text-emerald-700">
+                            saved: {devMemorySyncResult.storjUri}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">
+                            Dev: Storj chat history
+                          </span>
+                          <button
+                            type="button"
+                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
+                            disabled={devStorjHistoryLoading}
+                            onClick={() =>
+                              void devListStorjConversationHistory()
+                            }
+                          >
+                            {devStorjHistoryLoading ? "loading..." : "list"}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
+                            disabled={devStorjRestoreLoading}
+                            onClick={() =>
+                              void devRestoreConversationMemoryFromStorj()
+                            }
+                          >
+                            {devStorjRestoreLoading
+                              ? "restoring..."
+                              : "restore latest"}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                            onClick={closeDevStorjViewer}
+                            title="Clear Storj viewer results"
+                          >
+                            close
+                          </button>
+                          <span className="text-slate-500">
+                            {devStorjHistoryItems.length
+                              ? `${devStorjHistoryItems.length} snapshots`
+                              : "no list loaded"}
+                          </span>
+                          {devStorjHistoryError && (
+                            <span className="text-rose-700">
+                              {devStorjHistoryError}
+                            </span>
+                          )}
+                          {devStorjRestoreError && (
+                            <span className="text-rose-700">
+                              {devStorjRestoreError}
+                            </span>
+                          )}
+                          {devStorjRestoreOk && (
+                            <span className="text-emerald-700">
+                              {devStorjRestoreOk}
+                            </span>
+                          )}
+                        </div>
+
+                        {devStorjHistoryItems.length > 0 && (
+                          <div className="max-h-40 overflow-auto rounded border border-slate-200 bg-white p-2">
+                            <div className="flex flex-col gap-1">
+                              {devStorjHistoryItems.slice(0, 10).map((it) => (
+                                <div
+                                  key={it.uri}
+                                  className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-1 last:border-b-0 last:pb-0"
+                                >
+                                  <span className="text-slate-600">
+                                    {new Date(it.uploadedAt).toLocaleString()} ·{" "}
+                                    {(it.size / 1024).toFixed(1)} KB
+                                  </span>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                                      onClick={() =>
+                                        void devViewStorjConversationHistory({
+                                          uri: it.uri,
+                                          contentHash: it.contentHash,
+                                        })
+                                      }
+                                    >
+                                      view
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                                      onClick={() =>
+                                        void devRestoreConversationMemoryFromStorj(
+                                          it.uri,
+                                        )
+                                      }
+                                    >
+                                      restore
+                                    </button>
+                                    <span className="text-slate-500 truncate max-w-[320px]">
+                                      {it.uri}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {devStorjHistorySelected && (
+                          <div className="rounded border border-slate-200 bg-white p-2">
+                            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-slate-600 truncate max-w-[520px]">
+                                {devStorjHistorySelected.uri}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                                  onClick={() => {
+                                    try {
+                                      void navigator.clipboard.writeText(
+                                        devStorjHistorySelected.json,
+                                      );
+                                    } catch {
+                                      // ignore
+                                    }
+                                  }}
+                                >
+                                  copy JSON
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                                  onClick={() =>
+                                    setDevStorjHistorySelected(null)
+                                  }
+                                >
+                                  close
+                                </button>
+                              </div>
+                            </div>
+                            <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words text-[10px] text-slate-800">
+                              {devStorjHistorySelected.json}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">
+                            Dev: Venice “session memory” test
+                          </span>
+                          <button
+                            type="button"
+                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
+                            disabled={devVeniceSessionTestLoading}
+                            onClick={() => void devTestVeniceApiSessionMemory()}
+                          >
+                            {devVeniceSessionTestLoading
+                              ? "testing..."
+                              : "run test"}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                            onClick={closeDevVeniceSessionTest}
+                            title="Clear Venice session test output"
+                          >
+                            close
+                          </button>
+                          {devVeniceSessionTestError && (
+                            <span className="text-rose-700">
+                              {devVeniceSessionTestError}
+                            </span>
+                          )}
+                          {devVeniceSessionTestResult && (
+                            <span
+                              className={
+                                devVeniceSessionTestResult.passed
+                                  ? "text-emerald-700"
+                                  : "text-amber-700"
+                              }
+                            >
+                              {devVeniceSessionTestResult.passed
+                                ? "PASS (stateful)"
+                                : "FAIL (stateless)"}
+                            </span>
+                          )}
+                        </div>
+
+                        {devVeniceSessionTestResult && (
+                          <div className="rounded border border-slate-200 bg-white p-2">
+                            <div className="text-slate-600">
+                              Secret:{" "}
+                              <span className="font-mono">
+                                {devVeniceSessionTestResult.secret}
+                              </span>
+                            </div>
+                            <div className="mt-1 text-slate-600">
+                              Call #1:{" "}
+                              <span className="font-mono">
+                                {devVeniceSessionTestResult.firstResponse ||
+                                  "(empty)"}
+                              </span>
+                            </div>
+                            <div className="mt-1 text-slate-600">
+                              Call #2:{" "}
+                              <span className="font-mono">
+                                {devVeniceSessionTestResult.secondResponse ||
+                                  "(empty)"}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

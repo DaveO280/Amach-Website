@@ -91,6 +91,86 @@ export function extractGoalsFromConversation(
 }
 
 /**
+ * Extract "freeform" goals that don't fit numeric/metric patterns.
+ * Example: "reduce visceral fat", "improve VO2max", "muscle hypertrophy", "push-up max"
+ */
+export function extractFreeformGoalsFromConversation(
+  messages: ChatMessage[],
+): string[] {
+  const out = new Set<string>();
+  const userMessages = messages.filter((msg) => msg.role === "user");
+  const goalPhrases: Array<{ re: RegExp; label: string }> = [
+    { re: /\bvo2\s*max\b/i, label: "Improve VO2max" },
+    { re: /\bvisceral\s+fat\b/i, label: "Reduce visceral fat" },
+    { re: /\bhypertrophy\b/i, label: "Build muscle (hypertrophy)" },
+    { re: /\bpush\s*-?\s*ups?\b/i, label: "Improve push-up max" },
+    { re: /\bzone\s*2\b/i, label: "Improve aerobic base (Zone 2)" },
+    {
+      re: /\bjoints?\b|\brecovery\b/i,
+      label: "Protect joints / improve recovery",
+    },
+  ];
+
+  for (const m of userMessages) {
+    const text = m.content || "";
+    for (const { re, label } of goalPhrases) {
+      if (re.test(text)) out.add(label);
+    }
+  }
+  return Array.from(out);
+}
+
+/**
+ * Lightweight preference extraction for ConversationMemory.preferences.
+ * This is intentionally conservative; it only captures explicit statements.
+ */
+export function extractPreferencesFromConversation(messages: ChatMessage[]): {
+  dietPreferred: string[];
+  dietDisliked: string[];
+  dietRestrictions: string[];
+  exercisePreferred: string[];
+} {
+  const dietPreferred = new Set<string>();
+  const dietDisliked = new Set<string>();
+  const dietRestrictions = new Set<string>();
+  const exercisePreferred = new Set<string>();
+
+  const userMessages = messages.filter((msg) => msg.role === "user");
+  for (const m of userMessages) {
+    const t = (m.content || "").toLowerCase();
+
+    if (/\bketo\b|\bketogenic\b/.test(t)) dietPreferred.add("keto");
+    if (/\bmediterranean\b/.test(t)) dietPreferred.add("mediterranean");
+    if (/\bhigh\s*protein\b/.test(t)) dietPreferred.add("high protein");
+    if (/\bvegan\b/.test(t)) dietPreferred.add("vegan");
+    if (/\bvegetarian\b/.test(t)) dietPreferred.add("vegetarian");
+
+    if (/\bgluten\s*-?\s*free\b/.test(t)) dietRestrictions.add("gluten-free");
+    if (/\bdairy\s*-?\s*free\b/.test(t)) dietRestrictions.add("dairy-free");
+
+    if (
+      /\bdislike\b|\bdon't like\b|\bcan't stand\b/.test(t) &&
+      /\bketo\b/.test(t)
+    ) {
+      dietDisliked.add("keto");
+    }
+
+    if (/\bpush\s*-?\s*ups?\b/.test(t)) exercisePreferred.add("push-ups");
+    if (/\bstrength\b|\bhypertrophy\b/.test(t))
+      exercisePreferred.add("strength training");
+    if (/\bzone\s*2\b/.test(t)) exercisePreferred.add("zone 2");
+    if (/\bvo2\s*max\b/.test(t)) exercisePreferred.add("vo2 max intervals");
+  }
+
+  return {
+    dietPreferred: Array.from(dietPreferred),
+    dietDisliked: Array.from(dietDisliked),
+    dietRestrictions: Array.from(dietRestrictions),
+    exercisePreferred: Array.from(exercisePreferred),
+  };
+}
+
+/**
  * Extract interventions (things user is actively doing)
  * Looks for patterns like:
  * - "I started..."

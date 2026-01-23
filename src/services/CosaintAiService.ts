@@ -11,6 +11,7 @@ import type { ToolCall } from "@/ai/tools/ToolExecutor";
 import { ToolExecutor } from "@/ai/tools/ToolExecutor";
 import { ToolResponseParser } from "@/ai/tools/ToolResponseParser";
 import { IndexedDBDataSource } from "@/data/sources/IndexedDBDataSource";
+import type { ConversationMemory } from "@/types/conversationMemory";
 import type { ParsedReportSummary } from "@/types/reportData";
 import {
   diagnoseAnalysisResult,
@@ -123,6 +124,48 @@ function compactOneLine(text: string, maxLen: number): string {
   const cleaned = text.replace(/\s+/g, " ").trim();
   if (cleaned.length <= maxLen) return cleaned;
   return cleaned.slice(0, Math.max(0, maxLen - 1)).trimEnd() + "…";
+}
+
+function formatConversationMemoryCapsule(
+  memory: ConversationMemory,
+): string | null {
+  const activeFacts = (memory.criticalFacts ?? [])
+    .filter((f) => f && f.isActive)
+    .slice(-12);
+
+  const goals = activeFacts
+    .filter((f) => f.category === "goal")
+    .map((f) => compactOneLine(String(f.value ?? ""), 120))
+    .filter(Boolean)
+    .slice(-6);
+  const concerns = activeFacts
+    .filter((f) => f.category === "concern")
+    .map((f) => compactOneLine(String(f.value ?? ""), 120))
+    .filter(Boolean)
+    .slice(-6);
+
+  const sessions = [
+    ...(memory.importantSessions ?? []),
+    ...(memory.recentSessions ?? []),
+  ]
+    .slice(-5)
+    .map((s) => {
+      const date = typeof s.date === "string" ? s.date : "";
+      const summary = compactOneLine(String(s.summary ?? ""), 180);
+      return date ? `${date}: ${summary}` : summary;
+    })
+    .filter(Boolean);
+
+  const lines: string[] = [];
+  if (goals.length) lines.push(`- Active goals: ${goals.join(" | ")}`);
+  if (concerns.length) lines.push(`- Active concerns: ${concerns.join(" | ")}`);
+  if (sessions.length) {
+    lines.push(`- Recent session notes:`);
+    for (const s of sessions) lines.push(`  - ${s}`);
+  }
+
+  if (!lines.length) return null;
+  return `Conversation memory (from prior chats):\n${lines.join("\n")}`;
 }
 
 export class CosaintAiService {
@@ -283,6 +326,7 @@ export class CosaintAiService {
     useMultiAgent: boolean = true,
     reports?: ParsedReportSummary[],
     forceInitialAnalysis: boolean = false,
+    conversationMemory?: ConversationMemory | null,
   ): Promise<string> {
     try {
       const isQuick = !useMultiAgent;
@@ -442,6 +486,7 @@ export class CosaintAiService {
         rankedMetrics,
         allHealthMetrics, // Pass all metrics for accurate date range calculation
         useMultiAgent ? "full" : "lite",
+        conversationMemory,
       );
 
       // Dev-only: log prompt stats without dumping full prompt content.
@@ -478,9 +523,24 @@ export class CosaintAiService {
         mode: useMultiAgent ? "deep" : "quick",
       });
 
+      // Venice parameters: per docs, disable thinking to avoid <think> blocks and empty content when thinking is stripped.
+      // Docs: https://docs.venice.ai/overview/about-venice
+      const veniceParams: Record<string, unknown> = useMultiAgent
+        ? {
+            strip_thinking_response: true,
+            include_venice_system_prompt: false,
+          }
+        : {
+            // Quick: force model to answer directly in content (no reasoning mode).
+            disable_thinking: true,
+            strip_thinking_response: true,
+            include_venice_system_prompt: false,
+          };
+
       let response = await this.veniceApi.generateVeniceResponse(
         prompt,
         maxTokens,
+        veniceParams,
       );
 
       console.log("[CosaintAiService] Venice API response received", {
@@ -507,6 +567,7 @@ export class CosaintAiService {
             response = await this.veniceApi.generateVeniceResponse(
               prompt,
               maxTokens,
+              veniceParams,
             );
           }
         }
@@ -573,6 +634,10 @@ export class CosaintAiService {
           const newResponse = await this.veniceApi.generateVeniceResponse(
             followUpPrompt,
             4000,
+            {
+              strip_thinking_response: true,
+              include_venice_system_prompt: false,
+            },
           );
 
           if (!newResponse) {
@@ -658,6 +723,7 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
     rankedMetrics?: HealthMetric[],
     allMetrics?: HealthMetric[], // All metrics for accurate date range calculation
     toolPromptMode?: "full" | "lite",
+    conversationMemory?: ConversationMemory | null,
   ): string {
     const promptStyle: "deep" | "quick" =
       toolPromptMode === "lite" ? "quick" : "deep";
@@ -677,6 +743,14 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
         : "none",
       includeAlerts: promptStyle === "deep",
     });
+
+    // Add a compact "memory capsule" to let the model reference prior chats without full logs.
+    if (conversationMemory) {
+      const capsule = formatConversationMemoryCapsule(conversationMemory);
+      if (capsule) {
+        systemMessage += `\n\n${capsule}`;
+      }
+    }
 
     // Add temporal context (current date, data timespan, seasonal context)
     if (includeHealthContext) {
@@ -1320,7 +1394,11 @@ ${summary}`;
       );
     }
 
-    const response = await this.veniceApi.generateVeniceResponse(prompt, 500);
+    const response = await this.veniceApi.generateVeniceResponse(prompt, 500, {
+      disable_thinking: true,
+      strip_thinking_response: true,
+      include_venice_system_prompt: false,
+    });
     return response
       ? response
           .split("\n")

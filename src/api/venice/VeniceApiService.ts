@@ -131,10 +131,12 @@ export class VeniceApiService {
   async generateVeniceResponse(
     prompt: string,
     maxTokens: number = 2000,
+    veniceParameters?: Record<string, unknown>,
   ): Promise<string | null> {
     const response = await this.generateCompletion({
       userPrompt: prompt,
       maxTokens,
+      veniceParameters,
     });
     return response ?? null;
   }
@@ -144,11 +146,13 @@ export class VeniceApiService {
     userPrompt,
     temperature = 0.7,
     maxTokens = 2000,
+    veniceParameters,
   }: {
     systemPrompt?: string;
     userPrompt: string;
     temperature?: number;
     maxTokens?: number;
+    veniceParameters?: Record<string, unknown>;
   }): Promise<string> {
     const requestId = Date.now().toString();
     const startTime = Date.now();
@@ -166,6 +170,7 @@ export class VeniceApiService {
         temperature,
         model: this.modelName,
         stream: false,
+        ...(veniceParameters ? { venice_parameters: veniceParameters } : {}),
       };
 
       // Log request size to debug mobile Status 0 errors

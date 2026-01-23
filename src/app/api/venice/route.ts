@@ -102,6 +102,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         include_venice_system_prompt: false,
       } satisfies Record<string, unknown>);
 
+    // Dev-only: log the exact venice_parameters we are forwarding.
+    if (process.env.NODE_ENV === "development") {
+      console.error("[Venice API Route] venice_parameters (effective):", {
+        venice_parameters: requestBody.venice_parameters,
+      });
+    }
+
     // Optional JSON-mode / structured outputs (OpenAI-compatible)
     // Pass through if provided by caller.
     if (body.response_format) {
@@ -232,6 +239,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           { error: "Invalid response format from Venice API" },
           { status: 500 },
         );
+      }
+
+      // Dev-only: echo back the effective venice_parameters to confirm thinking is disabled/stripped.
+      if (process.env.NODE_ENV === "development") {
+        return NextResponse.json({
+          ...data,
+          __debug_venice_parameters: requestBody.venice_parameters,
+        });
       }
 
       return NextResponse.json(data);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStorageService } from "@/storage";
 import { getStorjTimelineService } from "@/storage";
 import { getStorjConversationService } from "@/storage";
+import { getStorjReportService } from "@/storage/StorjReportService";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 import { getKeyDerivationMessage } from "@/utils/walletEncryption";
 import { verifyMessage } from "viem";

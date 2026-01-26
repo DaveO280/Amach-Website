@@ -63,7 +63,7 @@
     "framer-motion": "^12.23.25",
     "jszip": "^3.10.1",
     "lucide-react": "^0.344.0",
-    "next": "^16.1.1",
+    "next": "^16.0.9",
     "node-fetch": "^3.3.2",
     "papaparse": "^5.5.3",
     "pdf-lib": "^1.17.1",
@@ -83,7 +83,6 @@
     "@matterlabs/hardhat-zksync-solc": "^1.5.1",
     "@matterlabs/hardhat-zksync-upgradable": "^1.10.0",
     "@nomiclabs/hardhat-ethers": "^2.2.3",
-    "@nomiclabs/hardhat-waffle": "^2.0.6",
     "@openzeppelin/contracts": "^5.4.0",
     "@openzeppelin/contracts-upgradeable": "^5.4.0",
     "@svgr/webpack": "^8.1.0",
@@ -116,7 +115,7 @@
     "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",
     "eslint": "^9.39.1",
-    "eslint-config-next": "16.1.1",
+    "eslint-config-next": "16.0.9",
     "eslint-config-prettier": "^9.1.2",
     "eslint-define-config": "^2.1.0",
     "eslint-plugin-prettier": "^5.5.4",
@@ -142,6 +141,9 @@
     "onlyBuiltDependencies": [
       "sharp"
     ],
+    "ignoredOptionalDependencies": [
+      "canvas"
+    ],
     "overrides": {
       "form-data": "^4.0.4",
       "axios": "^1.13.2",
@@ -152,12 +154,20 @@
       "cookie": "^0.7.2",
       "brace-expansion": "^2.0.1",
       "tmp": "^0.2.3",
-      "next": "^16.1.1",
-      "qs": ">=6.14.1",
-      "preact": ">=10.28.2"
+      "next": "^16.0.9",
+      "h3": "^1.15.5",
+      "hono": "^4.11.4",
+      "qs": "^6.14.1",
+      "preact": "^10.28.2",
+      "lodash": "^4.17.23",
+      "diff@4.0.2": "4.0.4",
+      "diff@5.2.0": "5.2.2",
+      "undici": "^6.23.0",
+      "tar": "^7.5.4"
     },
     "peerDependencyRules": {
       "ignoreMissing": [
+        "canvas",
         "request"
       ]
     },

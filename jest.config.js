@@ -1,6 +1,8 @@
 module.exports = {
   preset: "ts-jest",
-  testEnvironment: "jsdom",
+  // Default to node to avoid jsdom/canvas native dependency issues on Windows.
+  // If we add DOM-dependent tests later, create a dedicated "browser" project.
+  testEnvironment: "node",
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
   },
@@ -17,8 +19,24 @@ module.exports = {
     {
       displayName: "default",
       preset: "ts-jest",
-      testEnvironment: "jsdom",
-      testMatch: ["**/__tests__/**/*.test.ts", "!**/storage/**"],
+      testEnvironment: "node",
+      testMatch: [
+        "**/__tests__/**/*.test.ts",
+        "!**/storage/**",
+        "!**/utils/reportParsers/__tests__/**",
+      ],
+      moduleNameMapper: {
+        "^@/(.*)$": "<rootDir>/src/$1",
+      },
+      transform: {
+        "^.+\\.tsx?$": "ts-jest",
+      },
+    },
+    {
+      displayName: "parsers",
+      preset: "ts-jest",
+      testEnvironment: "node",
+      testMatch: ["**/utils/reportParsers/__tests__/**/*.test.ts"],
       moduleNameMapper: {
         "^@/(.*)$": "<rootDir>/src/$1",
       },

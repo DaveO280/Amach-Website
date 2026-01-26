@@ -16,6 +16,34 @@ const DAILY_SCORES_STORE = "daily-scores";
 const UPLOADED_FILES_STORE = "uploaded-files";
 const PROCESSED_DATA_STORE = "processed-data"; // New store for pre-aggregated data
 
+// Keep raw IndexedDB samples recent for performance; long-range is preserved in processed aggregates.
+const RAW_RETENTION_DAYS = 180; // ~6 months
+
+function trimRawToRecentWindow(data: HealthDataResults): HealthDataResults {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - RAW_RETENTION_DAYS);
+  const cutoffMs = cutoff.getTime();
+
+  const trimmed: HealthDataResults = {};
+
+  for (const [metricType, metrics] of Object.entries(data)) {
+    // Sleep and some records can straddle boundaries; include if either start OR end is within window.
+    trimmed[metricType as keyof HealthDataResults] = (metrics || []).filter(
+      (m) => {
+        const startMs = new Date(m.startDate).getTime();
+        const endMs = new Date((m.endDate as string) || m.startDate).getTime();
+        if (Number.isNaN(startMs) && Number.isNaN(endMs)) return false;
+        return (
+          (Number.isNaN(startMs) ? false : startMs >= cutoffMs) ||
+          (Number.isNaN(endMs) ? false : endMs >= cutoffMs)
+        );
+      },
+    ) as HealthMetric[];
+  }
+
+  return trimmed;
+}
+
 interface HealthDataStore {
   id: string;
   data: HealthDataResults & { healthScores?: HealthScore[] };
@@ -223,6 +251,16 @@ class HealthDataStoreService {
       counts: Object.entries(mergedData).map(([k, v]) => `${k}: ${v.length}`),
     });
 
+    // Trim raw samples to a recent window to keep IndexedDB lean and UI fast.
+    const trimmedMergedData = trimRawToRecentWindow(mergedData);
+
+    console.log("✂️ [IndexedDB Debug] Trimmed raw data window:", {
+      retentionDays: RAW_RETENTION_DAYS,
+      counts: Object.entries(trimmedMergedData).map(
+        ([k, v]) => `${k}: ${v.length}`,
+      ),
+    });
+
     // Now save in a quick transaction
     return new Promise<void>((resolve, reject): void => {
       const transaction = db.transaction([STORE_NAME], "readwrite");
@@ -230,7 +268,7 @@ class HealthDataStoreService {
 
       const healthData: HealthDataStore = {
         id: "current",
-        data: mergedData,
+        data: trimmedMergedData,
         lastUpdated: new Date().toISOString(),
       };
 

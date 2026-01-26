@@ -38,6 +38,7 @@ import {
 } from "@/types/healthEventTypes";
 import {
   getWalletDerivedEncryptionKey,
+  getKeyDerivationMessage,
   type WalletEncryptionKey,
 } from "@/utils/walletEncryption";
 import { isChainTrackedStorjDataType } from "@/utils/storjChainMarkerRegistry";
@@ -172,6 +173,12 @@ export function StorageManagementSection({
   const [testsItems, setTestsItems] = useState<StorjListItem[]>([]);
   const [testsLoading, setTestsLoading] = useState(false);
   const [testsError, setTestsError] = useState<string>("");
+  const [testsInfo, setTestsInfo] = useState<string>("");
+  const [testsBucketMode, setTestsBucketMode] = useState<"current" | "legacy">(
+    "current",
+  );
+  const [testsLegacyBucket, setTestsLegacyBucket] = useState<string>("");
+  const [testsLegacyDebug, setTestsLegacyDebug] = useState<string>("");
   const [selectedTestItem, setSelectedTestItem] =
     useState<StorjListItem | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -292,6 +299,10 @@ export function StorageManagementSection({
     if (!encryptionKey) return;
     setTestsLoading(true);
     setTestsError("");
+    setTestsInfo("");
+    setTestsLegacyDebug("");
+    setTestsBucketMode("current");
+    setTestsLegacyBucket("");
     try {
       const resp = await fetch("/api/storj", {
         method: "POST",
@@ -300,18 +311,109 @@ export function StorageManagementSection({
           action: "storage/list",
           userAddress,
           encryptionKey,
-          dataType: testsDataType === "all" ? undefined : testsDataType,
+          // Always list without S3 prefix filtering to support legacy key layouts.
+          // We'll filter by metadata `dataType` client-side instead.
+          dataType: undefined,
         }),
       });
       const payload = await resp.json();
       if (!resp.ok || payload?.success === false) {
         throw new Error(payload?.error || "Failed to list Storj items");
       }
-      const list = (payload?.result ?? []) as StorjListItem[];
+      const all = (payload?.result ?? []) as StorjListItem[];
+      const TEST_DATA_TYPES = new Set([
+        "bloodwork-report-fhir",
+        "dexa-report-fhir",
+      ]);
+      const list =
+        testsDataType === "all"
+          ? all.filter((i) => TEST_DATA_TYPES.has(i.dataType))
+          : all.filter((i) => i.dataType === testsDataType);
       // newest first
       list.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
       setTestsItems(list);
       setSelectedTestItem(list[0] || null);
+      setTestsInfo(
+        testsDataType === "all"
+          ? `Showing all test reports (${list.length}).`
+          : `Showing ${testsDataType} items (${list.length}).`,
+      );
+    } catch (e) {
+      setTestsError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setTestsLoading(false);
+    }
+  };
+
+  const handleRefreshTestsLegacy = async (): Promise<void> => {
+    if (!encryptionKey) return;
+    setTestsLoading(true);
+    setTestsError("");
+    setTestsInfo("");
+    setTestsLegacyDebug("");
+    try {
+      const message = getKeyDerivationMessage(userAddress);
+      const signature = await signMessage(message);
+
+      const resp = await fetch("/api/storj", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "storage/list-legacy",
+          userAddress,
+          encryptionKey,
+          signature,
+          dataType: testsDataType === "all" ? "all" : testsDataType,
+        }),
+      });
+
+      const payload = await resp.json();
+      if (!resp.ok || payload?.success === false) {
+        throw new Error(payload?.error || "Failed to list legacy Storj items");
+      }
+
+      const chosenBucket = payload?.result?.chosenBucket as string | null;
+      const items = (payload?.result?.items ?? []) as StorjListItem[];
+      const candidateCounts =
+        (payload?.result?.candidateCounts as Array<{
+          bucket: string;
+          count: number;
+        }>) || [];
+      const topHits = candidateCounts
+        .filter((c) => c.count > 0)
+        .slice(0, 10)
+        .map((c) => `${c.bucket}: ${c.count}`)
+        .join("\n");
+      setTestsLegacyDebug(
+        topHits
+          ? `Buckets with items (top 10):\n${topHits}`
+          : "No items found in any probed legacy buckets.",
+      );
+      items.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+
+      setTestsBucketMode("legacy");
+      setTestsLegacyBucket(chosenBucket || "");
+      // In legacy mode, ensure "all" still means "all test reports", not "everything"
+      const TEST_DATA_TYPES = new Set([
+        "bloodwork-report-fhir",
+        "dexa-report-fhir",
+      ]);
+      const filteredLegacy =
+        testsDataType === "all"
+          ? items.filter((i) => TEST_DATA_TYPES.has(i.dataType))
+          : items.filter((i) => i.dataType === testsDataType);
+      setTestsItems(filteredLegacy);
+      setSelectedTestItem(filteredLegacy[0] || null);
+
+      if (!chosenBucket || filteredLegacy.length === 0) {
+        setTestsInfo(
+          "Legacy scan completed: no items found in legacy buckets for this wallet.",
+        );
+      } else {
+        setTestsInfo(
+          `Legacy scan: found ${filteredLegacy.length} item(s) in ${chosenBucket}. Preview works; deleting is disabled in legacy mode.`,
+        );
+      }
     } catch (e) {
       setTestsError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -606,16 +708,28 @@ export function StorageManagementSection({
     setPreviewError("");
     setPreviewJson("");
     try {
+      const legacyMode = testsBucketMode === "legacy";
       const isReport =
         item.dataType === "dexa-report-fhir" ||
         item.dataType === "bloodwork-report-fhir";
-      const action = isReport ? "report/retrieve" : "storage/retrieve";
-      const reportType =
-        item.dataType === "bloodwork-report-fhir"
-          ? "bloodwork"
-          : item.dataType === "dexa-report-fhir"
-            ? "dexa"
-            : undefined;
+
+      let action: string;
+      let reportType: string | undefined;
+      let signature: string | undefined;
+
+      if (legacyMode) {
+        action = "storage/retrieve-legacy";
+        const message = getKeyDerivationMessage(userAddress);
+        signature = await signMessage(message);
+      } else {
+        action = isReport ? "report/retrieve" : "storage/retrieve";
+        reportType =
+          item.dataType === "bloodwork-report-fhir"
+            ? "bloodwork"
+            : item.dataType === "dexa-report-fhir"
+              ? "dexa"
+              : undefined;
+      }
 
       const resp = await fetch("/api/storj", {
         method: "POST",
@@ -627,6 +741,7 @@ export function StorageManagementSection({
           storjUri: item.uri,
           expectedHash: item.contentHash || undefined,
           reportType,
+          signature,
         }),
       });
       const payload = await resp.json();
@@ -635,7 +750,7 @@ export function StorageManagementSection({
       }
 
       const result = payload?.result;
-      const data = isReport ? result : result?.data;
+      const data = legacyMode ? result?.data : isReport ? result : result?.data;
       setPreviewJson(JSON.stringify(data, null, 2));
     } catch (e) {
       setPreviewError(e instanceof Error ? e.message : "Unknown error");
@@ -1456,18 +1571,47 @@ export function StorageManagementSection({
                         bloodwork-report-fhir
                       </option>
                       <option value="dexa-report-fhir">dexa-report-fhir</option>
-                      <option value="all">all</option>
+                      <option value="all">all test reports</option>
                     </select>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleRefreshTests}
-                    disabled={testsLoading}
-                  >
-                    {testsLoading ? "Loading..." : "Refresh"}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleRefreshTests}
+                      disabled={testsLoading}
+                    >
+                      {testsLoading ? "Loading..." : "Refresh"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleRefreshTestsLegacy}
+                      disabled={testsLoading}
+                      title="If you saved files before the bucket security change, they may live in a legacy bucket."
+                    >
+                      Legacy scan
+                    </Button>
+                  </div>
                 </div>
+
+                {testsInfo && (
+                  <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <Info className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                    <p className="text-sm text-blue-900">
+                      {testsInfo}
+                      {testsBucketMode === "legacy" && testsLegacyBucket
+                        ? ` (bucket: ${testsLegacyBucket})`
+                        : ""}
+                    </p>
+                  </div>
+                )}
+
+                {testsBucketMode === "legacy" && testsLegacyDebug && (
+                  <pre className="p-3 text-xs whitespace-pre-wrap font-mono bg-gray-50 border border-gray-200 rounded-lg">
+                    {testsLegacyDebug}
+                  </pre>
+                )}
 
                 {testsError && (
                   <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -1585,7 +1729,10 @@ export function StorageManagementSection({
                               void handleDeleteItem(selectedTestItem)
                             }
                             disabled={
-                              deleteLoading || previewLoading || chainLoading
+                              testsBucketMode === "legacy" ||
+                              deleteLoading ||
+                              previewLoading ||
+                              chainLoading
                             }
                           >
                             {deleteLoading ? "Deleting..." : "Delete"}

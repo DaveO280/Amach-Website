@@ -608,6 +608,62 @@ export class StorjClient {
   }
 
   /**
+   * List objects from a specific bucket by name (used for legacy migration / diagnostics).
+   *
+   * SECURITY NOTE:
+   * - This does NOT validate bucket ownership.
+   * - It must only be used in server routes that independently verify wallet ownership.
+   */
+  async listBucketByName(
+    bucketName: string,
+    dataType?: string,
+  ): Promise<StorageReference[]> {
+    const prefix = dataType ? `${dataType}/` : "";
+
+    try {
+      const command = new ListObjectsV2Command({
+        Bucket: bucketName,
+        Prefix: prefix,
+      });
+
+      const response = await this.client.send(command);
+      const references: StorageReference[] = [];
+
+      if (response.Contents) {
+        for (const obj of response.Contents) {
+          if (!obj.Key) continue;
+          const headCommand = new HeadObjectCommand({
+            Bucket: bucketName,
+            Key: obj.Key,
+          });
+          try {
+            const headResponse = await this.client.send(headCommand);
+            const md = headResponse.Metadata || {};
+            const contentHash = md.contenthash || md.contentHash || "";
+            const uploadedAtRaw = md.uploadedat || md.uploadedAt || "0";
+            const dataTypeValue = md.datatype || md.dataType || "unknown";
+            references.push({
+              uri: `storj://${bucketName}/${obj.Key}`,
+              contentHash,
+              size: obj.Size || 0,
+              uploadedAt: parseInt(uploadedAtRaw, 10),
+              dataType: dataTypeValue,
+              metadata: md,
+            });
+          } catch {
+            continue;
+          }
+        }
+      }
+
+      return references;
+    } catch {
+      // Missing bucket or access error -> treat as empty for legacy probing.
+      return [];
+    }
+  }
+
+  /**
    * Verify integrity of stored data
    *
    * @param uri - Storj URI

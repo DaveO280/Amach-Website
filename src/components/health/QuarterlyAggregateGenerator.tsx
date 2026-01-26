@@ -26,6 +26,8 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
+import type { MetricSample } from "@/agents/types";
+import type { DailyProcessedSleepData } from "@/utils/sleepDataProcessor";
 
 interface QuarterlyAggregateGeneratorProps {
   userAddress: string;
@@ -52,21 +54,46 @@ export function QuarterlyAggregateGenerator({
         signMessage,
       );
 
-      // Load health data from IndexedDB
-      const healthData = await healthDataStore.getHealthData();
-      if (!healthData) {
-        throw new Error(
-          "No health data available. Please upload your Apple Health data first.",
-        );
+      // Prefer processed daily aggregates (supports long-range even when raw IndexedDB is trimmed).
+      const processed = await healthDataStore.getProcessedData();
+      let aggregate;
+      if (processed) {
+        aggregate =
+          await QuarterlyAggregationService.generateQuarterlyAggregateFromProcessed(
+            {
+              dailyAggregates: processed.dailyAggregates as unknown as Record<
+                string,
+                Map<string, MetricSample>
+              >,
+              sleepData: processed.sleepData as DailyProcessedSleepData[],
+            },
+            quarter,
+            year,
+          );
+      } else {
+        // Fallback (older installs): raw health data might be present but limited to a recent window.
+        const healthData = await healthDataStore.getHealthData();
+        if (!healthData) {
+          throw new Error(
+            "No health data available. Please upload your Apple Health data first.",
+          );
+        }
+        aggregate =
+          await QuarterlyAggregationService.generateQuarterlyAggregate(
+            healthData as unknown as Record<
+              string,
+              Array<{
+                startDate: string;
+                value: string;
+                unit?: string;
+                source?: string;
+                device?: string;
+              }>
+            >,
+            quarter,
+            year,
+          );
       }
-
-      // Generate aggregate
-      const aggregate =
-        await QuarterlyAggregationService.generateQuarterlyAggregate(
-          healthData,
-          quarter,
-          year,
-        );
 
       // Save to Storj
       await QuarterlyAggregationService.saveToStorj(

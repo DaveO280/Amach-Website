@@ -2,9 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStorageService } from "@/storage";
 import { getStorjTimelineService } from "@/storage";
 import { getStorjConversationService } from "@/storage";
-import { getStorjSyncService } from "@/storage";
-import { getStorjReportService } from "@/storage/StorjReportService";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
+import { getKeyDerivationMessage } from "@/utils/walletEncryption";
+import { verifyMessage } from "viem";
+import { StorjClient } from "@/storage/StorjClient";
+import type { ConversationMemory } from "@/types/conversationMemory";
+import {
+  generateLegacyAddressBucketName,
+  generateLegacyAddressBucketNameNo0x,
+  generateLegacyKeyedBucketName,
+} from "@/utils/storjAccessControl";
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // 60 seconds - allows for Storj operations
@@ -153,8 +160,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       case "conversation/sync": {
-        const syncService = getStorjSyncService();
-        result = await syncService.syncConversationMemory(
+        // NOTE: Server routes cannot read browser IndexedDB.
+        // Client must send the ConversationMemory snapshot in `data`.
+        if (!data) {
+          return NextResponse.json(
+            {
+              error:
+                "Conversation memory snapshot is required for conversation/sync",
+            },
+            { status: 400 },
+          );
+        }
+        const conversationService = getStorjConversationService();
+        result = await conversationService.syncMemoryToStorj(
+          data as ConversationMemory,
           userAddress,
           typedEncryptionKey,
           options,
@@ -163,12 +182,91 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       case "conversation/restore": {
-        const syncService = getStorjSyncService();
-        result = await syncService.restoreConversationMemory(
-          userAddress,
-          typedEncryptionKey,
-          storjUri,
-        );
+        // Restore returns the ConversationMemory snapshot to the client, which can save it to IndexedDB.
+        const conversationService = getStorjConversationService();
+
+        let history;
+        if (storjUri) {
+          history = await conversationService.retrieveConversationHistory(
+            storjUri,
+            typedEncryptionKey,
+          );
+        } else {
+          const snapshots =
+            await conversationService.listUserConversationHistory(
+              userAddress,
+              typedEncryptionKey,
+            );
+          if (!snapshots.length) {
+            return NextResponse.json(
+              { error: "No conversation history found on Storj" },
+              { status: 404 },
+            );
+          }
+          const latest = snapshots.sort(
+            (a, b) => b.uploadedAt - a.uploadedAt,
+          )[0];
+          history = await conversationService.retrieveConversationHistory(
+            latest.storjUri,
+            typedEncryptionKey,
+          );
+        }
+
+        if (!history) {
+          return NextResponse.json(
+            { error: "Failed to retrieve conversation history from Storj" },
+            { status: 500 },
+          );
+        }
+
+        const memory: ConversationMemory = {
+          userId: history.userId,
+          criticalFacts: history.criticalFacts.map((f) => ({
+            id: f.id,
+            category:
+              f.category as ConversationMemory["criticalFacts"][0]["category"],
+            value: f.value,
+            context: f.context,
+            dateIdentified: f.dateIdentified,
+            isActive: f.isActive,
+            source: "blockchain" as const,
+            storageLocation: f.storageLocation as
+              | "local"
+              | "blockchain"
+              | "both",
+            blockchainTxHash: f.blockchainTxHash,
+          })),
+          importantSessions: history.sessions
+            .filter(
+              (s) => s.importance === "critical" || s.importance === "high",
+            )
+            .map((s) => ({
+              id: s.id,
+              date: new Date(s.startedAt).toISOString(),
+              summary: s.summary || "",
+              topics: s.topics,
+              importance: s.importance,
+              extractedFacts: s.extractedFacts || [],
+              messageCount: s.messageCount,
+            })),
+          recentSessions: history.sessions
+            .filter((s) => s.importance === "medium" || s.importance === "low")
+            .map((s) => ({
+              id: s.id,
+              date: new Date(s.startedAt).toISOString(),
+              summary: s.summary || "",
+              topics: s.topics,
+              importance: s.importance,
+              extractedFacts: s.extractedFacts || [],
+              messageCount: s.messageCount,
+            })),
+          preferences: history.preferences as ConversationMemory["preferences"],
+          lastUpdated: new Date(history.lastSyncedAt).toISOString(),
+          totalSessions: history.sessions.length,
+          totalFactsExtracted: history.criticalFacts.length,
+        };
+
+        result = { success: true, memory };
         break;
       }
 
@@ -238,6 +336,128 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           userAddress,
           typedEncryptionKey,
           dataType,
+        );
+        break;
+      }
+
+      case "storage/list-legacy": {
+        const signature = body?.signature as string | undefined;
+        if (!signature) {
+          return NextResponse.json(
+            { error: "signature is required for storage/list-legacy" },
+            { status: 400 },
+          );
+        }
+
+        const message = getKeyDerivationMessage(userAddress);
+        const ok = await verifyMessage({
+          address: userAddress as `0x${string}`,
+          message,
+          signature: signature as `0x${string}`,
+        });
+        if (!ok) {
+          return NextResponse.json(
+            { error: "Invalid signature for wallet address" },
+            { status: 401 },
+          );
+        }
+
+        const envPrefix = process.env.STORJ_BUCKET_PREFIX || "amach-health";
+        const prefixCandidates = Array.from(
+          new Set([envPrefix, "amach-health", "amachhealth", "amach"]),
+        );
+
+        // Probe multiple historical formulas. We include:
+        // - address-only legacy buckets
+        // - keyed buckets with different key fragment sizes (some old versions varied this)
+        const key = typedEncryptionKey.key || "";
+        const keyFragments = Array.from(
+          new Set(
+            [
+              key.substring(0, 16),
+              key.substring(0, 32),
+              key.substring(0, 64),
+              key, // full key (rare, but probe)
+            ].filter((s) => s && s.length > 0),
+          ),
+        );
+
+        const bucketCandidates = prefixCandidates.flatMap((bucketPrefix) => [
+          generateLegacyAddressBucketName(userAddress, bucketPrefix),
+          generateLegacyAddressBucketNameNo0x(userAddress, bucketPrefix),
+          ...keyFragments.map((frag) =>
+            generateLegacyKeyedBucketName(userAddress, frag, bucketPrefix),
+          ),
+        ]);
+
+        const storjClient = StorjClient.createClient();
+        const filterDataType =
+          dataType && dataType !== "all" ? (dataType as string) : undefined;
+
+        let chosenBucket: string | null = null;
+        let items: unknown[] = [];
+        const candidateCounts: Array<{ bucket: string; count: number }> = [];
+
+        for (const b of bucketCandidates) {
+          // Always list without S3 prefix filtering to support legacy key layouts.
+          const listedAll = await storjClient.listBucketByName(b, undefined);
+          const listed = filterDataType
+            ? listedAll.filter((it) => it.dataType === filterDataType)
+            : listedAll;
+          candidateCounts.push({ bucket: b, count: listed.length });
+          if (!chosenBucket && listed.length > 0) {
+            chosenBucket = b;
+            items = listed;
+          }
+        }
+
+        result = {
+          bucketPrefix: envPrefix,
+          prefixCandidates,
+          keyFragments: keyFragments.map((s) => s.slice(0, 12) + "…"),
+          bucketCandidates,
+          candidateCounts,
+          chosenBucket,
+          items,
+        };
+        break;
+      }
+
+      case "storage/retrieve-legacy": {
+        const signature = body?.signature as string | undefined;
+        if (!storjUri) {
+          return NextResponse.json(
+            { error: "storjUri is required for storage/retrieve-legacy" },
+            { status: 400 },
+          );
+        }
+        if (!signature) {
+          return NextResponse.json(
+            { error: "signature is required for storage/retrieve-legacy" },
+            { status: 400 },
+          );
+        }
+
+        const message = getKeyDerivationMessage(userAddress);
+        const ok = await verifyMessage({
+          address: userAddress as `0x${string}`,
+          message,
+          signature: signature as `0x${string}`,
+        });
+        if (!ok) {
+          return NextResponse.json(
+            { error: "Invalid signature for wallet address" },
+            { status: 401 },
+          );
+        }
+
+        const storageService = getStorageService();
+        // IMPORTANT: pass userAddress as undefined so StorjClient does NOT run bucket ownership validation.
+        result = await storageService.retrieveHealthData(
+          storjUri,
+          typedEncryptionKey,
+          expectedHash,
+          undefined,
         );
         break;
       }

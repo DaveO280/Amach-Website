@@ -71,6 +71,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       model: string;
       stream: boolean;
       response_format?: unknown;
+      venice_parameters?: Record<string, unknown>;
       top_p?: number;
       frequency_penalty?: number;
       presence_penalty?: number;
@@ -86,6 +87,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       model: modelName,
       stream: false,
     };
+
+    // Venice-specific parameters (server-side defaults with pass-through override).
+    // Docs: https://docs.venice.ai/overview/about-venice
+    const incomingVeniceParams =
+      (body.venice_parameters as Record<string, unknown> | undefined) ??
+      (body.veniceParameters as Record<string, unknown> | undefined);
+    requestBody.venice_parameters =
+      incomingVeniceParams ??
+      ({
+        // Hide reasoning/thinking output when supported by the model.
+        strip_thinking_response: true,
+        // Avoid including Venice system prompts in responses when supported.
+        include_venice_system_prompt: false,
+      } satisfies Record<string, unknown>);
+
+    // Dev-only: log the exact venice_parameters we are forwarding.
+    if (process.env.NODE_ENV === "development") {
+      console.error("[Venice API Route] venice_parameters (effective):", {
+        venice_parameters: requestBody.venice_parameters,
+      });
+    }
 
     // Optional JSON-mode / structured outputs (OpenAI-compatible)
     // Pass through if provided by caller.
@@ -130,6 +152,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       model: modelName,
       messageCount: requestBody.messages?.length || 0,
       maxTokens: requestBody.max_tokens,
+      hasVeniceParams: Boolean(requestBody.venice_parameters),
     });
 
     try {
@@ -216,6 +239,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           { error: "Invalid response format from Venice API" },
           { status: 500 },
         );
+      }
+
+      // Dev-only: echo back the effective venice_parameters to confirm thinking is disabled/stripped.
+      if (process.env.NODE_ENV === "development") {
+        return NextResponse.json({
+          ...data,
+          __debug_venice_parameters: requestBody.venice_parameters,
+        });
       }
 
       return NextResponse.json(data);

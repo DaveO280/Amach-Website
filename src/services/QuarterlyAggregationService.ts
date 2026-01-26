@@ -11,10 +11,10 @@
  * and are never deleted by the pruning system.
  */
 
-import type { HealthDataResults } from "@/data/types/healthMetrics";
 import type { MetricSample } from "@/agents/types";
 import { getStorageService } from "@/storage/StorageService";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
+import type { DailyProcessedSleepData } from "@/utils/sleepDataProcessor";
 
 export interface QuarterlyMetricSummary {
   average: number;
@@ -59,6 +59,18 @@ export interface QuarterlyHealthAggregate {
 }
 
 export class QuarterlyAggregationService {
+  private static readonly NON_SLEEP_METRIC_MAPPING: Record<
+    string,
+    Exclude<keyof QuarterlyHealthAggregate["metrics"], "sleep">
+  > = {
+    HKQuantityTypeIdentifierHeartRate: "heartRate",
+    HKQuantityTypeIdentifierRestingHeartRate: "restingHeartRate",
+    HKQuantityTypeIdentifierHeartRateVariabilitySDNN: "hrv",
+    HKQuantityTypeIdentifierStepCount: "steps",
+    HKQuantityTypeIdentifierAppleExerciseTime: "exercise",
+    HKQuantityTypeIdentifierActiveEnergyBurned: "activeEnergy",
+    HKQuantityTypeIdentifierRespiratoryRate: "respiratory",
+  };
   /**
    * Determine quarter from date
    */
@@ -157,7 +169,16 @@ export class QuarterlyAggregationService {
    * Generate quarterly aggregate from health data
    */
   static async generateQuarterlyAggregate(
-    healthData: HealthDataResults,
+    healthData: Record<
+      string,
+      Array<{
+        startDate: string;
+        value: string;
+        unit?: string;
+        source?: string;
+        device?: string;
+      }>
+    >,
     quarter: 1 | 2 | 3 | 4,
     year: number,
   ): Promise<QuarterlyHealthAggregate> {
@@ -186,15 +207,7 @@ export class QuarterlyAggregationService {
       dataSource: "apple-health",
     };
 
-    const metricMapping: Record<string, keyof typeof aggregate.metrics> = {
-      HKQuantityTypeIdentifierHeartRate: "heartRate",
-      HKQuantityTypeIdentifierRestingHeartRate: "restingHeartRate",
-      HKQuantityTypeIdentifierHeartRateVariabilitySDNN: "hrv",
-      HKQuantityTypeIdentifierStepCount: "steps",
-      HKQuantityTypeIdentifierAppleExerciseTime: "exercise",
-      HKQuantityTypeIdentifierActiveEnergyBurned: "activeEnergy",
-      HKQuantityTypeIdentifierRespiratoryRate: "respiratory",
-    };
+    const metricMapping = this.NON_SLEEP_METRIC_MAPPING;
 
     for (const [appleHealthType, metricKey] of Object.entries(metricMapping)) {
       const data = healthData[appleHealthType];
@@ -220,19 +233,7 @@ export class QuarterlyAggregationService {
 
       const summary = this.calculateMetricSummary(quarterSamples);
 
-      // For sleep metric, add extra fields (though we don't have efficiency/duration in raw data)
-      if (metricKey === "sleep") {
-        (aggregate.metrics[metricKey] as QuarterlyMetricSummary & {
-          avgEfficiency: number;
-          avgDuration: number;
-        }) = {
-          ...summary,
-          avgEfficiency: 0, // Would need sleep analysis data
-          avgDuration: summary.average, // Use average as duration approximation
-        };
-      } else {
-        aggregate.metrics[metricKey] = summary;
-      }
+      aggregate.metrics[metricKey] = summary;
 
       console.log(
         `[Quarterly] ${metricKey}: ${summary.sampleCount} samples, avg=${summary.average.toFixed(1)}`,
@@ -264,6 +265,119 @@ export class QuarterlyAggregationService {
     console.log(
       `[Quarterly] Summary: ${aggregate.summary.activeDays}/${totalDays} active days (${aggregate.summary.completeness.toFixed(1)}% complete)`,
     );
+
+    return aggregate;
+  }
+
+  /**
+   * Generate quarterly aggregate from processed daily aggregates (preferred).
+   * This uses per-day values (daily totals for cumulative metrics, daily averages for others),
+   * which makes quarter-over-quarter comparisons stable and avoids huge raw arrays.
+   */
+  static async generateQuarterlyAggregateFromProcessed(
+    processed: {
+      dailyAggregates: Record<string, Map<string, MetricSample>>;
+      sleepData: DailyProcessedSleepData[];
+    },
+    quarter: 1 | 2 | 3 | 4,
+    year: number,
+  ): Promise<QuarterlyHealthAggregate> {
+    const dateRange = this.getQuarterDateRange(quarter, year);
+
+    const aggregate: QuarterlyHealthAggregate = {
+      version: 1,
+      quarter,
+      year,
+      dateRange: {
+        start: dateRange.start.toISOString(),
+        end: dateRange.end.toISOString(),
+      },
+      metrics: {},
+      summary: {
+        totalDays: 0,
+        activeDays: 0,
+        completeness: 0,
+      },
+      generatedAt: new Date().toISOString(),
+      dataSource: "apple-health",
+    };
+
+    const metricMapping = this.NON_SLEEP_METRIC_MAPPING;
+
+    const activeDays = new Set<string>();
+
+    for (const [appleHealthType, metricKey] of Object.entries(metricMapping)) {
+      const dailyMap = processed.dailyAggregates[appleHealthType];
+      if (!dailyMap || dailyMap.size === 0) continue;
+
+      const quarterSamples = Array.from(dailyMap.values())
+        .filter(
+          (s) => s.timestamp >= dateRange.start && s.timestamp <= dateRange.end,
+        )
+        .filter(
+          (s) => !Number.isNaN(s.value) && !Number.isNaN(s.timestamp.getTime()),
+        );
+
+      if (quarterSamples.length === 0) continue;
+
+      // Track active days (per-day samples)
+      quarterSamples.forEach((s) =>
+        activeDays.add(s.timestamp.toISOString().split("T")[0]),
+      );
+
+      aggregate.metrics[metricKey] =
+        this.calculateMetricSummary(quarterSamples);
+    }
+
+    // Sleep: derive quarter samples from processed sleep days
+    const sleepDays = processed.sleepData.filter((d) => {
+      const dt = new Date(d.date + "T12:00:00");
+      return dt >= dateRange.start && dt <= dateRange.end;
+    });
+
+    if (sleepDays.length > 0) {
+      const sleepSamples: MetricSample[] = sleepDays
+        .filter((d) => d.sleepDuration > 0)
+        .map((d) => ({
+          timestamp: new Date(d.date + "T12:00:00"),
+          value: d.sleepDuration, // minutes
+          unit: "min",
+          metadata: {
+            efficiency: d.metrics.sleepEfficiency,
+            totalDuration: d.totalDuration,
+            stages: d.stageData,
+          },
+        }));
+
+      if (sleepSamples.length > 0) {
+        sleepSamples.forEach((s) =>
+          activeDays.add(s.timestamp.toISOString().split("T")[0]),
+        );
+
+        const summary = this.calculateMetricSummary(sleepSamples);
+        const avgEfficiency =
+          sleepDays.reduce((acc, d) => acc + d.metrics.sleepEfficiency, 0) /
+          sleepDays.length;
+        const avgDuration =
+          sleepDays.reduce((acc, d) => acc + d.sleepDuration, 0) /
+          sleepDays.length;
+
+        aggregate.metrics.sleep = {
+          ...summary,
+          avgEfficiency: Math.round(avgEfficiency * 10) / 10,
+          avgDuration: Math.round(avgDuration),
+        };
+      }
+    }
+
+    const totalDays = Math.ceil(
+      (dateRange.end.getTime() - dateRange.start.getTime()) /
+        (1000 * 60 * 60 * 24),
+    );
+    aggregate.summary.totalDays = totalDays;
+    aggregate.summary.activeDays = activeDays.size;
+    aggregate.summary.completeness =
+      totalDays > 0 ? Math.round((activeDays.size / totalDays) * 100) / 100 : 0;
 
     return aggregate;
   }

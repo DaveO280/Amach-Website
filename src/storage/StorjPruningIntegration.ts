@@ -6,7 +6,7 @@
  */
 
 import type { StorageReference } from "./StorjClient";
-import type { StorjItem } from "./StorjPruningService";
+import type { PruningResult, StorjItem } from "./StorjPruningService";
 import type { StorageService } from "./StorageService";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 
@@ -110,7 +110,7 @@ export async function performPruning(
   userAddress: string,
   encryptionKey: WalletEncryptionKey,
   dataType: string,
-) {
+): Promise<PruningResult> {
   const { selectItemsToPrune, executePruning } =
     await import("./StorjPruningService");
 

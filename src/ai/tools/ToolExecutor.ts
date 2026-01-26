@@ -144,9 +144,7 @@ export class ToolExecutor {
     return null;
   }
 
-  private async handleCompareReports(
-    params: Record<string, unknown>,
-  ): Promise<
+  private async handleCompareReports(params: Record<string, unknown>): Promise<
     Array<{
       reportType: "dexa" | "bloodwork";
       reportDate: Date;

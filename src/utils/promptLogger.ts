@@ -3,7 +3,11 @@
  * Saves prompts to /public/debug-prompts/ directory
  */
 
+// Dev-only. Also make browser downloads opt-in to avoid cluttering Downloads.
 const ENABLE_FILE_LOGGING = process.env.NODE_ENV === "development";
+const ENABLE_BROWSER_DOWNLOADS =
+  process.env.NODE_ENV === "development" &&
+  process.env.NEXT_PUBLIC_ENABLE_PROMPT_LOG_DOWNLOADS === "true";
 
 interface PromptLog {
   timestamp: string;
@@ -62,9 +66,15 @@ END OF PROMPT LOG
     `   Total length: ${systemPrompt.length + userPrompt.length} chars`,
   );
 
-  // In browser environment, trigger download instead of file write
+  // In browser environment, only trigger download if explicitly enabled.
   if (typeof window !== "undefined") {
-    downloadPromptLog(filename, logContent);
+    if (ENABLE_BROWSER_DOWNLOADS) {
+      downloadPromptLog(filename, logContent);
+    } else {
+      console.log(
+        `ℹ️ [Prompt Logger] Browser download disabled (set NEXT_PUBLIC_ENABLE_PROMPT_LOG_DOWNLOADS=true to enable).`,
+      );
+    }
   } else {
     // Server-side: attempt to write to file
     try {

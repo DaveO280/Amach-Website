@@ -1689,7 +1689,10 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto p-0 bg-gradient-to-br from-amber-50 via-white to-emerald-50">
+      <DialogContent
+        preventOutsideClose
+        className="max-w-6xl max-h-[90vh] overflow-y-auto p-0 bg-gradient-to-br from-amber-50 via-white to-emerald-50"
+      >
         <div className="p-6 sm:p-8">
           {/* Pending Transaction Notification */}
           {pendingTx && (

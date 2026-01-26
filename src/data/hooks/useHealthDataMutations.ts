@@ -69,7 +69,11 @@ export function useClearHealthDataMutation(): UseMutationResult<
 > {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => healthDataStore.clearHealthData(),
+    mutationFn: async () => {
+      await healthDataStore.clearHealthData();
+      await healthDataStore.clearProcessedData();
+      await healthDataStore.clearDailyHealthScores();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["healthData"] });
     },

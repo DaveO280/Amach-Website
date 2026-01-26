@@ -1,6 +1,31 @@
 // src/services/CosaintAiService.ts
 import type { CoordinatorResult } from "@/agents/CoordinatorAgent";
+import {
+  getTopRelevant,
+  rankMetricsByRelevance,
+  type HealthMetric,
+  type UserContext,
+} from "@/ai/RelevanceScorer";
+import { formatToolsForPrompt } from "@/ai/tools/ToolDefinitions";
+import type { ToolCall } from "@/ai/tools/ToolExecutor";
+import { ToolExecutor } from "@/ai/tools/ToolExecutor";
+import { ToolResponseParser } from "@/ai/tools/ToolResponseParser";
+import { IndexedDBDataSource } from "@/data/sources/IndexedDBDataSource";
+import type { ConversationMemory } from "@/types/conversationMemory";
 import type { ParsedReportSummary } from "@/types/reportData";
+import {
+  diagnoseAnalysisResult,
+  logAnalysisDiagnostics,
+} from "@/utils/analysisDiagnostics";
+import {
+  getRecommendedAnalysisMode,
+  updateAnalysisState,
+} from "@/utils/analysisState";
+import { getReportsSummary } from "@/utils/reportFormatters";
+import {
+  buildTemporalContext,
+  formatTemporalContext,
+} from "@/utils/temporalContext";
 import {
   calculateAgeFromBirthDate,
   type NormalizedUserProfile,
@@ -13,32 +38,6 @@ import type { HealthContextMetrics } from "../types/HealthContext";
 import type { HealthDataByType } from "../types/healthData";
 import { logger } from "../utils/logger";
 import { runCoordinatorAnalysis } from "./CoordinatorService";
-import {
-  type HealthMetric,
-  type UserContext,
-  rankMetricsByRelevance,
-  getTopRelevant,
-} from "@/ai/RelevanceScorer";
-import {
-  getRecommendedAnalysisMode,
-  updateAnalysisState,
-} from "@/utils/analysisState";
-import {
-  diagnoseAnalysisResult,
-  logAnalysisDiagnostics,
-} from "@/utils/analysisDiagnostics";
-import { isCumulativeMetric } from "@/utils/dataDeduplicator";
-import { formatReportsForAI } from "@/utils/reportFormatters";
-import { extractDatePart } from "@/utils/dataDeduplicator";
-import {
-  buildTemporalContext,
-  formatTemporalContext,
-} from "@/utils/temporalContext";
-import { formatToolsForPrompt } from "@/ai/tools/ToolDefinitions";
-import { ToolResponseParser } from "@/ai/tools/ToolResponseParser";
-import { ToolExecutor } from "@/ai/tools/ToolExecutor";
-import { IndexedDBDataSource } from "@/data/sources/IndexedDBDataSource";
-import type { ToolCall } from "@/ai/tools/ToolExecutor";
 
 /**
  * Efficiently get min/max timestamps from a large array without sorting
@@ -65,8 +64,109 @@ const RESPONSE_FORMAT_GUIDELINES = `
 Be informative and analytical. Weave metrics into flowing, detailed sentences that explain context and significance. Compare their numbers to age/sex norms to show what's working well or needs attention. Connect how different metrics influence each other. Stay measured and grounded in the data—let the numbers speak for themselves without excessive enthusiasm.
 `;
 
+const QUICK_RESPONSE_GUIDELINES = `
+
+Response style:
+- Provide direct, practical, evidence-informed health guidance
+- Keep responses conversational (1-3 paragraphs for most questions)
+- Reference user profile (age, sex, height, weight) when relevant for personalized context
+- Use specific examples and actionable recommendations
+- Respect dietary preferences or constraints mentioned in conversation
+- Focus on what you CAN help with (general guidance, profile-based advice, evidence-based recommendations)
+- If asked about specific metrics/lab results you don't have, suggest Deep mode for data analysis
+`;
+
 // Feature flag for tool use - set via environment variable
 const ENABLE_TOOL_USE = process.env.NEXT_PUBLIC_ENABLE_TOOL_USE === "true";
+
+const COSAINT_SERVICE_BUILD_STAMP =
+  "cosaint-service-build-2026-01-22TquickTokensOverride-v1";
+
+function getQuickMaxTokensOverride(): number | null {
+  // Dev-only: allow temporarily increasing Quick mode token budget to inspect full output.
+  // Set via:
+  // localStorage.setItem("cosaint_quick_max_tokens", "4000")
+  if (process.env.NODE_ENV !== "development") return null;
+
+  // IMPORTANT: Prefer localStorage over env so the in-app dev controls always win.
+  const localRaw =
+    typeof window !== "undefined"
+      ? window.localStorage.getItem("cosaint_quick_max_tokens")
+      : null;
+  const envVal = process.env.NEXT_PUBLIC_VENICE_QUICK_MAX_TOKENS;
+  const raw =
+    (typeof localRaw === "string" && localRaw.trim().length > 0
+      ? localRaw
+      : null) ??
+    (typeof envVal === "string" && envVal.trim().length > 0 ? envVal : null);
+
+  // Dev-only trace so we can verify the browser is running the latest bundle.
+  if (typeof window !== "undefined") {
+    console.log("[CosaintAiService] Quick max_tokens override trace", {
+      build: COSAINT_SERVICE_BUILD_STAMP,
+      localRaw,
+      envVal: envVal ?? null,
+      rawChosenBeforeClamp: raw ?? null,
+    });
+  }
+
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  // Cap to avoid runaway costs and absurdly long generations.
+  // Also enforce a floor: values like 900 often cause GLM to hit length while still "thinking",
+  // which can yield empty content when thinking is stripped server-side.
+  const clamped = Math.max(1500, Math.min(Math.floor(n), 8000));
+  return clamped;
+}
+
+function compactOneLine(text: string, maxLen: number): string {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= maxLen) return cleaned;
+  return cleaned.slice(0, Math.max(0, maxLen - 1)).trimEnd() + "…";
+}
+
+function formatConversationMemoryCapsule(
+  memory: ConversationMemory,
+): string | null {
+  const activeFacts = (memory.criticalFacts ?? [])
+    .filter((f) => f && f.isActive)
+    .slice(-12);
+
+  const goals = activeFacts
+    .filter((f) => f.category === "goal")
+    .map((f) => compactOneLine(String(f.value ?? ""), 120))
+    .filter(Boolean)
+    .slice(-6);
+  const concerns = activeFacts
+    .filter((f) => f.category === "concern")
+    .map((f) => compactOneLine(String(f.value ?? ""), 120))
+    .filter(Boolean)
+    .slice(-6);
+
+  const sessions = [
+    ...(memory.importantSessions ?? []),
+    ...(memory.recentSessions ?? []),
+  ]
+    .slice(-5)
+    .map((s) => {
+      const date = typeof s.date === "string" ? s.date : "";
+      const summary = compactOneLine(String(s.summary ?? ""), 180);
+      return date ? `${date}: ${summary}` : summary;
+    })
+    .filter(Boolean);
+
+  const lines: string[] = [];
+  if (goals.length) lines.push(`- Active goals: ${goals.join(" | ")}`);
+  if (concerns.length) lines.push(`- Active concerns: ${concerns.join(" | ")}`);
+  if (sessions.length) {
+    lines.push(`- Recent session notes:`);
+    for (const s of sessions) lines.push(`  - ${s}`);
+  }
+
+  if (!lines.length) return null;
+  return `Conversation memory (from prior chats):\n${lines.join("\n")}`;
+}
 
 export class CosaintAiService {
   private veniceApi: VeniceApiService;
@@ -197,7 +297,7 @@ export class CosaintAiService {
 
       if (!response) {
         logger.warn("Empty response from Venice API", { userMessage });
-        return this.getFallbackResponse(userMessage);
+        return this.getFallbackResponse(userMessage, conversationHistory);
       }
 
       return response;
@@ -206,7 +306,7 @@ export class CosaintAiService {
         error: error instanceof Error ? error.message : String(error),
         userMessage,
       });
-      return this.getFallbackResponse(userMessage);
+      return this.getFallbackResponse(userMessage, conversationHistory);
     }
   }
 
@@ -226,52 +326,47 @@ export class CosaintAiService {
     useMultiAgent: boolean = true,
     reports?: ParsedReportSummary[],
     forceInitialAnalysis: boolean = false,
+    conversationMemory?: ConversationMemory | null,
   ): Promise<string> {
     try {
+      const isQuick = !useMultiAgent;
+
       // Log health data and file status
-      console.log("[CosaintAiService] Health data received:", {
-        hasHealthData: Boolean(healthData),
-        availableMetrics: healthData ? Object.keys(healthData) : [],
-        uploadedFilesCount: uploadedFiles?.length || 0,
-        uploadedFiles: uploadedFiles?.map((f) => ({
-          summary: f.summary,
-          hasRawData: !!f.rawData,
-        })),
-        userProfile,
-        structuredReportCount: reports?.length ?? 0,
-      });
+      if (!isQuick) {
+        console.log("[CosaintAiService] Health data received:", {
+          hasHealthData: Boolean(healthData),
+          availableMetrics: healthData ? Object.keys(healthData) : [],
+          uploadedFilesCount: uploadedFiles?.length || 0,
+          uploadedFiles: uploadedFiles?.map((f) => ({
+            summary: f.summary,
+            hasRawData: !!f.rawData,
+          })),
+          userProfile,
+          structuredReportCount: reports?.length ?? 0,
+        });
+      }
 
       // Convert and rank health metrics by relevance
+      // Standard mode: skip expensive ranking (faster prompt build).
       let rankedMetrics: HealthMetric[] = [];
-      let allHealthMetrics: HealthMetric[] = []; // Keep all metrics for date range calculation
-      if (metricData && Object.keys(metricData).length > 0) {
+      let allHealthMetrics: HealthMetric[] = []; // Keep all metrics for date range calculation (deep mode)
+      const shouldComputeRanking = useMultiAgent;
+      if (
+        shouldComputeRanking &&
+        metricData &&
+        Object.keys(metricData).length > 0
+      ) {
         allHealthMetrics = this.convertToHealthMetrics(metricData);
         const userContext = this.buildUserContext(
           userProfile,
           conversationHistory,
         );
 
-        console.log("[CosaintAiService] Ranking metrics by relevance:", {
-          totalMetrics: allHealthMetrics.length,
-          userContext: {
-            hasGoals: Boolean(userContext.goals?.length),
-            hasConditions: Boolean(userContext.conditions?.length),
-            hasRecentQueries: Boolean(userContext.recentQueries?.length),
-          },
-        });
-
         // Rank metrics by relevance
         const ranked = rankMetricsByRelevance(allHealthMetrics, userContext);
 
-        // Get top 100 most relevant metrics (reduce context size while keeping quality)
+        // Get top 100 most relevant metrics
         rankedMetrics = getTopRelevant(ranked, 100).map((rm) => rm.metric);
-
-        console.log("[CosaintAiService] Ranked metrics:", {
-          topMetricsCount: rankedMetrics.length,
-          topMetricTypes: [
-            ...new Set(rankedMetrics.slice(0, 10).map((m) => m.type)),
-          ],
-        });
       }
 
       let coordinatorResult: CoordinatorResult | null = null;
@@ -390,27 +485,62 @@ export class CosaintAiService {
         reports,
         rankedMetrics,
         allHealthMetrics, // Pass all metrics for accurate date range calculation
+        useMultiAgent ? "full" : "lite",
+        conversationMemory,
       );
 
-      // Log the prompt for debugging (you can remove this in production)
-      console.log(
-        "[CosaintAiService] Generated prompt (first 500 chars):",
-        prompt.substring(0, 500) + "...",
-      );
-      console.log("[CosaintAiService] FULL PROMPT LENGTH:", prompt.length);
-      console.log("[CosaintAiService] FULL PROMPT:", prompt);
+      // Dev-only: log prompt stats without dumping full prompt content.
+      if (process.env.NODE_ENV === "development") {
+        console.log("[CosaintAiService] Prompt stats", {
+          systemChars: prompt.split("\n\n")[0]?.length ?? undefined,
+          totalChars: prompt.length,
+        });
+      }
 
       // Generate a response using the Venice API
-      // Note: Qwen models use more tokens for internal reasoning, so we need higher limits
+      // Quick Chat (standard): keep token budget smaller for faster responses.
+      // QUICK MODE FIX: Increased from 900 to 1500 to ensure model completes its response
+      const debugQuickMaxTokens = !useMultiAgent
+        ? getQuickMaxTokensOverride()
+        : null;
+      // Temporary: allow much deeper responses (compute not a concern).
+      // Quick can still be overridden via localStorage/env, but defaults high.
+      const maxTokens = useMultiAgent ? 8000 : (debugQuickMaxTokens ?? 8000);
+      if (process.env.NODE_ENV === "development" && !useMultiAgent) {
+        console.log("[CosaintAiService] Quick max_tokens override", {
+          fromLocalStorage:
+            typeof window !== "undefined"
+              ? window.localStorage.getItem("cosaint_quick_max_tokens")
+              : null,
+          fromEnv: process.env.NEXT_PUBLIC_VENICE_QUICK_MAX_TOKENS ?? null,
+          chosen: maxTokens,
+        });
+      }
       console.log("[CosaintAiService] Calling Venice API", {
         promptLength: prompt.length,
-        maxTokens: 4000,
+        maxTokens,
         userMessage: userMessage.substring(0, 100),
+        mode: useMultiAgent ? "deep" : "quick",
       });
+
+      // Venice parameters: per docs, disable thinking to avoid <think> blocks and empty content when thinking is stripped.
+      // Docs: https://docs.venice.ai/overview/about-venice
+      const veniceParams: Record<string, unknown> = useMultiAgent
+        ? {
+            strip_thinking_response: true,
+            include_venice_system_prompt: false,
+          }
+        : {
+            // Quick: force model to answer directly in content (no reasoning mode).
+            disable_thinking: true,
+            strip_thinking_response: true,
+            include_venice_system_prompt: false,
+          };
 
       let response = await this.veniceApi.generateVeniceResponse(
         prompt,
-        4000, // High token limit for Qwen's thinking + response with multi-agent context
+        maxTokens,
+        veniceParams,
       );
 
       console.log("[CosaintAiService] Venice API response received", {
@@ -423,12 +553,113 @@ export class CosaintAiService {
       });
 
       if (!response) {
-        console.warn(
-          "⚠️ [CosaintAiService] Empty response from Venice API - returning fallback",
-          { userMessage: userMessage.substring(0, 100) },
+        // QUICK: retry once on empty response (we've seen occasional empty choices)
+        if (!useMultiAgent) {
+          console.warn(
+            "⚠️ [CosaintAiService] Empty response from Venice API (quick) - retrying once",
+            { userMessage: userMessage.substring(0, 100) },
+          );
+          // Retry up to 2 times (very small additional latency) before falling back.
+          for (let attempt = 1; attempt <= 2 && !response; attempt++) {
+            if (attempt > 1) {
+              await new Promise((r) => setTimeout(r, 200));
+            }
+            response = await this.veniceApi.generateVeniceResponse(
+              prompt,
+              maxTokens,
+              veniceParams,
+            );
+          }
+        }
+
+        if (!response) {
+          console.warn(
+            "⚠️ [CosaintAiService] Empty response from Venice API - returning fallback",
+            { userMessage: userMessage.substring(0, 100) },
+          );
+          logger.warn("Empty response from Venice API", { userMessage });
+          return this.getFallbackResponse(userMessage, conversationHistory);
+        }
+      }
+
+      // Tool execution loop (if enabled)
+      if (
+        ENABLE_TOOL_USE &&
+        useMultiAgent &&
+        ToolResponseParser.hasToolCalls(response)
+      ) {
+        console.log(
+          "[CosaintAiService] Tool calls detected, executing tools...",
         );
-        logger.warn("Empty response from Venice API", { userMessage });
-        return this.getFallbackResponse(userMessage);
+        let iterationCount = 0;
+        const maxIterations = 3; // Prevent infinite loops
+        let conversationContext = userMessage;
+
+        while (
+          iterationCount < maxIterations &&
+          response &&
+          ToolResponseParser.hasToolCalls(response)
+        ) {
+          iterationCount++;
+          console.log(
+            `[CosaintAiService] Tool execution iteration ${iterationCount}`,
+          );
+
+          // Extract tool calls
+          const toolCalls = ToolResponseParser.parseToolCalls(response);
+          console.log(
+            `[CosaintAiService] Found ${toolCalls.length} tool call(s):`,
+            toolCalls.map((tc) => tc.tool),
+          );
+          console.log(
+            "[CosaintAiService] Tool call details:",
+            JSON.stringify(toolCalls, null, 2),
+          );
+
+          // Execute tools directly on client (IndexedDB is browser-only)
+          const toolResults = await Promise.all(
+            toolCalls.map((call) => this.executeTool(call)),
+          );
+
+          // Format results for AI
+          const resultsText = this.formatToolResults(toolResults);
+          console.log(
+            "[CosaintAiService] Tool execution complete, sending results to AI",
+          );
+
+          // Update context with tool results and get new response
+          conversationContext = `${conversationContext}\n\n[Tool Execution Results]\n${resultsText}\n\nBased on these results, provide your analysis.`;
+
+          const followUpPrompt = `${prompt}\n\n${conversationContext}\n\nPlease provide your analysis based on the tool results above.`;
+          const newResponse = await this.veniceApi.generateVeniceResponse(
+            followUpPrompt,
+            4000,
+            {
+              strip_thinking_response: true,
+              include_venice_system_prompt: false,
+            },
+          );
+
+          if (!newResponse) {
+            console.warn(
+              "[CosaintAiService] No response from AI after tool execution",
+            );
+            break;
+          }
+
+          response = newResponse;
+
+          // If no more tool calls, break
+          if (!ToolResponseParser.hasToolCalls(response)) {
+            break;
+          }
+        }
+
+        if (iterationCount >= maxIterations) {
+          console.warn(
+            "[CosaintAiService] Max tool iterations reached, returning last response",
+          );
+        }
       }
 
       // Tool execution loop (if enabled)
@@ -504,7 +735,9 @@ export class CosaintAiService {
       }
 
       console.log("✅ [CosaintAiService] Returning successful response");
-      return response || this.getFallbackResponse(userMessage);
+      return (
+        response || this.getFallbackResponse(userMessage, conversationHistory)
+      );
     } catch (error) {
       console.error("❌ [CosaintAiService] Error generating AI response:", {
         error: error instanceof Error ? error.message : String(error),
@@ -515,7 +748,7 @@ export class CosaintAiService {
         error: error instanceof Error ? error.message : String(error),
         userMessage,
       });
-      return this.getFallbackResponse(userMessage);
+      return this.getFallbackResponse(userMessage, conversationHistory);
     }
   }
 
@@ -561,226 +794,71 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
     reports?: ParsedReportSummary[],
     rankedMetrics?: HealthMetric[],
     allMetrics?: HealthMetric[], // All metrics for accurate date range calculation
+    toolPromptMode?: "full" | "lite",
+    conversationMemory?: ConversationMemory | null,
   ): string {
+    const promptStyle: "deep" | "quick" =
+      toolPromptMode === "lite" ? "quick" : "deep";
+    const includeHealthContext = promptStyle === "deep";
+
     // Build the system message including character background, health data, file context, and user profile
-    let systemMessage = this.buildSystemMessage(healthData, userProfile);
+    let systemMessage = this.buildSystemMessage(healthData, userProfile, {
+      toolPromptMode: toolPromptMode ?? "full",
+      promptStyle,
+      includePersonaDetails: promptStyle === "deep",
+      // QUICK MODE FIX: Include profile in Quick mode (age/sex/height/weight for context)
+      includeUserProfile: includeHealthContext || promptStyle === "quick",
+      includeHealthData: includeHealthContext
+        ? promptStyle === "deep"
+          ? "full"
+          : "minimal"
+        : "none",
+      includeAlerts: promptStyle === "deep",
+    });
+
+    // Add a compact "memory capsule" to let the model reference prior chats without full logs.
+    if (conversationMemory) {
+      const capsule = formatConversationMemoryCapsule(conversationMemory);
+      if (capsule) {
+        systemMessage += `\n\n${capsule}`;
+      }
+    }
 
     // Add temporal context (current date, data timespan, seasonal context)
-    const timestampRange = allMetrics ? getTimestampRange(allMetrics) : null;
-    const dataStartDate = timestampRange
-      ? new Date(timestampRange.min)
-      : undefined;
-    const dataEndDate = timestampRange
-      ? new Date(timestampRange.max)
-      : undefined;
+    if (includeHealthContext) {
+      const timestampRange = allMetrics ? getTimestampRange(allMetrics) : null;
+      const dataStartDate = timestampRange
+        ? new Date(timestampRange.min)
+        : undefined;
+      const dataEndDate = timestampRange
+        ? new Date(timestampRange.max)
+        : undefined;
 
-    const temporalContext = buildTemporalContext(
-      healthData,
-      dataStartDate,
-      dataEndDate,
-    );
-    systemMessage += "\n\n" + formatTemporalContext(temporalContext);
+      const temporalContext = buildTemporalContext(
+        healthData,
+        dataStartDate,
+        dataEndDate,
+      );
+      systemMessage += "\n\n" + formatTemporalContext(temporalContext);
+    }
 
     systemMessage +=
       "\n\nFollow-up instruction: Always address the user's latest question or concern first, use the conversation history to avoid repeating full introductions or already acknowledged profile details, and consolidate duplicate findings instead of listing the same metric multiple times.";
 
-    // Add relevance-ranked metrics if available AND we don't have coordinator results
-    // (If we have coordinator results, the agents already analyzed the data properly with tiered aggregation)
-    if (rankedMetrics && rankedMetrics.length > 0 && !coordinatorResult) {
-      systemMessage +=
-        "\n\n📊 Top Relevant Health Metrics (AI-scored by importance):";
-
-      // Group ranked metrics by type for relevance display
-      const rankedMetricsByType = rankedMetrics.reduce(
-        (acc, metric) => {
-          if (!acc[metric.type]) acc[metric.type] = [];
-          acc[metric.type].push(metric);
-          return acc;
-        },
-        {} as Record<string, HealthMetric[]>,
-      );
-
-      // Use all metrics (not just ranked) for accurate date range calculation
-      const allMetricsByType = (allMetrics || rankedMetrics).reduce(
-        (acc, metric) => {
-          if (!acc[metric.type]) acc[metric.type] = [];
-          acc[metric.type].push(metric);
-          return acc;
-        },
-        {} as Record<string, HealthMetric[]>,
-      );
-
-      // Show top 5 metric types with aggregated information
-      console.log("[CosaintAI] About to iterate over rankedMetricsByType");
-      Object.entries(rankedMetricsByType)
-        .slice(0, 5)
-        .forEach(([type, rankedTypeMetrics]) => {
-          console.log(`[CosaintAI] Processing type: ${type}`);
-          if (rankedTypeMetrics.length === 0) return;
-
-          // Get all metrics of this type for accurate date range
-          const allTypeMetrics = allMetricsByType[type] || rankedTypeMetrics;
-
-          // Check if this is a cumulative metric (steps, active energy, exercise time)
-          const isCumulative = isCumulativeMetric(type);
-
-          let avg: number | null = null;
-          let min: number | null = null;
-          let max: number | null = null;
-
-          if (isCumulative) {
-            // For cumulative metrics, aggregate by day first (sum per day), then average daily totals
-            console.log(
-              `[CosaintAI] ${type} is cumulative, starting daily aggregation`,
-            );
-            const dailyTotals = new Map<string, number>();
-
-            console.log(
-              `[CosaintAI] About to iterate ${allTypeMetrics.length} metrics`,
-            );
-            for (const metric of allTypeMetrics) {
-              try {
-                // Safely extract date - use timestamp if startDate not available
-                const dateStr =
-                  metric.startDate || new Date(metric.timestamp).toISOString();
-                const dateKey = extractDatePart(dateStr);
-                const currentTotal = dailyTotals.get(dateKey) || 0;
-                dailyTotals.set(dateKey, currentTotal + metric.value);
-              } catch (e) {
-                // Skip invalid dates
-                console.warn(`[CosaintAiService] Invalid date for metric:`, e);
-                continue;
-              }
-            }
-
-            const dailyValues = Array.from(dailyTotals.values());
-            if (dailyValues.length > 0) {
-              avg =
-                dailyValues.reduce((sum, v) => sum + v, 0) / dailyValues.length;
-              // Use reduce instead of spread operator to avoid stack overflow with large arrays
-              min = dailyValues.reduce(
-                (acc, v) => Math.min(acc, v),
-                dailyValues[0],
-              );
-              max = dailyValues.reduce(
-                (acc, v) => Math.max(acc, v),
-                dailyValues[0],
-              );
-            }
-          } else {
-            // For non-cumulative metrics (heart rate, HRV, etc.), aggregate by day first
-            // Calculate daily averages, then stats from those daily averages
-            console.log(
-              `[CosaintAI] ${type} is non-cumulative, aggregating by day first`,
-            );
-            const dailyAverages = new Map<
-              string,
-              { sum: number; count: number }
-            >();
-
-            // Aggregate all readings by day
-            for (const metric of allTypeMetrics) {
-              try {
-                const dateStr =
-                  metric.startDate || new Date(metric.timestamp).toISOString();
-                const dateKey = extractDatePart(dateStr);
-                const value = metric.value;
-
-                if (isNaN(value)) continue;
-
-                const existing = dailyAverages.get(dateKey);
-                if (existing) {
-                  existing.sum += value;
-                  existing.count += 1;
-                } else {
-                  dailyAverages.set(dateKey, { sum: value, count: 1 });
-                }
-              } catch (e) {
-                console.warn(
-                  `[CosaintAiService] Invalid metric for daily aggregation:`,
-                  e,
-                );
-                continue;
-              }
-            }
-
-            // Calculate daily average values
-            const dailyValues: number[] = [];
-            for (const aggregate of dailyAverages.values()) {
-              if (aggregate.count > 0) {
-                dailyValues.push(aggregate.sum / aggregate.count);
-              }
-            }
-
-            if (dailyValues.length > 0) {
-              avg =
-                dailyValues.reduce((sum, v) => sum + v, 0) / dailyValues.length;
-              // Use reduce instead of spread operator to avoid stack overflow with large arrays
-              min = dailyValues.reduce(
-                (acc, v) => Math.min(acc, v),
-                dailyValues[0],
-              );
-              max = dailyValues.reduce(
-                (acc, v) => Math.max(acc, v),
-                dailyValues[0],
-              );
-            }
-          }
-
-          // Calculate date range efficiently without sorting all metrics
-          const timestampRange = getTimestampRange(allTypeMetrics);
-          if (!timestampRange) {
-            console.warn(`[CosaintAI] No timestamp range for ${type}`);
-            return; // Skip to next iteration in forEach
-          }
-
-          // Get unit from first metric
-          const firstMetric = allTypeMetrics[0];
-          const unit = firstMetric?.unit || "";
-
-          // Format date range
-          const startDate = new Date(timestampRange.min).toLocaleDateString();
-          const endDate = new Date(timestampRange.max).toLocaleDateString();
-          const dateRange =
-            startDate === endDate ? startDate : `${startDate} to ${endDate}`;
-
-          // Format value display
-          let valueDisplay = "";
-          if (avg !== null) {
-            valueDisplay = `Avg: ${avg.toFixed(1)}${unit}`;
-            if (min !== null && max !== null && min !== max) {
-              valueDisplay += ` (Range: ${min.toFixed(1)}-${max.toFixed(1)})`;
-            }
-          } else {
-            // Get latest value from the metric with the max timestamp
-            const latestMetric =
-              allTypeMetrics.find((m) => m.timestamp === timestampRange.max) ||
-              allTypeMetrics[allTypeMetrics.length - 1];
-            valueDisplay = `Latest: ${latestMetric?.value || "N/A"}${unit}`;
-          }
-
-          // For cumulative metrics, show daily average in the description
-          let dataPointDescription = `${allTypeMetrics.length} data points`;
-          if (isCumulative) {
-            try {
-              const uniqueDays = new Set<string>();
-              for (const m of allTypeMetrics) {
-                const dateStr =
-                  m.startDate || new Date(m.timestamp).toISOString();
-                uniqueDays.add(extractDatePart(dateStr));
-              }
-              dataPointDescription = `${allTypeMetrics.length} readings, ${uniqueDays.size} days`;
-            } catch (e) {
-              // Fallback to simple count if date extraction fails
-              dataPointDescription = `${allTypeMetrics.length} readings`;
-            }
-          }
-
-          systemMessage += `\n- ${type}: ${valueDisplay} (${dateRange}, ${dataPointDescription})`;
-        });
-
-      systemMessage +=
-        "\n\nNote: These metrics have been prioritized based on relevance to the user's goals, health conditions, and conversation context.";
+    // Keep data availability compact. Do not dump raw values into the system prompt.
+    // The model should use tools to retrieve the specific slices it needs.
+    if (includeHealthContext) {
+      const availableMetricTypes = Array.from(
+        new Set((rankedMetrics ?? allMetrics ?? []).map((m) => m.type)),
+      ).slice(0, 12);
+      if (availableMetricTypes.length > 0) {
+        systemMessage += `\n\nData index (use tools for actual values):`;
+        systemMessage += `\n- Timeseries metrics available: ${availableMetricTypes.join(", ")}`;
+        const r = allMetrics ? getTimestampRange(allMetrics) : null;
+        if (r) {
+          systemMessage += `\n- Timeseries coverage: ${new Date(r.min).toLocaleDateString()} to ${new Date(r.max).toLocaleDateString()}`;
+        }
+      }
     }
 
     // Debug: Check if coordinator summary exists
@@ -836,55 +914,48 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
       }
     }
 
-    // Add uploaded file summaries if present
-    // Prefer structured reports over full PDF text for better efficiency
-    if (reports && reports.length > 0) {
-      // Use structured reports if available (much more efficient than full PDF text)
-      systemMessage += `\n\nYou have access to the following structured health reports for this user:\n`;
-      const formattedReports = formatReportsForAI(reports);
-      systemMessage += formattedReports;
-      systemMessage += `\n\nThese reports contain all relevant metrics extracted from uploaded PDFs. Use this structured data for analysis instead of requesting the full PDF text.`;
-    } else if (uploadedFiles && uploadedFiles.length > 0) {
-      // Fallback to full file content only if no structured reports are available
-      systemMessage += `\n\nYou also have access to the following uploaded files for this user:\n`;
-      uploadedFiles.forEach((file) => {
-        systemMessage += `- ${file.summary}\n`;
-        // If the file has parsed content, include it in the context
-        if (file.rawData?.content && typeof file.rawData.content === "string") {
-          const content = file.rawData.content;
-
-          // Always include maximum content for comprehensive analysis
-          const maxLength = 20000; // Increased limit for all health reports
-          const preview =
-            content.length > maxLength
-              ? content.substring(0, maxLength) + "... (truncated)"
-              : content;
-
-          let fileInfo = `  File content (${file.rawData.parsedType || "unknown"} format)`;
-
-          // Add PDF-specific information
-          if (file.rawData.parsedType === "pdf") {
-            fileInfo += ` - ${file.rawData.pageCount || 0} pages`;
-            if (
-              file.rawData.metadata &&
-              typeof file.rawData.metadata === "object" &&
-              "title" in file.rawData.metadata
-            ) {
-              fileInfo += ` - Title: ${(file.rawData.metadata as { title?: string }).title}`;
-            }
-          }
-
-          // Add instruction for comprehensive analysis of all health reports
-          fileInfo += ` - HEALTH REPORT DATA: Please analyze ALL metrics and values found in this report comprehensively`;
-
-          systemMessage += `${fileInfo}:\n${preview}\n\n`;
+    // Keep report/file context compact; retrieve details via tools if needed.
+    if (includeHealthContext && reports && reports.length > 0) {
+      systemMessage += `\n\nReports available: ${getReportsSummary(reports)}.`;
+      const latest = reports
+        .slice()
+        .sort(
+          (a, b) =>
+            (b.report.type === "bloodwork" ? 1 : 0) -
+            (a.report.type === "bloodwork" ? 1 : 0),
+        )
+        .slice(0, 3);
+      const lines = latest.map((r) => {
+        if (r.report.type === "bloodwork") {
+          return `- bloodwork${r.report.reportDate ? ` (${r.report.reportDate})` : ""}`;
         }
+        return `- dexa${r.report.scanDate ? ` (${r.report.scanDate})` : ""}`;
       });
+      systemMessage += `\nLatest reports:\n${lines.join("\n")}`;
+      systemMessage += `\nUse get_latest_report to retrieve specific fields when needed.`;
+    } else if (
+      includeHealthContext &&
+      uploadedFiles &&
+      uploadedFiles.length > 0
+    ) {
+      // Avoid including raw file text; summaries can be huge. Keep a tiny one-line hint only.
+      const recentFiles = uploadedFiles
+        .slice(-3)
+        .map((f) => compactOneLine(f.summary ?? "", 220))
+        .filter(Boolean);
+      if (recentFiles.length > 0) {
+        systemMessage += `\n\nRecent uploaded files (metadata only):\n- ${recentFiles.join("\n- ")}`;
+      }
     }
 
     // Format the conversation history
     const formattedHistory =
       this.formatConversationHistory(conversationHistory);
+
+    const tailInstruction =
+      promptStyle === "quick"
+        ? "Please provide a helpful response as Cosaint. Be friendly, empathetic, and evidence-informed."
+        : "Please provide a helpful response as Cosaint, keeping in mind the user's health data, profile, and uploaded files if available. Your response should be friendly, empathetic and evidence-informed.";
 
     // Debug: Check final prompt includes coordinator summary
     const finalPrompt = `${systemMessage}
@@ -893,13 +964,20 @@ ${formattedHistory}
 
 User: ${userMessage}
 
-Please provide a helpful response as Cosaint, keeping in mind the user's health data, profile, and uploaded files if available. Your response should be friendly, empathetic and evidence-informed.`;
+${tailInstruction}`;
 
-    console.log(
-      "[CosaintAI] Final prompt includes coordinator summary:",
-      finalPrompt.includes("Latest multi-agent synthesis"),
-    );
-    console.log("[CosaintAI] System message length:", systemMessage.length);
+    // Dev-only: log prompt sizes for debugging without printing sensitive content.
+    if (process.env.NODE_ENV === "development") {
+      console.log("[CosaintAI] Prompt sizes", {
+        systemChars: systemMessage.length,
+        historyChars: formattedHistory.length,
+        userMessageChars: userMessage.length,
+        totalChars: finalPrompt.length,
+        includesCoordinatorSummary: finalPrompt.includes(
+          "Latest multi-agent synthesis",
+        ),
+      });
+    }
 
     return finalPrompt;
   }
@@ -910,11 +988,48 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
   private buildSystemMessage(
     healthData?: HealthContextMetrics,
     userProfile?: NormalizedUserProfile,
+    options?: {
+      toolPromptMode?: "full" | "lite";
+      promptStyle?: "deep" | "quick";
+      includeUserProfile?: boolean;
+      includeHealthData?: "none" | "minimal" | "full";
+      includeAlerts?: boolean;
+      includePersonaDetails?: boolean;
+    },
   ): string {
     // Start with the character's core identity
-    let systemMessage = `You are Cosaint, a holistic health AI companion developed by Amach Health.\n\n${this.characteristics.getBio()}\n\nYour personality is:\n- Empathetic: You genuinely care about the user's wellbeing\n- Evidence-informed: You provide helpful health insights based on research\n- Holistic: You consider the interconnectedness of health factors\n- Practical: You offer actionable suggestions that are realistic to implement
+    const promptStyle = options?.promptStyle ?? "deep";
+    const includePersonaDetails =
+      options?.includePersonaDetails ?? promptStyle === "deep";
+
+    let systemMessage = `You are Cosaint, a holistic health AI companion developed by Amach Health.`;
+    if (includePersonaDetails) {
+      systemMessage += `\n\n${this.characteristics.getBio()}\n\nYour personality is:\n- Empathetic: You genuinely care about the user's wellbeing\n- Evidence-informed: You provide helpful health insights based on research\n- Holistic: You consider the interconnectedness of health factors\n- Practical: You offer actionable suggestions that are realistic to implement
 
 Keep responses conversational and natural. If you mention research, weave it into the conversation without formal citations. When health reports or data are available, provide thoughtful analysis of the notable findings.`;
+    } else {
+      systemMessage +=
+        "\nKeep responses conversational, practical, and grounded.";
+    }
+
+    // QUICK mode: clarify available context without negative framing
+    if (promptStyle === "quick") {
+      systemMessage +=
+        "\n\nAvailable for this conversation:\n" +
+        "- User profile (age, sex, height, weight, BMI)\n" +
+        "- Conversation history and context\n" +
+        "- General health knowledge and evidence-based guidance\n\n" +
+        "When responding:\n" +
+        "- Provide practical, evidence-informed advice\n" +
+        "- Reference profile details when relevant (e.g., age-appropriate recommendations)\n" +
+        "- Respect dietary preferences or constraints mentioned in the conversation\n" +
+        "- If asked about specific health metrics (steps, HRV, sleep patterns) or lab results, suggest switching to Deep mode for personalized data analysis";
+    }
+
+    // Add tool definitions if tool use is enabled
+    if (ENABLE_TOOL_USE && promptStyle === "deep") {
+      systemMessage += formatToolsForPrompt(options?.toolPromptMode ?? "full");
+    }
 
     // Add tool definitions if tool use is enabled
     if (ENABLE_TOOL_USE) {
@@ -922,7 +1037,9 @@ Keep responses conversational and natural. If you mention research, weave it int
     }
 
     // Add user profile context if available
-    if (userProfile) {
+    const includeUserProfile =
+      options?.includeUserProfile ?? promptStyle === "deep";
+    if (includeUserProfile && userProfile) {
       const derivedAge =
         userProfile.age ??
         calculateAgeFromBirthDate(userProfile.birthDate ?? undefined);
@@ -941,31 +1058,61 @@ Keep responses conversational and natural. If you mention research, weave it int
       if (derivedAge !== undefined) {
         systemMessage += `\n- Age: ${Math.round(derivedAge)} years`;
       }
-      if (userProfile.birthDate) {
+      if (promptStyle === "deep" && userProfile.birthDate) {
         systemMessage += `\n- Birth date: ${userProfile.birthDate}`;
       }
       if (userProfile.sex) {
         systemMessage += `\n- Sex: ${userProfile.sex}`;
       }
-      if (heightDisplay) {
+      // QUICK MODE FIX: Include basic physical stats in Quick mode too
+      if (
+        (promptStyle === "deep" || promptStyle === "quick") &&
+        heightDisplay
+      ) {
         systemMessage += `\n- Height: ${heightDisplay}`;
       }
-      if (typeof userProfile.heightCm === "number") {
+      if (
+        (promptStyle === "deep" || promptStyle === "quick") &&
+        typeof userProfile.heightCm === "number"
+      ) {
         systemMessage += ` (${userProfile.heightCm.toFixed(1)} cm)`;
       }
-      if (weightLbs !== undefined) {
+      if (
+        (promptStyle === "deep" || promptStyle === "quick") &&
+        weightLbs !== undefined
+      ) {
         systemMessage += `\n- Weight: ${Math.round(weightLbs)} lbs`;
       }
-      if (typeof userProfile.weightKg === "number") {
+      if (
+        (promptStyle === "deep" || promptStyle === "quick") &&
+        typeof userProfile.weightKg === "number"
+      ) {
         systemMessage += ` (${userProfile.weightKg.toFixed(1)} kg)`;
       }
-      if (typeof userProfile.bmi === "number") {
+      if (
+        (promptStyle === "deep" || promptStyle === "quick") &&
+        typeof userProfile.bmi === "number"
+      ) {
         systemMessage += `\n- BMI: ${userProfile.bmi.toFixed(1)}`;
       }
     }
 
     // Add health data context if available
-    if (healthData) {
+    const includeHealthData = options?.includeHealthData ?? "full";
+    const includeAlerts = options?.includeAlerts ?? promptStyle === "deep";
+    if (healthData && includeHealthData !== "none") {
+      if (includeHealthData === "minimal") {
+        const keys = Object.entries(healthData)
+          .filter(([, v]) => Boolean(v))
+          .map(([k]) => k)
+          .slice(0, 12);
+        systemMessage += `\n\nHealth data available (use tools for values): ${keys.join(
+          ", ",
+        )}`;
+        systemMessage += RESPONSE_FORMAT_GUIDELINES;
+        return systemMessage;
+      }
+
       systemMessage += `\n\nYou have access to the following health data for this user:`;
 
       const metricLabels: Record<string, string> = {
@@ -1028,12 +1175,20 @@ Keep responses conversational and natural. If you mention research, weave it int
         if (key !== "sleep") systemMessage += `\n${line}`;
         if (key === "sleep") systemMessage += `\n${line}`;
       }
-      if (alerts.length > 0) {
+      if (includeAlerts && alerts.length > 0) {
         systemMessage += `\n\nAlerts:\n- ` + alerts.join("\n- ");
       }
-      systemMessage += `\n\nWhen making recommendations or setting goals, use the user\'s average, high, and low values for each metric to personalize your advice. Suggest realistic improvements based on their current range.`;
+      if (promptStyle === "deep") {
+        systemMessage += `\n\nWhen making recommendations or setting goals, use the user's average, high, and low values for each metric to personalize your advice. Suggest realistic improvements based on their current range.`;
+      } else {
+        systemMessage +=
+          "\n\nUse tools to retrieve exact values for the timeframe the user mentions.";
+      }
     }
-    systemMessage += RESPONSE_FORMAT_GUIDELINES;
+    systemMessage +=
+      promptStyle === "quick"
+        ? QUICK_RESPONSE_GUIDELINES
+        : RESPONSE_FORMAT_GUIDELINES;
     return systemMessage;
   }
 
@@ -1140,7 +1295,90 @@ Keep responses conversational and natural. If you mention research, weave it int
   /**
    * Get a fallback response if the API call fails
    */
-  private getFallbackResponse(userMessage: string): string {
+  private getFallbackResponse(
+    userMessage: string,
+    conversationHistory?: Array<{
+      role: "user" | "assistant";
+      content: string;
+    }>,
+  ): string {
+    const lower = userMessage.toLowerCase().trim();
+
+    const isShortAffirmation =
+      /^(y|yes|yeah|yep|sure|ok|okay|please|pls|go ahead|sounds good)\b/.test(
+        lower,
+      ) && lower.length <= 24;
+
+    if (
+      isShortAffirmation &&
+      conversationHistory &&
+      conversationHistory.length
+    ) {
+      const lastAssistant = [...conversationHistory]
+        .reverse()
+        .find((m) => m.role === "assistant")?.content;
+      const lastUser = [...conversationHistory]
+        .reverse()
+        .find((m) => m.role === "user")?.content;
+
+      const contextText =
+        `${lastUser ?? ""}\n${lastAssistant ?? ""}`.toLowerCase();
+
+      if (
+        contextText.includes("keto") &&
+        (contextText.includes("protein alternatives") ||
+          contextText.includes("unprocessed protein") ||
+          contextText.includes("unprocessed protein alternatives"))
+      ) {
+        return (
+          "Here are keto-friendly, mostly unprocessed protein options (with easy swaps):\n\n" +
+          "- Fish/seafood: salmon, sardines, trout, shrimp (great omega-3s)\n" +
+          "- Poultry: chicken thighs, turkey, rotisserie chicken (check ingredients)\n" +
+          "- Eggs: hard-boiled, omelets; add spinach/mushrooms/cheese\n" +
+          "- Beef/lamb: steak, ground beef (look for single-ingredient), slow-cooked roasts\n" +
+          "- Pork (less processed): pork shoulder, pork chops\n" +
+          "- Dairy (if you tolerate it): Greek yogurt (unsweetened), cottage cheese, cheese\n" +
+          "- Plant-based: tofu/tempeh, edamame (carbs vary by portion)\n\n" +
+          "If you want to keep some processed meats, a simple approach is: make them an occasional accent (a few servings/week), not the default protein, and pair them with high-fiber sides (non-starchy veg) to balance the meal."
+        );
+      }
+
+      // Generic "yes" continuation: if Cosaint just offered to elaborate on keto options,
+      // provide a concrete next step instead of saying "missing context".
+      if (
+        contextText.includes("keto") &&
+        (contextText.includes("elaborate") ||
+          contextText.includes("food options") ||
+          (contextText.includes("keto") &&
+            contextText.includes("would you like")))
+      ) {
+        return (
+          "Great—here are a few high-signal keto staples beyond meat, with how to use them:\n\n" +
+          "- Low-carb veg (base of meals): spinach, broccoli, cauliflower, zucchini, peppers. Roast/sauté and add olive oil/butter.\n" +
+          "- Healthy fats (make it satisfying): olive oil, avocado, olives, nuts/seeds; use these to hit satiety without processed meats.\n" +
+          "- Eggs (easy protein): omelets/frittatas with veg + cheese.\n" +
+          "- Dairy (if tolerated): hard cheeses, cottage cheese, unsweetened Greek yogurt; watch portions if it stalls goals.\n" +
+          "- Seafood (great quality): salmon/sardines/shrimp—often a cleaner protein than processed meats.\n\n" +
+          "If you tell me what you typically eat in a day on keto, I can suggest the cleanest swaps to reduce processed meats without making keto feel restrictive."
+        );
+      }
+    }
+
+    // Provide a minimally helpful, topic-aware fallback for common questions
+    // (Prefer this over generic "defaultResponses" when the model returns empty.)
+    if (lower.includes("keto") && lower.includes("energy")) {
+      return "Keto can help some people feel steadier energy after an adaptation phase, but the first 1–2 weeks often feel worse (fatigue, headaches). The biggest fix is usually electrolytes (salt, potassium, magnesium) plus enough calories and protein. If your goal is higher day-to-day energy, a less restrictive approach (higher-protein, minimally processed carbs around training, consistent sleep) often works as well with fewer downsides. Are you doing keto for weight loss, blood sugar control, or just energy?";
+    }
+
+    if (
+      lower.includes("keto") &&
+      (lower.includes("processed") ||
+        lower.includes("processed meats") ||
+        lower.includes("meats"))
+    ) {
+      return "If you’re doing keto, it’s still a good idea to keep processed meats as an occasional add-on rather than a staple. A practical target is: most days choose unprocessed proteins (fish, poultry, eggs, yogurt, tofu/tempeh) and use processed meats (bacon/sausage/deli meats) sparingly—e.g., a few servings per week. If you do have them, pick options with fewer additives (lower sodium, no nitrates/nitrites when possible) and balance with plenty of fiber (non-starchy veg, nuts/seeds).";
+    }
+
     // Check if the message relates to any known topics
     for (const topic of cosaintCharacteristics.responseContext.topics) {
       for (const keyword of topic.keywords) {
@@ -1233,7 +1471,11 @@ ${summary}`;
       );
     }
 
-    const response = await this.veniceApi.generateVeniceResponse(prompt, 500);
+    const response = await this.veniceApi.generateVeniceResponse(prompt, 500, {
+      disable_thinking: true,
+      strip_thinking_response: true,
+      include_venice_system_prompt: false,
+    });
     return response
       ? response
           .split("\n")

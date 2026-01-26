@@ -3,6 +3,8 @@ import type { HealthScore } from "@/types/HealthContext";
 import { healthDataStore } from "../data/store/healthDataStore";
 import { extractDatePart } from "./dataDeduplicator";
 import { processSleepData } from "./sleepDataProcessor";
+import type { MetricSample } from "@/agents/types";
+import type { DailyProcessedSleepData } from "./sleepDataProcessor";
 import {
   calculateAgeFromBirthDate,
   type NormalizedUserProfile,
@@ -24,6 +26,11 @@ export interface DailyMetrics {
   respiratory: number;
   activeEnergy: number;
   sleep: { duration: number; efficiency: number };
+}
+
+export interface ProcessedDailyInputs {
+  dailyAggregates: Record<string, Map<string, MetricSample>>;
+  sleepData: DailyProcessedSleepData[];
 }
 
 /**
@@ -154,12 +161,22 @@ export function calculateDailyHealthScores(
   });
 
   // Assign processed sleep data to dailyData
-  Object.keys(dailyData).forEach((date) => {
-    const sleep = sleepDataByDate.get(date);
-    if (sleep) {
-      dailyData[date].sleep = sleep;
+  // Ensure we include sleep-only days as well (days where only sleep exists but no other metric was recorded).
+  for (const [date, sleep] of sleepDataByDate.entries()) {
+    if (!dailyData[date]) {
+      dailyData[date] = {
+        steps: 0,
+        exercise: 0,
+        heartRate: { avg: 0, max: 0, min: 0 },
+        hrv: { avg: 0, max: 0, min: 0 },
+        restingHR: 0,
+        respiratory: 0,
+        activeEnergy: 0,
+        sleep: { duration: 0, efficiency: 0 },
+      };
     }
-  });
+    dailyData[date].sleep = sleep;
+  }
 
   // Calculate health scores for each day
   const dailyScores: DailyHealthScores[] = Object.entries(dailyData).map(
@@ -178,6 +195,129 @@ export function calculateDailyHealthScores(
       };
     },
   );
+
+  return dailyScores;
+}
+
+/**
+ * Calculate daily health scores from processed daily aggregates + processed sleep.
+ * This avoids "missing category" days caused by raw trimming or sparse raw samples.
+ */
+export function calculateDailyHealthScoresFromProcessed(
+  processed: ProcessedDailyInputs,
+  userProfile: NormalizedUserProfile = {},
+): DailyHealthScores[] {
+  const age =
+    userProfile.age ??
+    calculateAgeFromBirthDate(userProfile.birthDate ?? undefined) ??
+    40;
+  const sex: "male" | "female" =
+    userProfile.sex === "female" ? "female" : "male";
+  const heightCm =
+    userProfile.heightCm ??
+    (typeof userProfile.heightIn === "number"
+      ? userProfile.heightIn * 2.54
+      : undefined) ??
+    170;
+  const weightKg =
+    userProfile.weightKg ??
+    (typeof userProfile.weightLbs === "number"
+      ? userProfile.weightLbs / 2.20462
+      : undefined) ??
+    70;
+
+  // Build a map from YYYY-MM-DD to processed sleep metrics
+  const sleepDataByDate = new Map<
+    string,
+    { duration: number; efficiency: number }
+  >();
+  processed.sleepData.forEach((dayData) => {
+    const dayKey = extractDatePart(dayData.date);
+    sleepDataByDate.set(dayKey, {
+      duration: dayData.sleepDuration / 60, // minutes -> hours
+      efficiency: dayData.metrics.sleepEfficiency,
+    });
+  });
+
+  // Union of all date keys across daily aggregates + sleep
+  const dateKeys = new Set<string>();
+  Object.values(processed.dailyAggregates).forEach((m) => {
+    for (const dateKey of m.keys()) dateKeys.add(dateKey);
+  });
+  for (const dateKey of sleepDataByDate.keys()) dateKeys.add(dateKey);
+
+  const dailyScores: DailyHealthScores[] = [];
+
+  const getDailyValue = (
+    appleMetricId: string,
+    dateKey: string,
+  ): number | null => {
+    const map = processed.dailyAggregates[appleMetricId];
+    if (!map) return null;
+    const sample = map.get(dateKey);
+    if (!sample) return null;
+    if (Number.isNaN(sample.value)) return null;
+    return sample.value;
+  };
+
+  for (const dateKey of Array.from(dateKeys).sort()) {
+    const metrics: DailyMetrics = {
+      steps: getDailyValue("HKQuantityTypeIdentifierStepCount", dateKey) ?? 0,
+      exercise:
+        getDailyValue("HKQuantityTypeIdentifierAppleExerciseTime", dateKey) ??
+        0,
+      heartRate: {
+        avg: getDailyValue("HKQuantityTypeIdentifierHeartRate", dateKey) ?? 0,
+        max: 0,
+        min: 0,
+      },
+      hrv: {
+        avg:
+          getDailyValue(
+            "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+            dateKey,
+          ) ?? 0,
+        max: 0,
+        min: 0,
+      },
+      restingHR:
+        getDailyValue("HKQuantityTypeIdentifierRestingHeartRate", dateKey) ?? 0,
+      respiratory:
+        getDailyValue("HKQuantityTypeIdentifierRespiratoryRate", dateKey) ?? 0,
+      activeEnergy:
+        getDailyValue("HKQuantityTypeIdentifierActiveEnergyBurned", dateKey) ??
+        0,
+      sleep: sleepDataByDate.get(dateKey) ?? { duration: 0, efficiency: 0 },
+    };
+
+    // Pull min/max from metadata when present (helps heart/HRV)
+    const hrSample =
+      processed.dailyAggregates["HKQuantityTypeIdentifierHeartRate"]?.get(
+        dateKey,
+      );
+    if (hrSample?.metadata && typeof hrSample.metadata === "object") {
+      const meta = hrSample.metadata as Record<string, unknown>;
+      if (typeof meta.min === "number") metrics.heartRate.min = meta.min;
+      if (typeof meta.max === "number") metrics.heartRate.max = meta.max;
+    }
+    const hrvSample =
+      processed.dailyAggregates[
+        "HKQuantityTypeIdentifierHeartRateVariabilitySDNN"
+      ]?.get(dateKey);
+    if (hrvSample?.metadata && typeof hrvSample.metadata === "object") {
+      const meta = hrvSample.metadata as Record<string, unknown>;
+      if (typeof meta.min === "number") metrics.hrv.min = meta.min;
+      if (typeof meta.max === "number") metrics.hrv.max = meta.max;
+    }
+
+    const scores = calculateScoresForDay(metrics, {
+      age,
+      sex,
+      height: heightCm,
+      weight: weightKg,
+    });
+    dailyScores.push({ date: dateKey, scores });
+  }
 
   return dailyScores;
 }
@@ -444,16 +584,38 @@ function calculateScoresForDay(
     ),
   );
 
-  // Overall Health Score (OHS) - 30% sleep, 30% activity, 20% energy, 20% heart
-  // Only calculate overall score if we have sleep data (duration > 0)
-  // This prevents days with missing sleep from dragging down the overall average
-  const hasCompleteSleepData = metrics.sleep.duration > 0;
-  const overallHealthScore = hasCompleteSleepData
-    ? 0.3 * physicalActivityScore +
-      0.3 * sleepQualityScore +
-      0.2 * heartHealthScore +
-      0.2 * energyBalanceScore
-    : 0;
+  // Overall Health Score (OHS)
+  // Instead of forcing overall=0 when sleep is missing, re-weight across available domains.
+  // This prevents "phantom zeros" while still avoiding penalizing missing data.
+  const domainWeights = {
+    sleep: 0.3,
+    activity: 0.3,
+    energy: 0.2,
+    heart: 0.2,
+  } as const;
+
+  const hasSleep = metrics.sleep.duration > 0;
+  const hasActivity =
+    metrics.steps > 0 || metrics.exercise > 0 || metrics.activeEnergy > 0;
+  const hasEnergy = metrics.activeEnergy > 0;
+  const hasHeart =
+    metrics.hrv.avg > 0 || metrics.restingHR > 0 || metrics.heartRate.avg > 0;
+
+  const weightedParts: Array<{ w: number; v: number }> = [];
+  if (hasSleep)
+    weightedParts.push({ w: domainWeights.sleep, v: sleepQualityScore });
+  if (hasActivity)
+    weightedParts.push({ w: domainWeights.activity, v: physicalActivityScore });
+  if (hasEnergy)
+    weightedParts.push({ w: domainWeights.energy, v: energyBalanceScore });
+  if (hasHeart)
+    weightedParts.push({ w: domainWeights.heart, v: heartHealthScore });
+
+  const weightSum = weightedParts.reduce((acc, p) => acc + p.w, 0);
+  const overallHealthScore =
+    weightSum > 0
+      ? weightedParts.reduce((acc, p) => acc + p.w * p.v, 0) / weightSum
+      : 0;
 
   return [
     {
@@ -535,6 +697,19 @@ export async function calculateAndStoreDailyHealthScores(
     );
     throw error;
   }
+}
+
+export async function calculateAndStoreDailyHealthScoresFromProcessed(
+  processed: ProcessedDailyInputs,
+  userProfile: NormalizedUserProfile = {},
+): Promise<DailyHealthScores[]> {
+  const dailyScores = calculateDailyHealthScoresFromProcessed(
+    processed,
+    userProfile,
+  );
+  if (dailyScores.length === 0) return dailyScores;
+  await healthDataStore.saveDailyHealthScores(dailyScores);
+  return dailyScores;
 }
 
 /**

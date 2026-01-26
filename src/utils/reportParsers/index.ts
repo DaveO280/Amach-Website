@@ -13,7 +13,8 @@ import type {
 export interface ReportParsingOptions {
   inferredType?: "dexa" | "bloodwork";
   sourceName?: string;
-  useAI?: boolean; // Use AI parsing for bloodwork reports
+  // Legacy option used by some callers; currently ignored by the parser.
+  useAI?: boolean;
 }
 
 export async function parseHealthReport(

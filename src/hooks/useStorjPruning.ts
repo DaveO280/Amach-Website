@@ -35,7 +35,37 @@ export interface PruningStatus {
   error?: string;
 }
 
-export function useStorjPruning() {
+export type UseStorjPruningResult = {
+  status: PruningStatus;
+  analyzePruningCandidates: (
+    items: StorjItem[],
+    dataType: string,
+  ) => Promise<StorjItem[]>;
+  executePruningOperation: (
+    itemsToPrune: StorjItem[],
+    deleteFunction: (uri: string) => Promise<boolean>,
+  ) => Promise<PruningResult>;
+  performCompletePruning: (
+    storageService: StorageService,
+    userAddress: string,
+    encryptionKey: WalletEncryptionKey,
+    dataType: string,
+  ) => Promise<PruningResult>;
+  fetchStorageStats: (
+    storageService: StorageService,
+    userAddress: string,
+    encryptionKey: WalletEncryptionKey,
+    dataType?: string,
+  ) => Promise<{
+    stats: Awaited<ReturnType<typeof getStorageStats>>;
+    formatted: string;
+  }>;
+  getLastPruningSummary: () => string | null;
+  calculatePotentialSavings: () => number;
+  resetPruningStatus: () => void;
+};
+
+export function useStorjPruning(): UseStorjPruningResult {
   const [status, setStatus] = useState<PruningStatus>({
     isAnalyzing: false,
     isPruning: false,
@@ -51,7 +81,7 @@ export function useStorjPruning() {
   const analyzePruningCandidates = async (
     items: StorjItem[],
     dataType: string,
-  ) => {
+  ): Promise<StorjItem[]> => {
     setStatus((prev) => ({ ...prev, isAnalyzing: true, error: undefined }));
 
     try {
@@ -258,7 +288,10 @@ export function useStorjPruning() {
     userAddress: string,
     encryptionKey: WalletEncryptionKey,
     dataType?: string,
-  ) => {
+  ): Promise<{
+    stats: Awaited<ReturnType<typeof getStorageStats>>;
+    formatted: string;
+  }> => {
     try {
       const stats = await getStorageStats(
         storageService,

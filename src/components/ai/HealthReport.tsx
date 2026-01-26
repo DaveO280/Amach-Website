@@ -156,8 +156,11 @@ const HealthReport: React.FC = () => {
     energyAI.isPending,
   ]);
 
-  // Handler to trigger all queries
-  const handleGenerateAnalysis = (): void => {
+  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
+  const isAnyPending = sectionQueries.some((q) => q.isPending);
+
+  // Handler to trigger all queries (small concurrency limit to reduce 503s without being painfully slow)
+  const handleGenerateAnalysis = async (): Promise<void> => {
     if (!metrics || !healthScoresObj) {
       return;
     }
@@ -169,19 +172,54 @@ const HealthReport: React.FC = () => {
       hasProfile: Boolean(promptProfile),
     });
 
-    sectionQueries.forEach(({ section, mutate }) => {
-      const prompt = buildHealthAnalysisPrompt(
-        section,
-        metrics,
-        healthScoresObj,
-        promptProfile,
+    setIsGeneratingAll(true);
+    try {
+      const CONCURRENCY = 2;
+      // Stagger starts to avoid bursty traffic that often triggers 503s.
+      // This keeps the UI faster than fully sequential, but avoids 5-at-once.
+      const START_STAGGER_MS = 1000;
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      const tasks = sectionQueries.map(
+        ({ section, mutateAsync }) =>
+          async () => {
+            const prompt = buildHealthAnalysisPrompt(
+              section,
+              metrics,
+              healthScoresObj,
+              promptProfile,
+            );
+            console.log(`[HealthReport] Triggering ${section} analysis`, {
+              promptLength: prompt.length,
+              promptPreview: prompt.substring(0, 200),
+            });
+            await (
+              mutateAsync as (vars: { prompt: string }) => Promise<unknown>
+            )({
+              prompt,
+            });
+          },
       );
-      console.log(`[HealthReport] Triggering ${section} analysis`, {
-        promptLength: prompt.length,
-        promptPreview: prompt.substring(0, 200),
-      });
-      mutate({ prompt });
-    });
+
+      let nextIndex = 0;
+      const baseStart = Date.now();
+      const worker = async (): Promise<void> => {
+        while (nextIndex < tasks.length) {
+          const current = nextIndex;
+          nextIndex += 1;
+          // Start each query ~1s apart (global schedule), regardless of worker.
+          const scheduledAt = baseStart + current * START_STAGGER_MS;
+          const delay = scheduledAt - Date.now();
+          if (delay > 0) await sleep(delay);
+          await tasks[current]!();
+        }
+      };
+
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, tasks.length) }, worker),
+      );
+    } finally {
+      setIsGeneratingAll(false);
+    }
   };
 
   return (
@@ -199,11 +237,11 @@ const HealthReport: React.FC = () => {
         <div className="mb-4">
           <HealthScoreCards />
           <Button
-            onClick={handleGenerateAnalysis}
+            onClick={() => void handleGenerateAnalysis()}
             className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white w-fit disabled:cursor-not-allowed disabled:bg-emerald-300"
-            disabled={!canGenerateAnalysis}
+            disabled={!canGenerateAnalysis || isAnyPending || isGeneratingAll}
           >
-            Generate Health Analysis
+            {isGeneratingAll ? "Generating..." : "Generate Health Analysis"}
           </Button>
           <div className="mt-4 p-6 bg-gradient-to-br from-amber-50 via-white to-emerald-50 rounded-lg border border-amber-200/50 shadow-sm">
             {sectionQueries.map((query) => {

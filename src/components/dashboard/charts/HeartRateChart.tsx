@@ -15,7 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import { HealthData } from "../../../types/healthData";
-import { extractDatePart } from "../../../utils/dataDeduplicator";
+import { processDailyHeartRateData } from "../../../utils/chartDataProcessor";
 import { ChartContainer } from "./ChartContainer";
 import { useChartZoom } from "./useChartZoom";
 
@@ -28,47 +28,17 @@ const HeartRateChart: React.FC<HeartRateChartProps> = ({
   data,
   height = 300,
 }) => {
-  // Prepare chart data (min, max, avg per day)
   const chartData = useMemo(() => {
-    const dailyData: Record<
-      string,
-      { values: number[]; min: number; max: number }
-    > = {};
-    data.forEach((point) => {
-      try {
-        const dayKey = extractDatePart(point.startDate);
-        const value = parseFloat(point.value as string);
-        if (!isNaN(value)) {
-          if (!dailyData[dayKey]) {
-            dailyData[dayKey] = {
-              values: [],
-              min: Number.MAX_SAFE_INTEGER,
-              max: Number.MIN_SAFE_INTEGER,
-            };
-          }
-          dailyData[dayKey].values.push(value);
-          dailyData[dayKey].min = Math.min(dailyData[dayKey].min, value);
-          dailyData[dayKey].max = Math.max(dailyData[dayKey].max, value);
-        }
-      } catch (e) {
-        console.error("Error processing heart rate data point:", e);
-      }
-    });
-    return Object.entries(dailyData)
-      .map(([day, data]) => {
-        const avg =
-          data.values.reduce((sum, val) => sum + val, 0) / data.values.length;
-        return {
-          day,
-          date: new Date(day + "T12:00:00"),
-          avg: Math.round(avg),
-          min: Math.round(data.min),
-          max: Math.round(data.max),
-          range: [Math.round(data.min), Math.round(data.max)],
-          count: data.values.length,
-        };
-      })
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
+    const daily = processDailyHeartRateData(data);
+    return daily.map((d) => ({
+      day: d.day,
+      date: d.date,
+      avg: d.avg,
+      min: d.min,
+      max: d.max,
+      range: [d.min, d.max] as [number, number],
+      count: d.count,
+    }));
   }, [data]);
 
   // Use shared zoom logic

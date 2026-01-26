@@ -268,36 +268,46 @@ This is a lightweight query that doesn't return actual data, just metadata about
 /**
  * Format tools for inclusion in AI system prompt
  */
-export function formatToolsForPrompt(): string {
+export function formatToolsForPrompt(mode: "full" | "lite" = "full"): string {
+  // Keep tool docs compact to avoid bloating prompt context.
+  // The model only needs: tool names, parameter schema, and the tool-call format.
   let prompt = "\n\n## AVAILABLE TOOLS\n\n";
-  prompt += "You have access to the following tools to query health data:\n\n";
+  prompt +=
+    "Use tools to fetch data instead of asking the user to paste it. Call tools only when needed.\n\n";
+
+  const stripDescriptions = (schema: unknown): unknown => {
+    if (!schema || typeof schema !== "object") return schema;
+    if (Array.isArray(schema)) return schema.map(stripDescriptions);
+    const obj = schema as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (k === "description") continue;
+      out[k] = stripDescriptions(v);
+    }
+    return out;
+  };
 
   for (const tool of HEALTH_QUERY_TOOLS) {
-    prompt += `### ${tool.name}\n\n`;
-    prompt += `${tool.description}\n\n`;
-    prompt += "**Parameters:**\n";
-    prompt += "```json\n";
-    prompt += JSON.stringify(tool.parameters, null, 2);
-    prompt += "\n```\n\n";
-  }
+    const firstLine = tool.description.split("\n")[0]?.trim() || tool.name;
+    prompt += `### ${tool.name}\n`;
+    prompt += `${firstLine}\n`;
 
-  prompt += `## HOW TO USE TOOLS\n\n`;
-  prompt += `When the user's query requires health data, respond with a tool call in this format:\n\n`;
-  prompt += "```json\n";
-  prompt += `{
-  "tool": "query_timeseries_metrics",
-  "params": {
-    "metrics": ["heartRate"],
-    "dateRange": {
-      "start": "2024-12-01",
-      "end": "2024-12-31"
+    if (mode === "full") {
+      prompt += "Parameters:\n";
+      prompt += "```json\n";
+      prompt += JSON.stringify(stripDescriptions(tool.parameters), null, 2);
+      prompt += "\n```\n\n";
     }
   }
-}
-`;
+
+  prompt += "## TOOL CALL FORMAT\n\n";
+  prompt +=
+    "When you need data, respond with ONLY a JSON object in this exact format:\n\n";
+  prompt += "```json\n";
+  prompt += `{"tool":"query_timeseries_metrics","params":{"metrics":["hrv"],"dateRange":{"start":"2024-12-01","end":"2024-12-31"},"groupBy":"day","aggregation":"avg"}}`;
   prompt += "\n```\n\n";
-  prompt += `After receiving tool results, analyze and explain them to the user in plain language.\n`;
-  prompt += `You can call multiple tools in sequence if needed.\n\n`;
+  prompt +=
+    "After tool results are returned, write the final user-facing answer in plain language.\n";
 
   return prompt;
 }

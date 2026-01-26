@@ -131,10 +131,12 @@ export class VeniceApiService {
   async generateVeniceResponse(
     prompt: string,
     maxTokens: number = 2000,
+    veniceParameters?: Record<string, unknown>,
   ): Promise<string | null> {
     const response = await this.generateCompletion({
       userPrompt: prompt,
       maxTokens,
+      veniceParameters,
     });
     return response ?? null;
   }
@@ -144,11 +146,13 @@ export class VeniceApiService {
     userPrompt,
     temperature = 0.7,
     maxTokens = 2000,
+    veniceParameters,
   }: {
     systemPrompt?: string;
     userPrompt: string;
     temperature?: number;
     maxTokens?: number;
+    veniceParameters?: Record<string, unknown>;
   }): Promise<string> {
     const requestId = Date.now().toString();
     const startTime = Date.now();
@@ -166,6 +170,7 @@ export class VeniceApiService {
         temperature,
         model: this.modelName,
         stream: false,
+        ...(veniceParameters ? { venice_parameters: veniceParameters } : {}),
       };
 
       // Log request size to debug mobile Status 0 errors
@@ -207,6 +212,7 @@ export class VeniceApiService {
       const firstChoice = response.data?.choices?.[0];
       const message = firstChoice?.message;
       const content = message?.content;
+      const reasoningContent = message?.reasoning_content;
 
       console.log(`[VeniceApiService] Response received [${requestId}]`, {
         timestamp: new Date().toISOString(),
@@ -226,14 +232,39 @@ export class VeniceApiService {
         contentLength: content?.length || 0,
         contentValue: content,
         contentPreview: content?.substring?.(0, 100),
+        hasReasoningContent: Boolean(reasoningContent),
+        reasoningContentType: typeof reasoningContent,
+        reasoningContentLength: reasoningContent?.length || 0,
+        reasoningContentPreview: reasoningContent?.substring?.(0, 100),
         rawResponse: JSON.stringify(response.data).substring(0, 1000),
       });
+
+      // GLM 4.7 workaround: Model puts meta-analysis in reasoning_content
+      // With increased token limit (900 -> 1500), it should complete the response
+      // Just return reasoning_content if content is empty
+      if (
+        typeof reasoningContent === "string" &&
+        reasoningContent.length > 100
+      ) {
+        const c = String(content || "");
+        if (c.trim().length === 0) {
+          console.log(
+            "✅ [VeniceApiService] Using reasoning_content (content field empty)",
+          );
+          return reasoningContent;
+        }
+      }
 
       // Handle different response formats
       // Standard format: choices[0].message.content
       if (content !== undefined && content !== null) {
-        // Allow empty string content (some models may return empty responses)
-        return String(content);
+        // If content is empty but reasoning_content exists, prefer reasoning_content.
+        const c = String(content);
+        if (c.trim().length === 0 && typeof reasoningContent === "string") {
+          const r = String(reasoningContent);
+          if (r.trim().length > 0) return r;
+        }
+        return c;
       }
 
       // Alternative format: choices[0].text (some models use 'text' instead of 'message.content')

@@ -1,5 +1,6 @@
 // src/services/CosaintAiService.ts
 import type { CoordinatorResult } from "@/agents/CoordinatorAgent";
+import { CachedInsightsStore, DataHasher } from "@/ai/optimization";
 import {
   getTopRelevant,
   rankMetricsByRelevance,
@@ -10,6 +11,7 @@ import { formatToolsForPrompt } from "@/ai/tools/ToolDefinitions";
 import type { ToolCall } from "@/ai/tools/ToolExecutor";
 import { ToolExecutor } from "@/ai/tools/ToolExecutor";
 import { ToolResponseParser } from "@/ai/tools/ToolResponseParser";
+import { getFeatureFlags } from "@/config/featureFlags";
 import { IndexedDBDataSource } from "@/data/sources/IndexedDBDataSource";
 import type { ConversationMemory } from "@/types/conversationMemory";
 import type { ParsedReportSummary } from "@/types/reportData";
@@ -425,14 +427,91 @@ export class CosaintAiService {
               : null,
           });
 
-          coordinatorResult = await runCoordinatorAnalysis({
-            metricData,
-            profile: userProfile,
-            reports,
-            conversationHistory,
-            veniceService: this.veniceApi,
-            analysisMode,
-          });
+          // Check cache for coordinator insights (if feature enabled)
+          const flags = getFeatureFlags();
+          let usedCache = false;
+
+          if (flags.useCachedAgentInsights && metricData) {
+            try {
+              const dataHasher = new DataHasher();
+              const cachedInsightsStore = new CachedInsightsStore();
+              const dataFingerprint =
+                dataHasher.generateFingerprint(metricData);
+
+              if (flags.logCacheHits) {
+                console.log("[CosaintAiService] Data fingerprint:", {
+                  hash: dataFingerprint.hash.substring(0, 16) + "...",
+                  totalDataPoints: dataFingerprint.totalDataPoints,
+                  metricTypes: dataFingerprint.metricTypes.length,
+                });
+              }
+
+              const cacheResult =
+                await cachedInsightsStore.get(dataFingerprint);
+
+              if (cacheResult.hit && cacheResult.result) {
+                coordinatorResult = cacheResult.result;
+                usedCache = true;
+                console.log(
+                  "[CosaintAiService] Cache HIT - using cached coordinator insights",
+                  {
+                    ageMs: cacheResult.ageMs,
+                    ageSec: Math.round((cacheResult.ageMs || 0) / 1000),
+                  },
+                );
+              } else {
+                if (flags.logCacheHits) {
+                  console.log(
+                    "[CosaintAiService] Cache MISS:",
+                    cacheResult.reason,
+                  );
+                }
+              }
+            } catch (cacheError) {
+              console.warn(
+                "[CosaintAiService] Cache lookup failed:",
+                cacheError,
+              );
+            }
+          }
+
+          // Run coordinator analysis if not using cached result
+          if (!usedCache) {
+            coordinatorResult = await runCoordinatorAnalysis({
+              metricData,
+              profile: userProfile,
+              reports,
+              conversationHistory,
+              veniceService: this.veniceApi,
+              analysisMode,
+            });
+
+            // Cache the result (if feature enabled)
+            if (
+              flags.useCachedAgentInsights &&
+              coordinatorResult &&
+              metricData
+            ) {
+              try {
+                const dataHasher = new DataHasher();
+                const cachedInsightsStore = new CachedInsightsStore();
+                const dataFingerprint =
+                  dataHasher.generateFingerprint(metricData);
+                await cachedInsightsStore.set(
+                  dataFingerprint,
+                  coordinatorResult,
+                );
+                console.log(
+                  "[CosaintAiService] Cached coordinator insights for future use",
+                );
+              } catch (cacheError) {
+                console.warn(
+                  "[CosaintAiService] Failed to cache insights:",
+                  cacheError,
+                );
+              }
+            }
+          }
 
           // Log diagnostics for debugging
           if (coordinatorResult) {
@@ -474,6 +553,30 @@ export class CosaintAiService {
         }
       }
 
+      // Generate pre-computed metrics summary (if feature enabled)
+      let preComputedMetricsSummary: string | undefined;
+      const flags = getFeatureFlags();
+      if (flags.usePreComputedMetrics && metricData && useMultiAgent) {
+        try {
+          const { PreComputedMetricsGenerator } =
+            await import("@/ai/optimization");
+          const generator = new PreComputedMetricsGenerator();
+          const preComputed = generator.generate(metricData);
+          if (preComputed.promptSummary) {
+            preComputedMetricsSummary = preComputed.promptSummary;
+            console.log("[CosaintAiService] Pre-computed metrics generated:", {
+              metricCount: Object.keys(preComputed.last7Days).length,
+              summaryLength: preComputed.promptSummary.length,
+            });
+          }
+        } catch (preComputeError) {
+          console.warn(
+            "[CosaintAiService] Pre-computed metrics failed:",
+            preComputeError,
+          );
+        }
+      }
+
       // Create the prompt using the character's characteristics and context
       const prompt = this.createPromptWithFiles(
         userMessage,
@@ -487,6 +590,7 @@ export class CosaintAiService {
         allHealthMetrics, // Pass all metrics for accurate date range calculation
         useMultiAgent ? "full" : "lite",
         conversationMemory,
+        preComputedMetricsSummary,
       );
 
       // Dev-only: log prompt stats without dumping full prompt content.
@@ -662,78 +766,6 @@ export class CosaintAiService {
         }
       }
 
-      // Tool execution loop (if enabled)
-      if (ENABLE_TOOL_USE && ToolResponseParser.hasToolCalls(response)) {
-        console.log(
-          "[CosaintAiService] Tool calls detected, executing tools...",
-        );
-        let iterationCount = 0;
-        const maxIterations = 3; // Prevent infinite loops
-        let conversationContext = userMessage;
-
-        while (
-          iterationCount < maxIterations &&
-          response &&
-          ToolResponseParser.hasToolCalls(response)
-        ) {
-          iterationCount++;
-          console.log(
-            `[CosaintAiService] Tool execution iteration ${iterationCount}`,
-          );
-
-          // Extract tool calls
-          const toolCalls = ToolResponseParser.parseToolCalls(response);
-          console.log(
-            `[CosaintAiService] Found ${toolCalls.length} tool call(s):`,
-            toolCalls.map((tc) => tc.tool),
-          );
-          console.log(
-            "[CosaintAiService] Tool call details:",
-            JSON.stringify(toolCalls, null, 2),
-          );
-
-          // Execute tools directly on client (IndexedDB is browser-only)
-          const toolResults = await Promise.all(
-            toolCalls.map((call) => this.executeTool(call)),
-          );
-
-          // Format results for AI
-          const resultsText = this.formatToolResults(toolResults);
-          console.log(
-            "[CosaintAiService] Tool execution complete, sending results to AI",
-          );
-
-          // Update context with tool results and get new response
-          conversationContext = `${conversationContext}\n\n[Tool Execution Results]\n${resultsText}\n\nBased on these results, provide your analysis.`;
-
-          const followUpPrompt = `${prompt}\n\n${conversationContext}\n\nPlease provide your analysis based on the tool results above.`;
-          const newResponse = await this.veniceApi.generateVeniceResponse(
-            followUpPrompt,
-            4000,
-          );
-
-          if (!newResponse) {
-            console.warn(
-              "[CosaintAiService] No response from AI after tool execution",
-            );
-            break;
-          }
-
-          response = newResponse;
-
-          // If no more tool calls, break
-          if (!ToolResponseParser.hasToolCalls(response)) {
-            break;
-          }
-        }
-
-        if (iterationCount >= maxIterations) {
-          console.warn(
-            "[CosaintAiService] Max tool iterations reached, returning last response",
-          );
-        }
-      }
-
       console.log("✅ [CosaintAiService] Returning successful response");
       return (
         response || this.getFallbackResponse(userMessage, conversationHistory)
@@ -796,6 +828,7 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
     allMetrics?: HealthMetric[], // All metrics for accurate date range calculation
     toolPromptMode?: "full" | "lite",
     conversationMemory?: ConversationMemory | null,
+    preComputedMetricsSummary?: string,
   ): string {
     const promptStyle: "deep" | "quick" =
       toolPromptMode === "lite" ? "quick" : "deep";
@@ -844,6 +877,12 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
 
     systemMessage +=
       "\n\nFollow-up instruction: Always address the user's latest question or concern first, use the conversation history to avoid repeating full introductions or already acknowledged profile details, and consolidate duplicate findings instead of listing the same metric multiple times.";
+
+    // Add pre-computed metrics summary if available (reduces need for tool calls)
+    if (preComputedMetricsSummary) {
+      systemMessage += "\n\n" + preComputedMetricsSummary;
+      console.log("[CosaintAI] Added pre-computed metrics to prompt");
+    }
 
     // Keep data availability compact. Do not dump raw values into the system prompt.
     // The model should use tools to retrieve the specific slices it needs.

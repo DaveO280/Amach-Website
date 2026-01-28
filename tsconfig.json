@@ -28,7 +28,6 @@
       "jest",
       "react",
       "react-dom",
-      "next",
       "node-fetch",
       "offscreencanvas",
       "prop-types",

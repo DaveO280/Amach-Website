@@ -2,12 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Use Node.js runtime for longer timeout
 export const runtime = "nodejs";
-// Vercel Hobby plan: max 60s, Pro plan: max 300s
-// Note: Deep analysis with multiple agents can exceed 60s. Consider:
-// - Upgrading to Pro plan (allows 300s)
-// - Moving agent calls client-side
-// - Using background jobs/queues for long-running analysis
-export const maxDuration = 60; // 60 seconds - maximum allowed on Hobby plan
+// Vercel Hobby plan: max 60s, Pro plan: max 300s.
+// Deep analysis with multiple agents can exceed 60s, so we allow the full 300s window.
+export const maxDuration = 300; // seconds
 
 // Remove artificial timeout limits - let Venice API handle its own timeouts
 // Only use timeout if explicitly set in environment variable
@@ -35,6 +32,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.log("[Venice API Route] Request received", {
       timestamp: new Date().toISOString(),
       elapsedMs: Date.now() - startTime,
+      maxDurationSeconds: maxDuration,
     });
 
     // Get API credentials from environment variables (server-side only)
@@ -53,6 +51,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       hasApiKey: Boolean(apiKey),
       environment: process.env.NODE_ENV,
       modelName,
+      maxDurationSeconds: maxDuration,
       requestBody: {
         model: body.model,
         messageCount: body.messages?.length || 0,

@@ -31,6 +31,18 @@ import {
   type NormalizedUserProfile,
 } from "@/utils/userProfileUtils";
 import { randomChoice } from "@/utils/utils";
+import {
+  getCachedCoordinatorResult,
+  setCachedCoordinatorResult,
+  type CoordinatorAnalysisFingerprint,
+} from "@/utils/coordinatorAnalysisCache";
+import {
+  getCachedToolResult,
+  makeToolCacheKey,
+  setCachedToolResult,
+  type ToolCacheDataFingerprint,
+} from "@/utils/toolResultCache";
+import { shouldDisableVeniceThinking } from "@/utils/veniceThinking";
 import { VeniceApiService } from "../api/venice/VeniceApiService";
 import CharacteristicsLoader from "../components/ai/characteristicsLoader";
 import cosaintCharacteristics from "../components/ai/cosaint";
@@ -63,6 +75,20 @@ const RESPONSE_FORMAT_GUIDELINES = `
 
 Be informative and analytical. Weave metrics into flowing, detailed sentences that explain context and significance. Compare their numbers to age/sex norms to show what's working well or needs attention. Connect how different metrics influence each other. Stay measured and grounded in the data—let the numbers speak for themselves without excessive enthusiasm.
 `;
+
+// These are the metric IDs the multi-agent coordinator actually uses.
+// Keeping this local avoids exporting internal constants from CoordinatorService.
+const COORDINATOR_SUPPORTED_METRICS = new Set<string>([
+  "HKQuantityTypeIdentifierStepCount",
+  "HKQuantityTypeIdentifierHeartRate",
+  "HKQuantityTypeIdentifierRestingHeartRate",
+  "HKQuantityTypeIdentifierActiveEnergyBurned",
+  "HKQuantityTypeIdentifierAppleExerciseTime",
+  "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+  "HKQuantityTypeIdentifierRespiratoryRate",
+  "HKQuantityTypeIdentifierVO2Max",
+  "HKCategoryTypeIdentifierSleepAnalysis",
+]);
 
 const QUICK_RESPONSE_GUIDELINES = `
 
@@ -370,46 +396,55 @@ export class CosaintAiService {
       }
 
       let coordinatorResult: CoordinatorResult | null = null;
+      let toolCacheFingerprint: ToolCacheDataFingerprint | null = null;
+      let toolCacheMaxAgeMs: number | null = null;
       if (
         useMultiAgent &&
         ((metricData && Object.keys(metricData).length > 0) || reports?.length)
       ) {
         try {
-          // Calculate data range for analysis mode detection
-          let dataRange: { start: Date; end: Date } | undefined;
-          if (metricData && Object.keys(metricData).length > 0) {
-            let earliest: number | null = null;
-            let latest: number | null = null;
+          // Calculate data range & fingerprint for caching / mode detection.
+          // Avoid a second full scan of metricData by reusing the converted metrics array.
+          const supportedMetrics = allHealthMetrics.filter((m) =>
+            COORDINATOR_SUPPORTED_METRICS.has(m.type),
+          );
+          const tsRange = getTimestampRange(supportedMetrics);
+          const dataRange =
+            tsRange != null
+              ? { start: new Date(tsRange.min), end: new Date(tsRange.max) }
+              : undefined;
 
-            for (const points of Object.values(metricData)) {
-              for (const point of points) {
-                if (point?.startDate) {
-                  const timestamp = new Date(point.startDate).getTime();
-                  if (!Number.isNaN(timestamp)) {
-                    if (earliest === null || timestamp < earliest) {
-                      earliest = timestamp;
-                    }
-                    if (latest === null || timestamp > latest) {
-                      latest = timestamp;
-                    }
-                  }
-                }
-              }
-            }
-
-            if (earliest !== null && latest !== null) {
-              dataRange = {
-                start: new Date(earliest),
-                end: new Date(latest),
-              };
-            }
-          }
+          // Fingerprint should reflect the coordinator's actual inputs, not every metric in the raw payload.
+          const metricTypesCount = metricData
+            ? Object.keys(metricData).filter((k) =>
+                COORDINATOR_SUPPORTED_METRICS.has(k),
+              ).length
+            : 0;
+          const reportsCount = reports?.length ?? 0;
 
           // Determine analysis mode using auto-detection or force flag
           const analysisMode = getRecommendedAnalysisMode(
             dataRange,
             forceInitialAnalysis,
           );
+
+          const fingerprint: CoordinatorAnalysisFingerprint = {
+            analysisMode,
+            metricTypesCount,
+            earliestMs: tsRange?.min ?? null,
+            latestMs: tsRange?.max ?? null,
+            reportsCount,
+          };
+          toolCacheFingerprint = fingerprint;
+
+          // Cache policy:
+          // - initial: expensive and stable → cache longer
+          // - ongoing: cache shorter but still avoid re-running on every deep chat turn
+          const maxAgeMs =
+            analysisMode === "initial"
+              ? 24 * 60 * 60 * 1000 // 24h
+              : 15 * 60 * 1000; // 15m
+          toolCacheMaxAgeMs = maxAgeMs;
 
           console.log("[CosaintAiService] Analysis mode determined:", {
             mode: analysisMode,
@@ -423,37 +458,85 @@ export class CosaintAiService {
                     (1000 * 60 * 60 * 24),
                 }
               : null,
+            cache: {
+              enabled: true,
+              maxAgeMs,
+              fingerprint,
+            },
           });
 
-          coordinatorResult = await runCoordinatorAnalysis({
-            metricData,
-            profile: userProfile,
-            reports,
-            conversationHistory,
-            veniceService: this.veniceApi,
-            analysisMode,
+          // Emit a plain-text, always-visible log line so we can confirm cache behavior
+          // even if object logs are collapsed or filtered.
+          if (process.env.NODE_ENV === "development") {
+            console.log(
+              `[CosaintAiService] Coordinator cache lookup: ${JSON.stringify(
+                fingerprint,
+              )} (ttlMs=${maxAgeMs})`,
+            );
+          }
+
+          coordinatorResult = getCachedCoordinatorResult({
+            fingerprint,
+            maxAgeMs,
           });
+          const usedCachedCoordinator = Boolean(coordinatorResult);
+
+          if (coordinatorResult) {
+            console.log(
+              "[CosaintAiService] Using cached coordinator analysis",
+              {
+                analysisMode,
+                fingerprint,
+              },
+            );
+          } else {
+            if (process.env.NODE_ENV === "development") {
+              console.log("[CosaintAiService] Coordinator cache result: MISS");
+            }
+            coordinatorResult = await runCoordinatorAnalysis({
+              metricData,
+              profile: userProfile,
+              reports,
+              conversationHistory,
+              veniceService: this.veniceApi,
+              analysisMode,
+            });
+            setCachedCoordinatorResult({
+              fingerprint,
+              result: coordinatorResult,
+            });
+          }
 
           // Log diagnostics for debugging
           if (coordinatorResult) {
-            const metricCount = metricData ? Object.keys(metricData).length : 0;
-            const reportCount = reports?.length ?? 0;
-            const diagnostics = diagnoseAnalysisResult(
-              coordinatorResult,
-              metricCount,
-              reportCount,
-            );
-            if (diagnostics) {
-              logAnalysisDiagnostics(diagnostics);
-            }
+            // Only log multi-agent diagnostics and update analysis state when we actually ran the agents.
+            // Cached coordinator results are expected and should not look like "agents are running" in logs.
+            if (!usedCachedCoordinator) {
+              const metricCount = metricData
+                ? Object.keys(metricData).length
+                : 0;
+              const reportCount = reports?.length ?? 0;
+              const diagnostics = diagnoseAnalysisResult(
+                coordinatorResult,
+                metricCount,
+                reportCount,
+              );
+              if (diagnostics) {
+                logAnalysisDiagnostics(diagnostics);
+              }
 
-            // Update analysis state after successful analysis
-            if (dataRange) {
-              updateAnalysisState(analysisMode, dataRange);
-              console.log("[CosaintAiService] Analysis state updated:", {
-                mode: analysisMode,
-                date: new Date().toISOString(),
-              });
+              // Update analysis state after successful (fresh) analysis
+              if (dataRange) {
+                updateAnalysisState(analysisMode, dataRange);
+                console.log("[CosaintAiService] Analysis state updated:", {
+                  mode: analysisMode,
+                  date: new Date().toISOString(),
+                });
+              }
+            } else if (process.env.NODE_ENV === "development") {
+              console.log(
+                "[CosaintAiService] Coordinator cache result: HIT (no agent calls)",
+              );
             }
           } else {
             console.warn(
@@ -525,17 +608,17 @@ export class CosaintAiService {
 
       // Venice parameters: per docs, disable thinking to avoid <think> blocks and empty content when thinking is stripped.
       // Docs: https://docs.venice.ai/overview/about-venice
-      const veniceParams: Record<string, unknown> = useMultiAgent
-        ? {
-            strip_thinking_response: true,
-            include_venice_system_prompt: false,
-          }
-        : {
-            // Quick: force model to answer directly in content (no reasoning mode).
-            disable_thinking: true,
-            strip_thinking_response: true,
-            include_venice_system_prompt: false,
-          };
+      const veniceParams: Record<string, unknown> = {
+        strip_thinking_response: true,
+        include_venice_system_prompt: false,
+        ...(useMultiAgent
+          ? // Deep chat: allow disabling thinking via config (defaults to false).
+            shouldDisableVeniceThinking("deep")
+            ? { disable_thinking: true }
+            : {}
+          : // Quick chat: always disable thinking to ensure answers land in content.
+            { disable_thinking: true }),
+      };
 
       let response = await this.veniceApi.generateVeniceResponse(
         prompt,
@@ -607,6 +690,14 @@ export class CosaintAiService {
 
           // Extract tool calls
           const toolCalls = ToolResponseParser.parseToolCalls(response);
+          if (!toolCalls.length) {
+            if (process.env.NODE_ENV === "development") {
+              console.log(
+                "[CosaintAiService] hasToolCalls=true but parseToolCalls returned 0 tool calls; breaking to avoid extra Venice calls.",
+              );
+            }
+            break;
+          }
           console.log(
             `[CosaintAiService] Found ${toolCalls.length} tool call(s):`,
             toolCalls.map((tc) => tc.tool),
@@ -618,7 +709,41 @@ export class CosaintAiService {
 
           // Execute tools directly on client (IndexedDB is browser-only)
           const toolResults = await Promise.all(
-            toolCalls.map((call) => this.executeTool(call)),
+            toolCalls.map(async (call) => {
+              if (!toolCacheFingerprint) {
+                return await this.executeTool(call);
+              }
+
+              // Tool caching: keyed by tool+params+data fingerprint.
+              // Safe because tools only read local data; any upload changes the fingerprint.
+              const key = makeToolCacheKey({
+                toolCall: call,
+                fingerprint: toolCacheFingerprint,
+              });
+              const cached = getCachedToolResult({
+                key,
+                maxAgeMs: toolCacheMaxAgeMs ?? 15 * 60 * 1000,
+              });
+              if (cached) {
+                if (process.env.NODE_ENV === "development") {
+                  console.log(
+                    `[ToolCache] HIT tool=${call.tool} bytes=${JSON.stringify(cached).length}`,
+                  );
+                }
+                return cached;
+              }
+
+              const result = await this.executeTool(call);
+              if (result.success) {
+                setCachedToolResult({ key, result });
+                if (process.env.NODE_ENV === "development") {
+                  console.log(`[ToolCache] MISS+STORE tool=${call.tool}`);
+                }
+              } else if (process.env.NODE_ENV === "development") {
+                console.log(`[ToolCache] MISS tool=${call.tool} (not cached)`);
+              }
+              return result;
+            }),
           );
 
           // Format results for AI
@@ -631,86 +756,23 @@ export class CosaintAiService {
           conversationContext = `${conversationContext}\n\n[Tool Execution Results]\n${resultsText}\n\nBased on these results, provide your analysis.`;
 
           const followUpPrompt = `${prompt}\n\n${conversationContext}\n\nPlease provide your analysis based on the tool results above.`;
+          // Tool follow-up should have enough budget to avoid cutoffs and retries.
+          const toolFollowUpMaxTokens = maxTokens;
+          const followUpStartedAt = Date.now();
           const newResponse = await this.veniceApi.generateVeniceResponse(
             followUpPrompt,
-            4000,
+            toolFollowUpMaxTokens,
             {
               strip_thinking_response: true,
               include_venice_system_prompt: false,
             },
           );
-
-          if (!newResponse) {
-            console.warn(
-              "[CosaintAiService] No response from AI after tool execution",
-            );
-            break;
+          if (process.env.NODE_ENV === "development") {
+            console.log("[CosaintAiService] Tool follow-up Venice latency", {
+              elapsedMs: Date.now() - followUpStartedAt,
+              toolFollowUpMaxTokens,
+            });
           }
-
-          response = newResponse;
-
-          // If no more tool calls, break
-          if (!ToolResponseParser.hasToolCalls(response)) {
-            break;
-          }
-        }
-
-        if (iterationCount >= maxIterations) {
-          console.warn(
-            "[CosaintAiService] Max tool iterations reached, returning last response",
-          );
-        }
-      }
-
-      // Tool execution loop (if enabled)
-      if (ENABLE_TOOL_USE && ToolResponseParser.hasToolCalls(response)) {
-        console.log(
-          "[CosaintAiService] Tool calls detected, executing tools...",
-        );
-        let iterationCount = 0;
-        const maxIterations = 3; // Prevent infinite loops
-        let conversationContext = userMessage;
-
-        while (
-          iterationCount < maxIterations &&
-          response &&
-          ToolResponseParser.hasToolCalls(response)
-        ) {
-          iterationCount++;
-          console.log(
-            `[CosaintAiService] Tool execution iteration ${iterationCount}`,
-          );
-
-          // Extract tool calls
-          const toolCalls = ToolResponseParser.parseToolCalls(response);
-          console.log(
-            `[CosaintAiService] Found ${toolCalls.length} tool call(s):`,
-            toolCalls.map((tc) => tc.tool),
-          );
-          console.log(
-            "[CosaintAiService] Tool call details:",
-            JSON.stringify(toolCalls, null, 2),
-          );
-
-          // Execute tools directly on client (IndexedDB is browser-only)
-          const toolResults = await Promise.all(
-            toolCalls.map((call) => this.executeTool(call)),
-          );
-
-          // Format results for AI
-          const resultsText = this.formatToolResults(toolResults);
-          console.log(
-            "[CosaintAiService] Tool execution complete, sending results to AI",
-          );
-
-          // Update context with tool results and get new response
-          conversationContext = `${conversationContext}\n\n[Tool Execution Results]\n${resultsText}\n\nBased on these results, provide your analysis.`;
-
-          const followUpPrompt = `${prompt}\n\n${conversationContext}\n\nPlease provide your analysis based on the tool results above.`;
-          const newResponse = await this.veniceApi.generateVeniceResponse(
-            followUpPrompt,
-            4000,
-          );
 
           if (!newResponse) {
             console.warn(

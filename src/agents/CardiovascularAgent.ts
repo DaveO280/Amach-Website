@@ -69,15 +69,37 @@ Tone requirements:
   } {
     const appleHealth = context.availableData.appleHealth ?? {};
 
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
     const restingHeartRateSamples =
-      appleHealth.HKQuantityTypeIdentifierRestingHeartRate ?? [];
+      (
+        appleHealth.HKQuantityTypeIdentifierRestingHeartRate as
+          | MetricSample[]
+          | undefined
+      )?.filter((s) => s.timestamp >= sixMonthsAgo) ?? [];
     const hrvSamples =
-      appleHealth.HKQuantityTypeIdentifierHeartRateVariabilitySDNN ?? [];
+      (
+        appleHealth.HKQuantityTypeIdentifierHeartRateVariabilitySDNN as
+          | MetricSample[]
+          | undefined
+      )?.filter((s) => s.timestamp >= sixMonthsAgo) ?? [];
     const heartRateSamples =
-      appleHealth.HKQuantityTypeIdentifierHeartRate ?? [];
+      (
+        appleHealth.HKQuantityTypeIdentifierHeartRate as
+          | MetricSample[]
+          | undefined
+      )?.filter((s) => s.timestamp >= sixMonthsAgo) ?? [];
     const exerciseSamples =
-      appleHealth.HKQuantityTypeIdentifierAppleExerciseTime ?? [];
-    const vo2Samples = appleHealth.HKQuantityTypeIdentifierVO2Max ?? [];
+      (
+        appleHealth.HKQuantityTypeIdentifierAppleExerciseTime as
+          | MetricSample[]
+          | undefined
+      )?.filter((s) => s.timestamp >= sixMonthsAgo) ?? [];
+    const vo2Samples =
+      (
+        appleHealth.HKQuantityTypeIdentifierVO2Max as MetricSample[] | undefined
+      )?.filter((s) => s.timestamp >= sixMonthsAgo) ?? [];
 
     const dayKeys = new Set<string>();
     restingHeartRateSamples.forEach((sample) =>

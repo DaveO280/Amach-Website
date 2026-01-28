@@ -40,12 +40,15 @@ You analyze sleep data with clinical rigor, identifying patterns that impact hea
   ): SleepAgentData {
     const appleHealth = context.availableData.appleHealth ?? {};
 
-    // Limit sleep data to most recent 60 days to prevent overwhelming Venice AI
-    // (even with prompt limiting to 30 days display, 690 days was causing issues)
+    // Limit sleep data to roughly the last 6 months to prevent overwhelming Venice AI
     const allSleepSamples = this.normalizeSamples(
       appleHealth.HKCategoryTypeIdentifierSleepAnalysis,
     );
-    const recentSleepSamples = allSleepSamples.slice(-60);
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const recentSleepSamples =
+      allSleepSamples.filter((s) => s.timestamp >= sixMonthsAgo) ||
+      allSleepSamples;
 
     console.log(
       `[Sleep Agent] Limiting sleep data: ${allSleepSamples.length} total → ${recentSleepSamples.length} recent days`,

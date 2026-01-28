@@ -173,17 +173,45 @@ Tone requirements:
   } {
     const appleHealth = context.availableData.appleHealth ?? {};
 
-    const stepsSamples = appleHealth.HKQuantityTypeIdentifierStepCount ?? [];
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const stepsSamples =
+      (
+        appleHealth.HKQuantityTypeIdentifierStepCount as
+          | MetricSample[]
+          | undefined
+      )?.filter((s) => s.timestamp >= sixMonthsAgo) ?? [];
     const activeEnergySamples =
-      appleHealth.HKQuantityTypeIdentifierActiveEnergyBurned ?? [];
+      (
+        appleHealth.HKQuantityTypeIdentifierActiveEnergyBurned as
+          | MetricSample[]
+          | undefined
+      )?.filter((s) => s.timestamp >= sixMonthsAgo) ?? [];
     const exerciseSamples =
-      appleHealth.HKQuantityTypeIdentifierAppleExerciseTime ?? [];
+      (
+        appleHealth.HKQuantityTypeIdentifierAppleExerciseTime as
+          | MetricSample[]
+          | undefined
+      )?.filter((s) => s.timestamp >= sixMonthsAgo) ?? [];
     const hrvSamples =
-      appleHealth.HKQuantityTypeIdentifierHeartRateVariabilitySDNN ?? [];
+      (
+        appleHealth.HKQuantityTypeIdentifierHeartRateVariabilitySDNN as
+          | MetricSample[]
+          | undefined
+      )?.filter((s) => s.timestamp >= sixMonthsAgo) ?? [];
     const restingHeartRateSamples =
-      appleHealth.HKQuantityTypeIdentifierRestingHeartRate ?? [];
+      (
+        appleHealth.HKQuantityTypeIdentifierRestingHeartRate as
+          | MetricSample[]
+          | undefined
+      )?.filter((s) => s.timestamp >= sixMonthsAgo) ?? [];
     const heartRateSamples =
-      appleHealth.HKQuantityTypeIdentifierHeartRate ?? [];
+      (
+        appleHealth.HKQuantityTypeIdentifierHeartRate as
+          | MetricSample[]
+          | undefined
+      )?.filter((s) => s.timestamp >= sixMonthsAgo) ?? [];
 
     // Build daily summaries
     const dayKeys = new Set<string>();

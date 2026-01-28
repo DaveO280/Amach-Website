@@ -1,4 +1,5 @@
 import type { VeniceApiService } from "@/api/venice/VeniceApiService";
+import { shouldDisableVeniceThinking } from "@/utils/veniceThinking";
 
 import { ActivityEnergyAgent } from "./ActivityEnergyAgent";
 import { BaseHealthAgent } from "./BaseHealthAgent";
@@ -281,6 +282,13 @@ export class CoordinatorAgent {
         userPrompt: summaryPrompt,
         temperature: 0.2,
         maxTokens: 1200,
+        veniceParameters: {
+          strip_thinking_response: true,
+          include_venice_system_prompt: false,
+          ...(shouldDisableVeniceThinking("analysis")
+            ? { disable_thinking: true }
+            : {}),
+        },
       });
 
       let parsed: CoordinatorSummary | null = null;

@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import axios, { type AxiosResponse } from "axios";
+import { shouldDisableVeniceThinking } from "@/utils/veniceThinking";
 
 interface VeniceAIRequest {
   prompt: string;
@@ -182,6 +183,13 @@ async function fetchVeniceAI({
           temperature: 0.7,
           model: modelName,
           stream: false,
+          venice_parameters: {
+            strip_thinking_response: true,
+            include_venice_system_prompt: false,
+            ...(shouldDisableVeniceThinking("analysis")
+              ? { disable_thinking: true }
+              : {}),
+          },
         });
       } catch (error) {
         const status = axios.isAxiosError(error)

@@ -1,6 +1,7 @@
 import type { VeniceApiService } from "@/api/venice/VeniceApiService";
 import { logger } from "@/utils/logger";
 import { logPromptToFile } from "@/utils/promptLogger";
+import { shouldDisableVeniceThinking } from "@/utils/veniceThinking";
 
 import type {
   AgentDataQualityAssessment,
@@ -143,6 +144,13 @@ OUTPUT STRUCTURE:
         userPrompt: prompt,
         temperature: 0.4,
         maxTokens: 8000, // Increased for historical context analysis
+        veniceParameters: {
+          strip_thinking_response: true,
+          include_venice_system_prompt: false,
+          ...(shouldDisableVeniceThinking("analysis")
+            ? { disable_thinking: true }
+            : {}),
+        },
       });
 
       console.log(`✅ [${this.name}] Venice API response received`, {

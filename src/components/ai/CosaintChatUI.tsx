@@ -84,6 +84,8 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     }>
   >([]);
   const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
+  const [loadingElapsedSec, setLoadingElapsedSec] = useState<number>(0);
+  const [lastResponseMs, setLastResponseMs] = useState<number | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [autoExpandOnSend, setAutoExpandOnSend] = useState(true);
   const [messageCount, setMessageCount] = useState(0);
@@ -1034,6 +1036,31 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     }
   }, [autoExpandOnSend]);
 
+  const formatDuration = (ms: number): string => {
+    if (!Number.isFinite(ms) || ms < 0) return "";
+    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+    const totalSec = Math.floor(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}m ${s}s`;
+  };
+
+  // In-button timer (unobtrusive): show elapsed seconds while a response is generating.
+  useEffect(() => {
+    if (!isLoading || loadingStartTime === null) {
+      setLoadingElapsedSec(0);
+      return;
+    }
+    const update = (): void => {
+      setLoadingElapsedSec(
+        Math.max(0, Math.floor((Date.now() - loadingStartTime) / 1000)),
+      );
+    };
+    update();
+    const id = window.setInterval(update, 250);
+    return () => window.clearInterval(id);
+  }, [isLoading, loadingStartTime]);
+
   const handleSendMessage = async (): Promise<void> => {
     if (input.trim() === "") return;
 
@@ -1059,12 +1086,14 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       // The popup will show when they try to send the 11th message
     }
 
-    setLoadingStartTime(Date.now());
+    const startedAt = Date.now();
+    setLoadingStartTime(startedAt);
     if (autoExpandOnSend && !isExpanded) {
       setIsExpanded(true);
     }
     await sendMessage(input);
     setInput("");
+    setLastResponseMs(Date.now() - startedAt);
     setLoadingStartTime(null);
   };
 
@@ -2380,11 +2409,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           {isLoading ? (
             <div className="flex items-center gap-1">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></div>
-              <span className="text-xs">
-                {loadingStartTime
-                  ? `${Math.floor((Date.now() - loadingStartTime) / 1000)}s`
-                  : "AI"}
-              </span>
+              <span className="text-xs">{`${loadingElapsedSec}s`}</span>
             </div>
           ) : (
             <Send className="h-4 w-4" />
@@ -2392,8 +2417,13 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         </Button>
       </div>
 
-      <div className="mt-1 text-right text-xs text-gray-500">
-        {input.length}/500
+      <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
+        <div>
+          {lastResponseMs !== null
+            ? `Last: ${formatDuration(lastResponseMs)}`
+            : ""}
+        </div>
+        <div>{input.length}/500</div>
       </div>
 
       {/* Message Limit Popup */}

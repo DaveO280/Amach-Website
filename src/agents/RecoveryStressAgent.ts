@@ -252,35 +252,10 @@ Tone requirements:
 
     const lines: string[] = [];
 
-    // For initial analysis, use tiered format
+    // For initial analysis, use a compact tiered summary
     if (analysisMode === "initial") {
       lines.push(
-        "═══════════════════════════════════════════════════════════════",
-      );
-      lines.push(
-        "TIERED RECOVERY & STRESS ANALYSIS: ALL-TIME → 90-DAY → 30-DAY → RECENT WEEK",
-      );
-      lines.push(
-        "═══════════════════════════════════════════════════════════════",
-      );
-      lines.push("");
-      lines.push(
-        "INSTRUCTIONS: Analyze recovery patterns systematically from baseline to recent period.",
-      );
-      lines.push(
-        "1. Start with ALL-TIME BASELINE (HRV, resting HR, sleep averages)",
-      );
-      lines.push(
-        "2. Compare 90-DAY PERIOD to baseline for medium-term recovery trends",
-      );
-      lines.push(
-        "3. Compare 30-DAY PERIOD to identify recent stress/recovery shifts",
-      );
-      lines.push(
-        "4. Examine RECENT WEEK for acute changes in recovery markers",
-      );
-      lines.push(
-        "5. Look for CORRELATIONS (e.g., when exercise increases, does HRV drop?)",
+        "TIERED RECOVERY/STRESS: All-time baseline → 90-day → 30-day → recent week.",
       );
       lines.push("");
 

@@ -418,34 +418,10 @@ Tone requirements:
     const recent30d = this.calculatePeriodAverages(summaries, recovery, 30);
     const recent90d = this.calculatePeriodAverages(summaries, recovery, 90);
 
+    // Compact header describing the tiered summary (kept for model orientation,
+    // but without verbose instructional text to reduce token count)
     lines.push(
-      "═══════════════════════════════════════════════════════════════",
-    );
-    lines.push(
-      "TIERED HIERARCHICAL ANALYSIS: ALL-TIME → 90-DAY → 30-DAY → RECENT WEEK",
-    );
-    lines.push(
-      "═══════════════════════════════════════════════════════════════",
-    );
-    lines.push("");
-    lines.push(
-      "INSTRUCTIONS: Analyze health patterns systematically from widest baseline to most recent period.",
-    );
-    lines.push(
-      "1. Start with ALL-TIME BASELINE to understand this person's normal ranges",
-    );
-    lines.push(
-      "2. Compare 90-DAY PERIOD to baseline to identify medium-term trends",
-    );
-    lines.push(
-      "3. Compare 30-DAY PERIOD to both 90-day and baseline to see recent shifts",
-    );
-    lines.push("4. Examine RECENT WEEK for acute changes or outliers");
-    lines.push(
-      "5. Look for CORRELATIONS between metrics (e.g., when steps drop, does HRV also drop?)",
-    );
-    lines.push(
-      "6. Flag OUTLIERS that deviate significantly from personal norms (2+ standard deviations)",
+      "TIERED ANALYSIS SUMMARY: ALL-TIME baseline → 90-day → 30-day → recent 7-day window.",
     );
     lines.push("");
 
@@ -809,24 +785,7 @@ Tone requirements:
 
     lines.push("");
 
-    // CORRELATION & OUTLIER DETECTION
-    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    lines.push("CORRELATION & PATTERN DETECTION");
-    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    lines.push("Look for relationships across metrics:");
-    lines.push(
-      "  • When steps decrease, does HRV also decrease? (indicates recovery link to movement)",
-    );
-    lines.push(
-      "  • When exercise increases, does resting HR decrease? (indicates cardiovascular adaptation)",
-    );
-    lines.push(
-      "  • Are there weekly patterns? (e.g., lower activity on weekends)",
-    );
-    lines.push("  • Are there outlier days that deviate >2 std dev from mean?");
-    lines.push("");
-
-    // Additional context
+    // Additional context (kept numeric, trimmed of narrative text where possible)
     if (heartRateZones) {
       lines.push(
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
@@ -879,18 +838,6 @@ Tone requirements:
       );
       lines.push("");
     }
-
-    // Raw daily data (last 14 days only, for reference)
-    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    lines.push("RAW DAILY DATA (Last 14 Days - For Reference Only)");
-    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    summaries
-      .slice(-14)
-      .forEach(({ date, steps, activeEnergy, exerciseMinutes }) => {
-        lines.push(
-          `${date}: steps=${this.formatNumber(steps)} | energy=${this.formatNumber(activeEnergy)} kcal | exercise=${this.formatNumber(exerciseMinutes)} min`,
-        );
-      });
 
     return lines.join("\n");
   }

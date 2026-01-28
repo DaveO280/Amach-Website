@@ -145,20 +145,8 @@ Return structured JSON with findings, trends, concerns, correlations, and recomm
     data: DexaAgentData,
     quality: AgentDataQualityAssessment,
   ): string {
-    const basePrompt = super.buildDetailedPrompt(query, data, quality);
-
-    const directives = [
-      "Quantify changes in total body fat %, visceral fat metrics, and android/gynoid ratio when multiple scans exist.",
-      "Interpret bone density metrics (BMD, T-score, Z-score) in the context of osteoporosis risk.",
-      "Call out regional imbalances (e.g., limb asymmetry, trunk vs limb distribution).",
-      "Highlight implications for metabolic health, cardiovascular load, or recovery where supported.",
-      "Include actionable recommendations tied to the data (nutrition, training, follow-up testing).",
-    ];
-
-    return `${basePrompt}
-
-DEXA AGENT DIRECTIVES:
-${directives.map((line) => `- ${line}`).join("\n")}`;
+    // Use the base structured prompt; DEXA already passes compact, structured data.
+    return super.buildDetailedPrompt(query, data, quality);
   }
 
   protected postProcessInsight(

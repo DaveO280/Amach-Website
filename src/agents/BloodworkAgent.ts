@@ -170,20 +170,8 @@ Return structured JSON with findings, trends, concerns, correlations, and recomm
     data: BloodworkAgentData,
     quality: AgentDataQualityAssessment,
   ): string {
-    const basePrompt = super.buildDetailedPrompt(query, data, quality);
-
-    const directives = [
-      "Prioritize clinically significant abnormalities (critical-high/critical-low) before moderate deviations.",
-      "Group findings by panel (lipid, metabolic, thyroid, hormone, inflammation, hematology) and explain the implications.",
-      "Reference quantitative values, units, and reference ranges when providing findings.",
-      "Suggest actionable next steps (lifestyle adjustments, medical follow-up, retesting intervals) tied directly to the data.",
-      "Call out missing or outdated labs that limit interpretation, and recommend relevant follow-ups.",
-    ];
-
-    return `${basePrompt}
-
-BLOODWORK AGENT DIRECTIVES:
-${directives.map((line) => `- ${line}`).join("\n")}`;
+    // Use the base structured prompt; bloodwork data itself carries rich context.
+    return super.buildDetailedPrompt(query, data, quality);
   }
 
   protected postProcessInsight(

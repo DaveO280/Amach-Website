@@ -268,69 +268,6 @@ You analyze sleep data with clinical rigor, identifying patterns that impact hea
     return formattedData;
   }
 
-  protected buildDetailedPrompt(
-    query: string,
-    data: SleepAgentData,
-    quality: AgentDataQualityAssessment,
-    context?: AgentExecutionContext,
-  ): string {
-    const basePrompt = super.buildDetailedPrompt(query, data, quality, context);
-
-    let averageSleepHours: number | null = null;
-    let sleepRangeHours: number | null = null;
-    if (data.sleepAnalysis.length > 0) {
-      const totalSeconds = data.sleepAnalysis.reduce(
-        (sum, sample) => sum + sample.value,
-        0,
-      );
-      averageSleepHours = totalSeconds / data.sleepAnalysis.length / 3600;
-
-      const hoursValues = data.sleepAnalysis.map(
-        (sample) => sample.value / 3600,
-      );
-      const minHours = Math.min(...hoursValues);
-      const maxHours = Math.max(...hoursValues);
-      sleepRangeHours = maxHours - minHours;
-    }
-
-    const directives: string[] = [
-      "Only populate the `concerns` array when there is a clinically meaningful risk (severity must be moderate or high). For healthy, adequate patterns leave `concerns` empty.",
-      "When data appears healthy, frame recommendations as positive reinforcement rather than warnings.",
-    ];
-
-    if (averageSleepHours !== null) {
-      if (averageSleepHours >= 7 && averageSleepHours <= 9) {
-        directives.push(
-          "Explicitly acknowledge that the user's sleep duration is adequate. Use the word `adequate` when describing the finding.",
-        );
-      } else if (averageSleepHours < 7) {
-        directives.push(
-          "Describe the pattern as `insufficient sleep` and reference `sleep debt` directly to help the user understand the consequences.",
-        );
-        directives.push(
-          "Provide at least two distinct findings that explain the insufficiency, its effects, or contributing factors.",
-        );
-      }
-    }
-
-    if (sleepRangeHours !== null) {
-      if (sleepRangeHours >= 1.5) {
-        directives.push(
-          "Highlight the variability across the week and explicitly describe the pattern as an `inconsistent sleep schedule` if there is more than 1.5 hours difference between the shortest and longest nights.",
-        );
-      } else if (sleepRangeHours <= 0.5) {
-        directives.push(
-          "Note that nightly duration is highly consistent; reinforce the stability in your wording.",
-        );
-      }
-    }
-
-    return `${basePrompt}
-
-SLEEP AGENT DIRECTIVES:
-${directives.map((directive) => `- ${directive}`).join("\n")}`;
-  }
-
   protected postProcessInsight(
     insight: AgentInsight,
     data: SleepAgentData,

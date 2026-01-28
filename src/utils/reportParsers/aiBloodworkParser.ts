@@ -572,7 +572,7 @@ ${textToParse}`;
         },
         body: JSON.stringify({
           messages: attemptMessages,
-          max_tokens: 5000,
+          max_tokens: 8000,
           temperature: 0,
           model: modelName,
           stream: false,

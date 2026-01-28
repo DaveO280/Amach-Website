@@ -392,9 +392,7 @@ export class CoordinatorAgent {
         systemPrompt: SUMMARY_SYSTEM_PROMPT,
         userPrompt: summaryPrompt,
         temperature: 0.2,
-        // Coordinator summary should stay concise: enough room for rich bullets,
-        // but bounded to keep total Deep analysis latency under 60s.
-        maxTokens: 900,
+        maxTokens: 8000,
         veniceParameters: {
           strip_thinking_response: true,
           include_venice_system_prompt: false,

@@ -794,7 +794,13 @@ export class CosaintAiService {
             "[CosaintAiService] Max tool iterations reached, returning last response",
           );
         }
+
+        // Strip any tool calls from the final response (even if they weren't parsed/executed)
+        response = ToolResponseParser.stripToolCalls(response);
       }
+
+      // Always strip tool calls from the final response before returning (safety net)
+      response = ToolResponseParser.stripToolCalls(response);
 
       console.log("✅ [CosaintAiService] Returning successful response");
       return (

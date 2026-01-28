@@ -21,67 +21,16 @@ export abstract class BaseHealthAgent {
   protected getEnhancedSystemPrompt(): string {
     return `${this.systemPrompt}
 
-ANALYSIS FRAMEWORK:
-1. Data Review: Examine all available data carefully
-2. Pattern Recognition: Identify trends, anomalies, correlations
-3. Clinical Context: Consider normal ranges, age, activity level
-4. Confidence Assessment: Be explicit about certainty levels
-5. Actionability: Prioritize insights that lead to action
+Analyze data systematically: review patterns, apply clinical context, assess confidence, prioritize actionable insights. Use exact numbers/dates. Compare to baselines. Be conservative.
 
-QUALITY STANDARDS:
-- Be specific: Use exact numbers, dates, percentages
-- Show your work: Explain how you reached conclusions
-- Acknowledge limitations: State what you can't determine
-- Provide context: Compare to baselines, norms, previous periods
-- Be conservative: Better to say "possible" than "certain"
-
-OUTPUT STRUCTURE:
+Return JSON:
 {
-  "findings": [
-    {
-      "observation": "specific data-backed finding",
-      "evidence": "which data points support this",
-      "significance": "why this matters",
-      "confidence": 0.0-1.0
-    }
-  ],
-  "trends": [
-    {
-      "pattern": "description of trend",
-      "timeframe": "over what period",
-      "direction": "improving/declining/stable",
-      "magnitude": "how significant",
-      "confidence": 0.0-1.0
-    }
-  ],
-  "concerns": [
-    {
-      "issue": "potential problem identified",
-      "severity": "low/moderate/high",
-      "evidence": "supporting data",
-      "recommendation": "what to do about it"
-    }
-  ],
-  "correlations": [
-    {
-      "metric1": "first metric",
-      "metric2": "second metric",
-      "relationship": "description of correlation",
-      "strength": "weak/moderate/strong",
-      "confidence": 0.0-1.0
-    }
-  ],
-  "recommendations": [
-    {
-      "action": "specific actionable step",
-      "priority": "high/medium/low",
-      "rationale": "why this matters",
-      "timeframe": "when to do this"
-    }
-  ],
-  "dataLimitations": [
-    "what data would improve this analysis"
-  ],
+  "findings": [{"observation": "finding", "evidence": "data", "significance": "why", "confidence": 0.0-1.0}],
+  "trends": [{"pattern": "trend", "timeframe": "period", "direction": "improving/declining/stable", "magnitude": "significance", "confidence": 0.0-1.0}],
+  "concerns": [{"issue": "problem", "severity": "low/moderate/high", "evidence": "data", "recommendation": "action"}],
+  "correlations": [{"metric1": "metric", "metric2": "metric", "relationship": "description", "strength": "weak/moderate/strong", "confidence": 0.0-1.0}],
+  "recommendations": [{"action": "step", "priority": "high/medium/low", "rationale": "why", "timeframe": "when"}],
+  "dataLimitations": ["missing data"],
   "overallConfidence": 0.0-1.0,
   "relevanceToQuery": 0.0-1.0
 }`;
@@ -255,16 +204,20 @@ Be thorough but precise. Quality over quantity.`;
       // Strip <think> blocks that Venice AI sometimes includes
       let cleanedResponse = response;
 
-      // Check if there are <think> blocks (don't use test() as it consumes the match)
-      if (cleanedResponse.includes("<think>")) {
-        console.log(`[${this.name}] Found <think> blocks, stripping them out`);
+      // Check if there are thinking blocks (don't use test() as it consumes the match)
+      if (
+        cleanedResponse.includes("<think>") ||
+        cleanedResponse.includes("<think>")
+      ) {
+        console.log(`[${this.name}] Found thinking blocks, stripping them out`);
         console.log(
           `[${this.name}] Before stripping (first 500 chars):`,
           cleanedResponse.substring(0, 500),
         );
 
-        // Remove all <think>...</think> blocks (including nested or multiple)
+        // Remove all thinking blocks - handle both <think> and <think> tags
         cleanedResponse = cleanedResponse
+          .replace(/<think>[\s\S]*?<\/redacted_reasoning>/gi, "")
           .replace(/<think>[\s\S]*?<\/think>/gi, "")
           .trim();
 
@@ -354,9 +307,13 @@ Be thorough but precise. Quality over quantity.`;
       try {
         let fixedResponse = response;
 
-        // Strip <think> blocks
-        if (fixedResponse.includes("<think>")) {
+        // Strip thinking blocks - handle both <think> and <think> tags
+        if (
+          fixedResponse.includes("<think>") ||
+          fixedResponse.includes("<think>")
+        ) {
           fixedResponse = fixedResponse
+            .replace(/<think>[\s\S]*?<\/redacted_reasoning>/gi, "")
             .replace(/<think>[\s\S]*?<\/think>/gi, "")
             .trim();
         }

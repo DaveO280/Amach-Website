@@ -1,4 +1,12 @@
 import type { VeniceApiService } from "@/api/venice/VeniceApiService";
+import {
+  getCachedAgentResult,
+  setCachedAgentResult,
+} from "@/utils/agentResultCache";
+import {
+  getCachedCoordinatorSummary,
+  setCachedCoordinatorSummary,
+} from "@/utils/coordinatorSummaryCache";
 import { shouldDisableVeniceThinking } from "@/utils/veniceThinking";
 
 import { ActivityEnergyAgent } from "./ActivityEnergyAgent";
@@ -45,38 +53,26 @@ const DEFAULT_AGENT_QUERIES: Record<string, string> = {
     "Summarize notable laboratory findings, prioritizing abnormal biomarkers and panel-level themes.",
 };
 
-const SUMMARY_SYSTEM_PROMPT = `You are Cosaint's integrative health analyst.
-- Speak directly to the user (use "you" and "your"), weaving in Cosaint's data-forward yet compassionate tone. Use natural phrasing like "As a 44-year-old male..." rather than "You are a...".
-- Keep the profile mention concise—one clause is enough. If this is a follow-up conversation, acknowledge the profile only if it adds context for the new question.
-- You receive profile context plus structured findings from specialist agents (sleep, activity, cardiovascular, recovery, DEXA, bloodwork). Each specialist has already analyzed the raw data—your job is to synthesize their insights, highlight interplay between systems, and propose actionable next steps.
+const SUMMARY_SYSTEM_PROMPT = `You are Cosaint's integrative health analyst. Synthesize specialist agent findings into a cohesive analysis.
 
-You must return a JSON object from this template:
+Return JSON:
 {
-  "summary": "3-4 flowing sentences (not bullet-like) that connect the main themes across agents, mention at least one cross-metric interaction (e.g., how sleep schedule influences HRV), and transition naturally between topics.",
-  "keyFindings": [
-    "For each available bloodwork panel, include a conversational bullet that starts with the panel name (e.g., 'Lipid panel: ...') and weaves in the exact values/flags, how they compare to reference ranges, and why they matter. Use full sentences rather than fragments.",
-    "If DEXA data exists, include at least one bullet (full sentences) summarizing body composition (total body fat %, visceral metrics, android/gynoid balance), bone density (T/Z scores), and notable regional highlights from \`dexaRegionSummaries\`.",
-    "Include additional bullets for other domains when needed, but keep each bullet conversational and avoid list-like fragments."
-  ],
-  "priorityActions": [
-    "2-3 full-sentence items describing specific actions, why they matter, and how they influence multiple systems when possible."
-  ],
-  "watchItems": [
-    "Optional full-sentence notes on emerging risks, conflicting signals, missing data, or items needing medical follow-up. Omit if not relevant."
-  ]
+  "summary": "3-4 sentences connecting themes, mention cross-metric interactions (e.g., sleep→HRV), natural transitions.",
+  "keyFindings": ["Full sentences per domain. Bloodwork: panel name + values + context. DEXA: body comp + bone density. Other domains as relevant."],
+  "priorityActions": ["2-3 full sentences: specific actions, why they matter, multi-system benefits."],
+  "watchItems": ["Optional: emerging risks, conflicts, missing data. Omit if not relevant."]
 }
 
 Guidelines:
-- Reference actual numbers (averages, ranges, lab values) when citing a metric.
-- Leverage profile context (age, BMI, sex) to benchmark status when helpful.
-- For each entry in \`bloodworkPanelSummaries\`, produce a dedicated keyFindings bullet (full sentences) covering all flagged markers and contextual in-range values. Ensure the tone remains conversational rather than clipped.
-- If \`dexaRegionSummaries\` is present, ensure the DEXA bullet integrates total fat %, visceral fat, bone density, and notable regional summaries in narrative form.
-- If a specialist metadata flag such as \`activityMeetsAerobicGuidelines\` is true, acknowledge that the guideline is already being met and avoid recommending increased duration; instead focus on refinement or sustainability.
-- Priority actions should mention how improving one area can benefit another (e.g., "flatten weekend sleep swings to stabilize HRV") and use complete sentences.
-- When the user asks about a specific topic, lean into that signal in the summary and key findings before introducing unrelated domains. You have access to the full conversation history via \`conversationHistory\`—use it to infer focus.
-- Watch items are only for real gaps or conflicts—omit if data is robust.
-- Do not invent data or embellish; stay grounded in the provided payload.
-- Maintain Cosaint's supportive, evidence-based voice without sounding like a bulleted report.`;
+- Use "you/your", natural phrasing ("As a 44-year-old male...").
+- Reference actual numbers. Use profile (age/BMI/sex) for context.
+- Bloodwork: one bullet per panel with flagged markers + context.
+- DEXA: integrate total fat %, visceral fat, bone density, regional highlights.
+- If metadata flags show guidelines met, focus on refinement not increases.
+- Priority actions: show cross-system benefits (e.g., "flatten sleep swings to stabilize HRV").
+- Use conversationHistory to infer user focus.
+- Watch items: only real gaps/conflicts.
+- Stay grounded in payload. Supportive, evidence-based voice.`;
 
 export class CoordinatorAgent {
   private readonly agents: BaseHealthAgent[];
@@ -104,15 +100,45 @@ export class CoordinatorAgent {
     const { profile, queries } = options;
     const agentInsights: Record<string, AgentInsight> = {};
 
-    // Run all agents in parallel
+    // Cache TTL: same as coordinator cache (24h for initial, 15m for ongoing)
+    const maxAgeMs =
+      context.analysisMode === "initial" ? 24 * 60 * 60 * 1000 : 15 * 60 * 1000;
+
+    // Run all agents with a 100ms stagger to reduce concurrent load on Venice API
     // Note: We rely on Venice API's built-in timeout (130s) rather than adding our own
     // to avoid race conditions where Venice completes successfully but our timeout wins
 
-    const agentPromises = this.agents.map(async (agent) => {
+    const agentPromises = this.agents.map(async (agent, index) => {
+      // Stagger agent execution by 100ms per agent to reduce concurrent load
+      if (index > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 100 * index));
+      }
+
       const query =
         queries?.[agent.id] ?? DEFAULT_AGENT_QUERIES[agent.id] ?? "";
 
       const startTime = Date.now();
+
+      // Check cache first
+      const cached = getCachedAgentResult({
+        agentId: agent.id,
+        availableData: context.availableData,
+        analysisMode: context.analysisMode ?? "ongoing",
+        maxAgeMs,
+      });
+
+      if (cached) {
+        const duration = Date.now() - startTime;
+        console.log(
+          `✅ [CoordinatorAgent] Agent ${agent.id} cache HIT (${duration}ms)`,
+          {
+            findingsCount: cached.findings?.length ?? 0,
+            confidence: cached.confidence,
+            relevance: cached.relevance,
+          },
+        );
+        return { agentId: agent.id, insight: cached, error: null };
+      }
 
       try {
         // Let Venice API handle its own timeout (130s) - no need for additional timeout here
@@ -120,6 +146,14 @@ export class CoordinatorAgent {
           ...context,
           query,
           profile,
+        });
+
+        // Cache the result
+        setCachedAgentResult({
+          agentId: agent.id,
+          availableData: context.availableData,
+          analysisMode: context.analysisMode ?? "ongoing",
+          result: insight,
         });
 
         const duration = Date.now() - startTime;
@@ -181,10 +215,17 @@ export class CoordinatorAgent {
     });
 
     // Wait for all agents to complete (or fail gracefully)
+    console.log("[CoordinatorAgent] Waiting for all agents to complete...");
     const results = await Promise.allSettled(agentPromises);
+    console.log(
+      "[CoordinatorAgent] All agents completed, processing results...",
+    );
 
     // Process results
-    for (const result of results) {
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      const agent = this.agents[i];
+
       if (result.status === "fulfilled") {
         const { agentId, insight, error } = result.value;
         agentInsights[agentId] = insight;
@@ -203,8 +244,10 @@ export class CoordinatorAgent {
           });
         }
       } else {
-        // If the promise itself was rejected (shouldn't happen, but handle it)
+        // If the promise itself was rejected, create a fallback error insight
+        const agentId = agent?.id;
         console.error("[CoordinatorAgent] Agent promise rejected:", {
+          agentId,
           reason: result.reason,
           errorMessage:
             result.reason instanceof Error
@@ -215,6 +258,35 @@ export class CoordinatorAgent {
               ? result.reason.stack?.substring(0, 500)
               : undefined,
         });
+        // Add fallback error insight so coordinator has complete data
+        if (agentId) {
+          agentInsights[agentId] = {
+            agentId,
+            relevance: 0.1,
+            confidence: 0.3,
+            findings: [
+              {
+                observation: `${agentId} analysis failed due to promise rejection`,
+                evidence:
+                  result.reason instanceof Error
+                    ? result.reason.message
+                    : String(result.reason),
+                significance: "Analysis could not be completed",
+                confidence: 0.3,
+              },
+            ],
+            trends: [],
+            concerns: [],
+            correlations: [],
+            recommendations: [],
+            dataLimitations: ["Agent promise was rejected"],
+            dataPoints: [],
+            rawResponse:
+              result.reason instanceof Error
+                ? result.reason.message
+                : String(result.reason),
+          };
+        }
       }
     }
 
@@ -222,13 +294,52 @@ export class CoordinatorAgent {
       totalAgents: this.agents.length,
       successfulInsights: Object.keys(agentInsights).length,
       agentIds: Object.keys(agentInsights),
+      allAgentsPresent: this.agents.every(
+        (a) => agentInsights[a.id] !== undefined,
+      ),
     });
 
-    const combinedSummary = await this.buildSummary(
+    // Ensure all agents are present before generating summary
+    if (Object.keys(agentInsights).length < this.agents.length) {
+      console.warn(
+        `[CoordinatorAgent] Missing agent insights: expected ${this.agents.length}, got ${Object.keys(agentInsights).length}`,
+      );
+    }
+
+    // Check cache for coordinator summary (depends only on agent insights)
+    const summaryMaxAgeMs =
+      context.analysisMode === "initial" ? 24 * 60 * 60 * 1000 : 15 * 60 * 1000;
+    let combinedSummary:
+      | { raw: string; parsed: CoordinatorSummary | null }
+      | undefined;
+
+    const cachedSummary = getCachedCoordinatorSummary({
       agentInsights,
-      profile,
-      context.conversationHistory,
-    );
+      maxAgeMs: summaryMaxAgeMs,
+    });
+
+    if (cachedSummary) {
+      console.log("[CoordinatorAgent] Using cached coordinator summary");
+      combinedSummary = { raw: "", parsed: cachedSummary };
+    } else {
+      console.log("[CoordinatorAgent] Generating coordinator summary...", {
+        agentCount: Object.keys(agentInsights).length,
+        expectedAgentCount: this.agents.length,
+      });
+      combinedSummary = await this.buildSummary(
+        agentInsights,
+        profile,
+        context.conversationHistory,
+      );
+
+      // Cache the summary if generation succeeded
+      if (combinedSummary?.parsed) {
+        setCachedCoordinatorSummary({
+          agentInsights,
+          summary: combinedSummary.parsed,
+        });
+      }
+    }
 
     console.log("[CoordinatorAgent] Summary generation result:", {
       hasSummary: Boolean(combinedSummary),
@@ -290,6 +401,18 @@ export class CoordinatorAgent {
             : {}),
         },
       });
+
+      // Check if summary is empty (Venice timeout or error)
+      if (!rawSummary || rawSummary.trim().length === 0) {
+        console.error(
+          "[CoordinatorAgent] Summary generation returned empty response",
+          {
+            agentCount: Object.keys(agentInsights).length,
+            payloadSize: JSON.stringify(payload).length,
+          },
+        );
+        return { raw: "", parsed: null };
+      }
 
       let parsed: CoordinatorSummary | null = null;
       try {

@@ -109,3 +109,12 @@ export function setCachedToolResult(params: {
   });
   evictIfNeeded(map);
 }
+
+export function clearToolResultCache(): void {
+  const map = getCacheMap();
+  map.clear();
+  if (typeof window !== "undefined") {
+    delete window.__amachToolResultCacheV1;
+  }
+  moduleCache = null;
+}

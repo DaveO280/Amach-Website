@@ -445,6 +445,11 @@ export class VeniceApiService {
         // Don't retry on 4xx errors (except 429)
         if (axios.isAxiosError(error) && error.response?.status) {
           const status = error.response.status;
+          // For client or upstream timeout (504), another full retry just doubles latency
+          // without much chance of success. Surface the error immediately.
+          if (status === 504) {
+            throw error;
+          }
           if (status >= 400 && status < 500 && status !== 429) {
             throw error;
           }

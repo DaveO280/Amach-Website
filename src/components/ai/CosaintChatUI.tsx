@@ -26,6 +26,11 @@ import { generateSearchTag, getUserSecret } from "@/utils/searchableEncryption";
 import { getChainEventTypeForReportType } from "@/utils/storjChainMarkerRegistry";
 import { conversationMemoryStore } from "@/data/store/conversationMemoryStore";
 import type { ConversationMemory } from "@/types/conversationMemory";
+import { clearCoordinatorAnalysisCache } from "@/utils/coordinatorAnalysisCache";
+import { clearAgentResultCache } from "@/utils/agentResultCache";
+import { clearCoordinatorSummaryCache } from "@/utils/coordinatorSummaryCache";
+import { clearVeniceResponseCache } from "@/utils/veniceResponseCache";
+import { clearToolResultCache } from "@/utils/toolResultCache";
 
 // Define types for our message interface
 interface MessageType {
@@ -202,7 +207,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   const WARNING_MESSAGE_COUNT = 5;
 
   // Load message count from localStorage on mount
-  useEffect(() => {
+  useEffect((): void => {
     if (!isConnected) {
       const savedCount = localStorage.getItem(MESSAGE_COUNT_STORAGE_KEY);
       if (savedCount) {
@@ -437,7 +442,9 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     }
   };
 
-  const devRestoreConversationMemoryFromStorj = async (storjUri?: string) => {
+  const devRestoreConversationMemoryFromStorj = async (
+    storjUri?: string,
+  ): Promise<void> => {
     if (!isDev) return;
     try {
       setDevStorjRestoreLoading(true);
@@ -645,7 +652,17 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         signMessage,
       );
 
-      const fetchList = async (dataType: string) => {
+      const fetchList = async (
+        dataType: string,
+      ): Promise<
+        Array<{
+          uri: string;
+          metadata?: Record<string, string>;
+          contentHash?: string;
+          uploadedAt?: string;
+          sizeBytes?: number;
+        }>
+      > => {
         const res = await fetch("/api/storj", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1123,7 +1140,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     }
   };
 
-  useEffect(() => {
+  useEffect((): void => {
     if (!showFileManager) return;
     if (fileManagerTab === "saved") {
       void loadSavedFiles();
@@ -1131,7 +1148,13 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     if (fileManagerTab === "storj" && isConnected) {
       void loadStorjReportsList();
     }
-  }, [showFileManager, fileManagerTab, isConnected]);
+  }, [
+    showFileManager,
+    fileManagerTab,
+    isConnected,
+    loadSavedFiles,
+    loadStorjReportsList,
+  ]);
 
   // Load a saved file into chat context
   const loadSavedFileIntoContext = async (fileId: string): Promise<void> => {
@@ -1789,7 +1812,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                       <div className="flex flex-col gap-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium">
-                            Dev: Venice “session memory” test
+                            Dev: Venice &quot;session memory&quot; test
                           </span>
                           <button
                             type="button"
@@ -1853,6 +1876,28 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                             </div>
                           </div>
                         )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">Dev: Clear caches</span>
+                        <button
+                          type="button"
+                          className="rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-700 hover:bg-rose-100"
+                          onClick={() => {
+                            clearCoordinatorAnalysisCache();
+                            clearAgentResultCache();
+                            clearCoordinatorSummaryCache();
+                            clearToolResultCache();
+                            clearVeniceResponseCache();
+                            console.log("✅ All caches cleared");
+                            alert(
+                              "All caches cleared! Next Deep chat will run fresh.",
+                            );
+                          }}
+                          title="Clear all analysis caches (coordinator, agents, summary, tools, Venice responses)"
+                        >
+                          clear all
+                        </button>
                       </div>
                     </div>
                   )}

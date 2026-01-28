@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 // Use Node.js runtime for longer timeout
 export const runtime = "nodejs";
 // Vercel Hobby plan: max 60s, Pro plan: max 300s
+// Note: Deep analysis with multiple agents can exceed 60s. Consider:
+// - Upgrading to Pro plan (allows 300s)
+// - Moving agent calls client-side
+// - Using background jobs/queues for long-running analysis
 export const maxDuration = 60; // 60 seconds - maximum allowed on Hobby plan
 
 // Remove artificial timeout limits - let Venice API handle its own timeouts

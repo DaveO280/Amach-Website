@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from "uuid";
 import { useWalletService } from "@/hooks/useWalletService";
 import { conversationMemoryStore } from "@/data/store/conversationMemoryStore";
 import type { ConversationMemory } from "@/types/conversationMemory";
+import { ToolResponseParser } from "@/ai/tools/ToolResponseParser";
 import {
   extractConcernsFromConversation,
   extractFreeformGoalsFromConversation,
@@ -73,22 +74,29 @@ const sanitizeAssistantResponse = (raw: string): string => {
     return raw;
   }
 
+  // Remove any tool-call payloads (codefenced JSON, tool_call tags, etc.)
+  // This is a safety net: the user should never see raw tool JSON in chat.
+  const withoutTools = ToolResponseParser.stripToolCalls(raw);
+
   // First, try to strip <think> tags and keep content outside them
-  let withoutThink = raw.replace(/<think>[\s\S]*?<\/think>/gi, "");
+  let withoutThink = withoutTools.replace(/<think>[\s\S]*?<\/think>/gi, "");
   // Handle any unmatched <think> tags just in case
   withoutThink = withoutThink.replace(/<think>[\s\S]*$/gi, "");
   withoutThink = withoutThink.replace(/<\/?think>/gi, "");
 
   // If stripping <think> leaves nothing, extract content FROM <think> tags
   // (Qwen sometimes puts entire response in <think> tags)
-  if (withoutThink.trim().length === 0 && raw.includes("<think>")) {
+  if (withoutThink.trim().length === 0 && withoutTools.includes("<think>")) {
     console.log(
       "[aiStore] Response is ALL <think> tags - extracting content from within",
     );
-    console.log("[aiStore] Full raw response:", raw);
-    console.log("[aiStore] Has closing tag?", raw.includes("</think>"));
+    console.log("[aiStore] Full raw response:", withoutTools);
+    console.log(
+      "[aiStore] Has closing tag?",
+      withoutTools.includes("</think>"),
+    );
 
-    const thinkMatch = raw.match(/<think>([\s\S]*?)<\/think>/i);
+    const thinkMatch = withoutTools.match(/<think>([\s\S]*?)<\/think>/i);
     console.log("[aiStore] Regex match result:", {
       matched: Boolean(thinkMatch),
       contentLength: thinkMatch?.[1]?.length || 0,
@@ -106,7 +114,7 @@ const sanitizeAssistantResponse = (raw: string): string => {
       "[aiStore] Failed to extract from <think> tags - returning raw",
     );
     // If we can't extract, just return the raw content (better than nothing)
-    return raw.replace(/<\/?think>/gi, "").trim();
+    return withoutTools.replace(/<\/?think>/gi, "").trim();
   }
 
   return withoutThink.trimStart();

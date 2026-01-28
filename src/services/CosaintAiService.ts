@@ -1094,14 +1094,10 @@ Keep responses conversational and natural. If you mention research, weave it int
         "- If asked about specific health metrics (steps, HRV, sleep patterns) or lab results, suggest switching to Deep mode for personalized data analysis";
     }
 
-    // Add tool definitions if tool use is enabled
+    // Add tool definitions only for Deep-mode prompts.
+    // Quick mode should NEVER see tool schemas, otherwise the model tends to output tool JSON.
     if (ENABLE_TOOL_USE && promptStyle === "deep") {
       systemMessage += formatToolsForPrompt(options?.toolPromptMode ?? "full");
-    }
-
-    // Add tool definitions if tool use is enabled
-    if (ENABLE_TOOL_USE) {
-      systemMessage += formatToolsForPrompt();
     }
 
     // Add user profile context if available

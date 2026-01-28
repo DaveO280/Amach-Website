@@ -666,11 +666,9 @@ export class CosaintAiService {
       }
 
       // Tool execution loop (if enabled)
-      if (
-        ENABLE_TOOL_USE &&
-        useMultiAgent &&
-        ToolResponseParser.hasToolCalls(response)
-      ) {
+      // If Venice returns tool-call JSON as the *entire* response, always execute tools.
+      // Do not gate this on multi-agent mode; otherwise Quick can end up returning raw tool JSON.
+      if (ENABLE_TOOL_USE && ToolResponseParser.hasToolCalls(response)) {
         console.log(
           "[CosaintAiService] Tool calls detected, executing tools...",
         );

@@ -25,7 +25,8 @@ export async function parseDexaReportWithAI(
       : rawText;
 
   // Ultra-simplified prompt - just ask for JSON extraction
-  const systemPrompt = `Extract DEXA metrics as JSON. Include: scan_date, totalBodyFatPercent, totalLeanMassKg, visceralFat (mass_lbs, volume_in3, area_in2), androidGynoidRatio, BMD (total and regional), T-score, Z-score, and segmental analysis (arms, legs, trunk, android, gynoid, total) with fat_mass_lbs, lean_mass_lbs, bodyFatPercent. Output ONLY JSON.`;
+  // Note: Should handle various DEXA formats (Hologic, GE Lunar, Norland, etc.)
+  const systemPrompt = `Extract DEXA metrics as JSON from any DEXA scanner format (Hologic, GE Lunar, Norland, etc.). Include: scan_date, totalBodyFatPercent, totalLeanMassKg, visceralFat (mass_lbs, volume_in3, area_in2), androidGynoidRatio, BMD (total and regional), T-score, Z-score, and segmental analysis (arms, legs, trunk, android, gynoid, total) with fat_mass_lbs, lean_mass_lbs, bodyFatPercent. Extract whatever data is available in the report. Output ONLY JSON.`;
 
   const userPrompt = `Extract DEXA data as JSON:
 

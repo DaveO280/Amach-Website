@@ -406,7 +406,7 @@ export class CoordinatorAgent {
         systemPrompt: SUMMARY_SYSTEM_PROMPT,
         userPrompt: summaryPrompt,
         temperature: 0.2,
-        maxTokens: 8000,
+        maxTokens: 3000, // Reduced from 8000 to speed up summary generation and avoid 60s timeouts
         veniceParameters: {
           strip_thinking_response: true,
           include_venice_system_prompt: false,

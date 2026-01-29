@@ -17,62 +17,16 @@ export async function parseDexaReportWithAI(
   }
 
   // Truncate very long text to avoid token limits and timeouts
-  // Keep first 15000 chars which should cover most reports while staying under timeout limits
+  // Keep first 12000 chars - focus on the data tables which are usually at the start
   const textToParse =
-    rawText.length > 15000
-      ? rawText.substring(0, 15000) + "... (truncated)"
+    rawText.length > 12000
+      ? rawText.substring(0, 12000) + "... (truncated)"
       : rawText;
 
-  const systemPrompt = `Extract all metric data from this DEXA report and output ONLY valid JSON. No narrative, recommendations, or explanations.
+  // Simplified, concise prompt to match the working direct call
+  const systemPrompt = `Extract DEXA scan metrics and output ONLY valid JSON. Include: patient info, body composition, segmental analysis (arms, legs, trunk, android, gynoid), fat distribution (visceral/subcutaneous), bone health (BMD, T-score, Z-score), and metabolic metrics (RMR, RSMI). Output ONLY JSON, no markdown or explanations.`;
 
-The report may be in various formats (Hologic, GE Lunar, Norland, etc.) - extract whatever data is available.
-
-Required JSON structure (include only fields that are present in the report):
-{
-  "client_info": {
-    "measured_date": "MM/DD/YYYY"
-  },
-  "segmental_analysis": {
-    "arms_total": { "total_mass_lbs": X, "fat_mass_lbs": X, "lean_mass_lbs": X },
-    "legs_total": { "total_mass_lbs": X, "fat_mass_lbs": X, "lean_mass_lbs": X },
-    "trunk": { "total_mass_lbs": X, "fat_mass_lbs": X, "lean_mass_lbs": X },
-    "android": { "total_mass_lbs": X, "fat_mass_lbs": X, "lean_mass_lbs": X },
-    "gynoid": { "total_mass_lbs": X, "fat_mass_lbs": X, "lean_mass_lbs": X },
-    "total": { "total_mass_lbs": X, "fat_mass_lbs": X, "lean_mass_lbs": X }
-  },
-  "body_composition_percentages": {
-    "tissue_percent_fat": X,
-    "region_percent_fat": X
-  },
-  "android_gynoid_ratios": {
-    "android_tissue_percent_fat": X,
-    "gynoid_tissue_percent_fat": X,
-    "ag_ratio": X
-  },
-  "bone_mineral_density": {
-    "total_body": { "bmd_g_cm2": X, "t_score": X, "z_score": X },
-    "regional_bmd": {
-      "head": { "bmd_g_cm2": X },
-      "arms": { "bmd_g_cm2": X },
-      "legs": { "bmd_g_cm2": X },
-      "trunk": { "bmd_g_cm2": X },
-      "ribs": { "bmd_g_cm2": X },
-      "spine": { "bmd_g_cm2": X },
-      "pelvis": { "bmd_g_cm2": X }
-    }
-  },
-  "fat_distribution": {
-    "visceral_adipose_tissue": {
-      "mass_lbs": X,
-      "volume_in3": X,
-      "area_in2": X
-    }
-  }
-}
-
-Output ONLY the JSON object, no markdown, no code blocks, no explanations.`;
-
-  const userPrompt = `Extract all DEXA scan data from this report and output ONLY valid JSON (no markdown, no code blocks, no explanations):
+  const userPrompt = `Analyze this DEXA report and extract relevant metrics in JSON:
 
 ${textToParse}`;
 
@@ -95,10 +49,11 @@ ${textToParse}`;
       },
       body: JSON.stringify({
         messages,
-        max_tokens: 8000,
-        temperature: 0.1,
+        max_tokens: 4000, // Reduced from 8000 - JSON responses are typically much smaller
+        temperature: 0, // Use 0 for deterministic output (faster)
         model: modelName,
         stream: false,
+        response_format: { type: "json_object" }, // Force JSON mode for faster, structured output
         venice_parameters: {
           // Disable thinking to ensure JSON response is in content field
           disable_thinking: true,
@@ -155,8 +110,9 @@ ${textToParse}`;
     console.log("[AIDexaParser] Attempting to parse JSON directly...");
 
     // Try parsing directly first (if Venice outputs pure JSON)
-    // Define the expected JSON structure from Venice
+    // Define the expected JSON structure from Venice (flexible to handle multiple formats)
     interface VeniceDexaJson {
+      // Old format fields
       client_info?: {
         measured_date?: string;
       };
@@ -196,6 +152,30 @@ ${textToParse}`;
           volume_in3?: number;
           area_in2?: number;
         };
+      };
+      // New format fields (from user's example)
+      patient_info?: {
+        scan_date?: string;
+        measured_date?: string;
+      };
+      body_composition_summary?: {
+        tissue_percent_fat?: number;
+        region_percent_fat?: number;
+        lean_mass_lbs?: number;
+        fat_mass_lbs?: number;
+      };
+      segmental_analysis_lbs?: Record<
+        string,
+        {
+          total_mass?: number;
+          fat_mass?: number;
+          lean_mass?: number;
+        }
+      >;
+      bone_health?: {
+        total_body_bmd_g_cm2?: number;
+        t_score?: number;
+        z_score?: number;
       };
     }
 
@@ -280,8 +260,9 @@ ${textToParse}`;
     // Map JSON structure to DexaReportData
     const regions: DexaRegionMetrics[] = [];
 
-    // Extract segmental analysis data
-    const segmental = parsed.segmental_analysis || {};
+    // Extract segmental analysis data (handle both old and new formats)
+    const segmental =
+      parsed.segmental_analysis || parsed.segmental_analysis_lbs || {};
     const regionMapping: Record<string, string> = {
       arms_total: "arms",
       legs_total: "legs",
@@ -296,36 +277,64 @@ ${textToParse}`;
       if (regionData) {
         const metrics: DexaRegionMetrics = { region: regionName };
 
-        if (regionData.fat_mass_lbs !== undefined) {
-          metrics.fatMassKg = regionData.fat_mass_lbs * 0.453592;
+        // Handle both old format (fat_mass_lbs) and new format (fat_mass)
+        const fatLbs =
+          ("fat_mass_lbs" in regionData
+            ? regionData.fat_mass_lbs
+            : undefined) ??
+          ("fat_mass" in regionData ? regionData.fat_mass : undefined);
+        const leanLbs =
+          ("lean_mass_lbs" in regionData
+            ? regionData.lean_mass_lbs
+            : undefined) ??
+          ("lean_mass" in regionData ? regionData.lean_mass : undefined);
+
+        if (fatLbs !== undefined) {
+          metrics.fatMassKg = fatLbs * 0.453592;
         }
-        if (regionData.lean_mass_lbs !== undefined) {
-          metrics.leanMassKg = regionData.lean_mass_lbs * 0.453592;
+        if (leanLbs !== undefined) {
+          metrics.leanMassKg = leanLbs * 0.453592;
         }
 
         // Calculate body fat % if we have both
-        if (
-          regionData.fat_mass_lbs !== undefined &&
-          regionData.lean_mass_lbs !== undefined
-        ) {
-          const tissueLbs = regionData.fat_mass_lbs + regionData.lean_mass_lbs;
+        if (fatLbs !== undefined && leanLbs !== undefined) {
+          const tissueLbs = fatLbs + leanLbs;
           if (tissueLbs > 0) {
-            metrics.bodyFatPercent =
-              (regionData.fat_mass_lbs / tissueLbs) * 100;
+            metrics.bodyFatPercent = (fatLbs / tissueLbs) * 100;
           }
         }
 
         // Add BMD data if available (for total region)
-        if (regionName === "total" && parsed.bone_mineral_density?.total_body) {
-          const bmd = parsed.bone_mineral_density.total_body;
-          if (bmd.bmd_g_cm2 !== undefined) {
-            metrics.boneDensityGPerCm2 = bmd.bmd_g_cm2;
-          }
-          if (bmd.t_score !== undefined) {
-            metrics.tScore = bmd.t_score;
-          }
-          if (bmd.z_score !== undefined) {
-            metrics.zScore = bmd.z_score;
+        if (regionName === "total") {
+          if (
+            parsed.bone_mineral_density &&
+            "total_body" in parsed.bone_mineral_density &&
+            parsed.bone_mineral_density.total_body
+          ) {
+            const bmd = parsed.bone_mineral_density.total_body;
+            if (bmd.bmd_g_cm2 !== undefined) {
+              metrics.boneDensityGPerCm2 = bmd.bmd_g_cm2;
+            }
+            if (bmd.t_score !== undefined) {
+              metrics.tScore = bmd.t_score;
+            }
+            if (bmd.z_score !== undefined) {
+              metrics.zScore = bmd.z_score;
+            }
+          } else if (
+            parsed.bone_health &&
+            "total_body_bmd_g_cm2" in parsed.bone_health
+          ) {
+            if (parsed.bone_health.total_body_bmd_g_cm2 !== undefined) {
+              metrics.boneDensityGPerCm2 =
+                parsed.bone_health.total_body_bmd_g_cm2;
+            }
+            if (parsed.bone_health.t_score !== undefined) {
+              metrics.tScore = parsed.bone_health.t_score;
+            }
+            if (parsed.bone_health.z_score !== undefined) {
+              metrics.zScore = parsed.bone_health.z_score;
+            }
           }
         }
 
@@ -341,29 +350,45 @@ ${textToParse}`;
       }
     }
 
-    // Extract body composition percentages
-    const bodyComp = parsed.body_composition_percentages || {};
+    // Extract body composition percentages (handle both old and new formats)
+    const bodyComp =
+      parsed.body_composition_percentages ||
+      parsed.body_composition_summary ||
+      {};
     let totalBodyFatPercent = bodyComp.tissue_percent_fat;
 
-    // If totalBodyFatPercent not found in body_composition_percentages, try to extract from total region
+    // If totalBodyFatPercent not found, try to extract from total region
     if (totalBodyFatPercent === undefined && segmental.total) {
       const totalData = segmental.total;
-      if (
-        totalData.fat_mass_lbs !== undefined &&
-        totalData.lean_mass_lbs !== undefined
-      ) {
-        const tissueLbs = totalData.fat_mass_lbs + totalData.lean_mass_lbs;
+      const fatLbs =
+        ("fat_mass_lbs" in totalData ? totalData.fat_mass_lbs : undefined) ??
+        ("fat_mass" in totalData ? totalData.fat_mass : undefined);
+      const leanLbs =
+        ("lean_mass_lbs" in totalData ? totalData.lean_mass_lbs : undefined) ??
+        ("lean_mass" in totalData ? totalData.lean_mass : undefined);
+      if (fatLbs !== undefined && leanLbs !== undefined) {
+        const tissueLbs = fatLbs + leanLbs;
         if (tissueLbs > 0) {
-          totalBodyFatPercent = (totalData.fat_mass_lbs / tissueLbs) * 100;
+          totalBodyFatPercent = (fatLbs / tissueLbs) * 100;
         }
       }
     }
 
-    // Extract total lean mass from segmental analysis total
+    // Extract total lean mass from segmental analysis total or body_composition_summary
     const totalData = segmental.total;
     let totalLeanMassKg: number | undefined;
-    if (totalData?.lean_mass_lbs !== undefined) {
-      totalLeanMassKg = totalData.lean_mass_lbs * 0.453592;
+    if (
+      "lean_mass_lbs" in bodyComp &&
+      typeof bodyComp.lean_mass_lbs === "number"
+    ) {
+      totalLeanMassKg = bodyComp.lean_mass_lbs * 0.453592;
+    } else if (totalData) {
+      const leanLbs =
+        ("lean_mass_lbs" in totalData ? totalData.lean_mass_lbs : undefined) ??
+        ("lean_mass" in totalData ? totalData.lean_mass : undefined);
+      if (leanLbs !== undefined) {
+        totalLeanMassKg = leanLbs * 0.453592;
+      }
     }
 
     // Extract Android/Gynoid ratio
@@ -384,25 +409,41 @@ ${textToParse}`;
       }
     }
 
-    // Extract BMD data
-    const bmdData = parsed.bone_mineral_density || {};
-    const totalBmd = bmdData.total_body || {};
+    // Extract BMD data (handle both old and new formats)
+    const bmdData = parsed.bone_mineral_density || parsed.bone_health;
     let bmd: number | undefined;
     let tScore: number | undefined;
     let zScore: number | undefined;
+    let regionalBmd: Record<string, { bmd_g_cm2?: number }> = {};
 
-    if (totalBmd.bmd_g_cm2 !== undefined) {
-      bmd = totalBmd.bmd_g_cm2;
+    if (bmdData) {
+      if ("total_body" in bmdData && bmdData.total_body) {
+        const totalBmd = bmdData.total_body;
+        if (totalBmd.bmd_g_cm2 !== undefined) {
+          bmd = totalBmd.bmd_g_cm2;
+        }
+        if (totalBmd.t_score !== undefined) {
+          tScore = totalBmd.t_score;
+        }
+        if (totalBmd.z_score !== undefined) {
+          zScore = totalBmd.z_score;
+        }
+        if (bmdData.regional_bmd) {
+          regionalBmd = bmdData.regional_bmd;
+        }
+      } else if ("total_body_bmd_g_cm2" in bmdData) {
+        // New format (bone_health)
+        if (bmdData.total_body_bmd_g_cm2 !== undefined) {
+          bmd = bmdData.total_body_bmd_g_cm2;
+        }
+        if (bmdData.t_score !== undefined) {
+          tScore = bmdData.t_score;
+        }
+        if (bmdData.z_score !== undefined) {
+          zScore = bmdData.z_score;
+        }
+      }
     }
-    if (totalBmd.t_score !== undefined) {
-      tScore = totalBmd.t_score;
-    }
-    if (totalBmd.z_score !== undefined) {
-      zScore = totalBmd.z_score;
-    }
-
-    // Extract regional BMD
-    const regionalBmd = bmdData.regional_bmd || {};
     const bmdRegionMapping: Record<string, string> = {
       head: "head",
       arms: "arms",
@@ -442,8 +483,11 @@ ${textToParse}`;
       visceralFatAreaCm2 = vat.area_in2 * 6.452; // Convert in² to cm²
     }
 
-    // Extract scan date
-    const scanDate = parsed.client_info?.measured_date;
+    // Extract scan date (handle both old and new formats)
+    const scanDate =
+      parsed.client_info?.measured_date ||
+      parsed.patient_info?.scan_date ||
+      parsed.patient_info?.measured_date;
 
     const report: DexaReportData = {
       type: "dexa",

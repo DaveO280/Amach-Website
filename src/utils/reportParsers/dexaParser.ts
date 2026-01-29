@@ -259,22 +259,33 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
     }
 
     if (!visceralFatRating) {
+      // Look for "Fat Mass (lbs)  1.13" pattern in VAT section
       const match = line.match(
-        /(visceral fat(?: rating)?[:\s]*)(\d+(?:\.\d+)?)/i,
+        /(?:visceral|vat).*?fat.*?mass[:\s]*\(?lbs?\)?[:\s]*(\d+(?:\.\d+)?)/i,
       );
       if (match) {
-        visceralFatRating = Number.parseFloat(match[2]);
+        visceralFatRating = Number.parseFloat(match[1]);
         scoreHits += 1;
       }
     }
 
     if (!visceralFatAreaCm2) {
+      // Look for "Area (in²)  9.00" and convert to cm²
       const match = line.match(
-        /(visceral fat(?: area)?[:\s]*)(\d+(?:\.\d+)?)(?:\s*(?:cm2|cm²))/i,
+        /(?:visceral|vat).*?area[:\s]*\(?in²?\)?[:\s]*(\d+(?:\.\d+)?)/i,
       );
       if (match) {
-        visceralFatAreaCm2 = Number.parseFloat(match[2]);
+        visceralFatAreaCm2 = Number.parseFloat(match[1]) * 6.452; // Convert in² to cm²
         scoreHits += 1;
+      } else {
+        // Also try cm² directly
+        const cmMatch = line.match(
+          /(?:visceral|vat).*?area[:\s]*(\d+(?:\.\d+)?)(?:\s*(?:cm2|cm²))/i,
+        );
+        if (cmMatch) {
+          visceralFatAreaCm2 = Number.parseFloat(cmMatch[1]);
+          scoreHits += 1;
+        }
       }
     }
 
@@ -326,7 +337,7 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
   const regions: DexaRegionMetrics[] = [];
 
   // First, try to find structured table data (more reliable)
-  // Look for the "Total Body Tissue Quantitation" table
+  // Look for the "Total Body Tissue Quantitation" table or "Body Composition - Segmental Analysis"
   let inTable = false;
   let tableStartIndex = -1;
 
@@ -334,7 +345,9 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
     // Check if we're entering the composition table
     if (
       line.toLowerCase().includes("tissue quantitation") ||
-      line.toLowerCase().includes("composition (enhanced analysis)")
+      line.toLowerCase().includes("composition (enhanced analysis)") ||
+      line.toLowerCase().includes("body composition") ||
+      line.toLowerCase().includes("segmental analysis")
     ) {
       inTable = true;
       tableStartIndex = index;
@@ -361,13 +374,14 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
       //   "Total   23.4   60   161.9   36.3   118.5   7.1"
 
       // Map region names from table to our region names
+      // Handle both "Arms Total" and "arms total" formats
       const regionMap: Record<string, string> = {
+        "arms total": "arms",
         "arm right": "arms",
         "arm left": "arms",
-        "arms total": "arms",
+        "legs total": "legs",
         "leg right": "legs",
         "leg left": "legs",
-        "legs total": "legs",
         trunk: "trunk",
         android: "android",
         gynoid: "gynoid",
@@ -376,8 +390,9 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
 
       // Check each possible region name
       for (const [patternName, region] of Object.entries(regionMap)) {
+        // More flexible pattern - region name can be at start or anywhere, case insensitive
         const pattern = new RegExp(
-          `^${patternName.replace(/\s+/g, "\\s+")}\\s+`,
+          `\\b${patternName.replace(/\s+/g, "\\s+")}\\b`,
           "i",
         );
         if (pattern.test(line)) {
@@ -388,12 +403,15 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
             const metrics: DexaRegionMetrics = { region };
 
             // Parse based on table format: %Fat, Centile, Total Mass, Fat, Lean, BMC
+            // Example: "Arms Total   22.6   4.5   17.0" or "Total   23.4   60   161.9   36.3   118.5"
             const percentFat = parseFloat(numbers[0]);
             if (percentFat >= 0 && percentFat <= 100) {
               metrics.bodyFatPercent = percentFat;
             }
 
-            // Skip centile (numbers[1] if it's a dash or number), get Fat and Lean
+            // For "Total Body Tissue Quantitation" table:
+            // Format: Region | Tissue (%Fat) | Centile | Total Mass | Fat | Lean | BMC
+            // Numbers array: [%Fat, Centile, TotalMass, Fat, Lean, BMC]
             if (numbers.length >= 5) {
               const fatLbs = parseFloat(numbers[3]);
               const leanLbs = parseFloat(numbers[4]);
@@ -404,6 +422,24 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
               if (leanLbs >= 0 && leanLbs <= 500) {
                 metrics.leanMassKg = leanLbs * 0.453592;
               }
+            } else if (numbers.length >= 3) {
+              // Alternative format: "Arms Total   22.6   4.5   17.0" (Total Mass, Fat, Lean)
+              const fatLbs = parseFloat(numbers[1]);
+              const leanLbs = parseFloat(numbers[2]);
+
+              if (fatLbs >= 0 && fatLbs <= 500) {
+                metrics.fatMassKg = fatLbs * 0.453592;
+              }
+              if (leanLbs >= 0 && leanLbs <= 500) {
+                metrics.leanMassKg = leanLbs * 0.453592;
+              }
+              // Calculate body fat % from fat and lean
+              if (fatLbs > 0 && leanLbs > 0) {
+                const tissueLbs = fatLbs + leanLbs;
+                if (tissueLbs > 0) {
+                  metrics.bodyFatPercent = (fatLbs / tissueLbs) * 100;
+                }
+              }
             }
 
             // Only add if we extracted valid data
@@ -413,7 +449,16 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
               metrics.fatMassKg !== undefined
             ) {
               if (existing) {
-                Object.assign(existing, metrics);
+                // Merge with existing - prefer new data
+                if (metrics.bodyFatPercent !== undefined) {
+                  existing.bodyFatPercent = metrics.bodyFatPercent;
+                }
+                if (metrics.fatMassKg !== undefined) {
+                  existing.fatMassKg = metrics.fatMassKg;
+                }
+                if (metrics.leanMassKg !== undefined) {
+                  existing.leanMassKg = metrics.leanMassKg;
+                }
               } else {
                 regions.push(metrics);
               }
@@ -465,12 +510,16 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
       };
 
       for (const [patternName, region] of Object.entries(bmdRegionMap)) {
-        const pattern = new RegExp(`^${patternName}\\s+`, "i");
+        // More flexible pattern matching - region name can be anywhere in line
+        const pattern = new RegExp(`\\b${patternName}\\b`, "i");
         if (pattern.test(line)) {
-          // Extract BMD value (first number after region name)
-          const numbers = line.match(/-?\d+(?:\.\d+)?/g);
-          if (numbers && numbers.length > 0) {
-            const bmdValue = parseFloat(numbers[0]);
+          // Extract BMD value - look for number followed by "g/cm" or just numbers
+          // Pattern: "Head   2.972" or "Head   2.972   -   -"
+          const bmdMatch = line.match(
+            /(\d+\.\d+|\d+)(?:\s*(?:g\/cm[²2]?|g\/cm2))?/i,
+          );
+          if (bmdMatch) {
+            const bmdValue = parseFloat(bmdMatch[1]);
             if (bmdValue >= 0 && bmdValue <= 3) {
               let bmdRegion = regions.find((r) => r.region === region);
               if (!bmdRegion) {
@@ -480,16 +529,20 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
               bmdRegion.boneDensityGPerCm2 = bmdValue;
 
               // Extract T-score and Z-score if available (for total region)
-              if (region === "total" && numbers.length >= 3) {
-                const tVal = parseFloat(numbers[1]);
-                const zVal = parseFloat(numbers[2]);
-                if (tVal >= -10 && tVal <= 10) {
-                  bmdRegion.tScore = tVal;
-                  if (!tScore) tScore = tVal;
-                }
-                if (zVal >= -10 && zVal <= 10) {
-                  bmdRegion.zScore = zVal;
-                  if (!zScore) zScore = zVal;
+              // Look for pattern: "Total   1.500   3.0   3.2"
+              if (region === "total") {
+                const allNumbers = line.match(/-?\d+(?:\.\d+)?/g);
+                if (allNumbers && allNumbers.length >= 3) {
+                  const tVal = parseFloat(allNumbers[1]);
+                  const zVal = parseFloat(allNumbers[2]);
+                  if (tVal >= -10 && tVal <= 10) {
+                    bmdRegion.tScore = tVal;
+                    if (!tScore) tScore = tVal;
+                  }
+                  if (zVal >= -10 && zVal <= 10) {
+                    bmdRegion.zScore = zVal;
+                    if (!zScore) zScore = zVal;
+                  }
                 }
               }
             }
@@ -569,9 +622,21 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
     });
   }
 
+  // Calculate confidence based on extracted data
+  // Higher confidence if we have regions, BMD data, and key metrics
+  const hasRegions = regions.length > 0;
+  const hasBmdData = regions.some((r) => r.boneDensityGPerCm2 !== undefined);
+  const hasKeyMetrics =
+    totalBodyFatPercent !== undefined ||
+    totalLeanMassKg !== undefined ||
+    totalBmd !== undefined;
+
   const confidence = inferConfidence(
-    scoreHits + (regions.length > 0 ? 1 : 0),
-    maxScore,
+    scoreHits +
+      (hasRegions ? 2 : 0) +
+      (hasBmdData ? 1 : 0) +
+      (hasKeyMetrics ? 1 : 0),
+    maxScore + 4, // Adjusted max score to account for bonus points
   );
 
   const report: DexaReportData = {

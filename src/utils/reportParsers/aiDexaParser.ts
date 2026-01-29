@@ -16,17 +16,17 @@ export async function parseDexaReportWithAI(
     return null;
   }
 
-  // Truncate very long text to avoid token limits and timeouts
-  // Keep first 12000 chars - focus on the data tables which are usually at the start
+  // Aggressively truncate to focus on data tables (first 8000 chars should contain all key tables)
+  // The data tables are typically in the first portion of the PDF
   const textToParse =
-    rawText.length > 12000
-      ? rawText.substring(0, 12000) + "... (truncated)"
+    rawText.length > 8000
+      ? rawText.substring(0, 8000) + "... (truncated)"
       : rawText;
 
-  // Simplified, concise prompt to match the working direct call
-  const systemPrompt = `Extract DEXA scan metrics and output ONLY valid JSON. Include: patient info, body composition, segmental analysis (arms, legs, trunk, android, gynoid), fat distribution (visceral/subcutaneous), bone health (BMD, T-score, Z-score), and metabolic metrics (RMR, RSMI). Output ONLY JSON, no markdown or explanations.`;
+  // Ultra-simplified prompt - just ask for JSON extraction
+  const systemPrompt = `Extract DEXA metrics as JSON. Include: scan_date, totalBodyFatPercent, totalLeanMassKg, visceralFat (mass_lbs, volume_in3, area_in2), androidGynoidRatio, BMD (total and regional), T-score, Z-score, and segmental analysis (arms, legs, trunk, android, gynoid, total) with fat_mass_lbs, lean_mass_lbs, bodyFatPercent. Output ONLY JSON.`;
 
-  const userPrompt = `Analyze this DEXA report and extract relevant metrics in JSON:
+  const userPrompt = `Extract DEXA data as JSON:
 
 ${textToParse}`;
 
@@ -42,33 +42,51 @@ ${textToParse}`;
     }
     messages.push({ role: "user", content: userPrompt });
 
-    const response = await fetch("/api/venice", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messages,
-        max_tokens: 4000, // Reduced from 8000 - JSON responses are typically much smaller
-        temperature: 0, // Use 0 for deterministic output (faster)
-        model: modelName,
-        stream: false,
-        response_format: { type: "json_object" }, // Force JSON mode for faster, structured output
-        venice_parameters: {
-          // Disable thinking to ensure JSON response is in content field
-          disable_thinking: true,
-          // Strip any thinking that might leak through
-          strip_thinking_response: true,
-          // Don't include Venice system prompts
-          include_venice_system_prompt: false,
-        },
-      }),
-    });
+    // Add timeout to the fetch request (45 seconds to stay under 60s Vercel limit)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
 
-    if (!response.ok) {
-      throw new Error(
-        `API request failed: ${response.status} ${response.statusText}`,
-      );
+    let response: Response;
+    try {
+      response = await fetch("/api/venice", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          messages,
+          max_tokens: 3000, // Further reduced - JSON responses are compact
+          temperature: 0, // Use 0 for deterministic output (faster)
+          model: modelName,
+          stream: false,
+          response_format: { type: "json_object" }, // Force JSON mode for faster, structured output
+          venice_parameters: {
+            // Disable thinking to ensure JSON response is in content field
+            disable_thinking: true,
+            // Strip any thinking that might leak through
+            strip_thinking_response: true,
+            // Don't include Venice system prompts
+            include_venice_system_prompt: false,
+          },
+        }),
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(
+          `API request failed: ${response.status} ${response.statusText}`,
+        );
+      }
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError instanceof Error && fetchError.name === "AbortError") {
+        console.warn(
+          "[AIDexaParser] Request timed out after 45s, falling back to regex parser",
+        );
+        return null; // Let regex parser handle it
+      }
+      throw fetchError;
     }
 
     const data = await response.json();

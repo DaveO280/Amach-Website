@@ -402,17 +402,28 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
             const existing = regions.find((entry) => entry.region === region);
             const metrics: DexaRegionMetrics = { region };
 
-            // Parse based on table format: %Fat, Centile, Total Mass, Fat, Lean, BMC
-            // Example: "Arms Total   22.6   4.5   17.0" or "Total   23.4   60   161.9   36.3   118.5"
-            const percentFat = parseFloat(numbers[0]);
-            if (percentFat >= 0 && percentFat <= 100) {
-              metrics.bodyFatPercent = percentFat;
-            }
+            // Determine table format by checking first number
+            const firstNum = parseFloat(numbers[0]);
+            const isPercentFormat = firstNum >= 0 && firstNum <= 100;
 
-            // For "Total Body Tissue Quantitation" table:
-            // Format: Region | Tissue (%Fat) | Centile | Total Mass | Fat | Lean | BMC
-            // Numbers array: [%Fat, Centile, TotalMass, Fat, Lean, BMC]
-            if (numbers.length >= 5) {
+            if (isPercentFormat && numbers.length >= 6) {
+              // "Total Body Tissue Quantitation" format:
+              // Region | Tissue (%Fat) | Centile | Total Mass | Fat | Lean | BMC
+              // Example: "Total   23.4   60   161.9   36.3   118.5   7.1"
+              // Numbers: [%Fat=23.4, Centile=60, TotalMass=161.9, Fat=36.3, Lean=118.5, BMC=7.1]
+              metrics.bodyFatPercent = firstNum;
+              const fatLbs = parseFloat(numbers[4]); // 5th number (index 4) = Fat
+              const leanLbs = parseFloat(numbers[5]); // 6th number (index 5) = Lean
+
+              if (fatLbs >= 0 && fatLbs <= 500) {
+                metrics.fatMassKg = fatLbs * 0.453592;
+              }
+              if (leanLbs >= 0 && leanLbs <= 500) {
+                metrics.leanMassKg = leanLbs * 0.453592;
+              }
+            } else if (isPercentFormat && numbers.length >= 5) {
+              // Partial format: [%Fat, Centile, TotalMass, Fat, Lean]
+              metrics.bodyFatPercent = firstNum;
               const fatLbs = parseFloat(numbers[3]);
               const leanLbs = parseFloat(numbers[4]);
 
@@ -422,8 +433,11 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
               if (leanLbs >= 0 && leanLbs <= 500) {
                 metrics.leanMassKg = leanLbs * 0.453592;
               }
-            } else if (numbers.length >= 3) {
-              // Alternative format: "Arms Total   22.6   4.5   17.0" (Total Mass, Fat, Lean)
+            } else if (numbers.length >= 3 && firstNum > 10) {
+              // "Body Composition - Segmental Analysis" format:
+              // Region | Total Mass (lbs) | Fat Mass (lbs) | Lean Mass (lbs)
+              // Example: "Arms Total   22.6   4.5   17.0"
+              // Numbers: [TotalMass=22.6, Fat=4.5, Lean=17.0]
               const fatLbs = parseFloat(numbers[1]);
               const leanLbs = parseFloat(numbers[2]);
 
@@ -449,14 +463,26 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
               metrics.fatMassKg !== undefined
             ) {
               if (existing) {
-                // Merge with existing - prefer new data
-                if (metrics.bodyFatPercent !== undefined) {
+                // Merge with existing - prefer new data, but validate ranges
+                if (
+                  metrics.bodyFatPercent !== undefined &&
+                  metrics.bodyFatPercent <= 100
+                ) {
                   existing.bodyFatPercent = metrics.bodyFatPercent;
                 }
-                if (metrics.fatMassKg !== undefined) {
+                // Only update if the new value is in a reasonable range
+                if (
+                  metrics.fatMassKg !== undefined &&
+                  metrics.fatMassKg > 0 &&
+                  metrics.fatMassKg < 100
+                ) {
                   existing.fatMassKg = metrics.fatMassKg;
                 }
-                if (metrics.leanMassKg !== undefined) {
+                if (
+                  metrics.leanMassKg !== undefined &&
+                  metrics.leanMassKg > 20 &&
+                  metrics.leanMassKg < 200
+                ) {
                   existing.leanMassKg = metrics.leanMassKg;
                 }
               } else {
@@ -649,9 +675,11 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
     visceralFatVolumeCm3,
     androidGynoidRatio,
     boneDensityTotal: {
-      bmd: totalBmd,
-      tScore,
-      zScore,
+      bmd:
+        totalBmd ||
+        regions.find((r) => r.region === "total")?.boneDensityGPerCm2,
+      tScore: tScore || regions.find((r) => r.region === "total")?.tScore,
+      zScore: zScore || regions.find((r) => r.region === "total")?.zScore,
     },
     regions,
     notes: [],

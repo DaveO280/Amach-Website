@@ -16,11 +16,12 @@ export async function parseDexaReportWithAI(
     return null;
   }
 
-  // Aggressively truncate to focus on data tables (first 8000 chars should contain all key tables)
+  // Aggressively truncate to focus on data tables (first 5000 chars should contain all key tables)
   // The data tables are typically in the first portion of the PDF
+  // Further reduction to speed up AI processing and avoid timeouts
   const textToParse =
-    rawText.length > 8000
-      ? rawText.substring(0, 8000) + "... (truncated)"
+    rawText.length > 5000
+      ? rawText.substring(0, 5000) + "... (truncated)"
       : rawText;
 
   // Ultra-simplified prompt - just ask for JSON extraction
@@ -42,51 +43,33 @@ ${textToParse}`;
     }
     messages.push({ role: "user", content: userPrompt });
 
-    // Add timeout to the fetch request (45 seconds to stay under 60s Vercel limit)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000);
-
-    let response: Response;
-    try {
-      response = await fetch("/api/venice", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+    const response = await fetch("/api/venice", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messages,
+        max_tokens: 2000, // Reduced - JSON responses are compact
+        temperature: 0, // Use 0 for deterministic output (faster)
+        model: modelName,
+        stream: false,
+        response_format: { type: "json_object" }, // Force JSON mode for faster, structured output
+        venice_parameters: {
+          // Disable thinking to ensure JSON response is in content field
+          disable_thinking: true,
+          // Strip any thinking that might leak through
+          strip_thinking_response: true,
+          // Don't include Venice system prompts
+          include_venice_system_prompt: false,
         },
-        signal: controller.signal,
-        body: JSON.stringify({
-          messages,
-          max_tokens: 3000, // Further reduced - JSON responses are compact
-          temperature: 0, // Use 0 for deterministic output (faster)
-          model: modelName,
-          stream: false,
-          response_format: { type: "json_object" }, // Force JSON mode for faster, structured output
-          venice_parameters: {
-            // Disable thinking to ensure JSON response is in content field
-            disable_thinking: true,
-            // Strip any thinking that might leak through
-            strip_thinking_response: true,
-            // Don't include Venice system prompts
-            include_venice_system_prompt: false,
-          },
-        }),
-      });
-      clearTimeout(timeoutId);
+      }),
+    });
 
-      if (!response.ok) {
-        throw new Error(
-          `API request failed: ${response.status} ${response.statusText}`,
-        );
-      }
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      if (fetchError instanceof Error && fetchError.name === "AbortError") {
-        console.warn(
-          "[AIDexaParser] Request timed out after 45s, falling back to regex parser",
-        );
-        return null; // Let regex parser handle it
-      }
-      throw fetchError;
+    if (!response.ok) {
+      throw new Error(
+        `API request failed: ${response.status} ${response.statusText}`,
+      );
     }
 
     const data = await response.json();

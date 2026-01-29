@@ -618,34 +618,78 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
   }
 
   // Fallback: parse individual region lines if table parsing didn't work
+  // Also try parsing from raw text directly if table parsing failed
   if (regions.length === 0) {
-    lines.forEach((line) => {
-      // Skip address lines
-      if (/\d{4,}\s+[A-Z][a-z]+/.test(line) || /\(___\)/.test(line)) {
-        return;
-      }
+    // Try parsing from raw text with more flexible patterns
+    // Look for "Body Composition - Segmental Analysis" table format
+    // Example: "Arms Total | 22.6 | 4.5 | 17.0"
+    const segmentalMatch = rawText.match(
+      /(?:arms\s+total|legs\s+total|trunk|android|gynoid|total)[^\n]*?(\d+\.\d+)[^\n]*?(\d+\.\d+)[^\n]*?(\d+\.\d+)/gi,
+    );
 
-      Object.entries(REGION_PATTERNS).forEach(([region, pattern]) => {
-        if (pattern.test(line)) {
-          const existing = regions.find((entry) => entry.region === region);
-          const metrics = parseRegionLine(region, line);
+    if (segmentalMatch) {
+      segmentalMatch.forEach((match) => {
+        const numbers = match.match(/\d+\.\d+/g);
+        if (numbers && numbers.length >= 3) {
+          const fatLbs = parseFloat(numbers[1]);
+          const leanLbs = parseFloat(numbers[2]);
 
-          // Only add if we actually extracted valid data
-          if (
-            metrics.bodyFatPercent !== undefined ||
-            metrics.leanMassKg !== undefined ||
-            metrics.fatMassKg !== undefined ||
-            metrics.boneDensityGPerCm2 !== undefined
-          ) {
-            if (existing) {
-              Object.assign(existing, metrics);
-            } else {
-              regions.push(metrics);
+          let regionName: string | undefined;
+          if (match.toLowerCase().includes("arms")) regionName = "arms";
+          else if (match.toLowerCase().includes("legs")) regionName = "legs";
+          else if (match.toLowerCase().includes("trunk")) regionName = "trunk";
+          else if (match.toLowerCase().includes("android"))
+            regionName = "android";
+          else if (match.toLowerCase().includes("gynoid"))
+            regionName = "gynoid";
+          else if (match.toLowerCase().includes("total") && !regionName)
+            regionName = "total";
+
+          if (regionName && fatLbs > 0 && leanLbs > 0) {
+            const existing = regions.find((r) => r.region === regionName);
+            if (!existing) {
+              regions.push({
+                region: regionName,
+                fatMassKg: fatLbs * 0.453592,
+                leanMassKg: leanLbs * 0.453592,
+                bodyFatPercent: (fatLbs / (fatLbs + leanLbs)) * 100,
+              });
             }
           }
         }
       });
-    });
+    }
+
+    // If still no regions, try the original line-by-line parsing
+    if (regions.length === 0) {
+      lines.forEach((line) => {
+        // Skip address lines
+        if (/\d{4,}\s+[A-Z][a-z]+/.test(line) || /\(___\)/.test(line)) {
+          return;
+        }
+
+        Object.entries(REGION_PATTERNS).forEach(([region, pattern]) => {
+          if (pattern.test(line)) {
+            const existing = regions.find((entry) => entry.region === region);
+            const metrics = parseRegionLine(region, line);
+
+            // Only add if we actually extracted valid data
+            if (
+              metrics.bodyFatPercent !== undefined ||
+              metrics.leanMassKg !== undefined ||
+              metrics.fatMassKg !== undefined ||
+              metrics.boneDensityGPerCm2 !== undefined
+            ) {
+              if (existing) {
+                Object.assign(existing, metrics);
+              } else {
+                regions.push(metrics);
+              }
+            }
+          }
+        });
+      });
+    }
   }
 
   // Calculate confidence based on extracted data

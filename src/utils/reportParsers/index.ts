@@ -41,21 +41,11 @@ export async function parseHealthReport(
     let dexa: ParsedHealthReport | null = null;
 
     // Try AI parsing first if enabled, fall back to regex
-    // Use Promise.race to timeout AI parsing after 45 seconds (leaving buffer for Vercel 60s limit)
+    // Try AI parsing first if enabled, fall back to regex
     if (options.useAI) {
       console.log("[ReportParser] 🤖 Using AI to parse DEXA report...");
       try {
-        const aiPromise = parseDexaReportWithAI(rawText, options.sourceName);
-        const timeoutPromise = new Promise<null>((resolve) =>
-          setTimeout(() => {
-            console.warn(
-              "[ReportParser] ⏱️ AI parser timeout (45s), falling back to regex...",
-            );
-            resolve(null);
-          }, 45000),
-        );
-
-        dexa = await Promise.race([aiPromise, timeoutPromise]);
+        dexa = await parseDexaReportWithAI(rawText, options.sourceName);
 
         if (dexa) {
           // Accept AI result if it has regions OR if it has meaningful data (totalBodyFatPercent, BMD, etc.)

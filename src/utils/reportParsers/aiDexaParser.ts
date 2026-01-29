@@ -98,6 +98,14 @@ ${textToParse}`;
         temperature: 0.1,
         model: modelName,
         stream: false,
+        venice_parameters: {
+          // Disable thinking to ensure JSON response is in content field
+          disable_thinking: true,
+          // Strip any thinking that might leak through
+          strip_thinking_response: true,
+          // Don't include Venice system prompts
+          include_venice_system_prompt: false,
+        },
       }),
     });
 
@@ -111,12 +119,35 @@ ${textToParse}`;
     const firstChoice = data?.choices?.[0];
     const message = firstChoice?.message;
 
+    // Enhanced logging for debugging production issues
+    console.log("[AIDexaParser] Venice API response structure:", {
+      hasData: Boolean(data),
+      hasChoices: Boolean(data?.choices),
+      choicesLength: data?.choices?.length || 0,
+      hasFirstChoice: Boolean(firstChoice),
+      hasMessage: Boolean(message),
+      messageKeys: message ? Object.keys(message) : [],
+      hasContent: Boolean(message?.content),
+      contentLength: message?.content?.length || 0,
+      hasReasoningContent: Boolean(message?.reasoning_content),
+      reasoningContentLength: message?.reasoning_content?.length || 0,
+      contentPreview: message?.content?.substring?.(0, 200),
+      reasoningPreview: message?.reasoning_content?.substring?.(0, 200),
+    });
+
     // Get response - try content first, then reasoning_content
+    // In production, Venice might return JSON in either field depending on thinking mode
     let jsonText =
       message?.content?.trim() || message?.reasoning_content?.trim() || "";
 
     if (!jsonText) {
-      console.error("[AIDexaParser] ❌ Empty response from AI");
+      console.error("[AIDexaParser] ❌ Empty response from AI", {
+        hasContent: Boolean(message?.content),
+        hasReasoningContent: Boolean(message?.reasoning_content),
+        messageStructure: message
+          ? JSON.stringify(message).substring(0, 500)
+          : "null",
+      });
       return null;
     }
 
@@ -173,8 +204,16 @@ ${textToParse}`;
       console.log("[AIDexaParser] ✅ Successfully parsed JSON directly");
     } catch (directParseError) {
       // If direct parse fails, try removing markdown code blocks
-      console.log(
+      console.warn(
         "[AIDexaParser] Direct parse failed, trying to extract JSON from markdown...",
+        {
+          error:
+            directParseError instanceof Error
+              ? directParseError.message
+              : String(directParseError),
+          jsonTextLength: jsonText.length,
+          jsonTextPreview: jsonText.substring(0, 500),
+        },
       );
 
       // Remove markdown code blocks if present
@@ -196,11 +235,12 @@ ${textToParse}`;
       }
 
       if (!jsonMatch) {
-        console.error("[AIDexaParser] ❌ No JSON object found in AI response");
-        console.log(
-          "[AIDexaParser] Response preview:",
-          jsonText.substring(0, 500),
-        );
+        console.error("[AIDexaParser] ❌ No JSON object found in AI response", {
+          jsonTextLength: jsonText.length,
+          jsonTextPreview: jsonText.substring(0, 1000),
+          hasJsonMarkers: jsonText.includes("{") && jsonText.includes("}"),
+          hasSegmentalAnalysis: jsonText.includes("segmental_analysis"),
+        });
         // Fallback to structured text parsing
         return parseStructuredTextToDexaReport(
           jsonText,
@@ -216,11 +256,16 @@ ${textToParse}`;
         parsed = JSON.parse(jsonText);
         console.log("[AIDexaParser] ✅ Successfully parsed extracted JSON");
       } catch (extractParseError) {
-        console.error("[AIDexaParser] JSON parse error:", extractParseError);
-        console.log(
-          "[AIDexaParser] JSON text preview:",
-          jsonText.substring(0, 500),
-        );
+        console.error("[AIDexaParser] JSON parse error after extraction:", {
+          error:
+            extractParseError instanceof Error
+              ? extractParseError.message
+              : String(extractParseError),
+          extractedJsonLength: jsonText.length,
+          extractedJsonPreview: jsonText.substring(0, 1000),
+          originalTextLength:
+            message?.content?.length || message?.reasoning_content?.length || 0,
+        });
         // Fallback to structured text parsing
         return parseStructuredTextToDexaReport(
           jsonText,
@@ -283,9 +328,12 @@ ${textToParse}`;
           }
         }
 
+        // Always add region if it has any data, even if just bodyFatPercent
         if (
           metrics.fatMassKg !== undefined ||
-          metrics.leanMassKg !== undefined
+          metrics.leanMassKg !== undefined ||
+          metrics.bodyFatPercent !== undefined ||
+          metrics.boneDensityGPerCm2 !== undefined
         ) {
           regions.push(metrics);
         }
@@ -294,7 +342,21 @@ ${textToParse}`;
 
     // Extract body composition percentages
     const bodyComp = parsed.body_composition_percentages || {};
-    const totalBodyFatPercent = bodyComp.tissue_percent_fat;
+    let totalBodyFatPercent = bodyComp.tissue_percent_fat;
+
+    // If totalBodyFatPercent not found in body_composition_percentages, try to extract from total region
+    if (totalBodyFatPercent === undefined && segmental.total) {
+      const totalData = segmental.total;
+      if (
+        totalData.fat_mass_lbs !== undefined &&
+        totalData.lean_mass_lbs !== undefined
+      ) {
+        const tissueLbs = totalData.fat_mass_lbs + totalData.lean_mass_lbs;
+        if (tissueLbs > 0) {
+          totalBodyFatPercent = (totalData.fat_mass_lbs / tissueLbs) * 100;
+        }
+      }
+    }
 
     // Extract total lean mass from segmental analysis total
     const totalData = segmental.total;

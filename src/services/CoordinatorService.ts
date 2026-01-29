@@ -18,6 +18,69 @@ import {
 } from "@/utils/tieredDataAggregation";
 import { isCumulativeMetric } from "@/utils/dataDeduplicator";
 
+/**
+ * Extract date key (YYYY-MM-DD) from a Date or timestamp
+ */
+function extractDateKey(timestamp: Date | number): string {
+  const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Deduplicate samples by date, keeping the most recent value for each date
+ */
+function deduplicateSamplesByDate(
+  samples: MetricSample[],
+  isCumulative: boolean,
+): MetricSample[] {
+  const samplesByDate = new Map<string, MetricSample[]>();
+
+  // Group samples by date
+  for (const sample of samples) {
+    const dateKey = extractDateKey(sample.timestamp);
+    if (!samplesByDate.has(dateKey)) {
+      samplesByDate.set(dateKey, []);
+    }
+    samplesByDate.get(dateKey)!.push(sample);
+  }
+
+  // Aggregate samples within each date
+  const deduplicated: MetricSample[] = [];
+  for (const [, dateSamples] of samplesByDate.entries()) {
+    if (dateSamples.length === 0) continue;
+
+    // If multiple samples for same date, aggregate them
+    if (dateSamples.length > 1) {
+      const values = dateSamples.map((s) => s.value).filter(Number.isFinite);
+      if (values.length === 0) continue;
+
+      const aggregatedValue = isCumulative
+        ? values.reduce((sum, v) => sum + v, 0)
+        : values.reduce((sum, v) => sum + v, 0) / values.length;
+
+      // Use the most recent sample's timestamp and metadata
+      const sortedByTime = dateSamples.sort(
+        (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+      );
+
+      deduplicated.push({
+        timestamp: sortedByTime[0].timestamp,
+        value: aggregatedValue,
+        unit: sortedByTime[0].unit,
+        metadata: sortedByTime[0].metadata,
+      });
+    } else {
+      // Single sample for this date
+      deduplicated.push(dateSamples[0]);
+    }
+  }
+
+  return deduplicated;
+}
+
 export type AnalysisMode = "initial" | "ongoing";
 
 interface RunCoordinatorOptions {
@@ -366,21 +429,34 @@ function transformMetricData(
       continue;
     }
 
+    // Deduplicate by date before aggregation to ensure no duplicate dates
+    const isCumulative = isCumulativeMetric(metricId);
+    const deduplicatedSamples = deduplicateSamplesByDate(samples, isCumulative);
+
+    if (deduplicatedSamples.length !== samples.length) {
+      console.log(
+        `[CoordinatorService] ${metricId}: Deduplicated ${samples.length} samples → ${deduplicatedSamples.length} unique dates`,
+      );
+    }
+
     // Apply tiered aggregation for initial mode, simple window for ongoing
     let finalSamples: MetricSample[];
     if (analysisMode === "initial") {
       // Use tiered aggregation for full dataset
-      finalSamples = applyTieredAggregation(samples, metricId);
+      finalSamples = applyTieredAggregation(deduplicatedSamples, metricId);
+
+      // Final deduplication pass after tiered aggregation (in case aggregation creates duplicates)
+      finalSamples = deduplicateSamplesByDate(finalSamples, isCumulative);
+
       console.log(
-        `[CoordinatorService] ${metricId}: ${samples.length} samples → ${finalSamples.length} aggregated periods (tiered)`,
+        `[CoordinatorService] ${metricId}: ${samples.length} samples → ${deduplicatedSamples.length} deduplicated → ${finalSamples.length} final (tiered)`,
       );
     } else {
       // For ongoing mode: ALWAYS aggregate cumulative metrics by day first
-      const isCumulative = isCumulativeMetric(metricId);
 
       if (isCumulative) {
         // Aggregate by day, then take recent 60 days
-        const dailyGroups = aggregateSamplesByDay(samples);
+        const dailyGroups = aggregateSamplesByDay(deduplicatedSamples);
         const dailyAggregates = aggregateDailyValues(dailyGroups, true);
 
         // Convert to array and sort by date
@@ -391,18 +467,30 @@ function transformMetricData(
           (dateKey) => dailyAggregates.get(dateKey)!,
         );
 
-        console.log(
-          `[CoordinatorService] ${metricId}: ${samples.length} samples → ${dailyAggregates.size} days → ${finalSamples.length} recent days`,
-        );
-      } else {
-        // For non-cumulative metrics, just use recent samples
-        const sortedSamples = [...samples].sort(
-          (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
-        );
-        finalSamples = sortedSamples.slice(-MAX_DAYS_ONGOING * 50); // ~50 samples per day estimate
+        // Final deduplication pass (shouldn't be needed, but safety check)
+        finalSamples = deduplicateSamplesByDate(finalSamples, true);
 
         console.log(
-          `[CoordinatorService] ${metricId}: Using ${finalSamples.length} recent samples (from ${samples.length} total)`,
+          `[CoordinatorService] ${metricId}: ${samples.length} samples → ${deduplicatedSamples.length} deduplicated → ${dailyAggregates.size} days → ${finalSamples.length} recent days`,
+        );
+      } else {
+        // For non-cumulative metrics, aggregate by day first, then take recent
+        const dailyGroups = aggregateSamplesByDay(deduplicatedSamples);
+        const dailyAggregates = aggregateDailyValues(dailyGroups, false);
+
+        // Convert to array and sort by date, take recent
+        const sortedDates = Array.from(dailyAggregates.keys()).sort();
+        const recentDates = sortedDates.slice(-MAX_DAYS_ONGOING);
+
+        finalSamples = recentDates.map(
+          (dateKey) => dailyAggregates.get(dateKey)!,
+        );
+
+        // Final deduplication pass (shouldn't be needed, but safety check)
+        finalSamples = deduplicateSamplesByDate(finalSamples, false);
+
+        console.log(
+          `[CoordinatorService] ${metricId}: ${samples.length} samples → ${deduplicatedSamples.length} deduplicated → ${dailyAggregates.size} days → ${finalSamples.length} recent days`,
         );
       }
     }

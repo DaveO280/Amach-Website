@@ -28,6 +28,69 @@ import {
   aggregateDailyValues,
   isCumulativeMetric,
 } from "@/utils/tieredDataAggregation";
+
+/**
+ * Extract date key (YYYY-MM-DD) from a Date or timestamp
+ */
+function extractDateKey(timestamp: Date | number): string {
+  const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Deduplicate samples by date, aggregating values within each date
+ */
+function deduplicateSamplesByDate(
+  samples: MetricSample[],
+  isCumulative: boolean,
+): MetricSample[] {
+  const samplesByDate = new Map<string, MetricSample[]>();
+
+  // Group samples by date
+  for (const sample of samples) {
+    const dateKey = extractDateKey(sample.timestamp);
+    if (!samplesByDate.has(dateKey)) {
+      samplesByDate.set(dateKey, []);
+    }
+    samplesByDate.get(dateKey)!.push(sample);
+  }
+
+  // Aggregate samples within each date
+  const deduplicated: MetricSample[] = [];
+  for (const [, dateSamples] of samplesByDate.entries()) {
+    if (dateSamples.length === 0) continue;
+
+    // If multiple samples for same date, aggregate them
+    if (dateSamples.length > 1) {
+      const values = dateSamples.map((s) => s.value).filter(Number.isFinite);
+      if (values.length === 0) continue;
+
+      const aggregatedValue = isCumulative
+        ? values.reduce((sum, v) => sum + v, 0)
+        : values.reduce((sum, v) => sum + v, 0) / values.length;
+
+      // Use the most recent sample's timestamp and metadata
+      const sortedByTime = dateSamples.sort(
+        (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+      );
+
+      deduplicated.push({
+        timestamp: sortedByTime[0].timestamp,
+        value: aggregatedValue,
+        unit: sortedByTime[0].unit,
+        metadata: sortedByTime[0].metadata,
+      });
+    } else {
+      // Single sample for this date
+      deduplicated.push(dateSamples[0]);
+    }
+  }
+
+  return deduplicated;
+}
 import { healthDataStore } from "@/data/store/healthDataStore";
 
 // ============================================================================
@@ -405,16 +468,35 @@ export class HealthDataProcessor {
       if (tieredAggregation) {
         // Apply tiered aggregation: 30d daily, 150d weekly, rest monthly
         const tieredSamples = applyTieredAggregation(samples, metricType);
-        result[metricType] = tieredSamples;
+
+        // Final deduplication pass after tiered aggregation
+        const deduplicated = deduplicateSamplesByDate(
+          tieredSamples,
+          isCumulativeMetric(metricType),
+        );
+
+        result[metricType] = deduplicated;
 
         console.log(
-          `[HealthDataProcessor] ${metricType}: ${samples.length} daily → ${tieredSamples.length} tiered samples`,
+          `[HealthDataProcessor] ${metricType}: ${samples.length} daily → ${tieredSamples.length} tiered → ${deduplicated.length} deduplicated`,
         );
       } else {
-        // Return daily aggregates
-        result[metricType] = samples.sort(
+        // Return daily aggregates (already deduplicated by date from Map)
+        // But add final safety check
+        const deduplicated = deduplicateSamplesByDate(
+          samples,
+          isCumulativeMetric(metricType),
+        );
+
+        result[metricType] = deduplicated.sort(
           (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
         );
+
+        if (deduplicated.length !== samples.length) {
+          console.log(
+            `[HealthDataProcessor] ${metricType}: Deduplicated ${samples.length} → ${deduplicated.length} unique dates`,
+          );
+        }
       }
     }
 
@@ -434,14 +516,26 @@ export class HealthDataProcessor {
         }),
       );
 
+      // Deduplicate sleep samples by date (should already be deduplicated, but safety check)
+      const deduplicatedSleep = deduplicateSamplesByDate(sleepSamples, false);
+
       if (tieredAggregation) {
         const tieredSleep = applyTieredAggregation(
-          sleepSamples,
+          deduplicatedSleep,
           "HKCategoryTypeIdentifierSleepAnalysis",
         );
-        result["HKCategoryTypeIdentifierSleepAnalysis"] = tieredSleep;
+
+        // Final deduplication pass after tiered aggregation
+        result["HKCategoryTypeIdentifierSleepAnalysis"] =
+          deduplicateSamplesByDate(tieredSleep, false);
       } else {
-        result["HKCategoryTypeIdentifierSleepAnalysis"] = sleepSamples;
+        result["HKCategoryTypeIdentifierSleepAnalysis"] = deduplicatedSleep;
+      }
+
+      if (deduplicatedSleep.length !== sleepSamples.length) {
+        console.log(
+          `[HealthDataProcessor] Sleep: Deduplicated ${sleepSamples.length} → ${deduplicatedSleep.length} unique dates`,
+        );
       }
     }
 

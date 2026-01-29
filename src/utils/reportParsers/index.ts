@@ -45,15 +45,30 @@ export async function parseHealthReport(
       console.log("[ReportParser] 🤖 Using AI to parse DEXA report...");
       try {
         dexa = await parseDexaReportWithAI(rawText, options.sourceName);
-        if (dexa && dexa.regions && dexa.regions.length > 0) {
-          console.log(
-            `[ReportParser] ✅ AI parser extracted ${dexa.regions.length} regions`,
-          );
-        } else if (dexa) {
-          console.warn(
-            `[ReportParser] ⚠️ AI parser returned report with 0 regions, falling back to regex...`,
-          );
-          dexa = null; // Force fallback
+        if (dexa) {
+          // Accept AI result if it has regions OR if it has meaningful data (totalBodyFatPercent, BMD, etc.)
+          const hasRegions = dexa.regions && dexa.regions.length > 0;
+          const hasMeaningfulData =
+            dexa.totalBodyFatPercent !== undefined ||
+            dexa.boneDensityTotal?.bmd !== undefined ||
+            dexa.totalLeanMassKg !== undefined;
+
+          if (hasRegions) {
+            console.log(
+              `[ReportParser] ✅ AI parser extracted ${dexa.regions.length} regions`,
+            );
+          } else if (hasMeaningfulData) {
+            console.warn(
+              `[ReportParser] ⚠️ AI parser extracted data but 0 regions (confidence: ${dexa.confidence}). Keeping AI result and attempting to enhance with structured text parsing.`,
+            );
+            // Keep the AI result even without regions - it may have other valuable data
+            // The structured text parser fallback in aiDexaParser should have already tried to fill regions
+          } else {
+            console.warn(
+              `[ReportParser] ⚠️ AI parser returned report with no meaningful data, falling back to regex...`,
+            );
+            dexa = null; // Force fallback only if no meaningful data
+          }
         }
       } catch (aiError) {
         console.error("[ReportParser] ❌ AI parser error:", aiError);

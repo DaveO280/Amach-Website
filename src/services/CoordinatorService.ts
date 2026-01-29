@@ -176,27 +176,98 @@ function transformMetricData(
       );
 
       // Convert processed daily data into MetricSample format
-      const allSleepSamples: MetricSample[] = [];
+      // Deduplicate by date to handle any duplicate daily summaries
+      const sleepSamplesByDate = new Map<string, MetricSample>();
+
       for (const dayData of processedSleepData) {
         const timestamp = new Date(dayData.date);
         if (Number.isNaN(timestamp.getTime())) {
           continue;
         }
 
+        // Use date string as key for deduplication
+        const dateKey = dayData.date;
+
         // Sleep duration in seconds (agents expect numeric values)
         const durationSeconds = dayData.sleepDuration * 60; // Convert minutes to seconds
 
-        allSleepSamples.push({
-          timestamp,
-          value: durationSeconds,
-          unit: "s",
-          metadata: {
-            efficiency: dayData.metrics.sleepEfficiency,
-            totalDuration: dayData.totalDuration,
-            stages: dayData.stageData,
-            date: dayData.date,
-          },
-        });
+        // If we already have data for this date, merge sessions (sum durations)
+        const existing = sleepSamplesByDate.get(dateKey);
+        if (existing) {
+          console.warn(
+            `[CoordinatorService] Duplicate sleep data detected for date ${dateKey}. Merging sessions.`,
+            {
+              existingDuration: existing.value / 60,
+              newDuration: dayData.sleepDuration,
+            },
+          );
+          // Merge: sum durations, recalculate efficiency, combine stages
+          const existingDuration = existing.value / 60; // Convert back to minutes
+          const mergedDuration = existingDuration + dayData.sleepDuration;
+          const existingTotalDuration =
+            (existing.metadata?.totalDuration as number) || 0;
+          const mergedTotalDuration =
+            existingTotalDuration + dayData.totalDuration;
+
+          // Validate merged duration is reasonable (max 24 hours)
+          if (mergedDuration > 24 * 60) {
+            console.error(
+              `[CoordinatorService] Merged sleep duration exceeds 24h for ${dateKey}: ${mergedDuration} minutes. Using existing value.`,
+            );
+            continue; // Skip this duplicate, keep existing
+          }
+
+          const existingStages =
+            (existing.metadata?.stages as {
+              core?: number;
+              deep?: number;
+              rem?: number;
+              awake?: number;
+            }) || {};
+
+          sleepSamplesByDate.set(dateKey, {
+            timestamp,
+            value: mergedDuration * 60, // Back to seconds
+            unit: "s",
+            metadata: {
+              efficiency: Math.round(
+                (mergedDuration / mergedTotalDuration) * 100,
+              ),
+              totalDuration: mergedTotalDuration,
+              stages: {
+                core:
+                  (existingStages.core || 0) + (dayData.stageData.core || 0),
+                deep:
+                  (existingStages.deep || 0) + (dayData.stageData.deep || 0),
+                rem: (existingStages.rem || 0) + (dayData.stageData.rem || 0),
+                awake:
+                  (existingStages.awake || 0) + (dayData.stageData.awake || 0),
+              },
+              date: dayData.date,
+            },
+          });
+        } else {
+          // First entry for this date
+          sleepSamplesByDate.set(dateKey, {
+            timestamp,
+            value: durationSeconds,
+            unit: "s",
+            metadata: {
+              efficiency: dayData.metrics.sleepEfficiency,
+              totalDuration: dayData.totalDuration,
+              stages: dayData.stageData,
+              date: dayData.date,
+            },
+          });
+        }
+      }
+
+      const allSleepSamples = Array.from(sleepSamplesByDate.values());
+
+      if (allSleepSamples.length !== processedSleepData.length) {
+        console.log(
+          `[CoordinatorService] Deduplicated sleep data: ${processedSleepData.length} daily summaries → ${allSleepSamples.length} unique dates`,
+        );
       }
 
       // Apply tiered aggregation for initial mode, simple window for ongoing

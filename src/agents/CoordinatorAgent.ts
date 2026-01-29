@@ -60,18 +60,18 @@ Return JSON:
   "summary": "3-4 sentences connecting themes, mention cross-metric interactions (e.g., sleep→HRV), natural transitions.",
   "keyFindings": ["Full sentences per domain. Bloodwork: panel name + values + context. DEXA: body comp + bone density. Other domains as relevant."],
   "priorityActions": ["2-3 full sentences: specific actions, why they matter, multi-system benefits."],
-  "watchItems": ["Optional: emerging risks, conflicts, missing data. Omit if not relevant."]
+  "watchItems": ["Optional: emerging risks or data quality conflicts. Omit if not relevant."]
 }
 
 Guidelines:
 - Use "you/your", natural phrasing ("As a 44-year-old male...").
 - Reference actual numbers. Use profile (age/BMI/sex) for context.
-- Bloodwork: one bullet per panel with flagged markers + context.
-- DEXA: integrate total fat %, visceral fat, bone density, regional highlights.
+- Bloodwork: one bullet per panel with flagged markers + context (only if data is available).
+- DEXA: integrate total fat %, visceral fat, bone density, regional highlights (only if data is available).
 - If metadata flags show guidelines met, focus on refinement not increases.
 - Priority actions: show cross-system benefits (e.g., "flatten sleep swings to stabilize HRV").
 - Use conversationHistory to infer user focus.
-- Watch items: only real gaps/conflicts.
+- Watch items: only emerging risks or data quality conflicts. DO NOT mention missing data sets (e.g., "missing DEXA" or "missing bloodwork"). Only include watch items for actual data quality issues or emerging health risks.
 - Stay grounded in payload. Supportive, evidence-based voice.`;
 
 export class CoordinatorAgent {
@@ -369,6 +369,20 @@ export class CoordinatorAgent {
         profile,
         specialists: this.agents.map((agent) => {
           const insight = agentInsights[agent.id];
+          // Filter out dataLimitations that mention missing DEXA or bloodwork
+          const filteredDataLimitations = (
+            insight?.dataLimitations ?? []
+          ).filter((limitation) => {
+            const lower = limitation.toLowerCase();
+            return (
+              !lower.includes("missing") &&
+              !lower.includes("no dexa") &&
+              !lower.includes("no bloodwork") &&
+              !lower.includes("no structured") &&
+              !lower.includes("not available") &&
+              !lower.includes("unavailable")
+            );
+          });
           return {
             id: agent.id,
             name: agent.name,
@@ -379,7 +393,7 @@ export class CoordinatorAgent {
             trends: insight?.trends ?? [],
             concerns: insight?.concerns ?? [],
             recommendations: insight?.recommendations ?? [],
-            dataLimitations: insight?.dataLimitations ?? [],
+            dataLimitations: filteredDataLimitations,
           };
         }),
         crossSignals: this.buildCrossSignals(agentInsights),
@@ -432,6 +446,29 @@ export class CoordinatorAgent {
         cleanedSummary = cleanedSummary.trim();
 
         parsed = JSON.parse(cleanedSummary) as CoordinatorSummary;
+
+        // Filter out watch items that mention missing data sets
+        if (parsed?.watchItems) {
+          parsed.watchItems = parsed.watchItems.filter((item) => {
+            const lower = item.toLowerCase();
+            return (
+              !lower.includes("missing dexa") &&
+              !lower.includes("missing bloodwork") &&
+              !lower.includes("missing structured") &&
+              !lower.includes("no dexa") &&
+              !lower.includes("no bloodwork") &&
+              !lower.includes("not available") &&
+              !lower.includes("unavailable") &&
+              !lower.includes("data logging inconsistencies") &&
+              !lower.includes("missing data") &&
+              !lower.includes("limits the ability") &&
+              !lower.includes("limits ability") &&
+              !lower.includes("unable to assess") &&
+              !lower.includes("cannot assess")
+            );
+          });
+        }
+
         console.log("[CoordinatorAgent] Summary parsed successfully:", {
           hasSummary: Boolean(parsed?.summary),
           keyFindingsCount: parsed?.keyFindings?.length ?? 0,

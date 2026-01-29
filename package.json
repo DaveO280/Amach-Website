@@ -23,12 +23,8 @@
     "pre-commit": "lint-staged && pnpm type-check && pnpm validate-docs",
     "validate-docs": "pnpm exec tsx scripts/validate-docs.ts",
     "clean-docs": "pnpm exec tsx scripts/validate-docs.ts --fix --no-confirm",
-    "agent:test": "cross-env RUN_AGENT_TESTS=true VENICE_API_BASE_URL=http://127.0.0.1:3000 pnpm exec tsx tests/agents/agentQualityTest.ts",
-    "sleep:csv": "cross-env VENICE_API_BASE_URL=http://127.0.0.1:3000 pnpm exec tsx scripts/analyzeSleepFromCsv.ts",
-    "activity:csv": "cross-env VENICE_API_BASE_URL=http://127.0.0.1:3000 pnpm exec tsx scripts/analyzeActivityFromCsv.ts",
-    "cardio:csv": "cross-env VENICE_API_BASE_URL=http://127.0.0.1:3000 pnpm exec tsx scripts/analyzeCardioFromCsv.ts",
-    "recovery:csv": "cross-env VENICE_API_BASE_URL=http://127.0.0.1:3000 pnpm exec tsx scripts/analyzeRecoveryFromCsv.ts",
-    "coordinator:csv": "cross-env VENICE_API_BASE_URL=http://127.0.0.1:3000 pnpm exec tsx scripts/analyzeCoordinatorFromCsv.ts"
+    "agent:isolate": "pnpm exec tsx scripts/test-single-agent.ts",
+    "sleep:dedup": "pnpm exec tsx scripts/test-sleep-dedup.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.946.0",

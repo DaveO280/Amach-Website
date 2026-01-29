@@ -40,16 +40,29 @@ export class VeniceApiService {
     const rawEndpoint =
       process.env.VENICE_API_ENDPOINT ?? DEFAULT_ENDPOINT_PATH;
 
-    // Ensure endpoint always starts with a single leading slash
-    this.endpointPath = `/${rawEndpoint.replace(/^\/?/, "")}`;
+    // Check if VENICE_API_ENDPOINT is a full URL (starts with http:// or https://)
+    const isFullUrl = /^https?:\/\//.test(rawEndpoint);
 
-    const baseURL =
-      trimmedBaseUrl === ""
-        ? ""
-        : this.endpointPath !== DEFAULT_ENDPOINT_PATH &&
-            trimmedBaseUrl.endsWith(this.endpointPath)
-          ? trimmedBaseUrl.slice(0, -this.endpointPath.length) || ""
-          : trimmedBaseUrl;
+    let baseURL: string;
+    if (isFullUrl) {
+      // If endpoint is a full URL, parse it and use the host as baseURL
+      // This allows direct API calls without going through the Next.js proxy
+      const endpointUrl = new URL(rawEndpoint);
+      baseURL = `${endpointUrl.protocol}//${endpointUrl.host}`;
+      this.endpointPath = endpointUrl.pathname;
+    } else {
+      // Ensure endpoint always starts with a single leading slash
+      this.endpointPath = `/${rawEndpoint.replace(/^\/?/, "")}`;
+
+      // Use baseURL logic for relative endpoints
+      baseURL =
+        trimmedBaseUrl === ""
+          ? ""
+          : this.endpointPath !== DEFAULT_ENDPOINT_PATH &&
+              trimmedBaseUrl.endsWith(this.endpointPath)
+            ? trimmedBaseUrl.slice(0, -this.endpointPath.length) || ""
+            : trimmedBaseUrl;
+    }
 
     // Add better clarity to logs when hitting the proxy vs direct endpoint
     const targetInfo = baseURL || "(relative: /api/venice)";
@@ -66,6 +79,27 @@ export class VeniceApiService {
         Accept: "application/json",
       },
     };
+
+    // If calling Venice API directly (not through Next.js proxy), add API key
+    // Check if we're calling the Venice API directly (baseURL contains api.venice.ai)
+    if (baseURL.includes("api.venice.ai")) {
+      const apiKey = process.env.VENICE_API_KEY;
+      if (apiKey) {
+        axiosConfig.headers = {
+          ...axiosConfig.headers,
+          Authorization: `Bearer ${apiKey}`,
+        };
+        if (this.debugMode) {
+          logger.info(
+            "VeniceApiService: Added API key for direct Venice API call",
+          );
+        }
+      } else {
+        logger.warn(
+          "VeniceApiService: VENICE_API_KEY not found, direct API calls will fail",
+        );
+      }
+    }
 
     if (DEFAULT_CLIENT_TIMEOUT_MS !== undefined) {
       axiosConfig.timeout = DEFAULT_CLIENT_TIMEOUT_MS;
@@ -352,6 +386,15 @@ export class VeniceApiService {
         },
         body: JSON.stringify(requestBody),
       };
+
+      // If calling Venice API directly (not through Next.js proxy), add API key
+      if (baseURL.includes("api.venice.ai") || url.includes("api.venice.ai")) {
+        const apiKey = process.env.VENICE_API_KEY;
+        if (apiKey) {
+          (fetchOptions.headers as Record<string, string>).Authorization =
+            `Bearer ${apiKey}`;
+        }
+      }
 
       // Only add abort signal if timeout is configured
       let timeoutId: NodeJS.Timeout | undefined;

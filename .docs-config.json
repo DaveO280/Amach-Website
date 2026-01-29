@@ -37,7 +37,7 @@
 
   "exceptions": {
     "description": "Files matching stale patterns but should be kept",
-    "files": []
+    "files": ["OPTIMIZATION_SUMMARY.md", "AGENT_OPTIMIZATION_GUIDE.md"]
   },
 
   "autoClean": {

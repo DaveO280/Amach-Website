@@ -374,15 +374,104 @@ export const processSleepData = (
     dateGroupedData[session.date].push(session);
   });
 
+  // Deduplicate overlapping sessions within each date
+  // If two sessions overlap significantly (>80% overlap) or are exact duplicates, keep only the longer one
+  const deduplicatedByDate: { [date: string]: SleepSession[] } = {};
+
+  for (const [date, sessions] of Object.entries(dateGroupedData)) {
+    if (sessions.length === 0) continue;
+    if (sessions.length === 1) {
+      deduplicatedByDate[date] = sessions;
+      continue;
+    }
+
+    // Sort by start time
+    const sorted = [...sessions].sort(
+      (a, b) =>
+        new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+    );
+
+    const deduplicated: SleepSession[] = [];
+
+    for (const session of sorted) {
+      const sessionStart = new Date(session.startTime).getTime();
+      const sessionEnd = new Date(session.endTime).getTime();
+      const sessionDuration = sessionEnd - sessionStart;
+
+      // Check if this session is a duplicate or overlaps significantly with any already added session
+      let isDuplicate = false;
+      for (const existing of deduplicated) {
+        const existingStart = new Date(existing.startTime).getTime();
+        const existingEnd = new Date(existing.endTime).getTime();
+        const existingDuration = existingEnd - existingStart;
+
+        // Check for exact duplicate (same start and end times, within 1 minute tolerance)
+        const startDiff = Math.abs(sessionStart - existingStart);
+        const endDiff = Math.abs(sessionEnd - existingEnd);
+        const oneMinuteMs = 60 * 1000;
+
+        if (startDiff < oneMinuteMs && endDiff < oneMinuteMs) {
+          // Exact duplicate - keep the one with more sleep duration
+          isDuplicate = true;
+          if (session.sleepDuration > existing.sleepDuration) {
+            const index = deduplicated.indexOf(existing);
+            deduplicated[index] = session;
+          }
+          break;
+        }
+
+        // Calculate overlap for near-duplicates
+        const overlapStart = Math.max(sessionStart, existingStart);
+        const overlapEnd = Math.min(sessionEnd, existingEnd);
+        const overlapDuration = Math.max(0, overlapEnd - overlapStart);
+
+        // If overlap is >80% of either session, consider it a duplicate
+        const overlapRatioSession =
+          sessionDuration > 0 ? overlapDuration / sessionDuration : 0;
+        const overlapRatioExisting =
+          existingDuration > 0 ? overlapDuration / existingDuration : 0;
+
+        if (overlapRatioSession > 0.8 || overlapRatioExisting > 0.8) {
+          isDuplicate = true;
+          // Keep the longer session (by total duration, not just sleep duration)
+          if (sessionDuration > existingDuration) {
+            // Replace existing with this session
+            const index = deduplicated.indexOf(existing);
+            deduplicated[index] = session;
+          }
+          break;
+        }
+      }
+
+      if (!isDuplicate) {
+        deduplicated.push(session);
+      }
+    }
+
+    deduplicatedByDate[date] = deduplicated;
+  }
+
   // Create the final daily data
   const result: DailyProcessedSleepData[] = [];
 
-  for (const [date, sessions] of Object.entries(dateGroupedData)) {
-    const totalTimeInBed = sessions.reduce((sum, s) => sum + s.timeInBed, 0);
+  for (const [date, sessions] of Object.entries(deduplicatedByDate)) {
+    // Additional validation: if total sleep time exceeds 12 hours, log a warning
+    // and check for potential duplicates
     const totalSleepTime = sessions.reduce(
       (sum, s) => sum + s.sleepDuration,
       0,
     );
+    const totalTimeInBed = sessions.reduce((sum, s) => sum + s.timeInBed, 0);
+
+    // If total sleep exceeds 12 hours (720 minutes), it's likely a duplicate
+    if (totalSleepTime > 720) {
+      console.warn(
+        `[sleepDataProcessor] Suspicious sleep duration for ${date}: ${(totalSleepTime / 60).toFixed(1)}h. Sessions: ${sessions.length}. This may indicate duplicate data.`,
+      );
+      // For now, we'll still include it but log the warning
+      // In the future, we could apply additional filtering here
+    }
+
     const totalCore = sessions.reduce((sum, s) => sum + s.stageData.core, 0);
     const totalDeep = sessions.reduce((sum, s) => sum + s.stageData.deep, 0);
     const totalRem = sessions.reduce((sum, s) => sum + s.stageData.rem, 0);
@@ -416,7 +505,16 @@ export const processSleepData = (
 
 // Update the extractDatePart function
 export const extractDatePart = (dateString: string): string => {
-  return dateString.split("T")[0];
+  const datePart = dateString.split("T")[0];
+  // Normalize to YYYY-MM-DD format to ensure consistent date keys
+  const parts = datePart.split("-");
+  if (parts.length === 3) {
+    const year = parts[0].padStart(4, "0");
+    const month = parts[1].padStart(2, "0");
+    const day = parts[2].padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+  return datePart;
 };
 
 // Update the determinePrimaryDay function

@@ -57,5 +57,8 @@ export function shouldDisableVeniceThinking(
   );
   if (envScoped !== null) return envScoped;
 
+  // Default to true for analysis mode to improve performance
+  if (scope === "analysis") return true;
+
   return false;
 }

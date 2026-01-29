@@ -88,19 +88,61 @@ Return JSON:
         }
       }
 
-      const response = await this.veniceService.generateCompletion({
-        systemPrompt: this.getEnhancedSystemPrompt(),
-        userPrompt: prompt,
-        temperature: 0.4,
-        maxTokens: 8000,
-        veniceParameters: {
-          strip_thinking_response: true,
-          include_venice_system_prompt: false,
-          ...(shouldDisableVeniceThinking("analysis")
-            ? { disable_thinking: true }
-            : {}),
-        },
-      });
+      // Retry logic for slow responses (Venice API variance can cause 60-80s responses)
+      // With 70% success rate under 60s, one retry should suffice
+      const SLOW_RESPONSE_THRESHOLD_MS = 60000; // 60 seconds
+      let response: string | null = null;
+      let attempt = 1;
+      const maxAttempts = 2;
+
+      while (attempt <= maxAttempts) {
+        const startTime = Date.now();
+        try {
+          const apiResponse = await this.veniceService.generateCompletion({
+            systemPrompt: this.getEnhancedSystemPrompt(),
+            userPrompt: prompt,
+            temperature: 0.4,
+            maxTokens: 8000,
+            veniceParameters: {
+              strip_thinking_response: true,
+              include_venice_system_prompt: false,
+              ...(shouldDisableVeniceThinking("analysis")
+                ? { disable_thinking: true }
+                : {}),
+            },
+          });
+
+          const elapsed = Date.now() - startTime;
+          response = apiResponse;
+
+          if (elapsed > SLOW_RESPONSE_THRESHOLD_MS && attempt < maxAttempts) {
+            console.warn(
+              `⚠️ [${this.name}] Slow response (${elapsed}ms), retrying... (attempt ${attempt}/${maxAttempts})`,
+            );
+            attempt++;
+            response = null; // Reset to retry
+            continue;
+          }
+
+          // Success - either fast enough or last attempt
+          break;
+        } catch (error) {
+          if (attempt < maxAttempts) {
+            console.warn(
+              `⚠️ [${this.name}] Error on attempt ${attempt}, retrying...`,
+              error instanceof Error ? error.message : error,
+            );
+            attempt++;
+            continue;
+          }
+          // Last attempt failed, rethrow
+          throw error;
+        }
+      }
+
+      if (!response) {
+        throw new Error("Failed to get response after retries");
+      }
 
       console.log(`✅ [${this.name}] Venice API response received`, {
         responseLength: response.length,

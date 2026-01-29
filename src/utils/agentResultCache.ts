@@ -142,11 +142,9 @@ export function getCachedAgentResult(params: {
       return null;
     }
 
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        `[AgentCache] HIT agent=${params.agentId} age=${Math.round(age / 1000)}s`,
-      );
-    }
+    console.log(
+      `[AgentCache] HIT agent=${params.agentId} age=${Math.round(age / 1000)}s key=${key.substring(0, 50)}...`,
+    );
 
     return entry.result;
   } catch (error) {

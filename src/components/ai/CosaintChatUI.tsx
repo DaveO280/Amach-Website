@@ -38,6 +38,7 @@ interface MessageType {
   role: "user" | "assistant" | "system";
   content: string;
   timestamp: Date;
+  durationMs?: number; // Time taken to generate response (for assistant messages)
 }
 
 interface CosaintChatUIProps {
@@ -2418,6 +2419,12 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                   }`}
                 >
                   {message.content}
+                  {message.role === "assistant" &&
+                    message.durationMs !== undefined && (
+                      <div className="mt-2 pt-2 border-t border-amber-200 text-xs text-amber-700/70">
+                        {formatDuration(message.durationMs)}
+                      </div>
+                    )}
                 </div>
               </div>
             ))}

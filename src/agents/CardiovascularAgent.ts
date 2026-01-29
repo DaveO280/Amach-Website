@@ -274,50 +274,27 @@ Tone requirements:
 
     // For initial analysis, use a compact tiered summary
     if (analysisMode === "initial") {
-      lines.push(
-        "TIERED CARDIO ANALYSIS: All-time baseline → 90-day → 30-day → recent week.",
-      );
+      lines.push("CARDIO DATA: Baseline → 90d → 30d → 7d");
       lines.push("");
 
       // Calculate period averages
       const recent30d = this.calculatePeriodAverages(summaries, 30);
       const recent90d = this.calculatePeriodAverages(summaries, 90);
-
-      // TIER 1: ALL-TIME BASELINE
       lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        `Resting HR: ${this.formatNumber(averages.restingHeartRate, 1)} bpm`,
       );
-      lines.push("TIER 1: ALL-TIME BASELINE (Full History)");
-      lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
-      lines.push(
-        `Resting HR: ${this.formatNumber(averages.restingHeartRate, 1)} bpm (average)`,
-      );
-      lines.push(
-        `HRV: ${this.formatNumber(averages.hrv, 1)} ms (average autonomic balance)`,
-      );
+      lines.push(`HRV: ${this.formatNumber(averages.hrv, 1)} ms`);
       lines.push(
         `Avg Daytime HR: ${this.formatNumber(averages.avgHeartRate, 1)} bpm`,
       );
-      lines.push(
-        `Peak HR: ${this.formatNumber(averages.maxHeartRate, 1)} bpm (max observed)`,
-      );
+      lines.push(`Peak HR: ${this.formatNumber(averages.maxHeartRate, 1)} bpm`);
       if (averages.vo2Max !== null) {
         lines.push(
-          `VO2 Max: ${this.formatNumber(averages.vo2Max, 1)} ml/kg/min (cardio fitness)`,
+          `VO2 Max: ${this.formatNumber(averages.vo2Max, 1)} ml/kg/min`,
         );
       }
       lines.push("");
-
-      // TIER 2: 90-DAY PERIOD
-      lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
-      lines.push("TIER 2: 90-DAY PERIOD (vs Baseline)");
-      lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
+      lines.push("90-DAY:");
       if (
         recent90d.restingHeartRate !== null &&
         averages.restingHeartRate !== null
@@ -339,15 +316,7 @@ Tone requirements:
         );
       }
       lines.push("");
-
-      // TIER 3: 30-DAY PERIOD
-      lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
-      lines.push("TIER 3: 30-DAY PERIOD (Recent Trend)");
-      lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
+      lines.push("30-DAY:");
       if (
         recent30d.restingHeartRate !== null &&
         recent90d.restingHeartRate !== null
@@ -365,14 +334,8 @@ Tone requirements:
       }
       lines.push("");
 
-      // TIER 4: RECENT WEEK
-      lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
-      lines.push("TIER 4: RECENT WEEK (Latest Activity)");
-      lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
+      lines.push("");
+      lines.push("7-DAY:");
       summaries.slice(-7).forEach((summary) => {
         lines.push(
           `${summary.date}: RHR=${this.formatNumber(summary.restingHeartRate)}bpm | HRV=${this.formatNumber(summary.hrv, 1)}ms | Avg=${this.formatNumber(summary.avgHeartRate)}bpm | Max=${this.formatNumber(summary.maxHeartRate)}bpm`,
@@ -380,8 +343,8 @@ Tone requirements:
       });
     } else {
       // For ongoing analysis, use simple format
-      lines.push("CARDIO DATA SUMMARY (last 30 days if available):");
-      summaries.slice(-30).forEach((summary) => {
+      lines.push("CARDIO DATA (last 10 days):");
+      summaries.slice(-10).forEach((summary) => {
         lines.push(
           `  ${summary.date}: restingHR=${this.formatNumber(summary.restingHeartRate)} bpm | HRV=${this.formatNumber(summary.hrv, 1)} ms | avgHR=${this.formatNumber(summary.avgHeartRate)} bpm | maxHR=${this.formatNumber(summary.maxHeartRate)} bpm | exercise=${this.formatNumber(summary.exerciseMinutes, 1)} min`,
         );

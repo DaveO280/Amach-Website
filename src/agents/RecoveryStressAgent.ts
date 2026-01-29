@@ -281,35 +281,21 @@ Tone requirements:
 
     // For initial analysis, use a compact tiered summary
     if (analysisMode === "initial") {
-      lines.push(
-        "TIERED RECOVERY/STRESS: All-time baseline → 90-day → 30-day → recent week.",
-      );
+      lines.push("RECOVERY DATA: Baseline → 90d → 30d → 7d");
       lines.push("");
 
       // Calculate period averages
       const recent30d = this.calculatePeriodAverages(summaries, 30);
       const recent90d = this.calculatePeriodAverages(summaries, 90);
 
-      // TIER 1: ALL-TIME BASELINE
+      lines.push(`HRV: ${this.formatNumber(averages.hrv, 1)} ms`);
       lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
-      lines.push("TIER 1: ALL-TIME BASELINE (Full History)");
-      lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
-      lines.push(
-        `HRV: ${this.formatNumber(averages.hrv, 1)} ms (average autonomic balance)`,
-      );
-      lines.push(
-        `Resting HR: ${this.formatNumber(averages.restingHeartRate, 1)} bpm (average)`,
+        `Resting HR: ${this.formatNumber(averages.restingHeartRate, 1)} bpm`,
       );
       lines.push(
         `Respiratory Rate: ${this.formatNumber(averages.respiratoryRate, 1)} /min`,
       );
-      lines.push(
-        `Sleep Duration: ${this.formatNumber(averages.sleepHours, 1)} h (average)`,
-      );
+      lines.push(`Sleep: ${this.formatNumber(averages.sleepHours, 1)} h`);
       lines.push(
         `Active Energy: ${this.formatNumber(averages.activeEnergy, 1)} kcal/day`,
       );
@@ -317,15 +303,7 @@ Tone requirements:
         `Exercise: ${this.formatNumber(averages.exerciseMinutes, 1)} min/day`,
       );
       lines.push("");
-
-      // TIER 2: 90-DAY PERIOD
-      lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
-      lines.push("TIER 2: 90-DAY PERIOD (vs Baseline)");
-      lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
+      lines.push("90-DAY:");
       if (recent90d.hrv !== null && averages.hrv !== null) {
         const diff = recent90d.hrv - averages.hrv;
         lines.push(
@@ -348,15 +326,7 @@ Tone requirements:
         );
       }
       lines.push("");
-
-      // TIER 3: 30-DAY PERIOD
-      lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
-      lines.push("TIER 3: 30-DAY PERIOD (Recent Trend)");
-      lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
+      lines.push("30-DAY:");
       if (recent30d.hrv !== null && recent90d.hrv !== null) {
         const diff = recent30d.hrv - recent90d.hrv;
         lines.push(
@@ -380,14 +350,8 @@ Tone requirements:
       }
       lines.push("");
 
-      // TIER 4: RECENT WEEK
-      lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
-      lines.push("TIER 4: RECENT WEEK (Latest Activity)");
-      lines.push(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      );
+      lines.push("");
+      lines.push("7-DAY:");
       summaries.slice(-7).forEach((summary) => {
         lines.push(
           `${summary.date}: HRV=${this.formatNumber(summary.hrv, 1)}ms | RHR=${this.formatNumber(summary.restingHeartRate)}bpm | Sleep=${this.formatNumber(summary.sleepHours, 1)}h | Ex=${this.formatNumber(summary.exerciseMinutes)}min`,
@@ -395,8 +359,8 @@ Tone requirements:
       });
     } else {
       // For ongoing analysis, use simple format
-      lines.push("RECOVERY DATA SUMMARY (last 30 days if available):");
-      summaries.slice(-30).forEach((summary) => {
+      lines.push("RECOVERY DATA (last 10 days):");
+      summaries.slice(-10).forEach((summary) => {
         lines.push(
           `  ${summary.date}: HRV=${this.formatNumber(summary.hrv, 1)} ms | restingHR=${this.formatNumber(summary.restingHeartRate)} bpm | respRate=${this.formatNumber(summary.respiratoryRate, 1)} /min | sleep=${this.formatNumber(summary.sleepHours, 1)} h | exercise=${this.formatNumber(summary.exerciseMinutes, 1)} min | energy=${this.formatNumber(summary.activeEnergy, 1)} kcal`,
         );

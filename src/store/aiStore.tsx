@@ -30,6 +30,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  durationMs?: number; // Time taken to generate response (for assistant messages)
 }
 
 interface AiContextType {
@@ -204,6 +205,7 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     message: string,
     forceInitialAnalysis?: boolean,
   ): Promise<void> => {
+    const startTime = Date.now(); // Track start time for duration calculation
     try {
       setIsLoading(true);
       setError(null);
@@ -497,6 +499,9 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         );
       }
 
+      // Calculate duration
+      const durationMs = Date.now() - startTime;
+
       // Add the response to the messages
       setMessages((prev) => [
         ...prev,
@@ -505,6 +510,7 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           content: finalResponse,
           role: "assistant",
           timestamp: new Date(),
+          durationMs,
         },
       ]);
       addChatMessage({

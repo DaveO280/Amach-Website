@@ -425,6 +425,119 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
     }
   });
 
+  // Extract BMD data from Densitometry table
+  let inBmdTable = false;
+  lines.forEach((line) => {
+    // Check if we're entering the BMD table
+    if (
+      line.toLowerCase().includes("densitometry") ||
+      line.toLowerCase().includes("region bmd") ||
+      (line.toLowerCase().includes("bmd") &&
+        line.toLowerCase().includes("g/cm"))
+    ) {
+      inBmdTable = true;
+      return;
+    }
+
+    // Check if we're leaving the BMD table
+    if (
+      inBmdTable &&
+      (line.toLowerCase().includes("trend:") ||
+        line.toLowerCase().includes("graph") ||
+        line.toLowerCase().includes("page:") ||
+        line.toLowerCase().includes("comments:"))
+    ) {
+      inBmdTable = false;
+      return;
+    }
+
+    // Parse BMD table rows: "Region BMD (g/cm²) YA T-score AM Z-score"
+    if (inBmdTable) {
+      const bmdRegionMap: Record<string, string> = {
+        head: "head",
+        arms: "arms",
+        legs: "legs",
+        trunk: "trunk",
+        ribs: "ribs",
+        spine: "spine",
+        pelvis: "pelvis",
+        total: "total",
+      };
+
+      for (const [patternName, region] of Object.entries(bmdRegionMap)) {
+        const pattern = new RegExp(`^${patternName}\\s+`, "i");
+        if (pattern.test(line)) {
+          // Extract BMD value (first number after region name)
+          const numbers = line.match(/-?\d+(?:\.\d+)?/g);
+          if (numbers && numbers.length > 0) {
+            const bmdValue = parseFloat(numbers[0]);
+            if (bmdValue >= 0 && bmdValue <= 3) {
+              let bmdRegion = regions.find((r) => r.region === region);
+              if (!bmdRegion) {
+                bmdRegion = { region };
+                regions.push(bmdRegion);
+              }
+              bmdRegion.boneDensityGPerCm2 = bmdValue;
+
+              // Extract T-score and Z-score if available (for total region)
+              if (region === "total" && numbers.length >= 3) {
+                const tVal = parseFloat(numbers[1]);
+                const zVal = parseFloat(numbers[2]);
+                if (tVal >= -10 && tVal <= 10) {
+                  bmdRegion.tScore = tVal;
+                  if (!tScore) tScore = tVal;
+                }
+                if (zVal >= -10 && zVal <= 10) {
+                  bmdRegion.zScore = zVal;
+                  if (!zScore) zScore = zVal;
+                }
+              }
+            }
+          }
+          break;
+        }
+      }
+    }
+  });
+
+  // Extract visceral fat from VAT section
+  if (!visceralFatRating || !visceralFatVolumeCm3) {
+    let inVatSection = false;
+    lines.forEach((line) => {
+      if (
+        line.toLowerCase().includes("visceral adipose tissue") ||
+        line.toLowerCase().includes("vat")
+      ) {
+        inVatSection = true;
+      }
+      if (inVatSection) {
+        // Look for "Fat Mass (lbs)  1.13" or "Volume (in³)  33.19"
+        if (!visceralFatRating) {
+          const massMatch = line.match(
+            /fat\s+mass\s*\(?lbs?\)?[:\s]+(\d+(?:\.\d+)?)/i,
+          );
+          if (massMatch) {
+            visceralFatRating = parseFloat(massMatch[1]);
+          }
+        }
+        if (!visceralFatVolumeCm3) {
+          const volumeMatch = line.match(
+            /volume\s*\(?in³?\)?[:\s]+(\d+(?:\.\d+)?)/i,
+          );
+          if (volumeMatch) {
+            visceralFatVolumeCm3 = parseFloat(volumeMatch[1]) * 16.387; // Convert in³ to cm³
+          }
+        }
+        if (
+          line.toLowerCase().includes("subcutaneous") ||
+          line.toLowerCase().includes("sat")
+        ) {
+          inVatSection = false;
+        }
+      }
+    });
+  }
+
   // Fallback: parse individual region lines if table parsing didn't work
   if (regions.length === 0) {
     lines.forEach((line) => {
@@ -442,7 +555,8 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
           if (
             metrics.bodyFatPercent !== undefined ||
             metrics.leanMassKg !== undefined ||
-            metrics.fatMassKg !== undefined
+            metrics.fatMassKg !== undefined ||
+            metrics.boneDensityGPerCm2 !== undefined
           ) {
             if (existing) {
               Object.assign(existing, metrics);

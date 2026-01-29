@@ -16,10 +16,11 @@ export async function parseDexaReportWithAI(
     return null;
   }
 
-  // Truncate very long text to avoid token limits (keep first 20000 chars which should cover most reports)
+  // Truncate very long text to avoid token limits and timeouts
+  // Keep first 15000 chars which should cover most reports while staying under timeout limits
   const textToParse =
-    rawText.length > 20000
-      ? rawText.substring(0, 20000) + "... (truncated)"
+    rawText.length > 15000
+      ? rawText.substring(0, 15000) + "... (truncated)"
       : rawText;
 
   const systemPrompt = `Extract all metric data from this DEXA report and output ONLY valid JSON. No narrative, recommendations, or explanations.

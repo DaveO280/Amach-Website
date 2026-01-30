@@ -29,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStorjPruning } from "@/hooks/useStorjPruning";
 import type { StorageService } from "@/storage/StorageService";
 import type { StorageReference } from "@/storage/StorjClient";
+import { storjItemsCache } from "@/data/store/storjItemsCache";
 import {
   EVENT_TYPE_DEFINITIONS,
   HealthEventType as TimelineHealthEventType,
@@ -133,6 +134,21 @@ export function StorageManagementSection({
 
   const [selectedDataType, setSelectedDataType] = useState<string>("all");
 
+  // All tab state
+  const [allItems, setAllItems] = useState<StorjListItem[]>([]);
+  const [allLoading, setAllLoading] = useState(false);
+  const [allError, setAllError] = useState<string>("");
+
+  // Chats tab state
+  const [chatsItems, setChatsItems] = useState<StorjListItem[]>([]);
+  const [chatsLoading, setChatsLoading] = useState(false);
+  const [chatsError, setChatsError] = useState<string>("");
+
+  // Health Data tab state
+  const [healthDataItems, setHealthDataItems] = useState<StorjListItem[]>([]);
+  const [healthDataLoading, setHealthDataLoading] = useState(false);
+  const [healthDataError, setHealthDataError] = useState<string>("");
+
   // Context tab state (viewer)
   // Empty set means "All events"
   const [contextEventTypes, setContextEventTypes] = useState<Set<string>>(
@@ -220,7 +236,93 @@ export function StorageManagementSection({
     setKeyError("");
   }, [userAddress]);
 
-  // No automatic loading - data loads only when tabs are selected
+  // Load from IndexedDB cache on mount and when encryption key is ready
+  useEffect(() => {
+    if (!encryptionKey || !userAddress) return;
+
+    const loadFromCache = async (): Promise<void> => {
+      try {
+        await storjItemsCache.initialize();
+        const cached = await storjItemsCache.getCachedItems(userAddress);
+        const items: StorjListItem[] = cached.map((item) => ({
+          uri: item.uri,
+          contentHash: item.contentHash,
+          size: item.size,
+          uploadedAt: item.uploadedAt,
+          dataType: item.dataType,
+          metadata: item.metadata,
+        }));
+
+        // Load into appropriate tab states
+        setAllItems(items);
+        setChatsItems(
+          items.filter((i) => i.dataType === "conversation-session"),
+        );
+        setHealthDataItems(items.filter((i) => i.dataType === "health-raw"));
+        setContextItems(items.filter((i) => i.dataType === "timeline-event"));
+        setTestsItems(
+          items.filter(
+            (i) =>
+              i.dataType === "bloodwork-report-fhir" ||
+              i.dataType === "dexa-report-fhir",
+          ),
+        );
+      } catch (error) {
+        console.error("[StorageManagement] Failed to load from cache:", error);
+      }
+    };
+
+    void loadFromCache();
+  }, [encryptionKey, userAddress]);
+
+  // Generic refresh function that syncs from Storj to IndexedDB
+  const refreshFromStorj = async (
+    dataType?: string,
+  ): Promise<StorjListItem[]> => {
+    if (!encryptionKey) throw new Error("Encryption key required");
+
+    const resp = await fetch("/api/storj", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "storage/list",
+        userAddress,
+        encryptionKey,
+        dataType,
+      }),
+    });
+
+    const payload = await resp.json();
+    if (!resp.ok || payload?.success === false) {
+      throw new Error(
+        payload?.error || `Failed to list Storj items (${dataType || "all"})`,
+      );
+    }
+
+    const items = (payload?.result ?? []) as StorjListItem[];
+    items.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+
+    // Cache to IndexedDB
+    try {
+      await storjItemsCache.initialize();
+      await storjItemsCache.cacheItems(
+        userAddress,
+        items.map((item) => ({
+          uri: item.uri,
+          contentHash: item.contentHash,
+          size: item.size,
+          uploadedAt: item.uploadedAt,
+          dataType: item.dataType,
+          metadata: item.metadata,
+        })),
+      );
+    } catch (error) {
+      console.error("[StorageManagement] Failed to cache items:", error);
+      // Don't throw - caching failure shouldn't break the refresh
+    }
+
+    return items;
+  };
 
   // Client-side API wrapper for StorageService methods needed by pruning
   const createClientStorageService = (): StorageService => {
@@ -258,6 +360,48 @@ export function StorageManagementSection({
     } as StorageService;
   };
 
+  const handleRefreshAll = async (): Promise<void> => {
+    if (!encryptionKey) return;
+    setAllLoading(true);
+    setAllError("");
+    try {
+      const items = await refreshFromStorj();
+      setAllItems(items);
+    } catch (e) {
+      setAllError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setAllLoading(false);
+    }
+  };
+
+  const handleRefreshChats = async (): Promise<void> => {
+    if (!encryptionKey) return;
+    setChatsLoading(true);
+    setChatsError("");
+    try {
+      const items = await refreshFromStorj("conversation-session");
+      setChatsItems(items);
+    } catch (e) {
+      setChatsError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setChatsLoading(false);
+    }
+  };
+
+  const handleRefreshHealthData = async (): Promise<void> => {
+    if (!encryptionKey) return;
+    setHealthDataLoading(true);
+    setHealthDataError("");
+    try {
+      const items = await refreshFromStorj("health-raw");
+      setHealthDataItems(items);
+    } catch (e) {
+      setHealthDataError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setHealthDataLoading(false);
+    }
+  };
+
   const handleRefreshTests = async (): Promise<void> => {
     if (!encryptionKey) return;
     setTestsLoading(true);
@@ -267,23 +411,7 @@ export function StorageManagementSection({
     setTestsBucketMode("current");
     setTestsLegacyBucket("");
     try {
-      const resp = await fetch("/api/storj", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "storage/list",
-          userAddress,
-          encryptionKey,
-          // Always list without S3 prefix filtering to support legacy key layouts.
-          // We'll filter by metadata `dataType` client-side instead.
-          dataType: undefined,
-        }),
-      });
-      const payload = await resp.json();
-      if (!resp.ok || payload?.success === false) {
-        throw new Error(payload?.error || "Failed to list Storj items");
-      }
-      const all = (payload?.result ?? []) as StorjListItem[];
+      const all = await refreshFromStorj();
       const TEST_DATA_TYPES = new Set([
         "bloodwork-report-fhir",
         "dexa-report-fhir",
@@ -292,8 +420,6 @@ export function StorageManagementSection({
         testsDataType === "all"
           ? all.filter((i) => TEST_DATA_TYPES.has(i.dataType))
           : all.filter((i) => i.dataType === testsDataType);
-      // newest first
-      list.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
       setTestsItems(list);
       setSelectedTestItem(list[0] || null);
       setTestsInfo(
@@ -1383,6 +1509,216 @@ export function StorageManagementSection({
                 );
               })()}
             </TabsContent>
+          ) : selectedDataType === "all" ? (
+            <TabsContent value="all" className="mt-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-medium text-gray-700">
+                  All items ({allItems.length})
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleRefreshAll}
+                  disabled={allLoading}
+                >
+                  {allLoading ? "Loading..." : "Refresh"}
+                </Button>
+              </div>
+              {allError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-900">{allError}</p>
+                </div>
+              )}
+              <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
+                <div className="max-h-96 overflow-auto">
+                  {allItems.length === 0 ? (
+                    <div className="p-3 text-sm text-gray-500">
+                      No items found. Click Refresh to sync from Storj.
+                    </div>
+                  ) : (
+                    <div className="divide-y">
+                      {allItems.map((item) => (
+                        <div key={item.uri} className="p-3 hover:bg-gray-50">
+                          <div className="text-xs font-medium text-gray-900">
+                            {item.dataType}
+                          </div>
+                          <div className="text-[11px] text-gray-600 mt-1 break-all">
+                            {item.uri}
+                          </div>
+                          <div className="text-[11px] text-gray-500 mt-1 flex gap-2">
+                            <span>
+                              {item.uploadedAt
+                                ? new Date(item.uploadedAt).toLocaleString()
+                                : "unknown time"}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              {item.size ? (item.size / 1024).toFixed(1) : "0"}{" "}
+                              KB
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <Button
+                onClick={() => handlePrune("all")}
+                disabled={status.isAnalyzing || status.isPruning}
+                className="w-full"
+                variant="destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                {status.isAnalyzing
+                  ? "Analyzing..."
+                  : status.isPruning
+                    ? "Pruning..."
+                    : "Clean All Data"}
+              </Button>
+            </TabsContent>
+          ) : selectedDataType === "conversation-session" ? (
+            <TabsContent
+              value="conversation-session"
+              className="mt-4 space-y-3"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-medium text-gray-700">
+                  Chat sessions ({chatsItems.length})
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleRefreshChats}
+                  disabled={chatsLoading}
+                >
+                  {chatsLoading ? "Loading..." : "Refresh"}
+                </Button>
+              </div>
+              {chatsError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-900">{chatsError}</p>
+                </div>
+              )}
+              <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
+                <div className="max-h-96 overflow-auto">
+                  {chatsItems.length === 0 ? (
+                    <div className="p-3 text-sm text-gray-500">
+                      No items found. Click Refresh to sync from Storj.
+                    </div>
+                  ) : (
+                    <div className="divide-y">
+                      {chatsItems.map((item) => (
+                        <div key={item.uri} className="p-3 hover:bg-gray-50">
+                          <div className="text-xs font-medium text-gray-900">
+                            {item.dataType}
+                          </div>
+                          <div className="text-[11px] text-gray-600 mt-1 break-all">
+                            {item.uri}
+                          </div>
+                          <div className="text-[11px] text-gray-500 mt-1 flex gap-2">
+                            <span>
+                              {item.uploadedAt
+                                ? new Date(item.uploadedAt).toLocaleString()
+                                : "unknown time"}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              {item.size ? (item.size / 1024).toFixed(1) : "0"}{" "}
+                              KB
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <Button
+                onClick={() => handlePrune("conversation-session")}
+                disabled={status.isAnalyzing || status.isPruning}
+                className="w-full"
+                variant="destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                {status.isAnalyzing
+                  ? "Analyzing..."
+                  : status.isPruning
+                    ? "Pruning..."
+                    : "Clean Chat Sessions"}
+              </Button>
+            </TabsContent>
+          ) : selectedDataType === "health-raw" ? (
+            <TabsContent value="health-raw" className="mt-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-medium text-gray-700">
+                  Health data ({healthDataItems.length})
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleRefreshHealthData}
+                  disabled={healthDataLoading}
+                >
+                  {healthDataLoading ? "Loading..." : "Refresh"}
+                </Button>
+              </div>
+              {healthDataError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-900">{healthDataError}</p>
+                </div>
+              )}
+              <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
+                <div className="max-h-96 overflow-auto">
+                  {healthDataItems.length === 0 ? (
+                    <div className="p-3 text-sm text-gray-500">
+                      No items found. Click Refresh to sync from Storj.
+                    </div>
+                  ) : (
+                    <div className="divide-y">
+                      {healthDataItems.map((item) => (
+                        <div key={item.uri} className="p-3 hover:bg-gray-50">
+                          <div className="text-xs font-medium text-gray-900">
+                            {item.dataType}
+                          </div>
+                          <div className="text-[11px] text-gray-600 mt-1 break-all">
+                            {item.uri}
+                          </div>
+                          <div className="text-[11px] text-gray-500 mt-1 flex gap-2">
+                            <span>
+                              {item.uploadedAt
+                                ? new Date(item.uploadedAt).toLocaleString()
+                                : "unknown time"}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              {item.size ? (item.size / 1024).toFixed(1) : "0"}{" "}
+                              KB
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <Button
+                onClick={() => handlePrune("health-raw")}
+                disabled={status.isAnalyzing || status.isPruning}
+                className="w-full"
+                variant="destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                {status.isAnalyzing
+                  ? "Analyzing..."
+                  : status.isPruning
+                    ? "Pruning..."
+                    : "Clean Health Data"}
+              </Button>
+            </TabsContent>
           ) : selectedDataType !== "tests" ? (
             <TabsContent value={selectedDataType} className="mt-4 space-y-3">
               <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -1416,7 +1752,7 @@ export function StorageManagementSection({
                   ? "Analyzing..."
                   : status.isPruning
                     ? "Pruning..."
-                    : `Clean ${selectedDataType === "all" ? "All Data" : selectedDataType}`}
+                    : `Clean ${selectedDataType}`}
               </Button>
             </TabsContent>
           ) : (

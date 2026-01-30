@@ -31,6 +31,7 @@ import { clearAgentResultCache } from "@/utils/agentResultCache";
 import { clearCoordinatorSummaryCache } from "@/utils/coordinatorSummaryCache";
 import { clearVeniceResponseCache } from "@/utils/veniceResponseCache";
 import { clearToolResultCache } from "@/utils/toolResultCache";
+import { storjItemsCache } from "@/data/store/storjItemsCache";
 
 // Define types for our message interface
 interface MessageType {
@@ -987,6 +988,34 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               storjUri: result.storjUri,
               savedToStorjAt: new Date().toISOString(),
             });
+
+            // Cache to IndexedDB for fast access in Storage Manager
+            if (address) {
+              try {
+                await storjItemsCache.initialize();
+                await storjItemsCache.cacheItem(address, {
+                  uri: result.storjUri,
+                  contentHash,
+                  size: result.size || 0,
+                  uploadedAt: Date.now(),
+                  dataType:
+                    r.report.type === "bloodwork"
+                      ? "bloodwork-report-fhir"
+                      : "dexa-report-fhir",
+                  metadata: {
+                    reportType: r.report.type,
+                    uploadedAt: new Date().toISOString(),
+                    source: "chat-ui",
+                  },
+                });
+              } catch (error) {
+                console.error(
+                  "[CosaintChatUI] Failed to cache item to IndexedDB:",
+                  error,
+                );
+                // Don't throw - caching failure shouldn't break the save
+              }
+            }
 
             return { success: true, idx };
           } else {

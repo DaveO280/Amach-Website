@@ -663,6 +663,53 @@ class HealthDataStoreService {
     });
   }
 
+  async updateUploadedFileParsedReports(
+    fileId: string,
+    parsedReports: Array<{
+      report: unknown;
+      extractedAt: string;
+      storjUri?: string;
+      savedToStorjAt?: string;
+    }>,
+  ): Promise<void> {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    const db = await this.initDB();
+    return new Promise<void>((resolve, reject): void => {
+      const transaction = db.transaction([UPLOADED_FILES_STORE], "readwrite");
+      const store = transaction.objectStore(UPLOADED_FILES_STORE);
+      const getRequest = store.get(fileId);
+
+      getRequest.onerror = (): void => {
+        reject(getRequest.error);
+      };
+
+      getRequest.onsuccess = (): void => {
+        const file = getRequest.result as UploadedFileStore | undefined;
+        if (!file) {
+          reject(new Error(`File with id ${fileId} not found`));
+          return;
+        }
+
+        // Update the file with parsed reports
+        file.parsedReports = parsedReports;
+        file.lastAccessed = new Date().toISOString();
+
+        const putRequest = store.put(file);
+
+        putRequest.onerror = (): void => {
+          reject(putRequest.error);
+        };
+
+        putRequest.onsuccess = (): void => {
+          resolve();
+        };
+      };
+    });
+  }
+
   async getAllUploadedFiles(): Promise<UploadedFileStore[]> {
     if (!this.isInitialized) {
       await this.initialize();

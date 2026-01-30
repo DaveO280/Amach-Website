@@ -139,11 +139,6 @@ export function StorageManagementSection({
     "conversation-session",
   );
 
-  // All tab state
-  const [allItems, setAllItems] = useState<StorjListItem[]>([]);
-  const [allLoading, setAllLoading] = useState(false);
-  const [allError, setAllError] = useState<string>("");
-
   // Chats tab state
   const [chatsItems, setChatsItems] = useState<StorjListItem[]>([]);
   const [chatsLoading, setChatsLoading] = useState(false);
@@ -259,7 +254,6 @@ export function StorageManagementSection({
         }));
 
         // Load into appropriate tab states
-        setAllItems(items);
         setChatsItems(
           items.filter(
             (i) =>
@@ -507,39 +501,6 @@ export function StorageManagementSection({
         return json.result || [];
       },
     } as StorageService;
-  };
-
-  const handleRefreshAll = async (): Promise<void> => {
-    console.log("[StorageManagement] handleRefreshAll called");
-    if (!encryptionKey) {
-      console.error(
-        "[StorageManagement] Encryption key missing in handleRefreshAll",
-      );
-      setAllError("Encryption key required");
-      return;
-    }
-    if (!userAddress) {
-      console.error(
-        "[StorageManagement] User address missing in handleRefreshAll",
-      );
-      setAllError("User address required");
-      return;
-    }
-    setAllLoading(true);
-    setAllError("");
-    try {
-      console.log("[StorageManagement] Refreshing all items from Storj...");
-      const items = await refreshFromStorj();
-      console.log(`[StorageManagement] Refreshed ${items.length} items`);
-      setAllItems(items);
-    } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : "Unknown error";
-      console.error("[StorageManagement] Failed to refresh all items:", e);
-      setAllError(errorMessage);
-    } finally {
-      console.log("[StorageManagement] handleRefreshAll finally block");
-      setAllLoading(false);
-    }
   };
 
   const handleRefreshChats = async (): Promise<void> => {
@@ -1698,75 +1659,6 @@ export function StorageManagementSection({
                   </div>
                 );
               })()}
-            </TabsContent>
-          ) : selectedDataType === "all" ? (
-            <TabsContent value="all" className="mt-4 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-xs font-medium text-gray-700">
-                  All items ({allItems.length})
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleRefreshAll}
-                  disabled={allLoading}
-                >
-                  {allLoading ? "Loading..." : "Refresh"}
-                </Button>
-              </div>
-              {allError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
-                  <p className="text-sm text-red-900">{allError}</p>
-                </div>
-              )}
-              <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
-                <div className="max-h-96 overflow-auto">
-                  {allItems.length === 0 ? (
-                    <div className="p-3 text-sm text-gray-500">
-                      No items found. Click Refresh to sync from Storj.
-                    </div>
-                  ) : (
-                    <div className="divide-y">
-                      {allItems.map((item) => (
-                        <div key={item.uri} className="p-3 hover:bg-gray-50">
-                          <div className="text-xs font-medium text-gray-900">
-                            {item.dataType}
-                          </div>
-                          <div className="text-[11px] text-gray-600 mt-1 break-all">
-                            {item.uri}
-                          </div>
-                          <div className="text-[11px] text-gray-500 mt-1 flex gap-2">
-                            <span>
-                              {item.uploadedAt
-                                ? new Date(item.uploadedAt).toLocaleString()
-                                : "unknown time"}
-                            </span>
-                            <span>•</span>
-                            <span>
-                              {item.size ? (item.size / 1024).toFixed(1) : "0"}{" "}
-                              KB
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <Button
-                onClick={() => handlePrune("all")}
-                disabled={status.isAnalyzing || status.isPruning}
-                className="w-full"
-                variant="destructive"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                {status.isAnalyzing
-                  ? "Analyzing..."
-                  : status.isPruning
-                    ? "Pruning..."
-                    : "Clean All Data"}
-              </Button>
             </TabsContent>
           ) : selectedDataType === "conversation-session" ? (
             <TabsContent

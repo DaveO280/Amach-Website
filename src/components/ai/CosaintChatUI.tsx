@@ -13,7 +13,7 @@ import { useAi } from "@/store/aiStore";
 import { parseHealthReport } from "@/utils/reportParsers";
 import { Send, FileText } from "lucide-react";
 import Papa from "papaparse";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { healthDataStore } from "../../data/store/healthDataStore";
 import { parsePDF } from "../../utils/pdfParser";
 import { useWalletService } from "@/hooks/useWalletService";
@@ -635,7 +635,13 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     return md[key] ?? md[lowerKey];
   };
 
-  const loadStorjReportsList = async (): Promise<void> => {
+  const loadStorjReportsList = useCallback(async (): Promise<void> => {
+    // Prevent multiple simultaneous calls
+    if (storjImportLoading) {
+      console.log("⏸️ Storj reports already loading, skipping...");
+      return;
+    }
+
     if (!address) {
       setStorjImportError("Connect your wallet to import saved reports.");
       return;
@@ -717,7 +723,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     } finally {
       setStorjImportLoading(false);
     }
-  };
+  }, [address, signMessage]);
 
   const toggleSelectedStorjUri = (uri: string): void => {
     setSelectedStorjUris((prev) => {
@@ -1146,7 +1152,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     if (fileManagerTab === "saved") {
       void loadSavedFiles();
     }
-    if (fileManagerTab === "storj" && isConnected) {
+    if (fileManagerTab === "storj" && isConnected && !storjImportLoading) {
       void loadStorjReportsList();
     }
   }, [
@@ -1155,6 +1161,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     isConnected,
     loadSavedFiles,
     loadStorjReportsList,
+    storjImportLoading,
   ]);
 
   // Load a saved file into chat context
@@ -1183,6 +1190,23 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             sourceName: file.fileName,
             useAI: true,
           });
+
+          // Cache the parsed reports for next time (async, don't wait)
+          if (parsedReports.length > 0) {
+            healthDataStore
+              .updateUploadedFileParsedReports(file.id, parsedReports)
+              .then(() => {
+                console.log(
+                  `✅ Cached parsed reports for ${file.fileName} (${parsedReports.length} report(s))`,
+                );
+              })
+              .catch((error) => {
+                console.error(
+                  `❌ Failed to cache parsed reports for ${file.fileName}:`,
+                  error,
+                );
+              });
+          }
         }
 
         if (parsedReports.length) {

@@ -311,12 +311,16 @@ export function StorageManagementSection({
 
     const payload = await resp.json();
     if (!resp.ok || payload?.success === false) {
-      throw new Error(
-        payload?.error || `Failed to list Storj items (${dataType || "all"})`,
-      );
+      const errorMsg =
+        payload?.error || `Failed to list Storj items (${dataType || "all"})`;
+      console.error("[StorageManagement] Storj API error:", errorMsg);
+      throw new Error(errorMsg);
     }
 
     const storjItems = (payload?.result ?? []) as StorjListItem[];
+    console.log(
+      `[StorageManagement] Fetched ${storjItems.length} items from Storj`,
+    );
     storjItems.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
 
     // Find new items (exist in Storj but not in cache)
@@ -362,7 +366,7 @@ export function StorageManagementSection({
     // Merge cached items with Storj items, preferring Storj data for any conflicts
     const allItemsMap = new Map<string, StorjListItem>();
 
-    // Add cached items first
+    // Add cached items first (only if they match the requested dataType filter)
     for (const cached of cachedItems) {
       if (!dataType || cached.dataType === dataType) {
         allItemsMap.set(cached.uri, {
@@ -377,12 +381,17 @@ export function StorageManagementSection({
     }
 
     // Overwrite with Storj items (they're the source of truth)
+    // Storj items are already filtered by dataType from the API call
     for (const item of storjItems) {
       allItemsMap.set(item.uri, item);
     }
 
     const allItems = Array.from(allItemsMap.values());
     allItems.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+
+    console.log(
+      `[StorageManagement] Returning ${allItems.length} total items (${cachedItems.length} cached + ${storjItems.length} from Storj)`,
+    );
 
     return allItems;
   };
@@ -424,14 +433,21 @@ export function StorageManagementSection({
   };
 
   const handleRefreshAll = async (): Promise<void> => {
-    if (!encryptionKey) return;
+    if (!encryptionKey) {
+      setAllError("Encryption key required");
+      return;
+    }
     setAllLoading(true);
     setAllError("");
     try {
+      console.log("[StorageManagement] Refreshing all items from Storj...");
       const items = await refreshFromStorj();
+      console.log(`[StorageManagement] Refreshed ${items.length} items`);
       setAllItems(items);
     } catch (e) {
-      setAllError(e instanceof Error ? e.message : "Unknown error");
+      const errorMessage = e instanceof Error ? e.message : "Unknown error";
+      console.error("[StorageManagement] Failed to refresh all items:", e);
+      setAllError(errorMessage);
     } finally {
       setAllLoading(false);
     }

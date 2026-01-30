@@ -29,7 +29,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStorjPruning } from "@/hooks/useStorjPruning";
 import type { StorageService } from "@/storage/StorageService";
 import type { StorageReference } from "@/storage/StorjClient";
-import { storjItemsCache } from "@/data/store/storjItemsCache";
+import {
+  storjItemsCache,
+  type StorjItemCache,
+} from "@/data/store/storjItemsCache";
 import {
   EVENT_TYPE_DEFINITIONS,
   HealthEventType as TimelineHealthEventType,
@@ -276,11 +279,25 @@ export function StorageManagementSection({
   }, [encryptionKey, userAddress]);
 
   // Generic refresh function that syncs from Storj to IndexedDB
+  // Only fetches and caches items that aren't already in IndexedDB
   const refreshFromStorj = async (
     dataType?: string,
   ): Promise<StorjListItem[]> => {
     if (!encryptionKey) throw new Error("Encryption key required");
 
+    // First, get what we already have cached
+    let cachedItems: StorjItemCache[] = [];
+    try {
+      await storjItemsCache.initialize();
+      cachedItems = await storjItemsCache.getCachedItems(userAddress, dataType);
+    } catch (error) {
+      console.error("[StorageManagement] Failed to load from cache:", error);
+      // Continue anyway - will fetch all from Storj
+    }
+
+    const cachedUris = new Set(cachedItems.map((item) => item.uri));
+
+    // Fetch from Storj
     const resp = await fetch("/api/storj", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -299,29 +316,75 @@ export function StorageManagementSection({
       );
     }
 
-    const items = (payload?.result ?? []) as StorjListItem[];
-    items.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+    const storjItems = (payload?.result ?? []) as StorjListItem[];
+    storjItems.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
 
-    // Cache to IndexedDB
-    try {
-      await storjItemsCache.initialize();
-      await storjItemsCache.cacheItems(
-        userAddress,
-        items.map((item) => ({
-          uri: item.uri,
-          contentHash: item.contentHash,
-          size: item.size,
-          uploadedAt: item.uploadedAt,
-          dataType: item.dataType,
-          metadata: item.metadata,
-        })),
+    // Find new items (exist in Storj but not in cache)
+    const newItems = storjItems.filter((item) => !cachedUris.has(item.uri));
+
+    // Also check for items that might have been updated (different contentHash)
+    const updatedItems = storjItems.filter((item) => {
+      const cached = cachedItems.find((c) => c.uri === item.uri);
+      return cached && cached.contentHash !== item.contentHash;
+    });
+
+    // Cache only new and updated items
+    const itemsToCache = [...newItems, ...updatedItems];
+    if (itemsToCache.length > 0) {
+      try {
+        await storjItemsCache.initialize();
+        // Use cacheItem for individual items to merge with existing cache
+        // instead of replacing all items
+        for (const item of itemsToCache) {
+          await storjItemsCache.cacheItem(userAddress, {
+            uri: item.uri,
+            contentHash: item.contentHash,
+            size: item.size,
+            uploadedAt: item.uploadedAt,
+            dataType: item.dataType,
+            metadata: item.metadata,
+          });
+        }
+        console.log(
+          `[StorageManagement] Cached ${itemsToCache.length} new/updated item(s) from Storj`,
+        );
+      } catch (error) {
+        console.error("[StorageManagement] Failed to cache items:", error);
+        // Don't throw - caching failure shouldn't break the refresh
+      }
+    } else {
+      console.log(
+        "[StorageManagement] All items already cached, no new items from Storj",
       );
-    } catch (error) {
-      console.error("[StorageManagement] Failed to cache items:", error);
-      // Don't throw - caching failure shouldn't break the refresh
     }
 
-    return items;
+    // Return all items (cached + new) for display
+    // Merge cached items with Storj items, preferring Storj data for any conflicts
+    const allItemsMap = new Map<string, StorjListItem>();
+
+    // Add cached items first
+    for (const cached of cachedItems) {
+      if (!dataType || cached.dataType === dataType) {
+        allItemsMap.set(cached.uri, {
+          uri: cached.uri,
+          contentHash: cached.contentHash,
+          size: cached.size,
+          uploadedAt: cached.uploadedAt,
+          dataType: cached.dataType,
+          metadata: cached.metadata,
+        });
+      }
+    }
+
+    // Overwrite with Storj items (they're the source of truth)
+    for (const item of storjItems) {
+      allItemsMap.set(item.uri, item);
+    }
+
+    const allItems = Array.from(allItemsMap.values());
+    allItems.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+
+    return allItems;
   };
 
   // Client-side API wrapper for StorageService methods needed by pruning

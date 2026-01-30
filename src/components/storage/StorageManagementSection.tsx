@@ -459,8 +459,19 @@ export function StorageManagementSection({
   };
 
   const handleRefreshAll = async (): Promise<void> => {
+    console.log("[StorageManagement] handleRefreshAll called");
     if (!encryptionKey) {
+      console.error(
+        "[StorageManagement] Encryption key missing in handleRefreshAll",
+      );
       setAllError("Encryption key required");
+      return;
+    }
+    if (!userAddress) {
+      console.error(
+        "[StorageManagement] User address missing in handleRefreshAll",
+      );
+      setAllError("User address required");
       return;
     }
     setAllLoading(true);
@@ -475,6 +486,7 @@ export function StorageManagementSection({
       console.error("[StorageManagement] Failed to refresh all items:", e);
       setAllError(errorMessage);
     } finally {
+      console.log("[StorageManagement] handleRefreshAll finally block");
       setAllLoading(false);
     }
   };

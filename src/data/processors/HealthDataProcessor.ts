@@ -373,6 +373,7 @@ export class HealthDataProcessor {
   /**
    * Get data for visualizations
    * Can return raw, daily, weekly, or monthly aggregates
+   * Note: For heart rate, use getRawHeartRateSamples() directly for async loading
    */
   getDataForVisualization(
     metricType: string,
@@ -403,6 +404,14 @@ export class HealthDataProcessor {
             stages: day.stageData,
           },
         }));
+    }
+
+    // Special handling: Heart rate needs raw samples for zone calculations
+    // This is handled separately in HealthDashboard via getRawHeartRateSamples()
+    // to support async loading from IndexedDB
+    if (metricType === "HKQuantityTypeIdentifierHeartRate") {
+      // Return empty - should use getRawHeartRateSamples() directly
+      return [];
     }
 
     const dailyData = this.processedData.dailyAggregates[metricType];
@@ -437,9 +446,9 @@ export class HealthDataProcessor {
    * Get data for AI agents with tiered aggregation
    * This provides optimal context window usage
    */
-  getDataForAIAgents(
+  async getDataForAIAgents(
     options: GetDataOptions = {},
-  ): Record<string, MetricSample[]> {
+  ): Promise<Record<string, MetricSample[]>> {
     if (!this.processedData) {
       return {};
     }
@@ -453,7 +462,7 @@ export class HealthDataProcessor {
     )) {
       // Special handling: Heart rate needs raw samples for zone calculations
       if (metricType === "HKQuantityTypeIdentifierHeartRate") {
-        const rawHeartRate = this.getRawHeartRateSamples(options);
+        const rawHeartRate = await this.getRawHeartRateSamples(options);
         if (rawHeartRate.length > 0) {
           result[metricType] = rawHeartRate;
           console.log(
@@ -563,17 +572,36 @@ export class HealthDataProcessor {
   /**
    * Get raw heart rate samples for zone calculations
    * Heart rate zones need individual readings, not daily averages
+   * If rawData is not available (e.g., loaded from IndexedDB), loads from IndexedDB
    */
-  getRawHeartRateSamples(options: GetDataOptions = {}): MetricSample[] {
-    if (!this.processedData || !this.processedData.rawData) {
-      return [];
+  async getRawHeartRateSamples(
+    options: GetDataOptions = {},
+  ): Promise<MetricSample[]> {
+    const { startDate, endDate } = options;
+
+    // First, try to get from in-memory processedData
+    let heartRateData: HealthDataPoint[] | undefined;
+    if (this.processedData?.rawData) {
+      heartRateData =
+        this.processedData.rawData["HKQuantityTypeIdentifierHeartRate"];
     }
 
-    const { startDate, endDate } = options;
-    const heartRateData =
-      this.processedData.rawData["HKQuantityTypeIdentifierHeartRate"];
+    // If not available in memory, load from IndexedDB (may be trimmed to 180 days)
+    if (!heartRateData || heartRateData.length === 0) {
+      try {
+        const rawData = await healthDataStore.getHealthData();
+        heartRateData = rawData?.["HKQuantityTypeIdentifierHeartRate"] as
+          | HealthDataPoint[]
+          | undefined;
+      } catch (error) {
+        console.error(
+          "[HealthDataProcessor] Failed to load raw heart rate from IndexedDB:",
+          error,
+        );
+      }
+    }
 
-    if (!heartRateData) {
+    if (!heartRateData || heartRateData.length === 0) {
       return [];
     }
 
@@ -609,13 +637,13 @@ export class HealthDataProcessor {
    * Get data with historical context for AI agents
    * Returns both full historical data and recent detailed data
    */
-  getDataWithHistoricalContext(
+  async getDataWithHistoricalContext(
     metricType: string,
     recentDays: number = 60,
-  ): {
+  ): Promise<{
     historical: MetricSample[];
     recent: MetricSample[];
-  } {
+  }> {
     if (!this.processedData) {
       return { historical: [], recent: [] };
     }
@@ -651,7 +679,7 @@ export class HealthDataProcessor {
       const recentStart = new Date(
         now.getTime() - recentDays * 24 * 60 * 60 * 1000,
       );
-      const allSamples = this.getRawHeartRateSamples();
+      const allSamples = await this.getRawHeartRateSamples();
 
       return {
         historical: allSamples,

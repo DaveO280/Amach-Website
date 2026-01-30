@@ -152,7 +152,7 @@ export async function runCoordinatorAnalysis({
     );
 
     // Get data optimized for AI agents
-    const agentData = healthDataProcessor.getDataForAIAgents({
+    const agentData = await healthDataProcessor.getDataForAIAgents({
       tieredAggregation: analysisMode === "initial",
     });
 

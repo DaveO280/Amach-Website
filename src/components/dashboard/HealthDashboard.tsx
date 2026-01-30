@@ -57,15 +57,39 @@ export const HealthDashboard: () => JSX.Element = () => {
 
   // Prefer long-range processed aggregates (persisted) when available.
   // Raw IndexedDB data may be trimmed to a recent window for performance.
-  const heartRateForCharts = useMemo(() => {
-    const samples = healthDataProcessor.getDataForVisualization(
-      "HKQuantityTypeIdentifierHeartRate",
-      { aggregationLevel: "daily" },
-    );
-    if (samples.length > 0)
-      return toHealthData(samples, "HKQuantityTypeIdentifierHeartRate");
-    return (metricData["HKQuantityTypeIdentifierHeartRate"] ||
-      []) as HealthData[];
+  const [heartRateForCharts, setHeartRateForCharts] = useState<HealthData[]>(
+    (metricData["HKQuantityTypeIdentifierHeartRate"] || []) as HealthData[],
+  );
+
+  useEffect(() => {
+    const loadHeartRateData = async (): Promise<void> => {
+      try {
+        // Use getRawHeartRateSamples to load from IndexedDB if needed
+        const samples = await healthDataProcessor.getRawHeartRateSamples({});
+        if (samples.length > 0) {
+          setHeartRateForCharts(
+            toHealthData(samples, "HKQuantityTypeIdentifierHeartRate"),
+          );
+        } else {
+          // Fallback to metricData if no processed data
+          setHeartRateForCharts(
+            (metricData["HKQuantityTypeIdentifierHeartRate"] ||
+              []) as HealthData[],
+          );
+        }
+      } catch (error) {
+        console.error(
+          "[HealthDashboard] Failed to load heart rate data:",
+          error,
+        );
+        // Fallback to metricData on error
+        setHeartRateForCharts(
+          (metricData["HKQuantityTypeIdentifierHeartRate"] ||
+            []) as HealthData[],
+        );
+      }
+    };
+    void loadHeartRateData();
   }, [metricData, toHealthData]);
 
   const hrvForCharts = useMemo(() => {

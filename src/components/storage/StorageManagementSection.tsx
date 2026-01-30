@@ -299,18 +299,31 @@ export function StorageManagementSection({
     // First, get what we already have cached
     let cachedItems: StorjItemCache[] = [];
     try {
-      await storjItemsCache.initialize();
+      console.log("[StorageManagement] Initializing IndexedDB cache...");
+      await Promise.race([
+        storjItemsCache.initialize(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("IndexedDB init timeout")), 5000),
+        ),
+      ]);
+      console.log("[StorageManagement] IndexedDB initialized");
       console.log(
         `[StorageManagement] Getting cached items for user: ${userAddress}`,
       );
       // When dataType is undefined, get all cached items (don't filter)
-      cachedItems = await storjItemsCache.getCachedItems(userAddress);
+      cachedItems = await Promise.race([
+        storjItemsCache.getCachedItems(userAddress),
+        new Promise<StorjItemCache[]>((_, reject) =>
+          setTimeout(() => reject(new Error("getCachedItems timeout")), 5000),
+        ),
+      ]);
       console.log(
         `[StorageManagement] Found ${cachedItems.length} cached items`,
       );
     } catch (error) {
       console.error("[StorageManagement] Failed to load from cache:", error);
       // Continue anyway - will fetch all from Storj
+      cachedItems = [];
     }
 
     const cachedUris = new Set(cachedItems.map((item) => item.uri));

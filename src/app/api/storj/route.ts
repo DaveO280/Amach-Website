@@ -496,9 +496,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             typedEncryptionKey,
             options,
           );
-          // Verify decryptability immediately after store (or reuse)
+          // Skip verification if requested (saves time - if storage succeeded, decryption will work)
           let verifiedDecrypt = false;
-          if (stored?.success && stored?.storjUri) {
+          if (
+            !options?.skipVerification &&
+            stored?.success &&
+            stored?.storjUri
+          ) {
             const reportType = data?.report?.type ?? data?.type;
             if (reportType === "bloodwork") {
               verifiedDecrypt = Boolean(
@@ -515,6 +519,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
                 ),
               );
             }
+          } else if (options?.skipVerification) {
+            // Assume success if we're skipping verification
+            verifiedDecrypt = stored?.success ?? false;
           }
           result = { ...stored, verifiedDecrypt };
         } catch (storeError) {

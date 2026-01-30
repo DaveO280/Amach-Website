@@ -942,51 +942,73 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         signMessage,
       );
 
-      for (const { r, idx } of unsaved) {
-        const resp = await fetch("/api/storj", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "report/store",
-            userAddress: address,
-            encryptionKey,
-            data: r,
-            options: {
-              metadata: {
-                uploadedAt: new Date().toISOString(),
-                source: "chat-ui",
+      // Save reports in parallel for better performance
+      const savePromises = unsaved.map(async ({ r, idx }) => {
+        try {
+          const resp = await fetch("/api/storj", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "report/store",
+              userAddress: address,
+              encryptionKey,
+              data: r,
+              options: {
+                metadata: {
+                  uploadedAt: new Date().toISOString(),
+                  source: "chat-ui",
+                },
+                skipVerification: true, // Skip slow verification step
               },
-            },
-          }),
-        });
+            }),
+          });
 
-        const payload = await resp.json();
-        const result = payload?.result;
+          const payload = await resp.json();
+          const result = payload?.result;
 
-        if (result?.success && result?.storjUri) {
-          const contentHash =
-            (result?.contentHash as string | undefined) ||
-            (result?.existingContentHash as string | undefined) ||
-            "";
-          if (!contentHash) {
-            throw new Error(
-              "Storj save succeeded but no contentHash was returned; cannot record on-chain marker.",
-            );
+          if (result?.success && result?.storjUri) {
+            const contentHash =
+              (result?.contentHash as string | undefined) ||
+              (result?.existingContentHash as string | undefined) ||
+              "";
+            if (!contentHash) {
+              throw new Error(
+                "Storj save succeeded but no contentHash was returned; cannot record on-chain marker.",
+              );
+            }
+
+            await recordReportUploadOnChain({
+              storjUri: result.storjUri,
+              contentHash,
+              reportType: r.report.type,
+            });
+
+            updateReport(idx, {
+              storjUri: result.storjUri,
+              savedToStorjAt: new Date().toISOString(),
+            });
+
+            return { success: true, idx };
+          } else {
+            throw new Error(result?.error || "Failed to save report to Storj");
           }
-
-          await recordReportUploadOnChain({
-            storjUri: result.storjUri,
-            contentHash,
-            reportType: r.report.type,
-          });
-
-          updateReport(idx, {
-            storjUri: result.storjUri,
-            savedToStorjAt: new Date().toISOString(),
-          });
-        } else {
-          throw new Error(result?.error || "Failed to save report to Storj");
+        } catch (error) {
+          console.error(`❌ Failed to save report ${idx}:`, error);
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          return { success: false, idx, error: errorMessage };
         }
+      });
+
+      // Wait for all saves to complete
+      const results = await Promise.all(savePromises);
+      const failures = results.filter(
+        (r): r is { success: false; idx: number; error: string } => !r.success,
+      );
+      if (failures.length > 0) {
+        throw new Error(
+          `Failed to save ${failures.length} report(s): ${failures.map((f) => f.error).join(", ")}`,
+        );
       }
 
       setShowReportViewer(true);

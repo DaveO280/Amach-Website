@@ -9,7 +9,8 @@
 
 import { Button } from "@/components/ui/button";
 import { useStorjPruning } from "@/hooks/useStorjPruning";
-import { getStorageService } from "@/storage/StorageService";
+import type { StorageService } from "@/storage/StorageService";
+import type { StorageReference } from "@/storage/StorjClient";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 import { useState } from "react";
 
@@ -33,9 +34,42 @@ export function StorjPruningButton({
 
   const [statsText, setStatsText] = useState<string>("");
 
-  const handleViewStats = async () => {
+  // Client-side API wrapper for StorageService methods needed by pruning
+  const createClientStorageService = (): StorageService => {
+    return {
+      listUserData: async (
+        address: string,
+        key: WalletEncryptionKey,
+        dataType?: string,
+      ): Promise<StorageReference[]> => {
+        const res = await fetch("/api/storj", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "storage/list",
+            userAddress: address,
+            encryptionKey: key,
+            dataType,
+          }),
+        });
+        const json = (await res.json()) as {
+          success?: boolean;
+          result?: StorageReference[];
+          error?: string;
+        };
+        if (!res.ok || json.success === false) {
+          throw new Error(
+            json.error || `Failed to list Storj data (${dataType || "all"})`,
+          );
+        }
+        return json.result || [];
+      },
+    } as StorageService;
+  };
+
+  const handleViewStats = async (): Promise<void> => {
     try {
-      const storageService = getStorageService();
+      const storageService = createClientStorageService();
       const { formatted } = await fetchStorageStats(
         storageService,
         userAddress,
@@ -51,7 +85,7 @@ export function StorjPruningButton({
     }
   };
 
-  const handlePrune = async () => {
+  const handlePrune = async (): Promise<void> => {
     const confirmed = confirm(
       `This will analyze and remove old/duplicate ${dataType} data from Storj.\n\n` +
         "Important snapshots will be preserved.\n\n" +
@@ -61,7 +95,7 @@ export function StorjPruningButton({
     if (!confirmed) return;
 
     try {
-      const storageService = getStorageService();
+      const storageService = createClientStorageService();
 
       const result = await performCompletePruning(
         storageService,

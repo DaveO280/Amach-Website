@@ -3,9 +3,10 @@
  * Provides fast local access to Storj items without hitting the API every time
  */
 
-const DB_NAME = "amach-health-db";
-const DB_VERSION = 5; // Increment to add storj-items-cache store
-const STORJ_ITEMS_STORE = "storj-items-cache";
+// Use a separate database to avoid version conflicts with healthDataStore
+const DB_NAME = "amach-storj-cache-db";
+const DB_VERSION = 1;
+const STORJ_ITEMS_STORE = "storj-items";
 
 export interface StorjItemCache {
   uri: string; // Primary key

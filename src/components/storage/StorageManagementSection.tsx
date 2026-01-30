@@ -459,6 +459,10 @@ export function StorageManagementSection({
     console.log(
       `[StorageManagement] Returning ${allItems.length} total items (${cachedItems.length} cached + ${storjItems.length} from Storj)`,
     );
+    console.log(
+      `[StorageManagement] Return items breakdown: dataType=${dataType || "all"}, first 3 URIs:`,
+      allItems.slice(0, 3).map((i) => i.uri),
+    );
 
     return allItems;
   };

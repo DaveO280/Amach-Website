@@ -283,13 +283,31 @@ export function StorageManagementSection({
   const refreshFromStorj = async (
     dataType?: string,
   ): Promise<StorjListItem[]> => {
-    if (!encryptionKey) throw new Error("Encryption key required");
+    console.log(
+      `[StorageManagement] refreshFromStorj called with dataType: ${dataType || "undefined"}`,
+    );
+    if (!encryptionKey) {
+      console.error("[StorageManagement] Encryption key missing!");
+      throw new Error("Encryption key required");
+    }
+    if (!userAddress) {
+      console.error("[StorageManagement] User address missing!");
+      throw new Error("User address required");
+    }
 
+    console.log("[StorageManagement] Starting cache check...");
     // First, get what we already have cached
     let cachedItems: StorjItemCache[] = [];
     try {
       await storjItemsCache.initialize();
-      cachedItems = await storjItemsCache.getCachedItems(userAddress, dataType);
+      console.log(
+        `[StorageManagement] Getting cached items for user: ${userAddress}`,
+      );
+      // When dataType is undefined, get all cached items (don't filter)
+      cachedItems = await storjItemsCache.getCachedItems(userAddress);
+      console.log(
+        `[StorageManagement] Found ${cachedItems.length} cached items`,
+      );
     } catch (error) {
       console.error("[StorageManagement] Failed to load from cache:", error);
       // Continue anyway - will fetch all from Storj

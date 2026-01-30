@@ -520,7 +520,19 @@ export function StorageManagementSection({
   };
 
   const handleRefreshTests = async (): Promise<void> => {
-    if (!encryptionKey) return;
+    console.log("[StorageManagement] handleRefreshTests called");
+    if (!encryptionKey) {
+      console.error(
+        "[StorageManagement] Encryption key missing in handleRefreshTests",
+      );
+      return;
+    }
+    if (!userAddress) {
+      console.error(
+        "[StorageManagement] User address missing in handleRefreshTests",
+      );
+      return;
+    }
     setTestsLoading(true);
     setTestsError("");
     setTestsInfo("");
@@ -528,6 +540,7 @@ export function StorageManagementSection({
     setTestsBucketMode("current");
     setTestsLegacyBucket("");
     try {
+      console.log("[StorageManagement] Refreshing tests from Storj...");
       const all = await refreshFromStorj();
       const TEST_DATA_TYPES = new Set([
         "bloodwork-report-fhir",

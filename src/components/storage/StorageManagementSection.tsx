@@ -298,6 +298,9 @@ export function StorageManagementSection({
     const cachedUris = new Set(cachedItems.map((item) => item.uri));
 
     // Fetch from Storj
+    console.log(
+      `[StorageManagement] Fetching from Storj API (dataType: ${dataType || "all"})...`,
+    );
     const resp = await fetch("/api/storj", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -305,14 +308,19 @@ export function StorageManagementSection({
         action: "storage/list",
         userAddress,
         encryptionKey,
-        dataType,
+        dataType: dataType || undefined, // Explicitly pass undefined if not set
       }),
     });
+
+    console.log(
+      `[StorageManagement] Storj API response status: ${resp.status} ${resp.statusText}`,
+    );
 
     const payload = await resp.json();
     if (!resp.ok || payload?.success === false) {
       const errorMsg =
-        payload?.error || `Failed to list Storj items (${dataType || "all"})`;
+        payload?.error ||
+        `Failed to list Storj items: ${resp.status} ${resp.statusText}`;
       console.error("[StorageManagement] Storj API error:", errorMsg);
       throw new Error(errorMsg);
     }

@@ -9,7 +9,7 @@ import {
 import { HealthDataValidator } from "../validation/healthDataValidator";
 
 const DB_NAME = "amach-health-db";
-const DB_VERSION = 3; // Increment version for processed-data store
+const DB_VERSION = 4; // Increment version to add parsedReports to uploaded files
 const STORE_NAME = "health-data";
 const GOALS_STORE = "goals";
 const DAILY_SCORES_STORE = "daily-scores";
@@ -62,6 +62,12 @@ interface UploadedFileStore {
   fileType: string;
   fileSize: number;
   parsedContent: string;
+  parsedReports?: Array<{
+    report: unknown;
+    extractedAt: string;
+    storjUri?: string;
+    savedToStorjAt?: string;
+  }>; // Cached parsed reports to avoid re-parsing
   metadata?: Record<string, unknown>;
   pageCount?: number;
   uploadedAt: string;
@@ -586,6 +592,12 @@ class HealthDataStoreService {
     parsedContent: string,
     metadata?: Record<string, unknown>,
     pageCount?: number,
+    parsedReports?: Array<{
+      report: unknown;
+      extractedAt: string;
+      storjUri?: string;
+      savedToStorjAt?: string;
+    }>,
   ): Promise<string> {
     if (!this.isInitialized) {
       await this.initialize();
@@ -605,6 +617,7 @@ class HealthDataStoreService {
         fileType: file.type || file.name.split(".").pop() || "unknown",
         fileSize: file.size,
         parsedContent,
+        parsedReports, // Store parsed reports to avoid re-parsing
         metadata,
         pageCount,
         uploadedAt: now,

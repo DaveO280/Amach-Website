@@ -1163,13 +1163,27 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     try {
       const file = await healthDataStore.getUploadedFile(fileId);
       if (file) {
-        const parsedReports =
-          file.parsedContent && typeof file.parsedContent === "string"
-            ? await parseHealthReport(file.parsedContent, {
-                sourceName: file.fileName,
-                useAI: true,
-              })
-            : [];
+        // Use cached parsed reports if available, otherwise parse on-demand
+        let parsedReports: ParsedReportSummary[] = [];
+        if (file.parsedReports && file.parsedReports.length > 0) {
+          // Use cached parsed reports (no re-parsing needed!)
+          console.log(
+            `✅ Using cached parsed reports for ${file.fileName} (${file.parsedReports.length} report(s))`,
+          );
+          parsedReports = file.parsedReports as ParsedReportSummary[];
+        } else if (
+          file.parsedContent &&
+          typeof file.parsedContent === "string"
+        ) {
+          // Fallback: parse if no cached reports available
+          console.log(
+            `⚠️ No cached reports found, parsing ${file.fileName}...`,
+          );
+          parsedReports = await parseHealthReport(file.parsedContent, {
+            sourceName: file.fileName,
+            useAI: true,
+          });
+        }
 
         if (parsedReports.length) {
           addParsedReports(parsedReports);
@@ -1418,15 +1432,18 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         parsedReports,
       });
 
-      // Save the parsed file to IndexedDB for persistence
+      // Save the parsed file to IndexedDB for persistence (including parsed reports)
       try {
         const fileId = await healthDataStore.saveUploadedFile(
           file,
           parsedContent.content,
           parsedContent.metadata,
           parsedContent.pageCount,
+          parsedReports, // Save parsed reports to avoid re-parsing later
         );
-        console.log(`✅ File saved to IndexedDB with ID: ${fileId}`);
+        console.log(
+          `✅ File saved to IndexedDB with ID: ${fileId} (${parsedReports.length} parsed report(s) cached)`,
+        );
       } catch (dbError) {
         console.error("❌ Failed to save file to IndexedDB:", dbError);
         // Don't fail the upload if IndexedDB save fails
@@ -2250,48 +2267,50 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                           : "No saved reports found yet."}
                       </div>
                     ) : (
-                      storjReports.map((r) => {
-                        const reportType =
-                          getMeta(r.metadata, "reporttype") ||
-                          (r.dataType === "bloodwork-report-fhir"
-                            ? "bloodwork"
-                            : "dexa");
-                        const date =
-                          getMeta(r.metadata, "scandate") ||
-                          getMeta(r.metadata, "reportdate") ||
-                          r.uploadedAt ||
-                          "";
-                        const label = `${reportType.toUpperCase()}${date ? ` • ${date}` : ""}`;
+                      storjReports
+                        .filter((r) => r && r.uri) // Filter out invalid entries
+                        .map((r) => {
+                          const reportType =
+                            getMeta(r.metadata, "reporttype") ||
+                            (r.dataType === "bloodwork-report-fhir"
+                              ? "bloodwork"
+                              : "dexa");
+                          const date =
+                            getMeta(r.metadata, "scandate") ||
+                            getMeta(r.metadata, "reportdate") ||
+                            r.uploadedAt ||
+                            "";
+                          const label = `${reportType.toUpperCase()}${date ? ` • ${date}` : ""}`;
 
-                        return (
-                          <button
-                            key={r.uri}
-                            type="button"
-                            onClick={() => toggleSelectedStorjUri(r.uri)}
-                            className={`w-full px-2 py-2 text-left text-xs hover:bg-emerald-50 ${
-                              selectedStorjUris.has(r.uri)
-                                ? "bg-emerald-50 border-l-4 border-emerald-600"
-                                : ""
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={selectedStorjUris.has(r.uri)}
-                                onChange={() => toggleSelectedStorjUri(r.uri)}
-                                onClick={(e) => e.stopPropagation()}
-                                className="h-3.5 w-3.5 accent-emerald-600"
-                              />
-                              <div className="font-semibold text-emerald-900">
-                                {label}
+                          return (
+                            <button
+                              key={r.uri}
+                              type="button"
+                              onClick={() => toggleSelectedStorjUri(r.uri)}
+                              className={`w-full px-2 py-2 text-left text-xs hover:bg-emerald-50 ${
+                                selectedStorjUris.has(r.uri)
+                                  ? "bg-emerald-50 border-l-4 border-emerald-600"
+                                  : ""
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedStorjUris.has(r.uri)}
+                                  onChange={() => toggleSelectedStorjUri(r.uri)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="h-3.5 w-3.5 accent-emerald-600"
+                                />
+                                <div className="font-semibold text-emerald-900">
+                                  {label}
+                                </div>
                               </div>
-                            </div>
-                            <div className="truncate text-[11px] text-gray-600">
-                              {r.uri}
-                            </div>
-                          </button>
-                        );
-                      })
+                              <div className="truncate text-[11px] text-gray-600">
+                                {r.uri}
+                              </div>
+                            </button>
+                          );
+                        })
                     )}
                   </div>
                 </>

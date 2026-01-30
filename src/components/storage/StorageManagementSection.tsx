@@ -30,10 +30,6 @@ import { useStorjPruning } from "@/hooks/useStorjPruning";
 import type { StorageService } from "@/storage/StorageService";
 import type { StorageReference } from "@/storage/StorjClient";
 import {
-  formatSnapshotInfo,
-  getSnapshotInfo,
-} from "@/storage/StorjPruningIntegration";
-import {
   EVENT_TYPE_DEFINITIONS,
   HealthEventType as TimelineHealthEventType,
 } from "@/types/healthEventTypes";
@@ -52,12 +48,6 @@ interface StorageManagementSectionProps {
   userAddress: string;
   signMessage: (message: string) => Promise<string>;
   getWalletClient: () => Promise<import("viem").WalletClient | null>;
-}
-
-interface StorageStats {
-  totalItems: number;
-  totalSizeMB: number;
-  dataTypes: Record<string, { count: number; sizeMB: number }>;
 }
 
 interface StorjListItem {
@@ -132,12 +122,8 @@ export function StorageManagementSection({
   signMessage,
   getWalletClient,
 }: StorageManagementSectionProps): JSX.Element {
-  const {
-    status,
-    performCompletePruning,
-    fetchStorageStats,
-    getLastPruningSummary,
-  } = useStorjPruning();
+  const { status, performCompletePruning, getLastPruningSummary } =
+    useStorjPruning();
 
   const [encryptionKey, setEncryptionKey] =
     useState<WalletEncryptionKey | null>(null);
@@ -145,10 +131,7 @@ export function StorageManagementSection({
   const [keyError, setKeyError] = useState<string>("");
   const keyRequestAttemptedRef = React.useRef(false);
 
-  const [stats, setStats] = useState<StorageStats | null>(null);
-  const [snapshotInfo, setSnapshotInfo] = useState<string>("");
   const [selectedDataType, setSelectedDataType] = useState<string>("all");
-  const [isLoadingStats, setIsLoadingStats] = useState(false);
 
   // Context tab state (viewer)
   // Empty set means "All events"
@@ -237,13 +220,7 @@ export function StorageManagementSection({
     setKeyError("");
   }, [userAddress]);
 
-  // Fetch initial stats when key is ready
-  useEffect(() => {
-    if (!encryptionKey) return;
-
-    void handleRefreshStats();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [encryptionKey]);
+  // No automatic loading - data loads only when tabs are selected
 
   // Client-side API wrapper for StorageService methods needed by pruning
   const createClientStorageService = (): StorageService => {
@@ -279,57 +256,6 @@ export function StorageManagementSection({
         return json.result || [];
       },
     } as StorageService;
-  };
-
-  const handleRefreshStats = async (): Promise<void> => {
-    if (!encryptionKey) return;
-
-    setIsLoadingStats(true);
-    try {
-      const storageService = createClientStorageService();
-      const dataType =
-        selectedDataType === "all" ? undefined : selectedDataType;
-
-      const { stats: rawStats } = await fetchStorageStats(
-        storageService,
-        userAddress,
-        encryptionKey,
-        dataType,
-      );
-
-      // Format stats for display
-      const formattedStats: StorageStats = {
-        totalItems: rawStats.totalItems,
-        totalSizeMB: rawStats.totalSizeBytes / (1024 * 1024),
-        dataTypes: Object.fromEntries(
-          Object.entries(rawStats.byDataType).map(([type, data]) => [
-            type,
-            {
-              count: data.count,
-              sizeMB: data.sizeBytes / (1024 * 1024),
-            },
-          ]),
-        ),
-      };
-
-      setStats(formattedStats);
-
-      // Fetch snapshot info for health-raw data
-      if (dataType === "health-raw" || !dataType) {
-        const snapshots = await getSnapshotInfo(
-          storageService,
-          userAddress,
-          encryptionKey,
-          "health-raw",
-        );
-        const formatted = formatSnapshotInfo(snapshots);
-        setSnapshotInfo(formatted);
-      }
-    } catch (error) {
-      console.error("[StorageManagement] Failed to fetch stats:", error);
-    } finally {
-      setIsLoadingStats(false);
-    }
   };
 
   const handleRefreshTests = async (): Promise<void> => {
@@ -975,8 +901,7 @@ export function StorageManagementSection({
         alert(`✅ Pruning complete!\n\n${summary}`);
       }
 
-      // Refresh stats after pruning
-      await handleRefreshStats();
+      // Stats removed - no refresh needed
     } catch (error) {
       console.error("[StorageManagement] Pruning failed:", error);
       alert(
@@ -1078,724 +1003,622 @@ export function StorageManagementSection({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Storage Statistics */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900">
-              Storage Overview
-            </h3>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleRefreshStats}
-              disabled={
-                isLoadingStats || status.isAnalyzing || status.isPruning
-              }
-            >
-              {isLoadingStats ? "Loading..." : "Refresh"}
-            </Button>
-          </div>
-
-          {stats && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-xs text-blue-600 font-medium">Total Items</p>
-                <p className="text-2xl font-bold text-blue-900">
-                  {stats.totalItems}
-                </p>
-              </div>
-              <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                <p className="text-xs text-purple-600 font-medium">
-                  Total Size
-                </p>
-                <p className="text-2xl font-bold text-purple-900">
-                  {stats.totalSizeMB.toFixed(1)} MB
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Data Type Breakdown */}
-        {stats && Object.keys(stats.dataTypes).length > 0 && (
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-gray-900">
-              By Data Type
-            </h3>
-            <div className="space-y-2">
-              {Object.entries(stats.dataTypes).map(([type, data]) => (
-                <div
-                  key={type}
-                  className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-200"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{type}</p>
-                    <p className="text-xs text-gray-600">
-                      {data.count} items • {data.sizeMB.toFixed(2)} MB
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handlePrune(type)}
-                    disabled={status.isAnalyzing || status.isPruning}
-                  >
-                    <Trash2 className="h-3 w-3 mr-1" />
-                    Clean
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Snapshot Info */}
-        {snapshotInfo && (
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-              <Info className="h-4 w-4" />
-              Protected Snapshots
-            </h3>
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono">
-                {snapshotInfo}
-              </pre>
-            </div>
-          </div>
-        )}
-
         {/* Pruning Controls */}
-        <div className="pt-3 border-t">
-          <Tabs value={selectedDataType} onValueChange={setSelectedDataType}>
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="conversation-session">Chats</TabsTrigger>
-              <TabsTrigger value="health-raw">Health Data</TabsTrigger>
-              <TabsTrigger value="context-vault">Context</TabsTrigger>
-              <TabsTrigger value="tests">Tests</TabsTrigger>
-            </TabsList>
-            {selectedDataType === "context-vault" ? (
-              <TabsContent value="context-vault" className="mt-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-xs font-medium text-gray-700">
-                    Timeline events
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleRefreshContext}
-                    disabled={contextLoading}
-                  >
-                    {contextLoading ? "Loading..." : "Refresh"}
-                  </Button>
+        <Tabs value={selectedDataType} onValueChange={setSelectedDataType}>
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="conversation-session">Chats</TabsTrigger>
+            <TabsTrigger value="health-raw">Health Data</TabsTrigger>
+            <TabsTrigger value="context-vault">Context</TabsTrigger>
+            <TabsTrigger value="tests">Tests</TabsTrigger>
+          </TabsList>
+          {selectedDataType === "context-vault" ? (
+            <TabsContent value="context-vault" className="mt-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-medium text-gray-700">
+                  Timeline events
                 </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleRefreshContext}
+                  disabled={contextLoading}
+                >
+                  {contextLoading ? "Loading..." : "Refresh"}
+                </Button>
+              </div>
 
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-medium text-gray-700">
-                    Event type
-                  </label>
-                  {(() => {
-                    const knownTypes = Object.keys(EVENT_TYPE_DEFINITIONS)
-                      .filter((t) => t !== TimelineHealthEventType.CUSTOM)
-                      .sort();
-
-                    const unknownTypes = Array.from(
-                      new Set(
-                        contextItems
-                          .map((i) => getTimelineEventTypeRaw(i))
-                          .filter((x): x is string => Boolean(x))
-                          .filter((t) => !knownTypes.includes(t)),
-                      ),
-                    ).sort();
-
-                    const categories: Array<{
-                      key: string;
-                      label: string;
-                      types: string[];
-                    }> = [
-                      {
-                        key: "medication",
-                        label: "Medications",
-                        types: knownTypes.filter((t) =>
-                          t.startsWith("MEDICATION_"),
-                        ),
-                      },
-                      {
-                        key: "condition",
-                        label: "Conditions",
-                        types: knownTypes.filter((t) =>
-                          t.startsWith("CONDITION_"),
-                        ),
-                      },
-                      {
-                        key: "injury",
-                        label: "Injuries",
-                        types: knownTypes.filter((t) =>
-                          t.startsWith("INJURY_"),
-                        ),
-                      },
-                      {
-                        key: "illness",
-                        label: "Illnesses",
-                        types: knownTypes.filter((t) =>
-                          t.startsWith("ILLNESS_"),
-                        ),
-                      },
-                      {
-                        key: "procedure",
-                        label: "Procedures",
-                        types: knownTypes.filter(
-                          (t) =>
-                            t.startsWith("SURGERY_") ||
-                            t.startsWith("PROCEDURE_"),
-                        ),
-                      },
-                      {
-                        key: "allergy",
-                        label: "Allergies",
-                        types: knownTypes.filter((t) =>
-                          t.startsWith("ALLERGY_"),
-                        ),
-                      },
-                      {
-                        key: "measurement",
-                        label: "Measurements",
-                        types: knownTypes.filter(
-                          (t) =>
-                            t.endsWith("_RECORDED") ||
-                            t.includes("BLOOD_PRESSURE"),
-                        ),
-                      },
-                      {
-                        key: "general",
-                        label: "General",
-                        types: knownTypes.filter(
-                          (t) =>
-                            t === "METRIC_SNAPSHOT" || t === "GENERAL_NOTE",
-                        ),
-                      },
-                    ].filter((c) => c.types.length > 0);
-
-                    const selectedCount = contextEventTypes.size;
-                    const buttonLabel =
-                      selectedCount === 0
-                        ? "All events"
-                        : `${selectedCount} selected`;
-
-                    const toggleType = (t: string): void => {
-                      setContextEventTypes((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(t)) next.delete(t);
-                        else next.add(t);
-                        return next;
-                      });
-                    };
-
-                    const setAll = (): void => setContextEventTypes(new Set());
-
-                    return (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 px-2 text-xs"
-                          >
-                            {buttonLabel}
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="max-h-[360px] overflow-auto">
-                          <DropdownMenuCheckboxItem
-                            checked={contextEventTypes.size === 0}
-                            onCheckedChange={() => setAll()}
-                          >
-                            All events
-                          </DropdownMenuCheckboxItem>
-                          <DropdownMenuSeparator />
-
-                          {categories.map((cat) => (
-                            <React.Fragment key={cat.key}>
-                              <div className="px-2 py-1 text-[11px] font-semibold text-gray-600">
-                                {cat.label}
-                              </div>
-                              {cat.types.map((t) => (
-                                <DropdownMenuCheckboxItem
-                                  key={t}
-                                  checked={contextEventTypes.has(t)}
-                                  onCheckedChange={() => toggleType(t)}
-                                >
-                                  {formatEventTypeDropdownLabel(t)}
-                                </DropdownMenuCheckboxItem>
-                              ))}
-                              <DropdownMenuSeparator />
-                            </React.Fragment>
-                          ))}
-
-                          {unknownTypes.length > 0 && (
-                            <>
-                              <div className="px-2 py-1 text-[11px] font-semibold text-gray-600">
-                                Other / Custom (from your timeline)
-                              </div>
-                              {unknownTypes.map((t) => (
-                                <DropdownMenuCheckboxItem
-                                  key={t}
-                                  checked={contextEventTypes.has(t)}
-                                  onCheckedChange={() => toggleType(t)}
-                                >
-                                  {formatEventTypeLabel(t)}
-                                </DropdownMenuCheckboxItem>
-                              ))}
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    );
-                  })()}
-                </div>
-
-                {contextError && (
-                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
-                    <p className="text-sm text-red-900">{contextError}</p>
-                  </div>
-                )}
-                {contextDeleteError && (
-                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
-                    <p className="text-sm text-red-900">{contextDeleteError}</p>
-                  </div>
-                )}
-                {contextPreviewError && (
-                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
-                    <p className="text-sm text-red-900">
-                      {contextPreviewError}
-                    </p>
-                  </div>
-                )}
-                {chainError && (
-                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
-                    <p className="text-sm text-red-900">{chainError}</p>
-                  </div>
-                )}
-                {chainStatus && (
-                  <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                    <p className="text-sm text-green-900">{chainStatus}</p>
-                  </div>
-                )}
-
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-gray-700">
+                  Event type
+                </label>
                 {(() => {
-                  const filtered = contextItems.filter((i) => {
-                    // Context tab is timeline events only
-                    if (i.dataType !== "timeline-event") return false;
-                    // Empty set means "All"
-                    if (contextEventTypes.size > 0) {
-                      const t = getTimelineEventTypeRaw(i) || "";
-                      if (!contextEventTypes.has(t)) return false;
-                    }
-                    return true;
-                  });
-                  const filteredUris = filtered.map((i) => i.uri);
+                  const knownTypes = Object.keys(EVENT_TYPE_DEFINITIONS)
+                    .filter((t) => t !== TimelineHealthEventType.CUSTOM)
+                    .sort();
+
+                  const unknownTypes = Array.from(
+                    new Set(
+                      contextItems
+                        .map((i) => getTimelineEventTypeRaw(i))
+                        .filter((x): x is string => Boolean(x))
+                        .filter((t) => !knownTypes.includes(t)),
+                    ),
+                  ).sort();
+
+                  const categories: Array<{
+                    key: string;
+                    label: string;
+                    types: string[];
+                  }> = [
+                    {
+                      key: "medication",
+                      label: "Medications",
+                      types: knownTypes.filter((t) =>
+                        t.startsWith("MEDICATION_"),
+                      ),
+                    },
+                    {
+                      key: "condition",
+                      label: "Conditions",
+                      types: knownTypes.filter((t) =>
+                        t.startsWith("CONDITION_"),
+                      ),
+                    },
+                    {
+                      key: "injury",
+                      label: "Injuries",
+                      types: knownTypes.filter((t) => t.startsWith("INJURY_")),
+                    },
+                    {
+                      key: "illness",
+                      label: "Illnesses",
+                      types: knownTypes.filter((t) => t.startsWith("ILLNESS_")),
+                    },
+                    {
+                      key: "procedure",
+                      label: "Procedures",
+                      types: knownTypes.filter(
+                        (t) =>
+                          t.startsWith("SURGERY_") ||
+                          t.startsWith("PROCEDURE_"),
+                      ),
+                    },
+                    {
+                      key: "allergy",
+                      label: "Allergies",
+                      types: knownTypes.filter((t) => t.startsWith("ALLERGY_")),
+                    },
+                    {
+                      key: "measurement",
+                      label: "Measurements",
+                      types: knownTypes.filter(
+                        (t) =>
+                          t.endsWith("_RECORDED") ||
+                          t.includes("BLOOD_PRESSURE"),
+                      ),
+                    },
+                    {
+                      key: "general",
+                      label: "General",
+                      types: knownTypes.filter(
+                        (t) => t === "METRIC_SNAPSHOT" || t === "GENERAL_NOTE",
+                      ),
+                    },
+                  ].filter((c) => c.types.length > 0);
+
+                  const selectedCount = contextEventTypes.size;
+                  const buttonLabel =
+                    selectedCount === 0
+                      ? "All events"
+                      : `${selectedCount} selected`;
+
+                  const toggleType = (t: string): void => {
+                    setContextEventTypes((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(t)) next.delete(t);
+                      else next.add(t);
+                      return next;
+                    });
+                  };
+
+                  const setAll = (): void => setContextEventTypes(new Set());
 
                   return (
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-                      <div className="lg:col-span-5 border border-gray-200 rounded-lg bg-white overflow-hidden">
-                        <div className="p-2 border-b bg-gray-50 flex items-center justify-between">
-                          <div className="text-xs font-medium text-gray-700">
-                            Items ({filtered.length})
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                selectAllContextFiltered(filteredUris)
-                              }
-                              disabled={filtered.length === 0}
-                            >
-                              Select all
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={clearContextSelection}
-                              disabled={contextSelectedUris.size === 0}
-                            >
-                              Clear
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="max-h-72 overflow-auto">
-                          {filtered.length === 0 ? (
-                            <div className="p-3 text-sm text-gray-500">
-                              No items found. Click Refresh.
-                            </div>
-                          ) : (
-                            filtered.map((item) => {
-                              const checked = contextSelectedUris.has(item.uri);
-                              const rawType = getTimelineEventTypeRaw(item);
-                              const title = rawType
-                                ? formatEventTypeDropdownLabel(rawType)
-                                : "Timeline Event";
-                              const eventId =
-                                getMetaValue(item, ["eventid", "eventId"]) ||
-                                null;
-                              const eventTs = formatTimestampLabel(
-                                getMetaValue(item, ["timestamp"]),
-                              );
-                              return (
-                                <button
-                                  key={item.uri}
-                                  type="button"
-                                  className={`w-full text-left p-2 border-b hover:bg-gray-50 ${
-                                    checked ? "bg-emerald-50" : ""
-                                  }`}
-                                  onClick={() =>
-                                    toggleContextSelected(item.uri)
-                                  }
-                                >
-                                  <div className="flex items-start gap-2">
-                                    <input
-                                      type="checkbox"
-                                      className="mt-1"
-                                      checked={checked}
-                                      onChange={() =>
-                                        toggleContextSelected(item.uri)
-                                      }
-                                      onClick={(e) => e.stopPropagation()}
-                                    />
-                                    <div className="min-w-0 flex-1">
-                                      <div className="text-xs font-medium text-gray-900 truncate">
-                                        {title}
-                                      </div>
-                                      {(eventTs || eventId) && (
-                                        <div className="text-[11px] text-gray-600 flex items-center gap-2">
-                                          {eventTs && <span>{eventTs}</span>}
-                                          {eventId && (
-                                            <>
-                                              <span>•</span>
-                                              <span className="truncate">
-                                                id: {eventId}
-                                              </span>
-                                            </>
-                                          )}
-                                        </div>
-                                      )}
-                                      <div className="text-[11px] text-gray-500 flex items-center gap-2">
-                                        <span>
-                                          {item.uploadedAt
-                                            ? new Date(
-                                                item.uploadedAt,
-                                              ).toLocaleString()
-                                            : "unknown date"}
-                                        </span>
-                                        <span>•</span>
-                                        <span>
-                                          {item.size
-                                            ? (item.size / 1024).toFixed(1)
-                                            : "0"}{" "}
-                                          KB
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </button>
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 px-2 text-xs"
+                        >
+                          {buttonLabel}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="max-h-[360px] overflow-auto">
+                        <DropdownMenuCheckboxItem
+                          checked={contextEventTypes.size === 0}
+                          onCheckedChange={() => setAll()}
+                        >
+                          All events
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuSeparator />
 
-                      <div className="lg:col-span-7 border border-gray-200 rounded-lg bg-white overflow-hidden">
-                        <div className="p-2 border-b bg-gray-50 flex items-center justify-between">
-                          <div className="text-xs font-medium text-gray-700">
-                            Decrypted preview
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={handlePreviewContextSelected}
-                              disabled={
-                                contextPreviewLoading ||
-                                contextSelectedUris.size === 0
-                              }
-                            >
-                              {contextPreviewLoading
-                                ? "Decrypting..."
-                                : `Preview selected (${contextSelectedUris.size})`}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={handleDeleteContextSelected}
-                              disabled={
-                                contextDeleteLoading ||
-                                contextSelectedUris.size === 0 ||
-                                contextPreviewLoading ||
-                                chainLoading ||
-                                deleteLoading
-                              }
-                            >
-                              {contextDeleteLoading
-                                ? "Deleting..."
-                                : `Delete selected (${contextSelectedUris.size})`}
-                            </Button>
-                          </div>
-                        </div>
-                        <pre className="p-3 text-xs whitespace-pre-wrap font-mono max-h-72 overflow-auto">
-                          {contextPreviewJson ||
-                            (contextSelectedUris.size > 0
-                              ? "Click Preview selected to decrypt."
-                              : "Select one or more items to preview.")}
-                        </pre>
-                      </div>
-                    </div>
+                        {categories.map((cat) => (
+                          <React.Fragment key={cat.key}>
+                            <div className="px-2 py-1 text-[11px] font-semibold text-gray-600">
+                              {cat.label}
+                            </div>
+                            {cat.types.map((t) => (
+                              <DropdownMenuCheckboxItem
+                                key={t}
+                                checked={contextEventTypes.has(t)}
+                                onCheckedChange={() => toggleType(t)}
+                              >
+                                {formatEventTypeDropdownLabel(t)}
+                              </DropdownMenuCheckboxItem>
+                            ))}
+                            <DropdownMenuSeparator />
+                          </React.Fragment>
+                        ))}
+
+                        {unknownTypes.length > 0 && (
+                          <>
+                            <div className="px-2 py-1 text-[11px] font-semibold text-gray-600">
+                              Other / Custom (from your timeline)
+                            </div>
+                            {unknownTypes.map((t) => (
+                              <DropdownMenuCheckboxItem
+                                key={t}
+                                checked={contextEventTypes.has(t)}
+                                onCheckedChange={() => toggleType(t)}
+                              >
+                                {formatEventTypeLabel(t)}
+                              </DropdownMenuCheckboxItem>
+                            ))}
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   );
                 })()}
-              </TabsContent>
-            ) : selectedDataType !== "tests" ? (
-              <TabsContent value={selectedDataType} className="mt-4 space-y-3">
-                <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <div className="text-xs text-blue-900">
-                    <p className="font-medium mb-1">What gets pruned:</p>
-                    <ul className="list-disc list-inside space-y-0.5 text-blue-800">
-                      <li>Duplicate data (same content hash)</li>
-                      <li>Old data beyond retention period</li>
-                      <li>Items when storage limit exceeded</li>
-                    </ul>
-                    <p className="font-medium mt-2 mb-1">
-                      What&apos;s protected:
-                    </p>
-                    <ul className="list-disc list-inside space-y-0.5 text-blue-800">
-                      <li>Monthly snapshots (1st of each month)</li>
-                      <li>Quarterly snapshots (Q1, Q2, Q3, Q4)</li>
-                      <li>Most recent items (based on policy)</li>
-                    </ul>
-                  </div>
+              </div>
+
+              {contextError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-900">{contextError}</p>
                 </div>
-
-                <Button
-                  onClick={() => handlePrune(selectedDataType)}
-                  disabled={status.isAnalyzing || status.isPruning}
-                  className="w-full"
-                  variant="destructive"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  {status.isAnalyzing
-                    ? "Analyzing..."
-                    : status.isPruning
-                      ? "Pruning..."
-                      : `Clean ${selectedDataType === "all" ? "All Data" : selectedDataType}`}
-                </Button>
-              </TabsContent>
-            ) : (
-              <TabsContent value="tests" className="mt-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium text-gray-700">
-                      Data type
-                    </label>
-                    <select
-                      className="text-xs border border-gray-200 rounded px-2 py-1 bg-white"
-                      value={testsDataType}
-                      onChange={(e) => setTestsDataType(e.target.value)}
-                    >
-                      <option value="bloodwork-report-fhir">
-                        bloodwork-report-fhir
-                      </option>
-                      <option value="dexa-report-fhir">dexa-report-fhir</option>
-                      <option value="all">all test reports</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleRefreshTests}
-                      disabled={testsLoading}
-                    >
-                      {testsLoading ? "Loading..." : "Refresh"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleRefreshTestsLegacy}
-                      disabled={testsLoading}
-                      title="If you saved files before the bucket security change, they may live in a legacy bucket."
-                    >
-                      Legacy scan
-                    </Button>
-                  </div>
+              )}
+              {contextDeleteError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-900">{contextDeleteError}</p>
                 </div>
+              )}
+              {contextPreviewError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-900">{contextPreviewError}</p>
+                </div>
+              )}
+              {chainError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-900">{chainError}</p>
+                </div>
+              )}
+              {chainStatus && (
+                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                  <p className="text-sm text-green-900">{chainStatus}</p>
+                </div>
+              )}
 
-                {testsInfo && (
-                  <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <Info className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                    <p className="text-sm text-blue-900">
-                      {testsInfo}
-                      {testsBucketMode === "legacy" && testsLegacyBucket
-                        ? ` (bucket: ${testsLegacyBucket})`
-                        : ""}
-                    </p>
-                  </div>
-                )}
+              {(() => {
+                const filtered = contextItems.filter((i) => {
+                  // Context tab is timeline events only
+                  if (i.dataType !== "timeline-event") return false;
+                  // Empty set means "All"
+                  if (contextEventTypes.size > 0) {
+                    const t = getTimelineEventTypeRaw(i) || "";
+                    if (!contextEventTypes.has(t)) return false;
+                  }
+                  return true;
+                });
+                const filteredUris = filtered.map((i) => i.uri);
 
-                {testsBucketMode === "legacy" && testsLegacyDebug && (
-                  <pre className="p-3 text-xs whitespace-pre-wrap font-mono bg-gray-50 border border-gray-200 rounded-lg">
-                    {testsLegacyDebug}
-                  </pre>
-                )}
-
-                {testsError && (
-                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
-                    <p className="text-sm text-red-900">{testsError}</p>
-                  </div>
-                )}
-
-                {deleteError && (
-                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
-                    <p className="text-sm text-red-900">{deleteError}</p>
-                  </div>
-                )}
-                {chainError && (
-                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
-                    <p className="text-sm text-red-900">{chainError}</p>
-                  </div>
-                )}
-                {chainStatus && (
-                  <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                    <p className="text-sm text-green-900">{chainStatus}</p>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-                  <div className="lg:col-span-5 border border-gray-200 rounded-lg bg-white overflow-hidden">
-                    <div className="p-2 border-b bg-gray-50 text-xs font-medium text-gray-700">
-                      Files ({testsItems.length})
-                    </div>
-                    <div className="max-h-72 overflow-auto">
-                      {testsItems.length === 0 ? (
-                        <div className="p-3 text-sm text-gray-500">
-                          No items found. Click Refresh.
+                return (
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                    <div className="lg:col-span-5 border border-gray-200 rounded-lg bg-white overflow-hidden">
+                      <div className="p-2 border-b bg-gray-50 flex items-center justify-between">
+                        <div className="text-xs font-medium text-gray-700">
+                          Items ({filtered.length})
                         </div>
-                      ) : (
-                        <div className="divide-y">
-                          {testsItems.map((item) => (
-                            <button
-                              key={item.uri}
-                              className={`w-full text-left p-3 hover:bg-gray-50 ${
-                                selectedTestItem?.uri === item.uri
-                                  ? "bg-emerald-50"
-                                  : ""
-                              }`}
-                              onClick={() => {
-                                setSelectedTestItem(item);
-                                void handlePreviewItem(item);
-                              }}
-                            >
-                              <div className="text-xs font-medium text-gray-900">
-                                {item.dataType}
-                              </div>
-                              <div className="text-[11px] text-gray-600 mt-1 break-all">
-                                {item.uri}
-                              </div>
-                              <div className="text-[11px] text-gray-500 mt-1 flex gap-2">
-                                <span>
-                                  {item.uploadedAt
-                                    ? new Date(item.uploadedAt).toLocaleString()
-                                    : "unknown time"}
-                                </span>
-                                <span>•</span>
-                                <span>
-                                  {item.size
-                                    ? (item.size / 1024).toFixed(1)
-                                    : "0"}{" "}
-                                  KB
-                                </span>
-                              </div>
-                              {item.metadata?.reportfingerprint && (
-                                <div className="text-[11px] text-gray-500 mt-1">
-                                  fingerprint:{" "}
-                                  <span className="font-mono">
-                                    {item.metadata.reportfingerprint.slice(
-                                      0,
-                                      10,
-                                    )}
-                                    …
-                                  </span>
-                                </div>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="lg:col-span-7 border border-gray-200 rounded-lg bg-white overflow-hidden">
-                    <div className="p-2 border-b bg-gray-50 flex items-center justify-between">
-                      <div className="text-xs font-medium text-gray-700">
-                        Decrypted preview
-                      </div>
-                      {selectedTestItem && (
                         <div className="flex items-center gap-2">
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() =>
-                              void handlePreviewItem(selectedTestItem)
+                              selectAllContextFiltered(filteredUris)
                             }
+                            disabled={filtered.length === 0}
+                          >
+                            Select all
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={clearContextSelection}
+                            disabled={contextSelectedUris.size === 0}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="max-h-72 overflow-auto">
+                        {filtered.length === 0 ? (
+                          <div className="p-3 text-sm text-gray-500">
+                            No items found. Click Refresh.
+                          </div>
+                        ) : (
+                          filtered.map((item) => {
+                            const checked = contextSelectedUris.has(item.uri);
+                            const rawType = getTimelineEventTypeRaw(item);
+                            const title = rawType
+                              ? formatEventTypeDropdownLabel(rawType)
+                              : "Timeline Event";
+                            const eventId =
+                              getMetaValue(item, ["eventid", "eventId"]) ||
+                              null;
+                            const eventTs = formatTimestampLabel(
+                              getMetaValue(item, ["timestamp"]),
+                            );
+                            return (
+                              <button
+                                key={item.uri}
+                                type="button"
+                                className={`w-full text-left p-2 border-b hover:bg-gray-50 ${
+                                  checked ? "bg-emerald-50" : ""
+                                }`}
+                                onClick={() => toggleContextSelected(item.uri)}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <input
+                                    type="checkbox"
+                                    className="mt-1"
+                                    checked={checked}
+                                    onChange={() =>
+                                      toggleContextSelected(item.uri)
+                                    }
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-xs font-medium text-gray-900 truncate">
+                                      {title}
+                                    </div>
+                                    {(eventTs || eventId) && (
+                                      <div className="text-[11px] text-gray-600 flex items-center gap-2">
+                                        {eventTs && <span>{eventTs}</span>}
+                                        {eventId && (
+                                          <>
+                                            <span>•</span>
+                                            <span className="truncate">
+                                              id: {eventId}
+                                            </span>
+                                          </>
+                                        )}
+                                      </div>
+                                    )}
+                                    <div className="text-[11px] text-gray-500 flex items-center gap-2">
+                                      <span>
+                                        {item.uploadedAt
+                                          ? new Date(
+                                              item.uploadedAt,
+                                            ).toLocaleString()
+                                          : "unknown date"}
+                                      </span>
+                                      <span>•</span>
+                                      <span>
+                                        {item.size
+                                          ? (item.size / 1024).toFixed(1)
+                                          : "0"}{" "}
+                                        KB
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="lg:col-span-7 border border-gray-200 rounded-lg bg-white overflow-hidden">
+                      <div className="p-2 border-b bg-gray-50 flex items-center justify-between">
+                        <div className="text-xs font-medium text-gray-700">
+                          Decrypted preview
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handlePreviewContextSelected}
                             disabled={
-                              previewLoading || deleteLoading || chainLoading
+                              contextPreviewLoading ||
+                              contextSelectedUris.size === 0
                             }
                           >
-                            {previewLoading ? "Decrypting..." : "Re-decrypt"}
+                            {contextPreviewLoading
+                              ? "Decrypting..."
+                              : `Preview selected (${contextSelectedUris.size})`}
                           </Button>
                           <Button
                             size="sm"
                             variant="destructive"
-                            onClick={() =>
-                              void handleDeleteItem(selectedTestItem)
-                            }
+                            onClick={handleDeleteContextSelected}
                             disabled={
-                              testsBucketMode === "legacy" ||
-                              deleteLoading ||
-                              previewLoading ||
-                              chainLoading
+                              contextDeleteLoading ||
+                              contextSelectedUris.size === 0 ||
+                              contextPreviewLoading ||
+                              chainLoading ||
+                              deleteLoading
                             }
                           >
-                            {deleteLoading ? "Deleting..." : "Delete"}
+                            {contextDeleteLoading
+                              ? "Deleting..."
+                              : `Delete selected (${contextSelectedUris.size})`}
                           </Button>
                         </div>
-                      )}
+                      </div>
+                      <pre className="p-3 text-xs whitespace-pre-wrap font-mono max-h-72 overflow-auto">
+                        {contextPreviewJson ||
+                          (contextSelectedUris.size > 0
+                            ? "Click Preview selected to decrypt."
+                            : "Select one or more items to preview.")}
+                      </pre>
                     </div>
+                  </div>
+                );
+              })()}
+            </TabsContent>
+          ) : selectedDataType !== "tests" ? (
+            <TabsContent value={selectedDataType} className="mt-4 space-y-3">
+              <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-blue-900">
+                  <p className="font-medium mb-1">What gets pruned:</p>
+                  <ul className="list-disc list-inside space-y-0.5 text-blue-800">
+                    <li>Duplicate data (same content hash)</li>
+                    <li>Old data beyond retention period</li>
+                    <li>Items when storage limit exceeded</li>
+                  </ul>
+                  <p className="font-medium mt-2 mb-1">
+                    What&apos;s protected:
+                  </p>
+                  <ul className="list-disc list-inside space-y-0.5 text-blue-800">
+                    <li>Monthly snapshots (1st of each month)</li>
+                    <li>Quarterly snapshots (Q1, Q2, Q3, Q4)</li>
+                    <li>Most recent items (based on policy)</li>
+                  </ul>
+                </div>
+              </div>
 
-                    {previewError && (
-                      <div className="p-3 text-sm text-red-700 bg-red-50 border-b border-red-200">
-                        {previewError}
+              <Button
+                onClick={() => handlePrune(selectedDataType)}
+                disabled={status.isAnalyzing || status.isPruning}
+                className="w-full"
+                variant="destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                {status.isAnalyzing
+                  ? "Analyzing..."
+                  : status.isPruning
+                    ? "Pruning..."
+                    : `Clean ${selectedDataType === "all" ? "All Data" : selectedDataType}`}
+              </Button>
+            </TabsContent>
+          ) : (
+            <TabsContent value="tests" className="mt-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-medium text-gray-700">
+                    Data type
+                  </label>
+                  <select
+                    className="text-xs border border-gray-200 rounded px-2 py-1 bg-white"
+                    value={testsDataType}
+                    onChange={(e) => setTestsDataType(e.target.value)}
+                  >
+                    <option value="bloodwork-report-fhir">
+                      bloodwork-report-fhir
+                    </option>
+                    <option value="dexa-report-fhir">dexa-report-fhir</option>
+                    <option value="all">all test reports</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleRefreshTests}
+                    disabled={testsLoading}
+                  >
+                    {testsLoading ? "Loading..." : "Refresh"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleRefreshTestsLegacy}
+                    disabled={testsLoading}
+                    title="If you saved files before the bucket security change, they may live in a legacy bucket."
+                  >
+                    Legacy scan
+                  </Button>
+                </div>
+              </div>
+
+              {testsInfo && (
+                <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <Info className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                  <p className="text-sm text-blue-900">
+                    {testsInfo}
+                    {testsBucketMode === "legacy" && testsLegacyBucket
+                      ? ` (bucket: ${testsLegacyBucket})`
+                      : ""}
+                  </p>
+                </div>
+              )}
+
+              {testsBucketMode === "legacy" && testsLegacyDebug && (
+                <pre className="p-3 text-xs whitespace-pre-wrap font-mono bg-gray-50 border border-gray-200 rounded-lg">
+                  {testsLegacyDebug}
+                </pre>
+              )}
+
+              {testsError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-900">{testsError}</p>
+                </div>
+              )}
+
+              {deleteError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-900">{deleteError}</p>
+                </div>
+              )}
+              {chainError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-900">{chainError}</p>
+                </div>
+              )}
+              {chainStatus && (
+                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                  <p className="text-sm text-green-900">{chainStatus}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                <div className="lg:col-span-5 border border-gray-200 rounded-lg bg-white overflow-hidden">
+                  <div className="p-2 border-b bg-gray-50 text-xs font-medium text-gray-700">
+                    Files ({testsItems.length})
+                  </div>
+                  <div className="max-h-72 overflow-auto">
+                    {testsItems.length === 0 ? (
+                      <div className="p-3 text-sm text-gray-500">
+                        No items found. Click Refresh.
+                      </div>
+                    ) : (
+                      <div className="divide-y">
+                        {testsItems.map((item) => (
+                          <button
+                            key={item.uri}
+                            className={`w-full text-left p-3 hover:bg-gray-50 ${
+                              selectedTestItem?.uri === item.uri
+                                ? "bg-emerald-50"
+                                : ""
+                            }`}
+                            onClick={() => {
+                              setSelectedTestItem(item);
+                              void handlePreviewItem(item);
+                            }}
+                          >
+                            <div className="text-xs font-medium text-gray-900">
+                              {item.dataType}
+                            </div>
+                            <div className="text-[11px] text-gray-600 mt-1 break-all">
+                              {item.uri}
+                            </div>
+                            <div className="text-[11px] text-gray-500 mt-1 flex gap-2">
+                              <span>
+                                {item.uploadedAt
+                                  ? new Date(item.uploadedAt).toLocaleString()
+                                  : "unknown time"}
+                              </span>
+                              <span>•</span>
+                              <span>
+                                {item.size
+                                  ? (item.size / 1024).toFixed(1)
+                                  : "0"}{" "}
+                                KB
+                              </span>
+                            </div>
+                            {item.metadata?.reportfingerprint && (
+                              <div className="text-[11px] text-gray-500 mt-1">
+                                fingerprint:{" "}
+                                <span className="font-mono">
+                                  {item.metadata.reportfingerprint.slice(0, 10)}
+                                  …
+                                </span>
+                              </div>
+                            )}
+                          </button>
+                        ))}
                       </div>
                     )}
-
-                    <pre className="p-3 text-xs whitespace-pre-wrap font-mono max-h-72 overflow-auto">
-                      {previewJson ||
-                        (selectedTestItem
-                          ? "Select a file to preview."
-                          : "No file selected.")}
-                    </pre>
                   </div>
                 </div>
-              </TabsContent>
-            )}
-          </Tabs>
-        </div>
+
+                <div className="lg:col-span-7 border border-gray-200 rounded-lg bg-white overflow-hidden">
+                  <div className="p-2 border-b bg-gray-50 flex items-center justify-between">
+                    <div className="text-xs font-medium text-gray-700">
+                      Decrypted preview
+                    </div>
+                    {selectedTestItem && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            void handlePreviewItem(selectedTestItem)
+                          }
+                          disabled={
+                            previewLoading || deleteLoading || chainLoading
+                          }
+                        >
+                          {previewLoading ? "Decrypting..." : "Re-decrypt"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() =>
+                            void handleDeleteItem(selectedTestItem)
+                          }
+                          disabled={
+                            testsBucketMode === "legacy" ||
+                            deleteLoading ||
+                            previewLoading ||
+                            chainLoading
+                          }
+                        >
+                          {deleteLoading ? "Deleting..." : "Delete"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {previewError && (
+                    <div className="p-3 text-sm text-red-700 bg-red-50 border-b border-red-200">
+                      {previewError}
+                    </div>
+                  )}
+
+                  <pre className="p-3 text-xs whitespace-pre-wrap font-mono max-h-72 overflow-auto">
+                    {previewJson ||
+                      (selectedTestItem
+                        ? "Select a file to preview."
+                        : "No file selected.")}
+                  </pre>
+                </div>
+              </div>
+            </TabsContent>
+          )}
+        </Tabs>
 
         {/* Status Display */}
         {status.error && (

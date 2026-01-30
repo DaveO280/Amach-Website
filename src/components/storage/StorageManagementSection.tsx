@@ -1282,8 +1282,7 @@ export function StorageManagementSection({
       <CardContent className="space-y-4">
         {/* Pruning Controls */}
         <Tabs value={selectedDataType} onValueChange={setSelectedDataType}>
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="all">All</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="conversation-session">Chats</TabsTrigger>
             <TabsTrigger value="health-raw">Health Data</TabsTrigger>
             <TabsTrigger value="context-vault">Context</TabsTrigger>

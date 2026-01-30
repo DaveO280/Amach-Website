@@ -135,7 +135,9 @@ export function StorageManagementSection({
   const [keyError, setKeyError] = useState<string>("");
   const keyRequestAttemptedRef = React.useRef(false);
 
-  const [selectedDataType, setSelectedDataType] = useState<string>("all");
+  const [selectedDataType, setSelectedDataType] = useState<string>(
+    "conversation-session",
+  );
 
   // All tab state
   const [allItems, setAllItems] = useState<StorjListItem[]>([]);
@@ -259,7 +261,11 @@ export function StorageManagementSection({
         // Load into appropriate tab states
         setAllItems(items);
         setChatsItems(
-          items.filter((i) => i.dataType === "conversation-session"),
+          items.filter(
+            (i) =>
+              i.dataType === "conversation-session" ||
+              i.dataType === "conversation-history",
+          ),
         );
         setHealthDataItems(items.filter((i) => i.dataType === "health-raw"));
         setContextItems(items.filter((i) => i.dataType === "timeline-event"));
@@ -541,8 +547,17 @@ export function StorageManagementSection({
     setChatsLoading(true);
     setChatsError("");
     try {
-      const items = await refreshFromStorj("conversation-session");
-      setChatsItems(items);
+      // Fetch both conversation-session and conversation-history
+      const [sessions, history] = await Promise.all([
+        refreshFromStorj("conversation-session"),
+        refreshFromStorj("conversation-history"),
+      ]);
+      // Combine and deduplicate by URI
+      const allChatItems = [...sessions, ...history];
+      const uniqueItems = Array.from(
+        new Map(allChatItems.map((item) => [item.uri, item])).values(),
+      );
+      setChatsItems(uniqueItems);
     } catch (e) {
       setChatsError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -1760,7 +1775,7 @@ export function StorageManagementSection({
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="text-xs font-medium text-gray-700">
-                  Chat sessions ({chatsItems.length})
+                  Chat sessions & memory ({chatsItems.length})
                 </div>
                 <Button
                   size="sm"

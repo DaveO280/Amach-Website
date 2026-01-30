@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStorjPruning } from "@/hooks/useStorjPruning";
-import { getStorageService } from "@/storage/StorageService";
+import type { StorageService } from "@/storage/StorageService";
+import type { StorageReference } from "@/storage/StorjClient";
 import {
   formatSnapshotInfo,
   getSnapshotInfo,
@@ -244,12 +245,48 @@ export function StorageManagementSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [encryptionKey]);
 
+  // Client-side API wrapper for StorageService methods needed by pruning
+  const createClientStorageService = (): StorageService => {
+    return {
+      listUserData: async (
+        address: string,
+        key: typeof encryptionKey,
+        dataType?: string,
+      ): Promise<StorageReference[]> => {
+        if (!key) {
+          throw new Error("Encryption key required");
+        }
+        const res = await fetch("/api/storj", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "storage/list",
+            userAddress: address,
+            encryptionKey: key,
+            dataType,
+          }),
+        });
+        const json = (await res.json()) as {
+          success?: boolean;
+          result?: StorageReference[];
+          error?: string;
+        };
+        if (!res.ok || json.success === false) {
+          throw new Error(
+            json.error || `Failed to list Storj data (${dataType || "all"})`,
+          );
+        }
+        return json.result || [];
+      },
+    } as StorageService;
+  };
+
   const handleRefreshStats = async (): Promise<void> => {
     if (!encryptionKey) return;
 
     setIsLoadingStats(true);
     try {
-      const storageService = getStorageService();
+      const storageService = createClientStorageService();
       const dataType =
         selectedDataType === "all" ? undefined : selectedDataType;
 
@@ -923,7 +960,7 @@ export function StorageManagementSection({
     if (!confirmed) return;
 
     try {
-      const storageService = getStorageService();
+      const storageService = createClientStorageService();
       const targetDataType = dataType === "all" ? undefined : dataType;
 
       await performCompletePruning(

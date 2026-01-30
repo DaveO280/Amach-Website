@@ -170,6 +170,12 @@ export class StorjClient {
     const bucketPrefix = process.env.STORJ_BUCKET_PREFIX || "amach-health";
 
     if (!accessKeyId || !secretAccessKey) {
+      const isClient = typeof window !== "undefined";
+      if (isClient) {
+        throw new Error(
+          "StorjClient cannot be used directly in client-side code. Use the /api/storj endpoint instead. Storj credentials are server-only.",
+        );
+      }
       throw new Error(
         "Storj credentials not configured. Set STORJ_ACCESS_KEY and STORJ_SECRET_KEY environment variables.",
       );

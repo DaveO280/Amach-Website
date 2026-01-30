@@ -375,19 +375,47 @@ export function StorageManagementSection({
     const itemsToCache = [...newItems, ...updatedItems];
     if (itemsToCache.length > 0) {
       try {
-        await storjItemsCache.initialize();
+        console.log(
+          `[StorageManagement] Attempting to cache ${itemsToCache.length} new/updated items...`,
+        );
+        // Try to initialize with timeout
+        await Promise.race([
+          storjItemsCache.initialize(),
+          new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error("IndexedDB init timeout for caching")),
+              3000,
+            ),
+          ),
+        ]);
         // Use cacheItem for individual items to merge with existing cache
         // instead of replacing all items
-        for (const item of itemsToCache) {
-          await storjItemsCache.cacheItem(userAddress, {
-            uri: item.uri,
-            contentHash: item.contentHash,
-            size: item.size,
-            uploadedAt: item.uploadedAt,
-            dataType: item.dataType,
-            metadata: item.metadata,
-          });
-        }
+        // Cache items in parallel with a timeout for each
+        const cachePromises = itemsToCache.map((item) =>
+          Promise.race([
+            storjItemsCache.cacheItem(userAddress, {
+              uri: item.uri,
+              contentHash: item.contentHash,
+              size: item.size,
+              uploadedAt: item.uploadedAt,
+              dataType: item.dataType,
+              metadata: item.metadata,
+            }),
+            new Promise<void>((_, reject) =>
+              setTimeout(
+                () => reject(new Error(`Cache item timeout: ${item.uri}`)),
+                2000,
+              ),
+            ),
+          ]).catch((err) => {
+            console.warn(
+              `[StorageManagement] Failed to cache item ${item.uri}:`,
+              err,
+            );
+            // Continue even if individual items fail
+          }),
+        );
+        await Promise.all(cachePromises);
         console.log(
           `[StorageManagement] Cached ${itemsToCache.length} new/updated item(s) from Storj`,
         );

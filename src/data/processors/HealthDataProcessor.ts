@@ -287,9 +287,27 @@ export class HealthDataProcessor {
       );
 
       // Reconstruct processedData from stored data
-      // Note: rawData is not stored, only aggregates
+      // Note: Most rawData is not stored, only aggregates
+      // Exception: Heart rate raw samples are stored for zone calculations
+      const rawData: HealthDataByType = {};
+      if (stored.rawHeartRateSamples && stored.rawHeartRateSamples.length > 0) {
+        rawData["HKQuantityTypeIdentifierHeartRate"] =
+          stored.rawHeartRateSamples.map((point) => ({
+            startDate: point.startDate,
+            endDate: point.endDate || point.startDate,
+            value: point.value,
+            unit: point.unit,
+            source: point.source || "",
+            device: point.device || "",
+            type: point.type || "HKQuantityTypeIdentifierHeartRate",
+          }));
+        console.log(
+          `[HealthDataProcessor] Loaded ${stored.rawHeartRateSamples.length} heart rate samples from processed data`,
+        );
+      }
+
       this.processedData = {
-        rawData: {}, // Raw data not persisted to save space
+        rawData, // Only heart rate raw samples are stored
         dailyAggregates: stored.dailyAggregates as Record<
           string,
           Map<string, MetricSample>

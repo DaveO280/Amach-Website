@@ -887,6 +887,15 @@ class HealthDataStoreService {
   async getProcessedData(): Promise<{
     dailyAggregates: Record<string, Map<string, unknown>>;
     sleepData: unknown[];
+    rawHeartRateSamples?: Array<{
+      startDate: string;
+      value: string;
+      unit: string;
+      source?: string;
+      device?: string;
+      type?: string;
+      endDate?: string;
+    }>;
     dateRange: { start: Date; end: Date };
     lastUpdated: Date;
   } | null> {
@@ -898,6 +907,15 @@ class HealthDataStoreService {
     return new Promise<{
       dailyAggregates: Record<string, Map<string, unknown>>;
       sleepData: unknown[];
+      rawHeartRateSamples?: Array<{
+        startDate: string;
+        value: string;
+        unit: string;
+        source?: string;
+        device?: string;
+        type?: string;
+        endDate?: string;
+      }>;
       dateRange: { start: Date; end: Date };
       lastUpdated: Date;
     } | null>((resolve, reject): void => {
@@ -938,6 +956,7 @@ class HealthDataStoreService {
         resolve({
           dailyAggregates,
           sleepData: result.sleepData,
+          rawHeartRateSamples: result.rawHeartRateSamples,
           dateRange: {
             start: new Date(result.dateRange.start),
             end: new Date(result.dateRange.end),

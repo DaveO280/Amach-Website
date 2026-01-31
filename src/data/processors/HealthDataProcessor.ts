@@ -229,16 +229,31 @@ export class HealthDataProcessor {
     // Persist to IndexedDB
     if (persistToDb) {
       try {
+        // Extract raw heart rate samples for zone calculations
+        // Store full dataset, not just 180 days
+        const rawHeartRateSamples = rawData[
+          "HKQuantityTypeIdentifierHeartRate"
+        ]?.map((point) => ({
+          startDate: point.startDate,
+          value: point.value,
+          unit: point.unit || "",
+          source: point.source,
+          device: point.device,
+          type: point.type,
+          endDate: point.endDate,
+        }));
+
         await healthDataStore.saveProcessedData({
           dailyAggregates: dailyAggregates as Record<
             string,
             Map<string, unknown>
           >,
           sleepData,
+          rawHeartRateSamples,
           dateRange,
         });
         console.log(
-          "[HealthDataProcessor] Persisted processed data to IndexedDB",
+          `[HealthDataProcessor] Persisted processed data to IndexedDB (${rawHeartRateSamples?.length || 0} heart rate samples)`,
         );
       } catch (error) {
         console.error(

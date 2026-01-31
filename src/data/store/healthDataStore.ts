@@ -89,6 +89,16 @@ interface ProcessedDataStore {
   >;
   // Processed sleep data
   sleepData: unknown[];
+  // Raw heart rate samples (needed for zone calculations, not just daily aggregates)
+  rawHeartRateSamples?: Array<{
+    startDate: string;
+    value: string;
+    unit: string;
+    source?: string;
+    device?: string;
+    type?: string;
+    endDate?: string;
+  }>;
   // Date range
   dateRange: {
     start: string;
@@ -790,6 +800,15 @@ class HealthDataStoreService {
   async saveProcessedData(processedData: {
     dailyAggregates: Record<string, Map<string, unknown>>;
     sleepData: unknown[];
+    rawHeartRateSamples?: Array<{
+      startDate: string;
+      value: string;
+      unit: string;
+      source?: string;
+      device?: string;
+      type?: string;
+      endDate?: string;
+    }>;
     dateRange: { start: Date; end: Date };
   }): Promise<void> {
     if (!this.isInitialized) {
@@ -837,6 +856,7 @@ class HealthDataStoreService {
         id: "current",
         dailyAggregates: serializedAggregates,
         sleepData: processedData.sleepData,
+        rawHeartRateSamples: processedData.rawHeartRateSamples,
         dateRange: {
           start: processedData.dateRange.start.toISOString(),
           end: processedData.dateRange.end.toISOString(),

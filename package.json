@@ -169,7 +169,8 @@
       ]
     },
     "_comment": {
-      "request": "The 'request' package has SSRF vulnerability (CVE-2023-28155) but is only used in dev/test via @nomiclabs/hardhat-waffle. It's deprecated and has no patched version. This is acceptable risk as it never runs in production."
+      "request": "The 'request' package has SSRF vulnerability (CVE-2023-28155) but is only used in dev/test via @nomiclabs/hardhat-waffle. It's deprecated and has no patched version. This is acceptable risk as it never runs in production.",
+      "elliptic": "Elliptic has a low-severity vulnerability (risky cryptographic implementation) but is a transitive dependency required by crypto libraries. This is tolerated as it's a low-risk issue and no alternative is available without breaking changes."
     },
     "patchedDependencies": {
       "viem": "patches/viem.patch"

@@ -24,6 +24,7 @@ module.exports = {
         "**/__tests__/**/*.test.ts",
         "!**/storage/**",
         "!**/utils/reportParsers/__tests__/**",
+        "!**/data/parsers/__tests__/**",
       ],
       moduleNameMapper: {
         "^@/(.*)$": "<rootDir>/src/$1",
@@ -36,7 +37,10 @@ module.exports = {
       displayName: "parsers",
       preset: "ts-jest",
       testEnvironment: "node",
-      testMatch: ["**/utils/reportParsers/__tests__/**/*.test.ts"],
+      testMatch: [
+        "**/utils/reportParsers/__tests__/**/*.test.ts",
+        "**/data/parsers/__tests__/**/*.test.ts",
+      ],
       moduleNameMapper: {
         "^@/(.*)$": "<rootDir>/src/$1",
       },

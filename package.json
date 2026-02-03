@@ -6,7 +6,7 @@
     "dev": "next dev --experimental-https --webpack",
     "dev:http": "next dev",
     "dev:https": "next dev --experimental-https",
-    "build": "pnpm lint && pnpm type-check && next build --webpack",
+    "build": "pnpm lint && pnpm type-check && pnpm test && next build --webpack",
     "vercel-build": "next build --webpack",
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",

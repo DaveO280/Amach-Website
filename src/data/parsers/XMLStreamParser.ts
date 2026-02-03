@@ -458,27 +458,46 @@ export class XMLStreamParser {
    * Normalize date string to iOS-compatible ISO 8601 format
    * iOS Safari is strict about date formats
    * Converts "2025-08-17 17:38:00 -0400" to "2025-08-17T17:38:00-04:00"
+   * Only normalizes if the date fails to parse initially (preserves valid dates)
    */
   private normalizeDate(dateStr: string): string {
     try {
+      // First, test if the date already parses correctly
+      const testOriginal = new Date(dateStr);
+      if (!isNaN(testOriginal.getTime())) {
+        // Date is valid, return as-is (preserves desktop functionality)
+        return dateStr;
+      }
+
+      // Date failed to parse, try normalization for mobile Safari
       let normalized = dateStr;
 
-      // Replace first space with T (date and time separator)
-      normalized = normalized.replace(" ", "T");
+      // Replace first space with T (date and time separator) if not already present
+      if (!normalized.includes("T")) {
+        normalized = normalized.replace(" ", "T");
+      }
 
-      // Fix timezone format: " -0400" -> "-04:00"
-      // Handle space before timezone and add colon
-      normalized = normalized.replace(/ ([+-])(\d{2})(\d{2})$/, "$1$2:$3");
+      // Fix timezone format: handle multiple cases
+      // Only modify timezone if it doesn't already have a colon
+      if (!/[+-]\d{2}:\d{2}$/.test(normalized)) {
+        // Case 1: " -0400" -> "-04:00" (space before timezone, no colon)
+        normalized = normalized.replace(/ ([+-])(\d{2})(\d{2})$/, "$1$2:$3");
+        // Case 2: "-0400" -> "-04:00" (no space, no colon) - only if Case 1 didn't match
+        if (!/[+-]\d{2}:\d{2}$/.test(normalized)) {
+          normalized = normalized.replace(/([+-])(\d{2})(\d{2})$/, "$1$2:$3");
+        }
+      }
 
-      // Test if it parses correctly
-      const testDate = new Date(normalized);
-      if (!isNaN(testDate.getTime())) {
+      // Test if normalized version parses correctly
+      const testNormalized = new Date(normalized);
+      if (!isNaN(testNormalized.getTime())) {
         return normalized;
       }
 
-      // If that didn't work, return original
+      // If normalization didn't work, return original (might work on some browsers)
       return dateStr;
     } catch {
+      // On any error, return original to preserve functionality
       return dateStr;
     }
   }

@@ -88,7 +88,6 @@ const HealthReport: React.FC = () => {
 
   const hasHealthData = !!metrics;
   const promptProfile = buildPromptProfile(userProfile);
-  const hasProfile = Boolean(promptProfile);
   const canGenerateAnalysis = Boolean(hasHealthData && healthScoresObj);
 
   // Set up a useVeniceAI instance for each section (explicitly, not in a loop)
@@ -178,10 +177,11 @@ const HealthReport: React.FC = () => {
       // Stagger starts to avoid bursty traffic that often triggers 503s.
       // This keeps the UI faster than fully sequential, but avoids 5-at-once.
       const START_STAGGER_MS = 1000;
-      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      const sleep = (ms: number): Promise<void> =>
+        new Promise((r) => setTimeout(r, ms));
       const tasks = sectionQueries.map(
-        ({ section, mutateAsync }) =>
-          async () => {
+        ({ section, mutateAsync }): (() => Promise<void>) =>
+          async (): Promise<void> => {
             const prompt = buildHealthAnalysisPrompt(
               section,
               metrics,
@@ -289,23 +289,6 @@ const HealthReport: React.FC = () => {
               );
             })}
           </div>
-        </div>
-      )}
-
-      {hasHealthData && !hasProfile && (
-        <div className="flex flex-col space-y-4">
-          <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
-            <p className="text-amber-800">
-              Please enter your profile information to generate a personalized
-              health report.
-            </p>
-          </div>
-          <Button
-            onClick={() => setShowProfileModal(true)}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white w-fit"
-          >
-            Generate Health Report
-          </Button>
         </div>
       )}
 

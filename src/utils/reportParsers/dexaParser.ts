@@ -120,13 +120,22 @@ function parseRegionLine(region: string, line: string): DexaRegionMetrics {
     }
   }
 
-  // Extract BMD - look for "BMD (g/cm²)" or "bmd[:\s]*(\d+(?:\.\d+)?)"
-  const bmdMatch = line.match(/bmd\s*\(?g\/cm[²2]\)?[:\s]*(\d+(?:\.\d+)?)/i);
-  if (bmdMatch) {
-    const value = parseFloat(bmdMatch[1]);
-    if (value >= 0 && value <= 3) {
-      // Reasonable BMD range
-      metrics.boneDensityGPerCm2 = value;
+  // Extract BMD - try multiple patterns to handle various formats
+  const bmdPatterns = [
+    /bmd\s*\(?g\/cm[²2]\)?[:\s-]+(\d+\.\d+|\d+)/i,
+    /(?:bone\s+(?:mineral\s+)?density|bmd)[:\s-]+(\d+\.\d+|\d+)\s*(?:g\/cm[²2]?|g\/cm2)?/i,
+    /(\d+\.\d{2,})\s*(?:g\/cm[²2]?|g\/cm2)/i, // "1.234 g/cm²" format
+  ];
+
+  for (const pattern of bmdPatterns) {
+    const bmdMatch = line.match(pattern);
+    if (bmdMatch) {
+      const value = parseFloat(bmdMatch[1]);
+      if (value >= 0.3 && value <= 3.0) {
+        // Reasonable BMD range (0.3-3.0 g/cm²)
+        metrics.boneDensityGPerCm2 = value;
+        break;
+      }
     }
   }
 
@@ -324,12 +333,32 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
     }
 
     if (!totalBmd) {
-      const match = line.match(
-        /(total\s+(?:bone\s+)?density[:\s]*)(\d+(?:\.\d+)?)/i,
-      );
-      if (match) {
-        totalBmd = Number.parseFloat(match[2]);
-        scoreHits += 1;
+      // Try multiple patterns for total BMD
+      const totalBmdPatterns = [
+        /total\s+(?:body\s+)?(?:bone\s+)?(?:mineral\s+)?density[:\s-]+(\d+\.\d+|\d+)\s*(?:g\/cm[²2]?|g\/cm2)?/i,
+        /total\s+bmd[:\s-]+(\d+\.\d+|\d+)\s*(?:g\/cm[²2]?|g\/cm2)?/i,
+        /bmd[:\s-]+(\d+\.\d+|\d+)\s*(?:g\/cm[²2]?|g\/cm2)?/i,
+        /(total\s+(?:bone\s+)?density[:\s]*)(\d+(?:\.\d+)?)/i, // Original pattern
+      ];
+
+      for (const pattern of totalBmdPatterns) {
+        const match = line.match(pattern);
+        if (match) {
+          const value = parseFloat(match[1] || match[2]);
+          if (value >= 0.3 && value <= 3.0) {
+            totalBmd = value;
+            scoreHits += 1;
+
+            // Also add to total region if it exists
+            let totalRegion = regions.find((r) => r.region === "total");
+            if (!totalRegion) {
+              totalRegion = { region: "total" };
+              regions.push(totalRegion);
+            }
+            totalRegion.boneDensityGPerCm2 = value;
+            break;
+          }
+        }
       }
     }
   });
@@ -496,38 +525,61 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
     }
   });
 
-  // Extract BMD data from Densitometry table
+  // Extract BMD data from Densitometry table - improved detection and extraction
   let inBmdTable = false;
-  lines.forEach((line) => {
-    // Check if we're entering the BMD table
+  let bmdTableStartIndex = -1;
+
+  lines.forEach((line, index) => {
+    // Check if we're entering the BMD table - more flexible patterns
     if (
       line.toLowerCase().includes("densitometry") ||
       line.toLowerCase().includes("region bmd") ||
+      line.toLowerCase().includes("bone density") ||
+      line.toLowerCase().includes("bmd") ||
       (line.toLowerCase().includes("bmd") &&
-        line.toLowerCase().includes("g/cm"))
+        (line.toLowerCase().includes("g/cm") ||
+          line.toLowerCase().includes("g/cm²")))
     ) {
       inBmdTable = true;
+      bmdTableStartIndex = index;
       return;
     }
 
     // Check if we're leaving the BMD table
     if (
       inBmdTable &&
+      index > bmdTableStartIndex + 1 &&
       (line.toLowerCase().includes("trend:") ||
         line.toLowerCase().includes("graph") ||
         line.toLowerCase().includes("page:") ||
-        line.toLowerCase().includes("comments:"))
+        line.toLowerCase().includes("comments:") ||
+        line.toLowerCase().includes("body composition") ||
+        line.toLowerCase().includes("tissue quantitation"))
     ) {
       inBmdTable = false;
       return;
     }
 
     // Parse BMD table rows: "Region BMD (g/cm²) YA T-score AM Z-score"
-    if (inBmdTable) {
+    // Also handle formats like "Total Body Bone Density" table
+    if (inBmdTable && index > bmdTableStartIndex + 1) {
+      // Skip header rows
+      if (
+        line.toLowerCase().includes("region") &&
+        line.toLowerCase().includes("bmd") &&
+        line.toLowerCase().includes("score")
+      ) {
+        return; // This is a header row
+      }
+
       const bmdRegionMap: Record<string, string> = {
         head: "head",
         arms: "arms",
+        "arm right": "arms",
+        "arm left": "arms",
         legs: "legs",
+        "leg right": "legs",
+        "leg left": "legs",
         trunk: "trunk",
         ribs: "ribs",
         spine: "spine",
@@ -537,47 +589,255 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
 
       for (const [patternName, region] of Object.entries(bmdRegionMap)) {
         // More flexible pattern matching - region name can be anywhere in line
-        const pattern = new RegExp(`\\b${patternName}\\b`, "i");
+        const pattern = new RegExp(
+          `\\b${patternName.replace(/\s+/g, "\\s+")}\\b`,
+          "i",
+        );
         if (pattern.test(line)) {
-          // Extract BMD value - look for number followed by "g/cm" or just numbers
-          // Pattern: "Head   2.972" or "Head   2.972   -   -"
-          const bmdMatch = line.match(
-            /(\d+\.\d+|\d+)(?:\s*(?:g\/cm[²2]?|g\/cm2))?/i,
-          );
-          if (bmdMatch) {
-            const bmdValue = parseFloat(bmdMatch[1]);
-            if (bmdValue >= 0 && bmdValue <= 3) {
-              let bmdRegion = regions.find((r) => r.region === region);
-              if (!bmdRegion) {
-                bmdRegion = { region };
-                regions.push(bmdRegion);
-              }
-              bmdRegion.boneDensityGPerCm2 = bmdValue;
+          // Extract BMD value - improved pattern to handle various formats:
+          // "Head   2.972" or "Head   2.972 g/cm²" or "Head   BMD: 2.972"
+          // Also handle table format: "Head   2.972   -   -" (BMD, T-score, Z-score)
+          const bmdPatterns = [
+            /bmd[:\s-]+(\d+\.\d+|\d+)\s*(?:g\/cm[²2]?|g\/cm2)?/i, // "BMD: 1.234" or "BMD 1.234 g/cm²"
+            /(\d+\.\d{2,}|\d+\.\d+)\s*(?:g\/cm[²2]?|g\/cm2)?/i, // "1.234 g/cm²" or "1.234"
+            /(\d+\.\d+|\d+)(?=\s|$)/, // Just a number (for table format)
+          ];
 
-              // Extract T-score and Z-score if available (for total region)
-              // Look for pattern: "Total   1.500   3.0   3.2"
-              if (region === "total") {
-                const allNumbers = line.match(/-?\d+(?:\.\d+)?/g);
-                if (allNumbers && allNumbers.length >= 3) {
-                  const tVal = parseFloat(allNumbers[1]);
-                  const zVal = parseFloat(allNumbers[2]);
-                  if (tVal >= -10 && tVal <= 10) {
-                    bmdRegion.tScore = tVal;
-                    if (!tScore) tScore = tVal;
-                  }
-                  if (zVal >= -10 && zVal <= 10) {
-                    bmdRegion.zScore = zVal;
-                    if (!zScore) zScore = zVal;
+          let bmdValue: number | undefined;
+          for (const bmdPattern of bmdPatterns) {
+            const bmdMatch = line.match(bmdPattern);
+            if (bmdMatch) {
+              const candidate = parseFloat(bmdMatch[1] || bmdMatch[0]);
+              // BMD values are typically between 0.5 and 2.5 g/cm²
+              if (candidate >= 0.3 && candidate <= 3.0) {
+                bmdValue = candidate;
+                break;
+              }
+            }
+          }
+
+          if (bmdValue !== undefined) {
+            let bmdRegion = regions.find((r) => r.region === region);
+            if (!bmdRegion) {
+              bmdRegion = { region };
+              regions.push(bmdRegion);
+            }
+            bmdRegion.boneDensityGPerCm2 = bmdValue;
+
+            // Extract T-score and Z-score if available (for total region or any region)
+            // Look for pattern: "Total   1.500   3.0   3.2" or "Total   1.500   T: 3.0   Z: 3.2"
+            const allNumbers = line.match(/-?\d+(?:\.\d+)?/g);
+            if (allNumbers && allNumbers.length >= 2) {
+              // Find BMD value index
+              const bmdIndex = allNumbers.findIndex((n) => {
+                const num = parseFloat(n);
+                return Math.abs(num - bmdValue!) < 0.01;
+              });
+
+              // T-score and Z-score typically come after BMD
+              if (bmdIndex >= 0 && allNumbers.length > bmdIndex + 1) {
+                const tCandidate = parseFloat(allNumbers[bmdIndex + 1]);
+                if (
+                  tCandidate >= -10 &&
+                  tCandidate <= 10 &&
+                  Math.abs(tCandidate) < 5
+                ) {
+                  bmdRegion.tScore = tCandidate;
+                  if (!tScore && region === "total") tScore = tCandidate;
+                }
+
+                if (allNumbers.length > bmdIndex + 2) {
+                  const zCandidate = parseFloat(allNumbers[bmdIndex + 2]);
+                  if (
+                    zCandidate >= -10 &&
+                    zCandidate <= 10 &&
+                    Math.abs(zCandidate) < 5
+                  ) {
+                    bmdRegion.zScore = zCandidate;
+                    if (!zScore && region === "total") zScore = zCandidate;
                   }
                 }
               }
             }
+
+            // Also try explicit T-score and Z-score patterns
+            if (!bmdRegion.tScore) {
+              const tMatch = line.match(
+                /t[-\s]?score[:\s-]+(-?\d+(?:\.\d+)?)/i,
+              );
+              if (tMatch) {
+                const tVal = parseFloat(tMatch[1]);
+                if (tVal >= -10 && tVal <= 10) {
+                  bmdRegion.tScore = tVal;
+                  if (!tScore && region === "total") tScore = tVal;
+                }
+              }
+            }
+
+            if (!bmdRegion.zScore) {
+              const zMatch = line.match(
+                /z[-\s]?score[:\s-]+(-?\d+(?:\.\d+)?)/i,
+              );
+              if (zMatch) {
+                const zVal = parseFloat(zMatch[1]);
+                if (zVal >= -10 && zVal <= 10) {
+                  bmdRegion.zScore = zVal;
+                  if (!zScore && region === "total") zScore = zVal;
+                }
+              }
+            }
           }
-          break;
+          break; // Found a match, stop checking other patterns
         }
       }
     }
   });
+
+  // Aggressive fallback: search entire text for BMD patterns if table parsing didn't find anything
+  // This is more comprehensive and searches every line for BMD data
+  if (!totalBmd && regions.every((r) => !r.boneDensityGPerCm2)) {
+    // First, try to find BMD in any line that contains BMD-related keywords
+    const bmdKeywords = [
+      "bmd",
+      "bone density",
+      "bone mineral density",
+      "densitometry",
+    ];
+    const bmdRegionKeywords = [
+      "head",
+      "arms",
+      "legs",
+      "trunk",
+      "ribs",
+      "spine",
+      "pelvis",
+      "total",
+    ];
+
+    lines.forEach((line) => {
+      const lowerLine = line.toLowerCase();
+
+      // Check if this line might contain BMD data
+      const hasBmdKeyword = bmdKeywords.some((kw) => lowerLine.includes(kw));
+      const hasNumber = /\d+\.\d+/.test(line);
+
+      if (hasBmdKeyword || hasNumber) {
+        // Try multiple BMD extraction patterns
+        const bmdPatterns = [
+          /(?:bmd|bone\s+(?:mineral\s+)?density)[:\s-]+(\d+\.\d{2,}|\d+\.\d+)\s*(?:g\/cm[²2]?|g\/cm2)?/i,
+          /(\d+\.\d{2,})\s*(?:g\/cm[²2]?|g\/cm2)/i, // "1.234 g/cm²"
+          /(\d+\.\d{2,})(?=\s|$)/, // Just a number that looks like BMD (2+ decimal places)
+        ];
+
+        for (const pattern of bmdPatterns) {
+          const match = line.match(pattern);
+          if (match) {
+            const value = parseFloat(match[1] || match[0]);
+            // BMD values are typically between 0.5 and 2.5 g/cm²
+            if (value >= 0.3 && value <= 3.0) {
+              // Try to determine which region this BMD belongs to
+              let targetRegion: string | undefined;
+              for (const regionKeyword of bmdRegionKeywords) {
+                if (lowerLine.includes(regionKeyword)) {
+                  targetRegion =
+                    regionKeyword === "arms"
+                      ? "arms"
+                      : regionKeyword === "legs"
+                        ? "legs"
+                        : regionKeyword;
+                  break;
+                }
+              }
+
+              // If no specific region found, assume it's total if line contains "total"
+              if (!targetRegion && lowerLine.includes("total")) {
+                targetRegion = "total";
+              }
+
+              // If still no region, check if this looks like a total BMD line
+              if (
+                !targetRegion &&
+                (lowerLine.includes("total") || hasBmdKeyword)
+              ) {
+                targetRegion = "total";
+                totalBmd = value;
+              }
+
+              if (targetRegion) {
+                let bmdRegion = regions.find((r) => r.region === targetRegion);
+                if (!bmdRegion) {
+                  bmdRegion = { region: targetRegion };
+                  regions.push(bmdRegion);
+                }
+                if (!bmdRegion.boneDensityGPerCm2) {
+                  bmdRegion.boneDensityGPerCm2 = value;
+                }
+
+                // If this is total, also set the top-level variable
+                if (targetRegion === "total") {
+                  totalBmd = value;
+                }
+
+                // Try to extract T-score and Z-score from the same line
+                const tMatch = line.match(
+                  /t[-\s]?score[:\s-]+(-?\d+(?:\.\d+)?)/i,
+                );
+                if (tMatch) {
+                  const tVal = parseFloat(tMatch[1]);
+                  if (tVal >= -10 && tVal <= 10) {
+                    bmdRegion.tScore = tVal;
+                    if (targetRegion === "total" && !tScore) tScore = tVal;
+                  }
+                }
+
+                const zMatch = line.match(
+                  /z[-\s]?score[:\s-]+(-?\d+(?:\.\d+)?)/i,
+                );
+                if (zMatch) {
+                  const zVal = parseFloat(zMatch[1]);
+                  if (zVal >= -10 && zVal <= 10) {
+                    bmdRegion.zScore = zVal;
+                    if (targetRegion === "total" && !zScore) zScore = zVal;
+                  }
+                }
+
+                break; // Found BMD, move to next line
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Final fallback: look for "Total Body Bone Density" or "Total BMD" patterns anywhere in raw text
+    if (!totalBmd) {
+      const totalBmdPatterns = [
+        /total\s+(?:body\s+)?(?:bone\s+)?(?:mineral\s+)?density[:\s-]+(\d+\.\d+|\d+)\s*(?:g\/cm[²2]?|g\/cm2)?/i,
+        /total\s+bmd[:\s-]+(\d+\.\d+|\d+)\s*(?:g\/cm[²2]?|g\/cm2)?/i,
+        /bmd[:\s-]+(\d+\.\d+|\d+)\s*(?:g\/cm[²2]?|g\/cm2)?/i,
+      ];
+
+      for (const pattern of totalBmdPatterns) {
+        const match = rawText.match(pattern);
+        if (match) {
+          const value = parseFloat(match[1]);
+          if (value >= 0.3 && value <= 3.0) {
+            totalBmd = value;
+            // Also add to total region
+            let totalRegion = regions.find((r) => r.region === "total");
+            if (!totalRegion) {
+              totalRegion = { region: "total" };
+              regions.push(totalRegion);
+            }
+            if (!totalRegion.boneDensityGPerCm2) {
+              totalRegion.boneDensityGPerCm2 = value;
+            }
+            break;
+          }
+        }
+      }
+    }
+  }
 
   // Extract visceral fat from VAT section
   if (!visceralFatRating || !visceralFatVolumeCm3) {

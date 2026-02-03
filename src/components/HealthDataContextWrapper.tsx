@@ -20,7 +20,6 @@ import {
 import { extractDatePart, deduplicateData } from "@/utils/dataDeduplicator";
 import { processSleepData } from "@/utils/sleepDataProcessor";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { useWalletConnection } from "../hooks/useWalletConnection";
 import { healthDataProcessor } from "@/data/processors/HealthDataProcessor";
 import {
   normalizeUserProfile,
@@ -166,8 +165,13 @@ export default function HealthDataContextWrapper({
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isAiCompanionOpen, setIsAiCompanionOpen] = useState(false);
 
-  // Get wallet connection data
-  const { isConnected, profile: walletProfile } = useWalletConnection();
+  // Get wallet service (includes blockchain profile loading)
+  const {
+    isConnected,
+    address,
+    loadHealthProfileFromBlockchain,
+    getDecryptedProfile,
+  } = walletService;
 
   // Load long-range processed aggregates on startup (enables fast charts / tool-use without reprocessing raw data).
   useEffect(() => {
@@ -200,34 +204,77 @@ export default function HealthDataContextWrapper({
     }
   }, [isPending, error]);
 
-  // Update user profile from wallet data when available
+  // Load user profile from blockchain when wallet is connected (only once)
+  const profileLoadedRef = React.useRef<string | null>(null);
   useEffect(() => {
-    if (isConnected && walletProfile) {
-      const rawProfile: RawUserProfileInput = {
-        age: walletProfile.age,
-        birthDate: (walletProfile as { birthDate?: string }).birthDate,
-        sex: walletProfile.biologicalSex,
-        height: walletProfile.height,
-        heightCm: (walletProfile as { heightCm?: number }).heightCm,
-        heightIn: (walletProfile as { heightIn?: number }).heightIn,
-        weight: walletProfile.weight,
-        weightKg: (walletProfile as { weightKg?: number }).weightKg,
-        weightLbs: (walletProfile as { weightLbs?: number }).weightLbs,
-        name: (walletProfile as { name?: string }).name,
-      };
+    const loadProfileFromBlockchain = async (): Promise<void> => {
+      if (!isConnected || !address) {
+        profileLoadedRef.current = null;
+        return;
+      }
 
-      const normalizedProfile = normalizeUserProfile(rawProfile);
+      // Prevent re-loading if we've already loaded for this address
+      if (profileLoadedRef.current === address) {
+        return;
+      }
 
-      setHealthContext((prev) => ({
-        ...prev,
-        userProfile: normalizedProfile,
-      }));
+      try {
+        // Load encrypted profile from blockchain
+        const loadResult = await loadHealthProfileFromBlockchain();
 
-      setProfile(normalizedProfile);
+        if (!loadResult.success || !loadResult.profile) {
+          console.warn(
+            "⚠️ Failed to load profile from blockchain:",
+            loadResult.error,
+          );
+          return;
+        }
 
-      console.log("Updated user profile from wallet:", normalizedProfile);
-    }
-  }, [isConnected, walletProfile]);
+        // Decrypt the profile
+        const walletProfile = await getDecryptedProfile(loadResult.profile);
+
+        if (!walletProfile) {
+          console.warn("⚠️ Failed to decrypt profile from blockchain");
+          return;
+        }
+
+        const rawProfile: RawUserProfileInput = {
+          birthDate: walletProfile.birthDate,
+          sex: walletProfile.sex,
+          height: walletProfile.height,
+          heightIn: (walletProfile as { heightIn?: number }).heightIn,
+          heightCm: (walletProfile as { heightCm?: number }).heightCm,
+          weight: walletProfile.weight,
+          weightKg: (walletProfile as { weightKg?: number }).weightKg,
+          weightLbs: (walletProfile as { weightLbs?: number }).weightLbs,
+          age: (walletProfile as { age?: number }).age,
+          name: (walletProfile as { name?: string }).name,
+        };
+
+        const normalizedProfile = normalizeUserProfile(rawProfile);
+
+        setHealthContext((prev) => ({
+          ...prev,
+          userProfile: normalizedProfile,
+        }));
+
+        setProfile(normalizedProfile);
+
+        // Mark as loaded for this address
+        profileLoadedRef.current = address;
+
+        console.log(
+          "✅ Updated user profile from blockchain:",
+          normalizedProfile,
+        );
+      } catch (error) {
+        console.error("❌ Failed to load profile from blockchain:", error);
+      }
+    };
+
+    void loadProfileFromBlockchain();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected, address]); // Only depend on isConnected and address, not the functions
 
   // --- PORTED: Compute metrics, trends, and healthScores from metricData ---
   useEffect((): void => {

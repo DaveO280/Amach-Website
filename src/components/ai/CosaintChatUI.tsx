@@ -98,6 +98,10 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   const [messageCount, setMessageCount] = useState(0);
   const [showMessageLimitPopup, setShowMessageLimitPopup] = useState(false);
   const [showReportViewer, setShowReportViewer] = useState(false);
+  const [showSaveToStorjDialog, setShowSaveToStorjDialog] = useState(false);
+  const [pendingReportsToSave, setPendingReportsToSave] = useState<
+    ParsedReportSummary[]
+  >([]);
 
   // Dev-only: quick way to adjust Quick-mode token budget without using the console.
   const isDev = process.env.NODE_ENV === "development";
@@ -724,7 +728,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     } finally {
       setStorjImportLoading(false);
     }
-  }, [address, signMessage]);
+  }, [address, signMessage, storjImportLoading]);
 
   const toggleSelectedStorjUri = (uri: string): void => {
     setSelectedStorjUris((prev) => {
@@ -912,24 +916,15 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     await publicClient.waitForTransactionReceipt({ hash: txHash });
   };
 
-  const saveAllParsedReportsToStorj = async (): Promise<void> => {
+  const saveReportsToStorj = async (
+    reportsToSave: ParsedReportSummary[],
+  ): Promise<void> => {
     if (!ENABLE_STORJ_SAVE_UI) return;
     if (!isConnected || !address) {
       setSaveReportsError("Connect your wallet to save reports to Storj.");
       return;
     }
-    if (reports.length === 0) {
-      setSaveReportsError("No parsed reports available to save.");
-      return;
-    }
-
-    const unsaved = reports
-      .map((r, idx) => ({ r, idx }))
-      .filter(({ r }) => !r.storjUri);
-
-    if (unsaved.length === 0) {
-      setSaveReportsError("");
-      setShowReportViewer(true);
+    if (reportsToSave.length === 0) {
       return;
     }
 
@@ -944,8 +939,14 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       );
 
       // Save reports in parallel for better performance
-      const savePromises = unsaved.map(async ({ r, idx }) => {
+      const savePromises = reportsToSave.map(async (r, originalIdx) => {
         try {
+          // Find the report index in the main reports array
+          const reportIdx = reports.findIndex(
+            (existing) => existing.report === r.report,
+          );
+          const idx = reportIdx >= 0 ? reportIdx : originalIdx;
+
           const resp = await fetch("/api/storj", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -984,10 +985,13 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               reportType: r.report.type,
             });
 
-            updateReport(idx, {
-              storjUri: result.storjUri,
-              savedToStorjAt: new Date().toISOString(),
-            });
+            // Update the report if it exists in the main reports array
+            if (reportIdx >= 0) {
+              updateReport(reportIdx, {
+                storjUri: result.storjUri,
+                savedToStorjAt: new Date().toISOString(),
+              });
+            }
 
             // Cache to IndexedDB for fast access in Storage Manager
             if (address) {
@@ -1022,10 +1026,10 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             throw new Error(result?.error || "Failed to save report to Storj");
           }
         } catch (error) {
-          console.error(`❌ Failed to save report ${idx}:`, error);
+          console.error(`❌ Failed to save report:`, error);
           const errorMessage =
             error instanceof Error ? error.message : String(error);
-          return { success: false, idx, error: errorMessage };
+          return { success: false, idx: originalIdx, error: errorMessage };
         }
       });
 
@@ -1039,12 +1043,39 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           `Failed to save ${failures.length} report(s): ${failures.map((f) => f.error).join(", ")}`,
         );
       }
-
-      setShowReportViewer(true);
     } catch (e) {
       setSaveReportsError(e instanceof Error ? e.message : "Save failed");
+      throw e; // Re-throw so dialog can handle it
     } finally {
       setSavingReportsToStorj(false);
+    }
+  };
+
+  const saveAllParsedReportsToStorj = async (): Promise<void> => {
+    if (!ENABLE_STORJ_SAVE_UI) return;
+    if (!isConnected || !address) {
+      setSaveReportsError("Connect your wallet to save reports to Storj.");
+      return;
+    }
+    if (reports.length === 0) {
+      setSaveReportsError("No parsed reports available to save.");
+      return;
+    }
+
+    const unsaved = reports.filter((r) => !r.storjUri);
+
+    if (unsaved.length === 0) {
+      setSaveReportsError("");
+      setShowReportViewer(true);
+      return;
+    }
+
+    try {
+      await saveReportsToStorj(unsaved);
+      setShowReportViewer(true);
+    } catch (e) {
+      // Error already handled by saveReportsToStorj
+      console.error("Failed to save all reports:", e);
     }
   };
 
@@ -1056,11 +1087,6 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   // Focus the input field when the component mounts
   useEffect(() => {
     textareaRef.current?.focus();
-  }, []);
-
-  // Load saved files when component mounts
-  useEffect(() => {
-    loadSavedFiles();
   }, []);
 
   // Reset loading time when loading state changes
@@ -1133,7 +1159,9 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     };
     update();
     const id = window.setInterval(update, 250);
-    return () => window.clearInterval(id);
+    return (): void => {
+      window.clearInterval(id);
+    };
   }, [isLoading, loadingStartTime]);
 
   const handleSendMessage = async (): Promise<void> => {
@@ -1180,7 +1208,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   };
 
   // Load saved files from IndexedDB
-  const loadSavedFiles = async (): Promise<void> => {
+  const loadSavedFiles = useCallback(async (): Promise<void> => {
     try {
       const files = await healthDataStore.getAllUploadedFiles();
       setSavedFiles(
@@ -1196,7 +1224,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     } catch (error) {
       console.error("❌ Failed to load saved files:", error);
     }
-  };
+  }, []);
 
   useEffect((): void => {
     if (!showFileManager) return;
@@ -1530,6 +1558,17 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       console.log(
         `✅ File uploaded successfully: ${file.name} (${parsedContent.type})`,
       );
+
+      // Show dialog to save to Storj if reports were parsed and wallet is connected
+      if (
+        parsedReports.length > 0 &&
+        isConnected &&
+        address &&
+        ENABLE_STORJ_SAVE_UI
+      ) {
+        setPendingReportsToSave(parsedReports);
+        setShowSaveToStorjDialog(true);
+      }
     } catch (error) {
       console.error("❌ File upload error:", error);
       setUploadError(
@@ -2434,6 +2473,57 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           </div>
         </div>
       )}
+
+      {/* Save to Storj Dialog */}
+      <Dialog
+        open={showSaveToStorjDialog}
+        onOpenChange={setShowSaveToStorjDialog}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save Reports to Storj?</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-gray-700 mb-4">
+              {pendingReportsToSave.length} report(s) were successfully parsed.
+              Would you like to save them to Storj now?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowSaveToStorjDialog(false);
+                  setPendingReportsToSave([]);
+                }}
+                disabled={savingReportsToStorj}
+              >
+                No, Later
+              </Button>
+              <Button
+                onClick={async () => {
+                  try {
+                    await saveReportsToStorj(pendingReportsToSave);
+                    setShowSaveToStorjDialog(false);
+                    setPendingReportsToSave([]);
+                    // Optionally show success message
+                    setSaveReportsError(""); // Clear any previous errors
+                  } catch (error) {
+                    // Error is already set by saveReportsToStorj
+                    console.error("Failed to save reports:", error);
+                  }
+                }}
+                disabled={savingReportsToStorj}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                {savingReportsToStorj ? "Saving..." : "Yes, Save to Storj"}
+              </Button>
+            </div>
+            {saveReportsError && (
+              <p className="mt-2 text-sm text-red-600">{saveReportsError}</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {!isExpanded && (
         <div className="mb-2 text-sm text-emerald-800">

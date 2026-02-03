@@ -40,57 +40,141 @@ export async function parseHealthReport(
   if (isDexa) {
     let dexa: ParsedHealthReport | null = null;
 
-    // Try AI parsing first if enabled, fall back to regex
-    // Try AI parsing first if enabled, fall back to regex
+    // Try AI parsing first if enabled, then merge with regex parser for best results
+    let aiResult: ParsedHealthReport | null = null;
+    let regexResult: ParsedHealthReport | null = null;
+
     if (options.useAI) {
       console.log("[ReportParser] 🤖 Using AI to parse DEXA report...");
       try {
-        dexa = await parseDexaReportWithAI(rawText, options.sourceName);
+        aiResult = await parseDexaReportWithAI(rawText, options.sourceName);
 
-        if (dexa) {
-          // Accept AI result if it has regions OR if it has meaningful data (totalBodyFatPercent, BMD, etc.)
-          const hasRegions = dexa.regions && dexa.regions.length > 0;
+        if (aiResult) {
+          const hasRegions = aiResult.regions && aiResult.regions.length > 0;
           const hasMeaningfulData =
-            dexa.totalBodyFatPercent !== undefined ||
-            dexa.boneDensityTotal?.bmd !== undefined ||
-            dexa.totalLeanMassKg !== undefined;
+            aiResult.totalBodyFatPercent !== undefined ||
+            aiResult.boneDensityTotal?.bmd !== undefined ||
+            aiResult.totalLeanMassKg !== undefined;
 
           if (hasRegions) {
             console.log(
-              `[ReportParser] ✅ AI parser extracted ${dexa.regions.length} regions`,
+              `[ReportParser] ✅ AI parser extracted ${aiResult.regions.length} regions`,
             );
           } else if (hasMeaningfulData) {
             console.warn(
-              `[ReportParser] ⚠️ AI parser extracted data but 0 regions (confidence: ${dexa.confidence}). Keeping AI result and attempting to enhance with structured text parsing.`,
+              `[ReportParser] ⚠️ AI parser extracted data but 0 regions (confidence: ${aiResult.confidence}).`,
             );
-            // Keep the AI result even without regions - it may have other valuable data
-            // The structured text parser fallback in aiDexaParser should have already tried to fill regions
           } else {
             console.warn(
-              `[ReportParser] ⚠️ AI parser returned report with no meaningful data, falling back to regex...`,
+              `[ReportParser] ⚠️ AI parser returned report with no meaningful data.`,
             );
-            dexa = null; // Force fallback only if no meaningful data
+            aiResult = null;
           }
         } else {
-          console.log(
-            "[ReportParser] AI parser timed out or returned null, using regex parser...",
-          );
+          console.log("[ReportParser] AI parser timed out or returned null.");
         }
       } catch (aiError) {
         console.error("[ReportParser] ❌ AI parser error:", aiError);
-        dexa = null; // Force fallback
+        aiResult = null;
       }
     }
 
-    // Fall back to regex parser if AI parsing failed or wasn't enabled
-    if (!dexa) {
-      console.log("[ReportParser] 📝 Using regex to parse DEXA report...");
-      dexa = parseDexaReport(rawText);
-      if (dexa) {
-        console.log(
-          `[ReportParser] Regex parser extracted ${dexa.regions?.length || 0} regions`,
-        );
+    // Always run regex parser to get body composition data (fat/lean mass)
+    console.log("[ReportParser] 📝 Using regex to parse DEXA report...");
+    regexResult = parseDexaReport(rawText);
+    if (regexResult) {
+      console.log(
+        `[ReportParser] Regex parser extracted ${regexResult.regions?.length || 0} regions`,
+      );
+    }
+
+    // Merge results: prefer AI for BMD, prefer regex for body composition
+    if (aiResult && regexResult) {
+      console.log("[ReportParser] 🔀 Merging AI and regex parser results...");
+
+      // Start with AI result as base
+      dexa = { ...aiResult };
+
+      // Merge regions: combine BMD from AI with fat/lean mass from regex
+      const mergedRegions = new Map<string, (typeof aiResult.regions)[0]>();
+
+      // Add all regions from regex (has fat/lean mass)
+      regexResult.regions?.forEach((region) => {
+        mergedRegions.set(region.region, { ...region });
+      });
+
+      // Merge BMD data from AI into existing regions
+      aiResult.regions?.forEach((aiRegion) => {
+        const existing = mergedRegions.get(aiRegion.region);
+        if (existing) {
+          // Merge: keep fat/lean from regex, add BMD from AI
+          existing.boneDensityGPerCm2 =
+            aiRegion.boneDensityGPerCm2 ?? existing.boneDensityGPerCm2;
+          existing.tScore = aiRegion.tScore ?? existing.tScore;
+          existing.zScore = aiRegion.zScore ?? existing.zScore;
+        } else {
+          // New region from AI (only BMD), add it
+          mergedRegions.set(aiRegion.region, { ...aiRegion });
+        }
+      });
+
+      dexa.regions = Array.from(mergedRegions.values());
+
+      // Prefer regex for body composition totals (more reliable)
+      if (regexResult.totalBodyFatPercent !== undefined) {
+        dexa.totalBodyFatPercent = regexResult.totalBodyFatPercent;
       }
+      if (regexResult.totalLeanMassKg !== undefined) {
+        dexa.totalLeanMassKg = regexResult.totalLeanMassKg;
+      }
+      if (regexResult.visceralFatRating !== undefined) {
+        dexa.visceralFatRating = regexResult.visceralFatRating;
+      }
+      if (regexResult.visceralFatAreaCm2 !== undefined) {
+        dexa.visceralFatAreaCm2 = regexResult.visceralFatAreaCm2;
+      }
+      if (regexResult.visceralFatVolumeCm3 !== undefined) {
+        dexa.visceralFatVolumeCm3 = regexResult.visceralFatVolumeCm3;
+      }
+      if (regexResult.androidGynoidRatio !== undefined) {
+        dexa.androidGynoidRatio = regexResult.androidGynoidRatio;
+      }
+
+      // Prefer AI for BMD totals (more reliable)
+      if (aiResult.boneDensityTotal?.bmd !== undefined) {
+        dexa.boneDensityTotal = {
+          ...dexa.boneDensityTotal,
+          bmd: aiResult.boneDensityTotal.bmd,
+        };
+      }
+      if (aiResult.boneDensityTotal?.tScore !== undefined) {
+        dexa.boneDensityTotal = {
+          ...dexa.boneDensityTotal,
+          tScore: aiResult.boneDensityTotal.tScore,
+        };
+      }
+      if (aiResult.boneDensityTotal?.zScore !== undefined) {
+        dexa.boneDensityTotal = {
+          ...dexa.boneDensityTotal,
+          zScore: aiResult.boneDensityTotal.zScore,
+        };
+      }
+
+      // Use better confidence (higher of the two)
+      dexa.confidence = Math.max(
+        aiResult.confidence || 0,
+        regexResult.confidence || 0,
+      );
+
+      console.log(
+        `[ReportParser] ✅ Merged result: ${dexa.regions.length} regions with both body composition and BMD data`,
+      );
+    } else if (aiResult) {
+      // Only AI result available
+      dexa = aiResult;
+    } else if (regexResult) {
+      // Only regex result available
+      dexa = regexResult;
     }
 
     if (dexa) {

@@ -16,21 +16,17 @@ export async function parseDexaReportWithAI(
     return null;
   }
 
-  // Aggressively truncate to focus on data tables (first 5000 chars should contain all key tables)
-  // The data tables are typically in the first portion of the PDF
-  // Further reduction to speed up AI processing and avoid timeouts
+  // Simple: send full text (or reasonable chunk) to Venice and ask for JSON
+  // Only truncate if extremely long to avoid timeouts
   const textToParse =
-    rawText.length > 5000
-      ? rawText.substring(0, 5000) + "... (truncated)"
+    rawText.length > 20000
+      ? rawText.substring(0, 20000) + "... (truncated)"
       : rawText;
 
-  // Ultra-simplified prompt - just ask for JSON extraction
-  // Note: Should handle various DEXA formats (Hologic, GE Lunar, Norland, etc.)
-  const systemPrompt = `Extract DEXA metrics as JSON from any DEXA scanner format (Hologic, GE Lunar, Norland, etc.). Include: scan_date, totalBodyFatPercent, totalLeanMassKg, visceralFat (mass_lbs, volume_in3, area_in2), androidGynoidRatio, BMD (total and regional), T-score, Z-score, and segmental analysis (arms, legs, trunk, android, gynoid, total) with fat_mass_lbs, lean_mass_lbs, bodyFatPercent. Extract whatever data is available in the report. Output ONLY JSON.`;
+  // Minimal prompt - just ask Venice to extract metrics as JSON
+  const systemPrompt = `Extract all metrics from this DEXA scan report. Strip all verbiage and return only the data as JSON.`;
 
-  const userPrompt = `Extract DEXA data as JSON:
-
-${textToParse}`;
+  const userPrompt = textToParse;
 
   try {
     console.log("[AIDexaParser] Sending PDF text to AI for parsing...");
@@ -111,80 +107,16 @@ ${textToParse}`;
 
     console.log("[AIDexaParser] Attempting to parse JSON directly...");
 
-    // Try parsing directly first (if Venice outputs pure JSON)
-    // Define the expected JSON structure from Venice (flexible to handle multiple formats)
-    interface VeniceDexaJson {
-      // Old format fields
-      client_info?: {
-        measured_date?: string;
-      };
-      segmental_analysis?: Record<
-        string,
-        {
-          total_mass_lbs?: number;
-          fat_mass_lbs?: number;
-          lean_mass_lbs?: number;
-        }
-      >;
-      body_composition_percentages?: {
-        tissue_percent_fat?: number;
-        region_percent_fat?: number;
-      };
-      android_gynoid_ratios?: {
-        android_tissue_percent_fat?: number;
-        gynoid_tissue_percent_fat?: number;
-        ag_ratio?: number;
-      };
-      bone_mineral_density?: {
-        total_body?: {
-          bmd_g_cm2?: number;
-          t_score?: number;
-          z_score?: number;
-        };
-        regional_bmd?: Record<
-          string,
-          {
-            bmd_g_cm2?: number;
-          }
-        >;
-      };
-      fat_distribution?: {
-        visceral_adipose_tissue?: {
-          mass_lbs?: number;
-          volume_in3?: number;
-          area_in2?: number;
-        };
-      };
-      // New format fields (from user's example)
-      patient_info?: {
-        scan_date?: string;
-        measured_date?: string;
-      };
-      body_composition_summary?: {
-        tissue_percent_fat?: number;
-        region_percent_fat?: number;
-        lean_mass_lbs?: number;
-        fat_mass_lbs?: number;
-      };
-      segmental_analysis_lbs?: Record<
-        string,
-        {
-          total_mass?: number;
-          fat_mass?: number;
-          lean_mass?: number;
-        }
-      >;
-      bone_health?: {
-        total_body_bmd_g_cm2?: number;
-        t_score?: number;
-        z_score?: number;
-      };
-    }
-
-    let parsed: VeniceDexaJson;
+    // Venice returns JSON - accept whatever structure it gives us
+    // We'll intelligently extract data from any structure
+    let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(jsonText);
       console.log("[AIDexaParser] ✅ Successfully parsed JSON directly");
+      console.log("[AIDexaParser] Parsed JSON structure:", {
+        keys: Object.keys(parsed),
+        preview: JSON.stringify(parsed).substring(0, 1000),
+      });
     } catch (directParseError) {
       // If direct parse fails, try removing markdown code blocks
       console.warn(
@@ -259,191 +191,303 @@ ${textToParse}`;
       }
     }
 
-    // Map JSON structure to DexaReportData
+    // Map JSON structure to DexaReportData - intelligently extract from any structure
     const regions: DexaRegionMetrics[] = [];
 
-    // Extract segmental analysis data (handle both old and new formats)
-    const segmental =
-      parsed.segmental_analysis || parsed.segmental_analysis_lbs || {};
+    // Helper to safely get nested values
+    const get = (obj: unknown, path: string): unknown => {
+      const keys = path.split(".");
+      let current: unknown = obj;
+      for (const key of keys) {
+        if (current && typeof current === "object" && key in current) {
+          current = (current as Record<string, unknown>)[key];
+        } else {
+          return undefined;
+        }
+      }
+      return current;
+    };
+
+    // Helper to find any field that matches a pattern (case-insensitive)
+    const findField = (obj: unknown, patterns: string[]): unknown => {
+      if (!obj || typeof obj !== "object") return undefined;
+      const lowerObj: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(obj)) {
+        lowerObj[key.toLowerCase()] = value;
+      }
+      for (const pattern of patterns) {
+        const lowerPattern = pattern.toLowerCase();
+        for (const [key, value] of Object.entries(lowerObj)) {
+          if (key.includes(lowerPattern) || lowerPattern.includes(key)) {
+            return value;
+          }
+        }
+      }
+      return undefined;
+    };
+
+    // Extract regions - look for any structure that contains regional data
+    const regionKeys = ["arms", "legs", "trunk", "android", "gynoid", "total"];
     const regionMapping: Record<string, string> = {
       arms_total: "arms",
+      arms: "arms",
       legs_total: "legs",
+      legs: "legs",
       trunk: "trunk",
       android: "android",
       gynoid: "gynoid",
       total: "total",
     };
 
-    for (const [key, regionName] of Object.entries(regionMapping)) {
-      const regionData = segmental[key];
-      if (regionData) {
-        const metrics: DexaRegionMetrics = { region: regionName };
+    // Try to find segmental/regional data in any format
+    let segmental = findField(parsed, [
+      "segmental_analysis",
+      "segmental",
+      "regions",
+      "regional",
+    ]) as Record<string, unknown> | undefined;
 
-        // Handle both old format (fat_mass_lbs) and new format (fat_mass)
+    // If not found, check if parsed itself contains regional data
+    if (!segmental) {
+      // Check if any top-level key contains regional data
+      for (const [key, value] of Object.entries(parsed)) {
+        const lowerKey = key.toLowerCase();
+        if (
+          (lowerKey.includes("region") ||
+            lowerKey.includes("segmental") ||
+            lowerKey.includes("arm") ||
+            lowerKey.includes("leg") ||
+            lowerKey.includes("trunk")) &&
+          value &&
+          typeof value === "object"
+        ) {
+          segmental = value as Record<string, unknown>;
+          break;
+        }
+      }
+    }
+
+    console.log("[AIDexaParser] Found segmental data:", {
+      hasSegmental: !!segmental,
+      segmentalKeys:
+        segmental && typeof segmental === "object"
+          ? Object.keys(segmental)
+          : [],
+      allParsedKeys: Object.keys(parsed),
+    });
+
+    if (segmental && typeof segmental === "object") {
+      for (const [key, regionData] of Object.entries(segmental)) {
+        const lowerKey = key.toLowerCase();
+        const regionName =
+          regionMapping[lowerKey] ||
+          regionKeys.find((r) => lowerKey.includes(r));
+
+        if (regionName && regionData && typeof regionData === "object") {
+          const metrics: DexaRegionMetrics = { region: regionName };
+          const data = regionData as Record<string, unknown>;
+
+          // Extract fat/lean mass (try various field names)
+          const fatLbs =
+            (typeof data.fat_mass_lbs === "number"
+              ? data.fat_mass_lbs
+              : undefined) ??
+            (typeof data.fat_mass === "number" ? data.fat_mass : undefined) ??
+            (typeof data["fat mass"] === "number"
+              ? data["fat mass"]
+              : undefined);
+          const leanLbs =
+            (typeof data.lean_mass_lbs === "number"
+              ? data.lean_mass_lbs
+              : undefined) ??
+            (typeof data.lean_mass === "number" ? data.lean_mass : undefined) ??
+            (typeof data["lean mass"] === "number"
+              ? data["lean mass"]
+              : undefined);
+          const fatPercent =
+            (typeof data.body_fat_percent === "number"
+              ? data.body_fat_percent
+              : undefined) ??
+            (typeof data.fat_percent === "number"
+              ? data.fat_percent
+              : undefined) ??
+            (typeof data["%fat"] === "number" ? data["%fat"] : undefined);
+
+          if (fatLbs !== undefined) {
+            metrics.fatMassKg = fatLbs * 0.453592;
+          }
+          if (leanLbs !== undefined) {
+            metrics.leanMassKg = leanLbs * 0.453592;
+          }
+          if (fatPercent !== undefined) {
+            metrics.bodyFatPercent = fatPercent;
+          } else if (fatLbs !== undefined && leanLbs !== undefined) {
+            const tissueLbs = fatLbs + leanLbs;
+            if (tissueLbs > 0) {
+              metrics.bodyFatPercent = (fatLbs / tissueLbs) * 100;
+            }
+          }
+
+          // Extract BMD
+          const bmd =
+            (typeof data.bmd === "number" ? data.bmd : undefined) ??
+            (typeof data.bone_density === "number"
+              ? data.bone_density
+              : undefined) ??
+            (typeof data.bmd_g_cm2 === "number" ? data.bmd_g_cm2 : undefined);
+          if (bmd !== undefined) {
+            metrics.boneDensityGPerCm2 = bmd;
+          }
+
+          if (
+            metrics.fatMassKg !== undefined ||
+            metrics.leanMassKg !== undefined ||
+            metrics.bodyFatPercent !== undefined ||
+            metrics.boneDensityGPerCm2 !== undefined
+          ) {
+            regions.push(metrics);
+          }
+        }
+      }
+    }
+
+    // Extract totals - search flexibly for any field containing these values
+    let totalBodyFatPercent: number | undefined;
+    let totalLeanMassKg: number | undefined;
+    let androidGynoidRatio: number | undefined;
+
+    // Try to find total body fat % from various locations
+    const totalFatPercent = findField(parsed, [
+      "total_body_fat_percent",
+      "tissue_percent_fat",
+      "body_fat_percent",
+      "total_fat_percent",
+      "%fat",
+    ]);
+    if (typeof totalFatPercent === "number") {
+      totalBodyFatPercent = totalFatPercent;
+    } else if (segmental && typeof segmental === "object") {
+      const totalData = (segmental as Record<string, unknown>).total;
+      if (totalData && typeof totalData === "object") {
+        const data = totalData as Record<string, unknown>;
         const fatLbs =
-          ("fat_mass_lbs" in regionData
-            ? regionData.fat_mass_lbs
+          (typeof data.fat_mass_lbs === "number"
+            ? data.fat_mass_lbs
             : undefined) ??
-          ("fat_mass" in regionData ? regionData.fat_mass : undefined);
+          (typeof data.fat_mass === "number" ? data.fat_mass : undefined);
         const leanLbs =
-          ("lean_mass_lbs" in regionData
-            ? regionData.lean_mass_lbs
+          (typeof data.lean_mass_lbs === "number"
+            ? data.lean_mass_lbs
             : undefined) ??
-          ("lean_mass" in regionData ? regionData.lean_mass : undefined);
-
-        if (fatLbs !== undefined) {
-          metrics.fatMassKg = fatLbs * 0.453592;
-        }
-        if (leanLbs !== undefined) {
-          metrics.leanMassKg = leanLbs * 0.453592;
-        }
-
-        // Calculate body fat % if we have both
+          (typeof data.lean_mass === "number" ? data.lean_mass : undefined);
         if (fatLbs !== undefined && leanLbs !== undefined) {
           const tissueLbs = fatLbs + leanLbs;
           if (tissueLbs > 0) {
-            metrics.bodyFatPercent = (fatLbs / tissueLbs) * 100;
+            totalBodyFatPercent = (fatLbs / tissueLbs) * 100;
           }
-        }
-
-        // Add BMD data if available (for total region)
-        if (regionName === "total") {
-          if (
-            parsed.bone_mineral_density &&
-            "total_body" in parsed.bone_mineral_density &&
-            parsed.bone_mineral_density.total_body
-          ) {
-            const bmd = parsed.bone_mineral_density.total_body;
-            if (bmd.bmd_g_cm2 !== undefined) {
-              metrics.boneDensityGPerCm2 = bmd.bmd_g_cm2;
-            }
-            if (bmd.t_score !== undefined) {
-              metrics.tScore = bmd.t_score;
-            }
-            if (bmd.z_score !== undefined) {
-              metrics.zScore = bmd.z_score;
-            }
-          } else if (
-            parsed.bone_health &&
-            "total_body_bmd_g_cm2" in parsed.bone_health
-          ) {
-            if (parsed.bone_health.total_body_bmd_g_cm2 !== undefined) {
-              metrics.boneDensityGPerCm2 =
-                parsed.bone_health.total_body_bmd_g_cm2;
-            }
-            if (parsed.bone_health.t_score !== undefined) {
-              metrics.tScore = parsed.bone_health.t_score;
-            }
-            if (parsed.bone_health.z_score !== undefined) {
-              metrics.zScore = parsed.bone_health.z_score;
-            }
-          }
-        }
-
-        // Always add region if it has any data, even if just bodyFatPercent
-        if (
-          metrics.fatMassKg !== undefined ||
-          metrics.leanMassKg !== undefined ||
-          metrics.bodyFatPercent !== undefined ||
-          metrics.boneDensityGPerCm2 !== undefined
-        ) {
-          regions.push(metrics);
         }
       }
     }
 
-    // Extract body composition percentages (handle both old and new formats)
-    const bodyComp =
-      parsed.body_composition_percentages ||
-      parsed.body_composition_summary ||
-      {};
-    let totalBodyFatPercent = bodyComp.tissue_percent_fat;
-
-    // If totalBodyFatPercent not found, try to extract from total region
-    if (totalBodyFatPercent === undefined && segmental.total) {
-      const totalData = segmental.total;
-      const fatLbs =
-        ("fat_mass_lbs" in totalData ? totalData.fat_mass_lbs : undefined) ??
-        ("fat_mass" in totalData ? totalData.fat_mass : undefined);
-      const leanLbs =
-        ("lean_mass_lbs" in totalData ? totalData.lean_mass_lbs : undefined) ??
-        ("lean_mass" in totalData ? totalData.lean_mass : undefined);
-      if (fatLbs !== undefined && leanLbs !== undefined) {
-        const tissueLbs = fatLbs + leanLbs;
-        if (tissueLbs > 0) {
-          totalBodyFatPercent = (fatLbs / tissueLbs) * 100;
+    // Try to find total lean mass
+    const totalLean = findField(parsed, [
+      "total_lean_mass",
+      "lean_mass_lbs",
+      "lean_mass",
+    ]);
+    if (typeof totalLean === "number") {
+      totalLeanMassKg = totalLean * 0.453592;
+    } else if (segmental && typeof segmental === "object") {
+      const totalData = (segmental as Record<string, unknown>).total;
+      if (totalData && typeof totalData === "object") {
+        const data = totalData as Record<string, unknown>;
+        const leanLbs =
+          (typeof data.lean_mass_lbs === "number"
+            ? data.lean_mass_lbs
+            : undefined) ??
+          (typeof data.lean_mass === "number" ? data.lean_mass : undefined);
+        if (leanLbs !== undefined) {
+          totalLeanMassKg = leanLbs * 0.453592;
         }
-      }
-    }
-
-    // Extract total lean mass from segmental analysis total or body_composition_summary
-    const totalData = segmental.total;
-    let totalLeanMassKg: number | undefined;
-    if (
-      "lean_mass_lbs" in bodyComp &&
-      typeof bodyComp.lean_mass_lbs === "number"
-    ) {
-      totalLeanMassKg = bodyComp.lean_mass_lbs * 0.453592;
-    } else if (totalData) {
-      const leanLbs =
-        ("lean_mass_lbs" in totalData ? totalData.lean_mass_lbs : undefined) ??
-        ("lean_mass" in totalData ? totalData.lean_mass : undefined);
-      if (leanLbs !== undefined) {
-        totalLeanMassKg = leanLbs * 0.453592;
       }
     }
 
     // Extract Android/Gynoid ratio
-    const agRatios = parsed.android_gynoid_ratios || {};
-    const androidGynoidRatio = agRatios.ag_ratio;
+    const agRatios = findField(parsed, [
+      "android_gynoid_ratios",
+      "ag_ratio",
+      "android_gynoid",
+    ]);
+    if (agRatios && typeof agRatios === "object") {
+      const ratios = agRatios as Record<string, unknown>;
+      androidGynoidRatio =
+        typeof ratios.ag_ratio === "number" ? ratios.ag_ratio : undefined;
+    }
 
     // Update android/gynoid regions with %Fat if available
-    if (agRatios.android_tissue_percent_fat !== undefined) {
-      const androidRegion = regions.find((r) => r.region === "android");
-      if (androidRegion) {
-        androidRegion.bodyFatPercent = agRatios.android_tissue_percent_fat;
+    if (agRatios && typeof agRatios === "object") {
+      const ratios = agRatios as Record<string, unknown>;
+      if (typeof ratios.android_tissue_percent_fat === "number") {
+        const androidRegion = regions.find((r) => r.region === "android");
+        if (androidRegion) {
+          androidRegion.bodyFatPercent = ratios.android_tissue_percent_fat;
+        }
       }
-    }
-    if (agRatios.gynoid_tissue_percent_fat !== undefined) {
-      const gynoidRegion = regions.find((r) => r.region === "gynoid");
-      if (gynoidRegion) {
-        gynoidRegion.bodyFatPercent = agRatios.gynoid_tissue_percent_fat;
+      if (typeof ratios.gynoid_tissue_percent_fat === "number") {
+        const gynoidRegion = regions.find((r) => r.region === "gynoid");
+        if (gynoidRegion) {
+          gynoidRegion.bodyFatPercent = ratios.gynoid_tissue_percent_fat;
+        }
       }
     }
 
-    // Extract BMD data (handle both old and new formats)
-    const bmdData = parsed.bone_mineral_density || parsed.bone_health;
+    // Extract BMD data - search flexibly
+    const bmdData = findField(parsed, [
+      "bone_mineral_density",
+      "bone_health",
+      "bmd",
+      "bone_density",
+    ]);
     let bmd: number | undefined;
     let tScore: number | undefined;
     let zScore: number | undefined;
     let regionalBmd: Record<string, { bmd_g_cm2?: number }> = {};
 
-    if (bmdData) {
-      if ("total_body" in bmdData && bmdData.total_body) {
-        const totalBmd = bmdData.total_body;
-        if (totalBmd.bmd_g_cm2 !== undefined) {
-          bmd = totalBmd.bmd_g_cm2;
+    if (bmdData && typeof bmdData === "object") {
+      const bmdObj = bmdData as Record<string, unknown>;
+
+      // Try total_body structure
+      if (bmdObj.total_body && typeof bmdObj.total_body === "object") {
+        const totalBmd = bmdObj.total_body as Record<string, unknown>;
+        if (typeof totalBmd.bmd_g_cm2 === "number") bmd = totalBmd.bmd_g_cm2;
+        if (typeof totalBmd.t_score === "number") tScore = totalBmd.t_score;
+        if (typeof totalBmd.z_score === "number") zScore = totalBmd.z_score;
+        if (
+          totalBmd.regional_bmd &&
+          typeof totalBmd.regional_bmd === "object"
+        ) {
+          regionalBmd = totalBmd.regional_bmd as Record<
+            string,
+            { bmd_g_cm2?: number }
+          >;
         }
-        if (totalBmd.t_score !== undefined) {
-          tScore = totalBmd.t_score;
-        }
-        if (totalBmd.z_score !== undefined) {
-          zScore = totalBmd.z_score;
-        }
-        if (bmdData.regional_bmd) {
-          regionalBmd = bmdData.regional_bmd;
-        }
-      } else if ("total_body_bmd_g_cm2" in bmdData) {
-        // New format (bone_health)
-        if (bmdData.total_body_bmd_g_cm2 !== undefined) {
-          bmd = bmdData.total_body_bmd_g_cm2;
-        }
-        if (bmdData.t_score !== undefined) {
-          tScore = bmdData.t_score;
-        }
-        if (bmdData.z_score !== undefined) {
-          zScore = bmdData.z_score;
-        }
+      }
+
+      // Try flat structure
+      if (typeof bmdObj.total_body_bmd_g_cm2 === "number") {
+        bmd = bmdObj.total_body_bmd_g_cm2;
+      }
+      if (typeof bmdObj.t_score === "number") {
+        tScore = bmdObj.t_score;
+      }
+      if (typeof bmdObj.z_score === "number") {
+        zScore = bmdObj.z_score;
+      }
+      if (bmdObj.regional_bmd && typeof bmdObj.regional_bmd === "object") {
+        regionalBmd = bmdObj.regional_bmd as Record<
+          string,
+          { bmd_g_cm2?: number }
+        >;
       }
     }
     const bmdRegionMapping: Record<string, string> = {
@@ -454,6 +498,7 @@ ${textToParse}`;
       ribs: "ribs",
       spine: "spine",
       pelvis: "pelvis",
+      total: "total",
     };
 
     for (const [key, regionName] of Object.entries(bmdRegionMapping)) {
@@ -465,31 +510,89 @@ ${textToParse}`;
           regions.push(bmdRegion);
         }
         bmdRegion.boneDensityGPerCm2 = bmdValue;
+
+        // If this is the total region, also update the top-level bmd variable
+        if (regionName === "total" && !bmd) {
+          bmd = bmdValue;
+        }
       }
     }
 
-    // Extract visceral fat data
-    const fatDist = parsed.fat_distribution || {};
-    const vat = fatDist.visceral_adipose_tissue || {};
+    // Ensure total region gets BMD if we have it from top-level extraction
+    if (bmd !== undefined) {
+      let totalRegion = regions.find((r) => r.region === "total");
+      if (!totalRegion) {
+        totalRegion = { region: "total" };
+        regions.push(totalRegion);
+      }
+      if (!totalRegion.boneDensityGPerCm2) {
+        totalRegion.boneDensityGPerCm2 = bmd;
+      }
+      if (tScore !== undefined && !totalRegion.tScore) {
+        totalRegion.tScore = tScore;
+      }
+      if (zScore !== undefined && !totalRegion.zScore) {
+        totalRegion.zScore = zScore;
+      }
+    }
+
+    // Extract visceral fat data - search flexibly
+    const fatDist = findField(parsed, ["fat_distribution", "visceral", "vat"]);
     let visceralFatVolumeCm3: number | undefined;
     let visceralFatAreaCm2: number | undefined;
     let visceralFatMassLbs: number | undefined;
 
-    if (vat.mass_lbs !== undefined) {
-      visceralFatMassLbs = vat.mass_lbs;
-    }
-    if (vat.volume_in3 !== undefined) {
-      visceralFatVolumeCm3 = vat.volume_in3 * 16.387; // Convert in³ to cm³
-    }
-    if (vat.area_in2 !== undefined) {
-      visceralFatAreaCm2 = vat.area_in2 * 6.452; // Convert in² to cm²
+    if (fatDist && typeof fatDist === "object") {
+      const fatObj = fatDist as Record<string, unknown>;
+      const vat = (fatObj.visceral_adipose_tissue || fatObj) as Record<
+        string,
+        unknown
+      >;
+
+      if (typeof vat.mass_lbs === "number") {
+        visceralFatMassLbs = vat.mass_lbs;
+      }
+      if (typeof vat.volume_in3 === "number") {
+        visceralFatVolumeCm3 = vat.volume_in3 * 16.387; // Convert in³ to cm³
+      }
+      if (typeof vat.area_in2 === "number") {
+        visceralFatAreaCm2 = vat.area_in2 * 6.452; // Convert in² to cm²
+      }
     }
 
-    // Extract scan date (handle both old and new formats)
-    const scanDate =
-      parsed.client_info?.measured_date ||
-      parsed.patient_info?.scan_date ||
-      parsed.patient_info?.measured_date;
+    // Extract scan date - search flexibly
+    const scanDateField = findField(parsed, [
+      "scan_date",
+      "measured_date",
+      "date",
+    ]);
+    let scanDate: string | undefined;
+    if (typeof scanDateField === "string") {
+      scanDate = scanDateField;
+    } else if (scanDateField && typeof scanDateField === "object") {
+      const dateObj = scanDateField as Record<string, unknown>;
+      scanDate =
+        (typeof dateObj.scan_date === "string"
+          ? dateObj.scan_date
+          : undefined) ??
+        (typeof dateObj.measured_date === "string"
+          ? dateObj.measured_date
+          : undefined);
+    }
+
+    // Also try client_info/patient_info paths
+    if (!scanDate) {
+      const clientInfo = get(parsed, "client_info") as
+        | Record<string, unknown>
+        | undefined;
+      const patientInfo = get(parsed, "patient_info") as
+        | Record<string, unknown>
+        | undefined;
+      scanDate =
+        (clientInfo?.measured_date as string | undefined) ??
+        (patientInfo?.scan_date as string | undefined) ??
+        (patientInfo?.measured_date as string | undefined);
+    }
 
     const report: DexaReportData = {
       type: "dexa",
@@ -514,6 +617,18 @@ ${textToParse}`;
 
     console.log(
       `[AIDexaParser] ✅ Successfully extracted DEXA report with ${regions.length} regions`,
+      {
+        regions: regions.map((r) => ({
+          region: r.region,
+          hasFat: r.fatMassKg !== undefined,
+          hasLean: r.leanMassKg !== undefined,
+          hasFatPercent: r.bodyFatPercent !== undefined,
+          hasBMD: r.boneDensityGPerCm2 !== undefined,
+        })),
+        totalBodyFatPercent,
+        totalLeanMassKg,
+        bmd,
+      },
     );
     return report;
   } catch (error) {
@@ -811,8 +926,15 @@ function parseStructuredTextToDexaReport(
       }
     }
 
-    // Update total region with BMD data
-    const totalRegion = regions.find((r) => r.region === "total");
+    // Update total region with BMD data (create if it doesn't exist)
+    let totalRegion = regions.find((r) => r.region === "total");
+    if (
+      !totalRegion &&
+      (bmd !== undefined || tScore !== undefined || zScore !== undefined)
+    ) {
+      totalRegion = { region: "total" };
+      regions.push(totalRegion);
+    }
     if (totalRegion) {
       if (bmd !== undefined) totalRegion.boneDensityGPerCm2 = bmd;
       if (tScore !== undefined) totalRegion.tScore = tScore;

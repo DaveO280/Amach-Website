@@ -114,7 +114,9 @@ export class XMLStreamParser {
           const startDateMatch = recordStr.match(/startDate="([^"]+)"/);
           if (!startDateMatch) return;
 
-          const startDate = startDateMatch[1];
+          const rawStartDate = startDateMatch[1];
+          // Normalize date for iOS Safari compatibility
+          const startDate = this.normalizeDate(rawStartDate);
           const recordDate = new Date(startDate);
 
           // Check if record is within our time range
@@ -130,7 +132,10 @@ export class XMLStreamParser {
 
           // Extract other attributes
           const endDateMatch = recordStr.match(/endDate="([^"]+)"/);
-          const endDate = endDateMatch ? endDateMatch[1] : startDate;
+          // Normalize end date for iOS Safari compatibility
+          const endDate = endDateMatch
+            ? this.normalizeDate(endDateMatch[1])
+            : startDate;
 
           const valueMatch = recordStr.match(/value="([^"]+)"/);
           const value = valueMatch ? valueMatch[1] : "";
@@ -304,7 +309,9 @@ export class XMLStreamParser {
         if (!this.options.selectedMetrics.includes(type)) continue;
         const startDateMatch = recordStr.match(/startDate="([^"]+)"/);
         if (!startDateMatch) continue;
-        const startDate = startDateMatch[1];
+        const rawStartDate = startDateMatch[1];
+        // Normalize date for iOS Safari compatibility
+        const startDate = this.normalizeDate(rawStartDate);
         const recordDate = new Date(startDate);
         if (
           !this.isDateInRange(
@@ -315,7 +322,10 @@ export class XMLStreamParser {
         )
           continue;
         const endDateMatch = recordStr.match(/endDate="([^"]+)"/);
-        const endDate = endDateMatch ? endDateMatch[1] : startDate;
+        // Normalize end date for iOS Safari compatibility
+        const endDate = endDateMatch
+          ? this.normalizeDate(endDateMatch[1])
+          : startDate;
         const valueMatch = recordStr.match(/value="([^"]+)"/);
         const value = valueMatch ? valueMatch[1] : "";
         const unitMatch = recordStr.match(/unit="([^"]+)"/);
@@ -362,7 +372,9 @@ export class XMLStreamParser {
         if (!this.options.selectedMetrics.includes(type)) continue;
         const startDateMatch = recordStr.match(/startDate="([^"]+)"/);
         if (!startDateMatch) continue;
-        const startDate = startDateMatch[1];
+        const rawStartDate = startDateMatch[1];
+        // Normalize date for iOS Safari compatibility
+        const startDate = this.normalizeDate(rawStartDate);
         const recordDate = new Date(startDate);
         if (
           !this.isDateInRange(
@@ -373,7 +385,10 @@ export class XMLStreamParser {
         )
           continue;
         const endDateMatch = recordStr.match(/endDate="([^"]+)"/);
-        const endDate = endDateMatch ? endDateMatch[1] : startDate;
+        // Normalize end date for iOS Safari compatibility
+        const endDate = endDateMatch
+          ? this.normalizeDate(endDateMatch[1])
+          : startDate;
         const valueMatch = recordStr.match(/value="([^"]+)"/);
         const value = valueMatch ? valueMatch[1] : "";
         const unitMatch = recordStr.match(/unit="([^"]+)"/);
@@ -437,5 +452,34 @@ export class XMLStreamParser {
 
   private isDateInRange(date: Date, startDate: Date, endDate: Date): boolean {
     return date >= startDate && date <= endDate;
+  }
+
+  /**
+   * Normalize date string to iOS-compatible ISO 8601 format
+   * iOS Safari is strict about date formats
+   * Converts "2025-08-17 17:38:00 -0400" to "2025-08-17T17:38:00-04:00"
+   */
+  private normalizeDate(dateStr: string): string {
+    try {
+      let normalized = dateStr;
+
+      // Replace first space with T (date and time separator)
+      normalized = normalized.replace(" ", "T");
+
+      // Fix timezone format: " -0400" -> "-04:00"
+      // Handle space before timezone and add colon
+      normalized = normalized.replace(/ ([+-])(\d{2})(\d{2})$/, "$1$2:$3");
+
+      // Test if it parses correctly
+      const testDate = new Date(normalized);
+      if (!isNaN(testDate.getTime())) {
+        return normalized;
+      }
+
+      // If that didn't work, return original
+      return dateStr;
+    } catch {
+      return dateStr;
+    }
   }
 }

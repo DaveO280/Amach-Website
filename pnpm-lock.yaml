@@ -23,7 +23,7 @@ overrides:
   diff@4.0.2: 4.0.4
   diff@5.2.0: 5.2.2
   undici: ^6.23.0
-  tar: ^7.5.7
+  tar: 7.5.7
   fast-xml-parser: ^5.3.4
 
 patchedDependencies:

@@ -669,8 +669,8 @@ export function convertFhirToDexa(
       totalLeanMassKg = value;
     }
 
-    // Bone Mineral Density (Total Body)
-    if (code === "24701-4" && obs.component) {
+    // Bone Mineral Density (Total Body) - only if no valueString (not a regional observation)
+    if (code === "24701-4" && obs.component && !obs.valueString) {
       for (const comp of components) {
         const compCode = comp.code?.coding?.[0]?.code;
         const compValue = comp.valueQuantity?.value;

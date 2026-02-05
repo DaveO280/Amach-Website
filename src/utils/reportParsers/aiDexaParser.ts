@@ -23,8 +23,33 @@ export async function parseDexaReportWithAI(
       ? rawText.substring(0, 20000) + "... (truncated)"
       : rawText;
 
-  // Minimal prompt - just ask Venice to extract metrics as JSON
-  const systemPrompt = `Extract all metrics from this DEXA scan report. Strip all verbiage and return only the data as JSON.`;
+  // Structured prompt with explicit schema for consistent extraction
+  const systemPrompt = `Extract all metrics from this DEXA scan report and return as JSON with this exact structure:
+{
+  "scan_date": "YYYY-MM-DD or MM/DD/YYYY as found",
+  "total_body_fat_percent": number,
+  "total_lean_mass_lbs": number,
+  "visceral_fat": {
+    "mass_lbs": number,
+    "volume_in3": number,
+    "area_in2": number
+  },
+  "android_gynoid_ratio": number,
+  "bone_density": {
+    "total_bmd": number,
+    "t_score": number,
+    "z_score": number
+  },
+  "regions": {
+    "arms": { "fat_percent": number, "fat_lbs": number, "lean_lbs": number, "bmd": number },
+    "legs": { "fat_percent": number, "fat_lbs": number, "lean_lbs": number, "bmd": number },
+    "trunk": { "fat_percent": number, "fat_lbs": number, "lean_lbs": number, "bmd": number },
+    "android": { "fat_percent": number, "fat_lbs": number, "lean_lbs": number },
+    "gynoid": { "fat_percent": number, "fat_lbs": number, "lean_lbs": number },
+    "total": { "fat_percent": number, "fat_lbs": number, "lean_lbs": number, "bmd": number, "t_score": number, "z_score": number }
+  }
+}
+Include only fields that have values in the report. Use null for missing values.`;
 
   const userPrompt = textToParse;
 

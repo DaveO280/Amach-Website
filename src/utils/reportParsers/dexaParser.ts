@@ -309,9 +309,12 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
     }
 
     if (!androidGynoidRatio) {
-      const match = line.match(/(android\/gynoid ratio[:\s]*)(\d+(?:\.\d+)?)/i);
+      // Match various formats: "android/gynoid ratio", "A/G Ratio", "AG Ratio"
+      const match = line.match(
+        /(?:android\s*\/\s*gynoid\s*ratio|a\s*\/?\s*g\s*ratio)[:\s|]*(\d+(?:\.\d+)?)/i,
+      );
       if (match) {
-        androidGynoidRatio = Number.parseFloat(match[2]);
+        androidGynoidRatio = Number.parseFloat(match[1]);
         scoreHits += 1;
       }
     }
@@ -877,6 +880,87 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
     });
   }
 
+  // VAT Table parsing: Look for markdown table format with Volume, Fat Mass, Area columns
+  // Example: |  02/12/2025 | 44.1 | 33.19 | 1.13 | 9.00  |
+  if (!visceralFatRating || !visceralFatVolumeCm3 || !visceralFatAreaCm2) {
+    // Find VAT table header to determine column positions
+    const vatTableHeaderMatch = rawText.match(
+      /\|\s*Date.*?Volume\s*\(in[³3]\).*?Fat\s*Mass\s*\(lbs?\).*?Area\s*\(in[²2]\)/i,
+    );
+    if (vatTableHeaderMatch) {
+      // Find the data row after the header (skip separator row)
+      const headerIndex = rawText.indexOf(vatTableHeaderMatch[0]);
+      const afterHeader = rawText.substring(
+        headerIndex + vatTableHeaderMatch[0].length,
+      );
+      // Match a data row with pipe-separated values
+      const dataRowMatch = afterHeader.match(
+        /\|\s*[\d\/\-]+\s*\|\s*[\d.]+\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|/,
+      );
+      if (dataRowMatch) {
+        if (!visceralFatVolumeCm3) {
+          const volumeIn3 = parseFloat(dataRowMatch[1]);
+          if (volumeIn3 > 0) {
+            visceralFatVolumeCm3 = volumeIn3 * 16.387; // Convert in³ to cm³
+            scoreHits += 1;
+          }
+        }
+        if (!visceralFatRating) {
+          const massLbs = parseFloat(dataRowMatch[2]);
+          if (massLbs >= 0) {
+            visceralFatRating = massLbs;
+            scoreHits += 1;
+          }
+        }
+        if (!visceralFatAreaCm2) {
+          const areaIn2 = parseFloat(dataRowMatch[3]);
+          if (areaIn2 > 0) {
+            visceralFatAreaCm2 = areaIn2 * 6.452; // Convert in² to cm²
+            scoreHits += 1;
+          }
+        }
+      }
+    }
+  }
+
+  // Multi-line VAT parsing: Look for label followed by value on next line
+  // Example:
+  //   Mass
+  //   1.13 lbs
+  if (!visceralFatRating || !visceralFatVolumeCm3) {
+    for (let i = 0; i < lines.length - 1; i++) {
+      const currentLine = lines[i].toLowerCase().trim();
+      const nextLine = lines[i + 1]?.trim() || "";
+
+      // Check for "Mass" or "Fat Mass" label followed by value
+      if (!visceralFatRating && /^(?:fat\s+)?mass$/i.test(currentLine)) {
+        const valueMatch = nextLine.match(/^([\d.]+)\s*(?:lbs?)?$/i);
+        if (valueMatch) {
+          visceralFatRating = parseFloat(valueMatch[1]);
+          scoreHits += 1;
+        }
+      }
+
+      // Check for "Volume" label followed by value
+      if (!visceralFatVolumeCm3 && /^volume$/i.test(currentLine)) {
+        const valueMatch = nextLine.match(/^([\d.]+)\s*(?:in[³3])?$/i);
+        if (valueMatch) {
+          visceralFatVolumeCm3 = parseFloat(valueMatch[1]) * 16.387;
+          scoreHits += 1;
+        }
+      }
+
+      // Check for "Area" label followed by value
+      if (!visceralFatAreaCm2 && /^area$/i.test(currentLine)) {
+        const valueMatch = nextLine.match(/^([\d.]+)\s*(?:in[²2])?$/i);
+        if (valueMatch) {
+          visceralFatAreaCm2 = parseFloat(valueMatch[1]) * 6.452;
+          scoreHits += 1;
+        }
+      }
+    }
+  }
+
   // Fallback: parse individual region lines if table parsing didn't work
   // Also try parsing from raw text directly if table parsing failed
   if (regions.length === 0) {
@@ -949,6 +1033,14 @@ export function parseDexaReport(rawText: string): DexaReportData | null {
           }
         });
       });
+    }
+  }
+
+  // Extract totalLeanMassKg from total region if not already set
+  if (totalLeanMassKg === undefined) {
+    const totalRegion = regions.find((r) => r.region === "total");
+    if (totalRegion?.leanMassKg !== undefined) {
+      totalLeanMassKg = totalRegion.leanMassKg;
     }
   }
 

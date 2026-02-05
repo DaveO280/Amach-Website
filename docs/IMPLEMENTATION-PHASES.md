@@ -9,7 +9,7 @@ This document outlines the phased implementation plan for the Amach health data 
 | A     | Foundation & Web Cleanup | ✅ Complete | Consolidate data flows, create abstractions, add tests |
 | B     | iOS App Core             | 🔜 Planned  | Native iOS app with HealthKit integration              |
 | C     | AI Integration           | 🔜 Planned  | Apple Intelligence + Venice AI coordination            |
-| D     | Memory System            | 🔜 Planned  | Persistent health context and conversation memory      |
+| D     | Memory System            | ✅ Complete | Persistent health context and conversation memory      |
 | E     | zkProof Integration      | 🔜 Planned  | Client-side proof generation for data verification     |
 | F     | Token & Rewards          | 🔜 Planned  | ERC-20 rewards token on zkSync                         |
 | G     | Polish & Launch          | 🔜 Planned  | App Store submission, beta testing, launch             |
@@ -167,7 +167,7 @@ This document outlines the phased implementation plan for the Amach health data 
 
 ---
 
-## Phase D: Memory System 🔜
+## Phase D: Memory System ✅
 
 **Goal:** Persistent context for personalized AI interactions.
 
@@ -175,24 +175,43 @@ This document outlines the phased implementation plan for the Amach health data 
 
 - Already implemented with IndexedDB caching
 
-### D2: Short-term Memory
+### D2: Short-term Memory ✅
 
-- [ ] Session context window
-- [ ] Recent conversation tracking
-- [ ] Topic continuity
+- [x] Session context window (via `chatHistoryStore`)
+- [x] Recent conversation tracking (thread-based with topic shift detection)
+- [x] Topic continuity (keyword-based topic identification)
 
-### D3: Long-term Memory
+### D3: Long-term Memory ✅
 
-- [ ] User health patterns
-- [ ] Preferences and goals
-- [ ] Historical insights
-- [ ] Encrypted Storj storage
+- [x] User health patterns (via `CriticalFact` extraction)
+- [x] Preferences and goals (via `ConversationMemory.preferences`)
+- [x] Historical insights (via `SessionSummary`)
+- [x] Encrypted Storj storage (via `StorjConversationService`)
 
-### D4: Memory Integration
+### D4: Memory Integration ✅
 
-- [ ] Context injection into prompts
-- [ ] Memory pruning/consolidation
-- [ ] Cross-device sync
+- [x] Context injection into prompts (via `formatConversationMemoryCapsule`)
+- [x] Memory pruning/consolidation (configurable in `ConversationMemoryService`)
+- [x] Cross-device sync (pull/merge from Storj)
+
+**Files Created:**
+
+| File                                            | Purpose                               |
+| ----------------------------------------------- | ------------------------------------- |
+| `src/services/MemoryExtractionService.ts`       | AI-powered fact extraction from chats |
+| `src/services/ConversationMemoryService.ts`     | Memory orchestration, pruning, sync   |
+| `src/hooks/useConversationMemory.ts`            | React hook for memory access          |
+| `src/services/__tests__/memoryServices.test.ts` | 28 tests for memory services          |
+
+**Key Features:**
+
+- AI-powered extraction of goals, concerns, conditions, preferences, milestones
+- Session summarization with topic detection
+- Automatic memory pruning (configurable, default 90 days for inactive facts)
+- Duplicate fact consolidation (case-insensitive)
+- Cloud sync with debouncing (5 minute default)
+
+**Total Tests:** 148 passing (including 28 new memory service tests)
 
 ---
 
@@ -314,13 +333,21 @@ This document outlines the phased implementation plan for the Amach health data 
 - ✅ Deduplication consolidated
 - ✅ Service interfaces created
 - ✅ API endpoints added
-- ✅ 120 tests passing
+
+**Phase D Complete** - Memory system implemented:
+
+- ✅ AI-powered fact extraction
+- ✅ Memory orchestration service
+- ✅ React hooks for memory access
+- ✅ Cloud sync support
+- ✅ 148 tests passing total
 
 **Next Steps:**
 
 1. Apple Developer account activation (for iOS development)
-2. Begin Phase B (iOS app setup)
+2. Begin Phase B (iOS app setup) - requires Xcode
 3. Continue web app improvements in parallel
+4. Phase E (zkProof) or Phase F (Token) can proceed without iOS
 
 ---
 

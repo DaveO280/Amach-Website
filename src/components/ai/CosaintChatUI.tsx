@@ -8,30 +8,32 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { MessageLimitPopup } from "@/components/ui/MessageLimitPopup";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { conversationMemoryStore } from "@/data/store/conversationMemoryStore";
+import { storjItemsCache } from "@/data/store/storjItemsCache";
+import { useWalletService } from "@/hooks/useWalletService";
 import { useAi } from "@/store/aiStore";
+import type { ConversationMemory } from "@/types/conversationMemory";
+import type { ParsedReportSummary } from "@/types/reportData";
+import { clearAgentResultCache } from "@/utils/agentResultCache";
+import { clearCoordinatorAnalysisCache } from "@/utils/coordinatorAnalysisCache";
+import { clearCoordinatorSummaryCache } from "@/utils/coordinatorSummaryCache";
 import { parseHealthReport } from "@/utils/reportParsers";
-import { Send, FileText } from "lucide-react";
+import { generateSearchTag, getUserSecret } from "@/utils/searchableEncryption";
+import { getChainEventTypeForReportType } from "@/utils/storjChainMarkerRegistry";
+import { clearToolResultCache } from "@/utils/toolResultCache";
+import { clearVeniceResponseCache } from "@/utils/veniceResponseCache";
+import {
+  getCachedWalletEncryptionKey,
+  getWalletDerivedEncryptionKey,
+} from "@/utils/walletEncryption";
+import { FileText, Send } from "lucide-react";
 import Papa from "papaparse";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { healthDataStore } from "../../data/store/healthDataStore";
 import { parsePDF } from "../../utils/pdfParser";
-import { useWalletService } from "@/hooks/useWalletService";
-import { MessageLimitPopup } from "@/components/ui/MessageLimitPopup";
 import { ReportParserViewer } from "./ReportParserViewer";
-import { getCachedWalletEncryptionKey } from "@/utils/walletEncryption";
-import type { ParsedReportSummary } from "@/types/reportData";
-import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
-import { generateSearchTag, getUserSecret } from "@/utils/searchableEncryption";
-import { getChainEventTypeForReportType } from "@/utils/storjChainMarkerRegistry";
-import { conversationMemoryStore } from "@/data/store/conversationMemoryStore";
-import type { ConversationMemory } from "@/types/conversationMemory";
-import { clearCoordinatorAnalysisCache } from "@/utils/coordinatorAnalysisCache";
-import { clearAgentResultCache } from "@/utils/agentResultCache";
-import { clearCoordinatorSummaryCache } from "@/utils/coordinatorSummaryCache";
-import { clearVeniceResponseCache } from "@/utils/veniceResponseCache";
-import { clearToolResultCache } from "@/utils/toolResultCache";
-import { storjItemsCache } from "@/data/store/storjItemsCache";
 
 // Define types for our message interface
 interface MessageType {
@@ -189,6 +191,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   // Import parsed reports directly from Storj (skip re-parsing)
   const [storjImportError, setStorjImportError] = useState<string>("");
   const [storjImportLoading, setStorjImportLoading] = useState(false);
+  const storjImportLoadingRef = useRef(false);
   const [storjImportSuccess, setStorjImportSuccess] = useState<string>("");
   const [storjReports, setStorjReports] = useState<
     Array<{
@@ -641,9 +644,8 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   };
 
   const loadStorjReportsList = useCallback(async (): Promise<void> => {
-    // Prevent multiple simultaneous calls
-    if (storjImportLoading) {
-      console.log("⏸️ Storj reports already loading, skipping...");
+    // Prevent multiple simultaneous calls (ref avoids effect re-run when loading flips)
+    if (storjImportLoadingRef.current) {
       return;
     }
 
@@ -652,6 +654,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       return;
     }
 
+    storjImportLoadingRef.current = true;
     setStorjImportLoading(true);
     setStorjImportError("");
     setStorjImportSuccess("");
@@ -726,9 +729,10 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         e instanceof Error ? e.message : "Failed to load reports from Storj",
       );
     } finally {
+      storjImportLoadingRef.current = false;
       setStorjImportLoading(false);
     }
-  }, [address, signMessage, storjImportLoading]);
+  }, [address, signMessage]);
 
   const toggleSelectedStorjUri = (uri: string): void => {
     setSelectedStorjUris((prev) => {
@@ -1228,10 +1232,14 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
 
   useEffect((): void => {
     if (!showFileManager) return;
+
     if (fileManagerTab === "saved") {
       void loadSavedFiles();
     }
-    if (fileManagerTab === "storj" && isConnected && !storjImportLoading) {
+
+    // For Storj, load once per open/connection change.
+    // The loader guards concurrent calls via storjImportLoadingRef (stable callback = no loop).
+    if (fileManagerTab === "storj" && isConnected) {
       void loadStorjReportsList();
     }
   }, [
@@ -1240,7 +1248,6 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     isConnected,
     loadSavedFiles,
     loadStorjReportsList,
-    storjImportLoading,
   ]);
 
   // Load a saved file into chat context

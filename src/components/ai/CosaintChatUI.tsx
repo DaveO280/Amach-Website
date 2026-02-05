@@ -34,6 +34,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { healthDataStore } from "../../data/store/healthDataStore";
 import { parsePDF } from "../../utils/pdfParser";
 import { ReportParserViewer } from "./ReportParserViewer";
+import MemoryInspector from "./MemoryInspector";
 
 // Define types for our message interface
 interface MessageType {
@@ -2037,6 +2038,11 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                         >
                           clear all
                         </button>
+                      </div>
+
+                      {/* Memory Inspector */}
+                      <div className="mt-2">
+                        <MemoryInspector userId={address || "local-anon"} />
                       </div>
                     </div>
                   )}

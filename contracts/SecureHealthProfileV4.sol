@@ -14,8 +14,12 @@ import "./SecureHealthProfileV3.sol";
  * - Supports multiple data types (DEXA, Bloodwork, Apple Health, CGM)
  * - Tracks completeness scores for attestation tiers
  * - All existing V3 profiles remain compatible
+ *
+ * Custom errors (E0–E7) used to stay under 24KB contract size limit.
  */
 contract SecureHealthProfileV4 is SecureHealthProfileV3 {
+
+    error E0(); error E1(); error E2(); error E3(); error E4(); error E5(); error E6(); error E7();
 
     // ============================================
     // CONSTANTS
@@ -119,12 +123,12 @@ contract SecureHealthProfileV4 is SecureHealthProfileV3 {
         uint16 recordCount,
         bool coreComplete
     ) external nonReentrant profileExists(msg.sender) {
-        require(contentHash != bytes32(0), "Bad hash");
-        require(dataType <= DATA_TYPE_CGM, "Bad type");
-        require(startDate < endDate, "Bad dates");
-        require(endDate <= uint40(block.timestamp), "Future date");
-        require(completenessScore <= 10000, "Score>max");
-        require(hashToUser[contentHash] == address(0), "Duplicate");
+        if (contentHash == bytes32(0)) revert E0();
+        if (dataType > DATA_TYPE_CGM) revert E1();
+        if (startDate >= endDate) revert E2();
+        if (endDate > uint40(block.timestamp)) revert E3();
+        if (completenessScore > 10000) revert E4();
+        if (hashToUser[contentHash] != address(0)) revert E5();
 
         Attestation memory newAttestation = Attestation({
             contentHash: contentHash,
@@ -156,6 +160,47 @@ contract SecureHealthProfileV4 is SecureHealthProfileV3 {
     }
 
     /**
+     * @dev Internal helper to add one attestation at index i (reduces stack depth in batch)
+     */
+    function _pushAttestationAt(
+        uint256 i,
+        bytes32[] calldata contentHashes,
+        uint8[] calldata dataTypes,
+        uint40[] calldata startDates,
+        uint40[] calldata endDates,
+        uint16[] calldata completenessScores,
+        uint16[] calldata recordCounts,
+        bool[] calldata coreCompletes
+    ) internal {
+        bytes32 contentHash = contentHashes[i];
+        if (contentHash == bytes32(0)) revert E0();
+        uint8 dataType = dataTypes[i];
+        if (dataType > DATA_TYPE_CGM) revert E1();
+        uint40 startDate = startDates[i];
+        uint40 endDate = endDates[i];
+        if (startDate >= endDate) revert E2();
+        if (endDate > uint40(block.timestamp)) revert E3();
+        uint16 completenessScore = completenessScores[i];
+        if (completenessScore > 10000) revert E4();
+        if (hashToUser[contentHash] != address(0)) revert E5();
+
+        Attestation memory newAttestation = Attestation({
+            contentHash: contentHash,
+            dataType: dataType,
+            startDate: startDate,
+            endDate: endDate,
+            completenessScore: completenessScore,
+            recordCount: recordCounts[i],
+            coreComplete: coreCompletes[i],
+            timestamp: uint40(block.timestamp)
+        });
+
+        userAttestations[msg.sender].push(newAttestation);
+        hashToUser[contentHash] = msg.sender;
+        attestationCounts[msg.sender][dataType]++;
+    }
+
+    /**
      * @notice Batch create attestations (gas efficient for multiple uploads)
      * @param contentHashes Array of content hashes
      * @param dataTypes Array of data types
@@ -175,39 +220,27 @@ contract SecureHealthProfileV4 is SecureHealthProfileV3 {
         bool[] calldata coreCompletes
     ) external nonReentrant profileExists(msg.sender) {
         uint256 len = contentHashes.length;
-        require(len > 0 && len <= 50, "Bad batch");
-        require(
-            dataTypes.length == len &&
-            startDates.length == len &&
-            endDates.length == len &&
-            completenessScores.length == len &&
-            recordCounts.length == len &&
-            coreCompletes.length == len,
-            "Len mismatch"
-        );
+        if (len == 0 || len > 50) revert E6();
+        if (
+            dataTypes.length != len ||
+            startDates.length != len ||
+            endDates.length != len ||
+            completenessScores.length != len ||
+            recordCounts.length != len ||
+            coreCompletes.length != len
+        ) revert E7();
 
         for (uint256 i = 0; i < len; i++) {
-            require(contentHashes[i] != bytes32(0), "Bad hash");
-            require(dataTypes[i] <= DATA_TYPE_CGM, "Bad type");
-            require(startDates[i] < endDates[i], "Bad dates");
-            require(endDates[i] <= uint40(block.timestamp), "Future date");
-            require(completenessScores[i] <= 10000, "Score>max");
-            require(hashToUser[contentHashes[i]] == address(0), "Duplicate");
-
-            Attestation memory newAttestation = Attestation({
-                contentHash: contentHashes[i],
-                dataType: dataTypes[i],
-                startDate: startDates[i],
-                endDate: endDates[i],
-                completenessScore: completenessScores[i],
-                recordCount: recordCounts[i],
-                coreComplete: coreCompletes[i],
-                timestamp: uint40(block.timestamp)
-            });
-
-            userAttestations[msg.sender].push(newAttestation);
-            hashToUser[contentHashes[i]] = msg.sender;
-            attestationCounts[msg.sender][dataTypes[i]]++;
+            _pushAttestationAt(
+                i,
+                contentHashes,
+                dataTypes,
+                startDates,
+                endDates,
+                completenessScores,
+                recordCounts,
+                coreCompletes
+            );
         }
 
         totalAttestations += len;

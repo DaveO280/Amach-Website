@@ -1,15 +1,18 @@
 /**
  * Deploy/Upgrade SecureHealthProfileV4 with Attestation
  *
+ * Manual UUPS upgrade (no @openzeppelin/hardhat-upgrades) so we use only
+ * @nomiclabs/hardhat-ethers + ethers v5 and avoid getAddress/ethers v6 conflicts.
+ *
  * Usage:
- *   npx hardhat run scripts/deploy-v4-attestation.js --config hardhat.config.zksync.js --network zkSyncSepolia
+ *   pnpm exec hardhat run scripts/deploy-v4-attestation.js --network zksyncSepolia
  *
  * Prerequisites:
- *   - Set PRIVATE_KEY in .env (deployer wallet with ETH for gas)
- *   - Compile contracts first: npx hardhat compile --config hardhat.config.zksync.js
+ *   - .env has PRIVATE_KEY (deployer = proxy owner, with ETH on zkSync Sepolia for gas)
+ *   - Contracts compiled: pnpm exec hardhat compile
  */
 
-const { ethers, upgrades } = require("hardhat");
+const { ethers } = require("hardhat");
 
 // Current proxy address (from contractConfig.ts)
 const PROXY_ADDRESS = "0x2A8015613623A6A8D369BcDC2bd6DD202230785a";
@@ -19,54 +22,79 @@ async function main() {
 
   const [deployer] = await ethers.getSigners();
   console.log("Deployer address:", deployer.address);
-  console.log(
-    "Balance:",
-    ethers.formatEther(await ethers.provider.getBalance(deployer.address)),
-    "ETH\n",
-  );
+  const balance = await ethers.provider.getBalance(deployer.address);
+  console.log("Balance:", ethers.utils.formatEther(balance), "ETH\n");
 
-  // Get the V4 contract factory
+  // 1) Deploy new V4 implementation (no proxy)
   const SecureHealthProfileV4 = await ethers.getContractFactory(
     "SecureHealthProfileV4",
   );
+  const impl = await SecureHealthProfileV4.deploy();
+  await impl.deployed();
+  console.log("📦 V4 implementation deployed at:", impl.address);
 
-  // Option 1: Fresh deployment (if no existing proxy)
-  // const proxy = await upgrades.deployProxy(SecureHealthProfileV4, [], {
-  //   initializer: "initialize",
-  //   kind: "uups",
-  // });
-  // await proxy.waitForDeployment();
-  // console.log("✅ V4 Proxy deployed to:", await proxy.getAddress());
+  // Ensure the new implementation has code (UUPS reverts with "new implementation is not a contract" otherwise)
+  const implCode = await ethers.provider.getCode(impl.address);
+  if (!implCode || implCode === "0x") {
+    console.error(
+      "\n❌ New implementation has no code at this RPC. Wait a block and re-run, or try another node.",
+    );
+    process.exit(1);
+  }
 
-  // Option 2: Upgrade existing proxy to V4
-  console.log("📦 Upgrading existing proxy to V4...");
-  console.log("   Proxy address:", PROXY_ADDRESS);
+  // 2) Call upgradeToAndCall on the proxy (OZ UUPS v5 only has this, not upgradeTo)
+  const proxyAbi = [
+    "function upgradeToAndCall(address newImplementation, bytes memory data) external payable",
+    "function owner() external view returns (address)",
+    "function getContractVersion() external view returns (uint8)",
+    "function totalAttestations() external view returns (uint256)",
+    "function TIER_GOLD_MIN_SCORE() external view returns (uint16)",
+    "function TIER_SILVER_MIN_SCORE() external view returns (uint16)",
+    "function TIER_BRONZE_MIN_SCORE() external view returns (uint16)",
+  ];
+  const proxy = new ethers.Contract(PROXY_ADDRESS, proxyAbi, deployer);
+  const proxyOwner = await proxy.owner();
+  if (proxyOwner.toLowerCase() !== deployer.address.toLowerCase()) {
+    console.error(
+      "\n❌ Upgrade failed: only the proxy owner can call upgradeTo.",
+    );
+    console.error("   Proxy owner:  ", proxyOwner);
+    console.error("   Your address: ", deployer.address);
+    console.error(
+      "\n   Use the wallet that owns the proxy (set PRIVATE_KEY in .env) and try again.",
+    );
+    process.exit(1);
+  }
+  console.log("📦 Upgrading proxy to V4...");
+  let tx;
+  try {
+    // Empty data = no post-upgrade call. Use explicit gas limit for zkSync.
+    tx = await proxy.upgradeToAndCall(impl.address, "0x", { gasLimit: 400000 });
+    await tx.wait();
+    console.log("   Tx hash:", tx.hash);
+  } catch (err) {
+    try {
+      await proxy.callStatic.upgradeToAndCall(impl.address, "0x");
+    } catch (staticErr) {
+      if (staticErr.data) console.error("   Revert data:", staticErr.data);
+      if (staticErr.reason) console.error("   Reason:", staticErr.reason);
+    }
+    throw err;
+  }
 
-  const upgraded = await upgrades.upgradeProxy(
-    PROXY_ADDRESS,
-    SecureHealthProfileV4,
-    {
-      kind: "uups",
-    },
-  );
-  await upgraded.waitForDeployment();
-
-  // Verify the upgrade
-  const version = await upgraded.getContractVersion();
+  // 3) Verify via proxy
+  const version = await proxy.getContractVersion();
   console.log("\n✅ Upgrade complete!");
   console.log("   Contract version:", version.toString());
   console.log("   Proxy address:", PROXY_ADDRESS);
 
-  // Test attestation functions exist
   console.log("\n🧪 Verifying attestation functions...");
   try {
-    const totalAttestations = await upgraded.totalAttestations();
+    const totalAttestations = await proxy.totalAttestations();
+    const goldMin = await proxy.TIER_GOLD_MIN_SCORE();
+    const silverMin = await proxy.TIER_SILVER_MIN_SCORE();
+    const bronzeMin = await proxy.TIER_BRONZE_MIN_SCORE();
     console.log("   totalAttestations():", totalAttestations.toString());
-
-    // Check tier thresholds
-    const goldMin = await upgraded.TIER_GOLD_MIN_SCORE();
-    const silverMin = await upgraded.TIER_SILVER_MIN_SCORE();
-    const bronzeMin = await upgraded.TIER_BRONZE_MIN_SCORE();
     console.log(
       "   Tier thresholds: Gold ≥",
       goldMin.toString(),
@@ -75,18 +103,15 @@ async function main() {
       "Bronze ≥",
       bronzeMin.toString(),
     );
-
     console.log("\n✅ All attestation functions verified!");
   } catch (error) {
     console.error("❌ Verification failed:", error.message);
   }
 
-  // Output for contractConfig.ts update (if implementation address needed)
-  const implementationAddress =
-    await upgrades.erc1967.getImplementationAddress(PROXY_ADDRESS);
+  // Implementation address (same as we deployed; proxy now points to it)
   console.log("\n📋 Addresses for reference:");
   console.log("   Proxy (unchanged):", PROXY_ADDRESS);
-  console.log("   New Implementation:", implementationAddress);
+  console.log("   New Implementation:", impl.address);
 }
 
 main()

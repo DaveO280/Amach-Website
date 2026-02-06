@@ -161,7 +161,7 @@ contract SecureHealthProfileV3 is SecureHealthProfileV2 {
     // VERSION INFO
     // ============================================
 
-    function getContractVersion() external pure returns (uint8) {
+    function getContractVersion() external pure virtual returns (uint8) {
         return 3;
     }
 

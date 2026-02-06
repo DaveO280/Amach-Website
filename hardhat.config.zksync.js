@@ -1,6 +1,6 @@
 /**
  * zkSync-Specific Hardhat Config
- * Use this for zkSync deployments: npx hardhat run script.js --config hardhat.config.zksync.js
+ * Use this for zkSync deployments: npx hardhat run script.js --config hardhat.config.zksync.js --network zkSyncSepolia
  */
 
 require("@matterlabs/hardhat-zksync-solc");

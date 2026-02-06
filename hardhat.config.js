@@ -8,19 +8,15 @@ module.exports = {
       {
         version: "0.8.20",
         settings: {
-          optimizer: {
-            enabled: true,
-            runs: 200,
-          },
+          optimizer: { enabled: true, runs: 1 },
+          viaIR: true, // required for SecureHealthProfileV4 (stack too deep in batch)
         },
       },
       {
         version: "0.8.22",
         settings: {
-          optimizer: {
-            enabled: true,
-            runs: 200,
-          },
+          optimizer: { enabled: true, runs: 1 },
+          viaIR: true,
         },
       },
     ],

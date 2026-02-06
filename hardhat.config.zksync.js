@@ -20,9 +20,21 @@ module.exports = {
     compilers: [
       {
         version: "0.8.20",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 100, // Lower runs = smaller bytecode
+          },
+        },
       },
       {
         version: "0.8.22",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 100,
+          },
+        },
       },
     ],
   },

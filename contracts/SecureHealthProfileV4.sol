@@ -119,12 +119,12 @@ contract SecureHealthProfileV4 is SecureHealthProfileV3 {
         uint16 recordCount,
         bool coreComplete
     ) external nonReentrant profileExists(msg.sender) {
-        require(contentHash != bytes32(0), "Invalid content hash");
-        require(dataType <= DATA_TYPE_CGM, "Invalid data type");
-        require(startDate < endDate, "Invalid date range");
-        require(endDate <= uint40(block.timestamp), "End date in future");
-        require(completenessScore <= 10000, "Score exceeds maximum");
-        require(hashToUser[contentHash] == address(0), "Hash already attested");
+        require(contentHash != bytes32(0), "Bad hash");
+        require(dataType <= DATA_TYPE_CGM, "Bad type");
+        require(startDate < endDate, "Bad dates");
+        require(endDate <= uint40(block.timestamp), "Future date");
+        require(completenessScore <= 10000, "Score>max");
+        require(hashToUser[contentHash] == address(0), "Duplicate");
 
         Attestation memory newAttestation = Attestation({
             contentHash: contentHash,
@@ -175,7 +175,7 @@ contract SecureHealthProfileV4 is SecureHealthProfileV3 {
         bool[] calldata coreCompletes
     ) external nonReentrant profileExists(msg.sender) {
         uint256 len = contentHashes.length;
-        require(len > 0 && len <= 50, "Invalid batch size");
+        require(len > 0 && len <= 50, "Bad batch");
         require(
             dataTypes.length == len &&
             startDates.length == len &&
@@ -183,16 +183,16 @@ contract SecureHealthProfileV4 is SecureHealthProfileV3 {
             completenessScores.length == len &&
             recordCounts.length == len &&
             coreCompletes.length == len,
-            "Array length mismatch"
+            "Len mismatch"
         );
 
         for (uint256 i = 0; i < len; i++) {
-            require(contentHashes[i] != bytes32(0), "Invalid content hash");
-            require(dataTypes[i] <= DATA_TYPE_CGM, "Invalid data type");
-            require(startDates[i] < endDates[i], "Invalid date range");
-            require(endDates[i] <= uint40(block.timestamp), "End date in future");
-            require(completenessScores[i] <= 10000, "Score exceeds maximum");
-            require(hashToUser[contentHashes[i]] == address(0), "Hash already attested");
+            require(contentHashes[i] != bytes32(0), "Bad hash");
+            require(dataTypes[i] <= DATA_TYPE_CGM, "Bad type");
+            require(startDates[i] < endDates[i], "Bad dates");
+            require(endDates[i] <= uint40(block.timestamp), "Future date");
+            require(completenessScores[i] <= 10000, "Score>max");
+            require(hashToUser[contentHashes[i]] == address(0), "Duplicate");
 
             Attestation memory newAttestation = Attestation({
                 contentHash: contentHashes[i],

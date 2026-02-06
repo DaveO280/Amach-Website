@@ -160,6 +160,40 @@ export async function parseHealthReport(
         };
       }
 
+      // CRITICAL: If boneDensityTotal.bmd is still missing, promote from regions.total
+      if (dexa.boneDensityTotal?.bmd === undefined) {
+        const totalRegion = dexa.regions?.find((r) => r.region === "total");
+        if (totalRegion?.boneDensityGPerCm2 !== undefined) {
+          dexa.boneDensityTotal = {
+            ...dexa.boneDensityTotal,
+            bmd: totalRegion.boneDensityGPerCm2,
+          };
+          console.log(
+            `[ReportParser] 📊 Promoted BMD from regions.total: ${totalRegion.boneDensityGPerCm2}`,
+          );
+        }
+      }
+
+      // Also promote tScore and zScore from regions if missing
+      if (dexa.boneDensityTotal?.tScore === undefined) {
+        const totalRegion = dexa.regions?.find((r) => r.region === "total");
+        if (totalRegion?.tScore !== undefined) {
+          dexa.boneDensityTotal = {
+            ...dexa.boneDensityTotal,
+            tScore: totalRegion.tScore,
+          };
+        }
+      }
+      if (dexa.boneDensityTotal?.zScore === undefined) {
+        const totalRegion = dexa.regions?.find((r) => r.region === "total");
+        if (totalRegion?.zScore !== undefined) {
+          dexa.boneDensityTotal = {
+            ...dexa.boneDensityTotal,
+            zScore: totalRegion.zScore,
+          };
+        }
+      }
+
       // Use better confidence (higher of the two)
       dexa.confidence = Math.max(
         aiResult.confidence || 0,
@@ -172,9 +206,29 @@ export async function parseHealthReport(
     } else if (aiResult) {
       // Only AI result available
       dexa = aiResult;
+      // Promote BMD from regions if missing at top level
+      if (dexa.boneDensityTotal?.bmd === undefined) {
+        const totalRegion = dexa.regions?.find((r) => r.region === "total");
+        if (totalRegion?.boneDensityGPerCm2 !== undefined) {
+          dexa.boneDensityTotal = {
+            ...dexa.boneDensityTotal,
+            bmd: totalRegion.boneDensityGPerCm2,
+          };
+        }
+      }
     } else if (regexResult) {
       // Only regex result available
       dexa = regexResult;
+      // Promote BMD from regions if missing at top level
+      if (dexa.boneDensityTotal?.bmd === undefined) {
+        const totalRegion = dexa.regions?.find((r) => r.region === "total");
+        if (totalRegion?.boneDensityGPerCm2 !== undefined) {
+          dexa.boneDensityTotal = {
+            ...dexa.boneDensityTotal,
+            bmd: totalRegion.boneDensityGPerCm2,
+          };
+        }
+      }
     }
 
     if (dexa) {

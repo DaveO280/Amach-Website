@@ -430,6 +430,140 @@ const secureHealthProfileAbi = [
     stateMutability: "view",
     type: "function",
   },
+  // ============================================
+  // V4: HEALTH DATA ATTESTATION
+  // ============================================
+  {
+    inputs: [
+      { name: "contentHash", type: "bytes32" },
+      { name: "dataType", type: "uint8" },
+      { name: "startDate", type: "uint40" },
+      { name: "endDate", type: "uint40" },
+      { name: "completenessScore", type: "uint16" },
+      { name: "recordCount", type: "uint16" },
+      { name: "coreComplete", type: "bool" },
+    ],
+    name: "createAttestation",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "contentHashes", type: "bytes32[]" },
+      { name: "dataTypes", type: "uint8[]" },
+      { name: "startDates", type: "uint40[]" },
+      { name: "endDates", type: "uint40[]" },
+      { name: "completenessScores", type: "uint16[]" },
+      { name: "recordCounts", type: "uint16[]" },
+      { name: "coreCompletes", type: "bool[]" },
+    ],
+    name: "createAttestationBatch",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "contentHash", type: "bytes32" },
+    ],
+    name: "verifyAttestation",
+    outputs: [
+      { name: "exists", type: "bool" },
+      {
+        components: [
+          { name: "contentHash", type: "bytes32" },
+          { name: "dataType", type: "uint8" },
+          { name: "startDate", type: "uint40" },
+          { name: "endDate", type: "uint40" },
+          { name: "completenessScore", type: "uint16" },
+          { name: "recordCount", type: "uint16" },
+          { name: "coreComplete", type: "bool" },
+          { name: "timestamp", type: "uint40" },
+        ],
+        name: "attestation",
+        type: "tuple",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "contentHash", type: "bytes32" }],
+    name: "isHashAttested",
+    outputs: [
+      { name: "attested", type: "bool" },
+      { name: "attestor", type: "address" },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "dataType", type: "uint8" },
+    ],
+    name: "getAttestationCount",
+    outputs: [{ name: "count", type: "uint16" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "user", type: "address" }],
+    name: "getUserAttestations",
+    outputs: [
+      {
+        components: [
+          { name: "contentHash", type: "bytes32" },
+          { name: "dataType", type: "uint8" },
+          { name: "startDate", type: "uint40" },
+          { name: "endDate", type: "uint40" },
+          { name: "completenessScore", type: "uint16" },
+          { name: "recordCount", type: "uint16" },
+          { name: "coreComplete", type: "bool" },
+          { name: "timestamp", type: "uint40" },
+        ],
+        name: "",
+        type: "tuple[]",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "dataType", type: "uint8" },
+    ],
+    name: "getHighestTierAttestation",
+    outputs: [
+      { name: "tier", type: "uint8" },
+      {
+        components: [
+          { name: "contentHash", type: "bytes32" },
+          { name: "dataType", type: "uint8" },
+          { name: "startDate", type: "uint40" },
+          { name: "endDate", type: "uint40" },
+          { name: "completenessScore", type: "uint16" },
+          { name: "recordCount", type: "uint16" },
+          { name: "coreComplete", type: "bool" },
+          { name: "timestamp", type: "uint40" },
+        ],
+        name: "attestation",
+        type: "tuple",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "totalAttestations",
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
 ] as const;
 
 // Profile Verification contract ABI for verification operations

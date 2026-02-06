@@ -44,3 +44,19 @@ export {
   type SyncOptions,
   type SyncResult,
 } from "./StorjSyncService";
+
+export {
+  getStorjReportService,
+  StorjReportService,
+  type ReportStorageOptions,
+  type ReportStorageResult,
+} from "./StorjReportService";
+
+export {
+  AttestationService,
+  attestationAbi,
+  type AttestationInput,
+  type AttestationResult,
+  type AttestationVerification,
+  type OnChainAttestation,
+} from "./AttestationService";

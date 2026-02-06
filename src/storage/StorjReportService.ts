@@ -17,6 +17,10 @@ import {
 } from "@/utils/fhir/bloodworkToFhir";
 import type { FhirDiagnosticReport } from "@/utils/fhir/dexaToFhir";
 import { createHash } from "crypto";
+import type {
+  AttestationService,
+  AttestationResult,
+} from "./AttestationService";
 
 export interface ReportStorageResult {
   success: boolean;
@@ -26,6 +30,7 @@ export interface ReportStorageResult {
   duplicate?: boolean;
   verifiedDecrypt?: boolean;
   error?: string;
+  attestation?: AttestationResult;
 }
 
 export interface ReportStorageOptions {
@@ -33,6 +38,10 @@ export interface ReportStorageOptions {
   practitionerId?: string;
   metadata?: Record<string, string>;
   onProgress?: (progress: number) => void;
+  /** Optional attestation service for creating on-chain attestations */
+  attestationService?: AttestationService;
+  /** Whether to create an on-chain attestation (requires attestationService) */
+  createAttestation?: boolean;
 }
 
 /**
@@ -237,11 +246,31 @@ export class StorjReportService {
 
       console.log(`✅ DEXA report stored to Storj: ${stored.storjUri}`);
 
+      // Optionally create on-chain attestation
+      let attestation: AttestationResult | undefined;
+      if (
+        options?.createAttestation &&
+        options.attestationService &&
+        stored.contentHash
+      ) {
+        console.log(`🔗 Creating on-chain attestation for DEXA report...`);
+        attestation = await options.attestationService.attestDexaReport(
+          report,
+          stored.contentHash,
+        );
+        if (attestation.success) {
+          console.log(`✅ Attestation created: ${attestation.tier} tier`);
+        } else {
+          console.warn(`⚠️ Attestation failed: ${attestation.error}`);
+        }
+      }
+
       return {
         success: true,
         storjUri: stored.storjUri,
         contentHash: stored.contentHash,
         reportId,
+        attestation,
       };
     } catch (error) {
       console.error("❌ Failed to store DEXA report:", error);
@@ -316,11 +345,31 @@ export class StorjReportService {
 
       console.log(`✅ Bloodwork report stored to Storj: ${stored.storjUri}`);
 
+      // Optionally create on-chain attestation
+      let attestation: AttestationResult | undefined;
+      if (
+        options?.createAttestation &&
+        options.attestationService &&
+        stored.contentHash
+      ) {
+        console.log(`🔗 Creating on-chain attestation for Bloodwork report...`);
+        attestation = await options.attestationService.attestBloodworkReport(
+          report,
+          stored.contentHash,
+        );
+        if (attestation.success) {
+          console.log(`✅ Attestation created: ${attestation.tier} tier`);
+        } else {
+          console.warn(`⚠️ Attestation failed: ${attestation.error}`);
+        }
+      }
+
       return {
         success: true,
         storjUri: stored.storjUri,
         contentHash: stored.contentHash,
         reportId,
+        attestation,
       };
     } catch (error) {
       console.error("❌ Failed to store Bloodwork report:", error);

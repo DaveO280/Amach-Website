@@ -4,12 +4,51 @@ import React, { useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { Wallet, Shield, Loader2, RefreshCw, Coins } from "lucide-react";
+import {
+  Wallet,
+  Shield,
+  Loader2,
+  RefreshCw,
+  Coins,
+  FileCheck,
+  Activity,
+  Heart,
+  Bone,
+  Droplet,
+} from "lucide-react";
 import { useWalletService } from "../hooks/useWalletService";
+import {
+  useAttestations,
+  HealthDataType,
+  AttestationTier,
+  DATA_TYPE_LABELS,
+  TIER_LABELS,
+} from "../hooks/useAttestations";
+
+// Icon mapping for data types
+const DATA_TYPE_ICONS: Record<HealthDataType, React.ReactNode> = {
+  [HealthDataType.DEXA]: <Bone className="h-3 w-3" />,
+  [HealthDataType.BLOODWORK]: <Droplet className="h-3 w-3" />,
+  [HealthDataType.APPLE_HEALTH]: <Heart className="h-3 w-3" />,
+  [HealthDataType.CGM]: <Activity className="h-3 w-3" />,
+};
+
+// Tier colors
+const TIER_COLORS: Record<AttestationTier, string> = {
+  [AttestationTier.NONE]: "bg-gray-100 text-gray-600",
+  [AttestationTier.BRONZE]: "bg-amber-100 text-amber-700",
+  [AttestationTier.SILVER]: "bg-slate-200 text-slate-700",
+  [AttestationTier.GOLD]: "bg-yellow-100 text-yellow-700",
+};
 
 export const WalletSummaryWidget: React.FC = () => {
   const { isConnected, address, balance, healthProfile, connect, getBalance } =
     useWalletService();
+  const {
+    attestations,
+    isLoading: attestationsLoading,
+    hasAnyAttestations,
+  } = useAttestations(address);
 
   useEffect(() => {
     if (isConnected) {
@@ -97,6 +136,40 @@ export const WalletSummaryWidget: React.FC = () => {
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
+
+          {/* Health Data Attestations */}
+          {(hasAnyAttestations || attestationsLoading) && (
+            <div className="mt-4 pt-3 border-t border-emerald-100">
+              <div className="flex items-center gap-2 mb-2">
+                <FileCheck className="h-4 w-4 text-emerald-600" />
+                <span className="text-sm text-amber-800/80">Verified Data</span>
+              </div>
+              {attestationsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-amber-600">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Loading...
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {attestations.map((att) => (
+                    <Badge
+                      key={att.dataType}
+                      className={`${TIER_COLORS[att.highestTier]} flex items-center gap-1`}
+                      title={`${DATA_TYPE_LABELS[att.dataType]}: ${att.highestScore}% complete (${TIER_LABELS[att.highestTier]} tier) - ${att.count} attestation${att.count > 1 ? "s" : ""}`}
+                    >
+                      {DATA_TYPE_ICONS[att.dataType]}
+                      <span>{DATA_TYPE_LABELS[att.dataType]}</span>
+                      {att.highestTier > AttestationTier.NONE && (
+                        <span className="text-xs opacity-75">
+                          {TIER_LABELS[att.highestTier]}
+                        </span>
+                      )}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

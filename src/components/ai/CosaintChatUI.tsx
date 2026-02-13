@@ -209,7 +209,8 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   );
   const [savingReportsToStorj, setSavingReportsToStorj] = useState(false);
   const [saveReportsError, setSaveReportsError] = useState<string>("");
-  const ENABLE_STORJ_SAVE_UI = process.env.NODE_ENV === "development";
+  // Enable Storj save UI for all environments (was dev-only)
+  const ENABLE_STORJ_SAVE_UI = true;
 
   const AUTO_EXPAND_STORAGE_KEY = "cosaintAutoExpandOnSend";
   const MESSAGE_COUNT_STORAGE_KEY = "cosaintMessageCountNoWallet";

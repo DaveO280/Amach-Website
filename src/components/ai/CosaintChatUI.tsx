@@ -944,6 +944,13 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         signMessage,
       );
 
+      // Pre-warm the user secret to avoid multiple rapid signature requests
+      // This prevents Privy embedded wallet from crashing
+      await getUserSecret({ address, signMessage });
+
+      // Small delay to let Privy's wallet state stabilize after signatures
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       // Save reports in parallel for better performance
       const savePromises = reportsToSave.map(async (r, originalIdx) => {
         try {

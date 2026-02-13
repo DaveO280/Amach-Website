@@ -909,6 +909,9 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       );
     }
 
+    // Small delay before transaction to let Privy wallet stabilize
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
     const txHash = await walletClient.writeContract({
       address: SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
       abi: secureHealthProfileAbi,
@@ -951,8 +954,18 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       // Small delay to let Privy's wallet state stabilize after signatures
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // Save reports in parallel for better performance
-      const savePromises = reportsToSave.map(async (r, originalIdx) => {
+      // Save reports sequentially to avoid overwhelming Privy with multiple transactions
+      const results: Array<
+        | { success: true; idx: number }
+        | { success: false; idx: number; error: string }
+      > = [];
+
+      for (
+        let originalIdx = 0;
+        originalIdx < reportsToSave.length;
+        originalIdx++
+      ) {
+        const r = reportsToSave[originalIdx];
         try {
           // Find the report index in the main reports array
           const reportIdx = reports.findIndex(
@@ -1034,7 +1047,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               }
             }
 
-            return { success: true, idx };
+            results.push({ success: true, idx });
           } else {
             throw new Error(result?.error || "Failed to save report to Storj");
           }
@@ -1042,12 +1055,14 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           console.error(`❌ Failed to save report:`, error);
           const errorMessage =
             error instanceof Error ? error.message : String(error);
-          return { success: false, idx: originalIdx, error: errorMessage };
+          results.push({
+            success: false,
+            idx: originalIdx,
+            error: errorMessage,
+          });
         }
-      });
+      }
 
-      // Wait for all saves to complete
-      const results = await Promise.all(savePromises);
       const failures = results.filter(
         (r): r is { success: false; idx: number; error: string } => !r.success,
       );

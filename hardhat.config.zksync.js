@@ -4,6 +4,7 @@
  */
 
 require("@matterlabs/hardhat-zksync-solc");
+require("@nomiclabs/hardhat-ethers");
 require("dotenv").config();
 
 /** @type import('hardhat/config').HardhatUserConfig */
@@ -43,6 +44,7 @@ module.exports = {
       url: "https://sepolia.era.zksync.dev",
       ethNetwork: "sepolia",
       zksync: true,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       verifyURL:
         "https://explorer.sepolia.era.zksync.dev/contract_verification",
     },
@@ -50,6 +52,7 @@ module.exports = {
       url: "https://mainnet.era.zksync.io",
       ethNetwork: "mainnet",
       zksync: true,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       verifyURL:
         "https://zksync2-mainnet-explorer.zksync.io/contract_verification",
     },

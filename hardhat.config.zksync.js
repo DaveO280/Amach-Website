@@ -1,6 +1,10 @@
 /**
  * zkSync-Specific Hardhat Config
  * Use this for zkSync deployments: npx hardhat run script.js --config hardhat.config.zksync.js --network zkSyncSepolia
+ *
+ * NOTE: Deployment with zksolc currently fails (bytecode/creation issue).
+ * Use the default hardhat.config.js for deployments:
+ *   pnpm exec hardhat run scripts/deploy-v4-attestation.js --network zksyncSepolia
  */
 
 require("@matterlabs/hardhat-zksync-solc");
@@ -14,6 +18,8 @@ module.exports = {
     settings: {
       optimizer: {
         enabled: true,
+        mode: "z", // Size optimization (helps avoid stack too deep / large bytecode)
+        fallback_to_optimizing_for_size: true,
       },
     },
   },
@@ -26,6 +32,7 @@ module.exports = {
             enabled: true,
             runs: 100, // Lower runs = smaller bytecode
           },
+          viaIR: true, // Required for SecureHealthProfileV4 (stack too deep)
         },
       },
       {
@@ -35,6 +42,7 @@ module.exports = {
             enabled: true,
             runs: 100,
           },
+          viaIR: true,
         },
       },
     ],

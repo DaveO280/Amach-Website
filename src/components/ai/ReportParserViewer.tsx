@@ -9,6 +9,8 @@ import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
 import { useWalletService } from "@/hooks/useWalletService";
 import { generateSearchTag, getUserSecret } from "@/utils/searchableEncryption";
 import { getChainEventTypeForReportType } from "@/utils/storjChainMarkerRegistry";
+import { AttestationService } from "@/storage/AttestationService";
+import type { DexaReportData, BloodworkReportData } from "@/types/reportData";
 
 interface ReportParserViewerProps {
   reports: ParsedReportSummary[];
@@ -208,6 +210,68 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
     return Boolean(payload?.success && payload?.result);
   };
 
+  /**
+   * Create on-chain attestation for a stored report
+   */
+  const createReportAttestation = async (params: {
+    report: DexaReportData | BloodworkReportData;
+    contentHash: string;
+  }): Promise<{ success: boolean; tier?: string; error?: string }> => {
+    if (!address) return { success: false, error: "No wallet connected" };
+
+    try {
+      const walletClient = await getWalletClient();
+      if (!walletClient) {
+        return { success: false, error: "Wallet client not available" };
+      }
+
+      const { SECURE_HEALTH_PROFILE_CONTRACT } =
+        await import("@/lib/contractConfig");
+      const { getActiveChain } = await import("@/lib/networkConfig");
+      const { createPublicClient, http } = await import("viem");
+
+      const rpcUrl =
+        process.env.NEXT_PUBLIC_ZKSYNC_RPC_URL ||
+        "https://sepolia.era.zksync.dev";
+      const publicClient = createPublicClient({
+        chain: getActiveChain(),
+        transport: http(rpcUrl),
+      });
+
+      const attestationService = new AttestationService(
+        walletClient,
+        publicClient,
+        SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
+      );
+
+      let result;
+      if (params.report.type === "dexa") {
+        result = await attestationService.attestDexaReport(
+          params.report,
+          params.contentHash,
+        );
+      } else {
+        result = await attestationService.attestBloodworkReport(
+          params.report,
+          params.contentHash,
+        );
+      }
+
+      if (result.success) {
+        console.log(`✅ Attestation created: ${result.tier} tier`);
+        return { success: true, tier: result.tier };
+      } else {
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      console.error("Failed to create attestation:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  };
+
   // Update selected index when reports change
   React.useEffect(() => {
     if (reports.length === 0) {
@@ -324,6 +388,21 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
                           contentHash,
                           reportType: report.report.type,
                         });
+
+                        // Create on-chain attestation (proves data completeness)
+                        const attestResult = await createReportAttestation({
+                          report: report.report,
+                          contentHash,
+                        });
+                        if (attestResult.success) {
+                          console.log(
+                            `🔗 Attestation created: ${attestResult.tier} tier`,
+                          );
+                        } else {
+                          console.warn(
+                            `⚠️ Attestation skipped: ${attestResult.error}`,
+                          );
+                        }
 
                         successCount++;
                         newlySaved++;

@@ -45,8 +45,17 @@ import {
 import { isChainTrackedStorjDataType } from "@/utils/storjChainMarkerRegistry";
 // Note: on-chain upload markers are recorded at upload time (Report Parser Viewer save flow).
 // This component enforces mandatory on-chain deletion markers for report deletes.
-import { AlertCircle, CheckCircle, Database, Info, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle,
+  Database,
+  Info,
+  Trash2,
+  Award,
+} from "lucide-react";
 import React, { useEffect, useState } from "react";
+import { AttestationService } from "@/storage/AttestationService";
+import { getStorjReportService } from "@/storage/StorjReportService";
 
 interface StorageManagementSectionProps {
   userAddress: string;
@@ -189,6 +198,8 @@ export function StorageManagementSection({
   const [chainLoading, setChainLoading] = useState(false);
   const [chainError, setChainError] = useState<string>("");
   const [chainStatus, setChainStatus] = useState<string>("");
+  const [attestLoading, setAttestLoading] = useState(false);
+  const [attestStatus, setAttestStatus] = useState<string>("");
 
   // Initialize encryption key - only once per address change
   useEffect(() => {
@@ -1041,6 +1052,94 @@ export function StorageManagementSection({
       setDeleteError(e instanceof Error ? e.message : "Unknown error");
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  /**
+   * Create on-chain attestation for a stored report
+   */
+  const handleAttestItem = async (item: StorjListItem): Promise<void> => {
+    if (!encryptionKey) return;
+
+    setAttestLoading(true);
+    setAttestStatus("");
+
+    try {
+      // Get wallet client for signing
+      const walletClient = await getWalletClient();
+      if (!walletClient) {
+        throw new Error("Wallet client not available");
+      }
+
+      const { SECURE_HEALTH_PROFILE_CONTRACT } =
+        await import("@/lib/contractConfig");
+      const { getActiveChain } = await import("@/lib/networkConfig");
+      const { createPublicClient, http } = await import("viem");
+
+      const rpcUrl =
+        process.env.NEXT_PUBLIC_ZKSYNC_RPC_URL ||
+        "https://sepolia.era.zksync.dev";
+      const publicClient = createPublicClient({
+        chain: getActiveChain(),
+        transport: http(rpcUrl),
+      });
+
+      const attestationService = new AttestationService(
+        walletClient,
+        publicClient,
+        SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
+      );
+
+      // Use the content hash from the stored item
+      const contentHash = item.contentHash.startsWith("0x")
+        ? item.contentHash
+        : `0x${item.contentHash}`;
+
+      // Retrieve and attest based on report type
+      const reportService = getStorjReportService();
+      const isDexa = item.dataType === "dexa-report-fhir";
+
+      let result;
+      if (isDexa) {
+        const dexaData = await reportService.retrieveDexaReport(
+          item.uri,
+          encryptionKey,
+        );
+        if (!dexaData) {
+          throw new Error("Failed to retrieve DEXA report for attestation");
+        }
+        result = await attestationService.attestDexaReport(
+          dexaData,
+          contentHash,
+        );
+      } else {
+        const bloodworkData = await reportService.retrieveBloodworkReport(
+          item.uri,
+          encryptionKey,
+        );
+        if (!bloodworkData) {
+          throw new Error(
+            "Failed to retrieve bloodwork report for attestation",
+          );
+        }
+        result = await attestationService.attestBloodworkReport(
+          bloodworkData,
+          contentHash,
+        );
+      }
+
+      if (result.success) {
+        setAttestStatus(`✅ Attestation created: ${result.tier} tier`);
+        setTimeout(() => setAttestStatus(""), 5000);
+      } else {
+        throw new Error(result.error || "Attestation failed");
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      setAttestStatus(`❌ ${msg}`);
+      setTimeout(() => setAttestStatus(""), 5000);
+    } finally {
+      setAttestLoading(false);
     }
   };
 
@@ -2002,6 +2101,23 @@ export function StorageManagementSection({
                         </Button>
                         <Button
                           size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            void handleAttestItem(selectedTestItem)
+                          }
+                          disabled={
+                            testsBucketMode === "legacy" ||
+                            attestLoading ||
+                            previewLoading ||
+                            chainLoading
+                          }
+                          title="Create on-chain attestation to prove data completeness"
+                        >
+                          <Award className="h-3 w-3 mr-1" />
+                          {attestLoading ? "Attesting..." : "Attest"}
+                        </Button>
+                        <Button
+                          size="sm"
                           variant="destructive"
                           onClick={() =>
                             void handleDeleteItem(selectedTestItem)
@@ -2018,6 +2134,13 @@ export function StorageManagementSection({
                       </div>
                     )}
                   </div>
+                  {attestStatus && (
+                    <div
+                      className={`p-2 text-xs ${attestStatus.startsWith("✅") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}
+                    >
+                      {attestStatus}
+                    </div>
+                  )}
 
                   {previewError && (
                     <div className="p-3 text-sm text-red-700 bg-red-50 border-b border-red-200">

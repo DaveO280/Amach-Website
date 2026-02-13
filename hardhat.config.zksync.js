@@ -28,20 +28,14 @@ module.exports = {
       {
         version: "0.8.20",
         settings: {
-          optimizer: {
-            enabled: true,
-            runs: 100, // Lower runs = smaller bytecode
-          },
+          optimizer: { enabled: true, runs: 100 },
           viaIR: true, // Required for SecureHealthProfileV4 (stack too deep)
         },
       },
       {
         version: "0.8.22",
         settings: {
-          optimizer: {
-            enabled: true,
-            runs: 100,
-          },
+          optimizer: { enabled: true, runs: 100 },
           viaIR: true,
         },
       },

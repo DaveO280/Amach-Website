@@ -147,11 +147,17 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
   const { ready, authenticated, login, logout, user } = usePrivy();
   const { signMessage: privySignMessage } = useSignMessage();
 
-  // Get wallet address
-
-  const wallet = wallets?.[0] as
-    | { address?: string; getEthereumProvider?: () => Promise<unknown> }
-    | undefined;
+  // Prefer Privy embedded wallet so signing uses Privy's modal, not MetaMask
+  type WalletLike = {
+    address?: string;
+    getEthereumProvider?: () => Promise<unknown>;
+    walletClientType?: string;
+  };
+  const embeddedWallet = wallets?.find(
+    (w: WalletLike) =>
+      w.walletClientType === "privy" || w.walletClientType === "privy-v2",
+  );
+  const wallet = (embeddedWallet ?? wallets?.[0]) as WalletLike | undefined;
 
   const address = wallet?.address as string | undefined;
   const isConnected = ready && authenticated && !!address;

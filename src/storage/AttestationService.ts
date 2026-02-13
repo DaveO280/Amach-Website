@@ -3,15 +3,15 @@
  * Proves data uploads without revealing content
  */
 
-import { createHash } from "crypto";
-import type { WalletClient, PublicClient, Hash, Address } from "viem";
 import {
   HealthDataType,
   calculateAppleHealthCompleteness,
   calculateDexaCompleteness,
   type AttestationTier,
 } from "@/types/healthDataAttestation";
-import type { DexaReportData, BloodworkReportData } from "@/types/reportData";
+import type { BloodworkReportData, DexaReportData } from "@/types/reportData";
+import { createHash } from "crypto";
+import type { Address, Hash, PublicClient, WalletClient } from "viem";
 
 // V4 Attestation ABI (subset needed for this service)
 const attestationAbi = [
@@ -110,6 +110,13 @@ const attestationAbi = [
         type: "tuple[]",
       },
     ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "user", type: "address" }],
+    name: "hasProfile",
+    outputs: [{ name: "", type: "bool" }],
     stateMutability: "view",
     type: "function",
   },
@@ -341,6 +348,21 @@ export class AttestationService {
         return { success: false, error: "No wallet account connected" };
       }
 
+      // Contract requires profileExists(msg.sender); check before sending tx
+      const hasProfile = await this.publicClient.readContract({
+        address: this.contractAddress,
+        abi: attestationAbi,
+        functionName: "hasProfile",
+        args: [account.address],
+      });
+      if (!hasProfile) {
+        return {
+          success: false,
+          error:
+            "You need an on-chain health profile before creating attestations. Create or update your profile in the Wallet first.",
+        };
+      }
+
       // Convert contentHash to bytes32 if needed
       const contentHashBytes = input.contentHash.startsWith("0x")
         ? input.contentHash
@@ -415,6 +437,20 @@ export class AttestationService {
       const account = this.walletClient.account;
       if (!account) {
         return { success: false, error: "No wallet account connected" };
+      }
+
+      const hasProfile = await this.publicClient.readContract({
+        address: this.contractAddress,
+        abi: attestationAbi,
+        functionName: "hasProfile",
+        args: [account.address],
+      });
+      if (!hasProfile) {
+        return {
+          success: false,
+          error:
+            "You need an on-chain health profile before creating attestations. Create or update your profile in the Wallet first.",
+        };
       }
 
       // Prepare arrays

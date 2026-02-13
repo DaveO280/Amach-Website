@@ -11,10 +11,36 @@ import {
 } from "@/types/healthDataAttestation";
 import type { BloodworkReportData, DexaReportData } from "@/types/reportData";
 import { createHash } from "crypto";
-import type { Address, Hash, PublicClient, WalletClient } from "viem";
+import {
+  decodeErrorResult,
+  type Address,
+  type Hash,
+  type PublicClient,
+  type WalletClient,
+} from "viem";
 
-// V4 Attestation ABI (subset needed for this service)
+// V4 custom errors (SecureHealthProfileV4.sol) for user-facing messages
+const REVERT_MESSAGES: Record<string, string> = {
+  E0: "Invalid content hash.",
+  E1: "Invalid data type.",
+  E2: "Invalid date range (start must be before end).",
+  E3: "End date cannot be in the future.",
+  E4: "Completeness score exceeds maximum.",
+  E5: "This report was already attested (duplicate content hash).",
+  E6: "Invalid batch size (must be 1–50).",
+  E7: "Array length mismatch.",
+};
+
+// V4 Attestation ABI (subset needed for this service; includes errors for decodeErrorResult)
 const attestationAbi = [
+  { inputs: [], name: "E0", type: "error" },
+  { inputs: [], name: "E1", type: "error" },
+  { inputs: [], name: "E2", type: "error" },
+  { inputs: [], name: "E3", type: "error" },
+  { inputs: [], name: "E4", type: "error" },
+  { inputs: [], name: "E5", type: "error" },
+  { inputs: [], name: "E6", type: "error" },
+  { inputs: [], name: "E7", type: "error" },
   {
     inputs: [
       { name: "contentHash", type: "bytes32" },
@@ -147,6 +173,40 @@ const attestationAbi = [
     type: "function",
   },
 ] as const;
+
+/** Try to get revert data from a viem/contract error for decoding */
+function getRevertData(error: unknown): `0x${string}` | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const e = error as Record<string, unknown>;
+  const data =
+    e.data ??
+    (e.cause as Record<string, unknown> | undefined)?.data ??
+    (e.details as Record<string, unknown> | undefined)?.data;
+  if (typeof data === "string" && data.startsWith("0x") && data.length >= 10)
+    return data as `0x${string}`;
+  return undefined;
+}
+
+/** Turn a contract revert into a user-facing message when possible */
+function getAttestationErrorMessage(error: unknown): string {
+  const revertData = getRevertData(error);
+  if (revertData) {
+    try {
+      const decoded = decodeErrorResult({
+        abi: attestationAbi,
+        data: revertData,
+      });
+      const friendly = REVERT_MESSAGES[decoded.errorName];
+      if (friendly) return friendly;
+    } catch {
+      // ignore decode errors, fall back to generic message
+    }
+  }
+  const msg = error instanceof Error ? error.message : "Unknown error";
+  if (msg === "Transaction failed")
+    return "Transaction reverted on-chain. The report may already be attested, or check dates and data.";
+  return msg;
+}
 
 export interface AttestationInput {
   contentHash: string; // hex string (0x...)
@@ -414,7 +474,7 @@ export class AttestationService {
       console.error("❌ Failed to create attestation:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: getAttestationErrorMessage(error),
       };
     }
   }
@@ -502,7 +562,7 @@ export class AttestationService {
       console.error("❌ Failed to create batch attestation:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: getAttestationErrorMessage(error),
       };
     }
   }

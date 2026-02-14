@@ -49,7 +49,6 @@ import {
   AttestationService,
   getAttestationErrorMessage,
 } from "@/storage/AttestationService";
-import { getStorjReportService } from "@/storage/StorjReportService";
 import {
   AlertCircle,
   Award,
@@ -1098,35 +1097,41 @@ export function StorageManagementSection({
         ? item.contentHash
         : `0x${item.contentHash}`;
 
-      // Retrieve and attest based on report type
-      const reportService = getStorjReportService();
+      // Retrieve report via API (server has Storj credentials; client does not)
       const isDexa = item.dataType === "dexa-report-fhir";
+      const reportType = isDexa ? "dexa" : "bloodwork";
+      const resp = await fetch("/api/storj", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "report/retrieve",
+          userAddress,
+          encryptionKey,
+          storjUri: item.uri,
+          reportType,
+        }),
+      });
+      const payload = await resp.json();
+      if (!resp.ok || payload?.success === false) {
+        throw new Error(
+          payload?.error ||
+            "Failed to retrieve report from Storj for attestation",
+        );
+      }
+      const reportData = payload?.result;
+      if (!reportData) {
+        throw new Error("No report data returned from Storj");
+      }
 
       let result;
       if (isDexa) {
-        const dexaData = await reportService.retrieveDexaReport(
-          item.uri,
-          encryptionKey,
-        );
-        if (!dexaData) {
-          throw new Error("Failed to retrieve DEXA report for attestation");
-        }
         result = await attestationService.attestDexaReport(
-          dexaData,
+          reportData,
           contentHash,
         );
       } else {
-        const bloodworkData = await reportService.retrieveBloodworkReport(
-          item.uri,
-          encryptionKey,
-        );
-        if (!bloodworkData) {
-          throw new Error(
-            "Failed to retrieve bloodwork report for attestation",
-          );
-        }
         result = await attestationService.attestBloodworkReport(
-          bloodworkData,
+          reportData,
           contentHash,
         );
       }

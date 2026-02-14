@@ -428,9 +428,12 @@ export class AttestationService {
         ? input.contentHash
         : `0x${input.contentHash}`;
 
-      // Convert dates to unix timestamps
+      // Date range is meaningful only for Apple Health / CGM. For DEXA/Bloodwork we just need a valid range (start < end).
       const startTimestamp = Math.floor(input.startDate.getTime() / 1000);
-      const endTimestamp = Math.floor(input.endDate.getTime() / 1000);
+      let endTimestamp = Math.floor(input.endDate.getTime() / 1000);
+      if (endTimestamp <= startTimestamp) {
+        endTimestamp = startTimestamp + 1;
+      }
 
       // Convert score to basis points (0-10000)
       const scoreBasisPoints = Math.round(input.completenessScore * 100);
@@ -524,9 +527,11 @@ export class AttestationService {
       const startDates = inputs.map((i) =>
         Math.floor(i.startDate.getTime() / 1000),
       );
-      const endDates = inputs.map((i) =>
-        Math.floor(i.endDate.getTime() / 1000),
-      );
+      const endDates = inputs.map((i) => {
+        const start = Math.floor(i.startDate.getTime() / 1000);
+        const end = Math.floor(i.endDate.getTime() / 1000);
+        return end > start ? end : start + 1;
+      });
       const scores = inputs.map((i) => Math.round(i.completenessScore * 100));
       const recordCounts = inputs.map((i) => Math.min(i.recordCount, 65535));
       const coreCompletes = inputs.map((i) => i.coreComplete);

@@ -7,7 +7,7 @@ import {
 } from "@/data/hooks/useHealthDataMutations";
 import { deduplicateData } from "@/utils/dataDeduplicator";
 import Papa from "papaparse";
-import React from "react";
+import React, { useState } from "react";
 import { coreMetrics, timeFrameOptions } from "../core/metricDefinitions";
 import {
   validateHealthExportFile,
@@ -31,7 +31,11 @@ import {
 } from "../data/types/healthMetrics";
 import { useSelection } from "../store/selectionStore";
 import { TimeFrame } from "../types/healthData";
-import type { HealthDataByType } from "@/types/healthData";
+import type { HealthDataByType, HealthDataPoint } from "@/types/healthData";
+import { AppleHealthStorjService } from "@/storage/appleHealth";
+import { useWalletService } from "@/hooks/useWalletService";
+import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
+import { Upload, CheckCircle, AlertCircle } from "lucide-react";
 
 const HealthDataSelector: () => React.ReactElement = () => {
   const {
@@ -54,6 +58,23 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
   const { mutate: saveHealthData } = useSaveHealthDataMutation();
   const { mutate: clearHealthDataMutation } = useClearHealthDataMutation();
+
+  // Wallet integration for Storj save
+  const { isConnected, address, signMessage } = useWalletService();
+
+  // State for ALL metrics captured for Storj backup
+  const [allMetricsForStorj, setAllMetricsForStorj] = useState<Record<
+    string,
+    HealthDataPoint[]
+  > | null>(null);
+  const [storjSaveStatus, setStorjSaveStatus] = useState<{
+    saving: boolean;
+    progress: number;
+    message: string;
+    success?: boolean;
+    error?: string;
+    storjUri?: string;
+  } | null>(null);
 
   const handleFileSelect = (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -120,6 +141,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
       onSuccess: () => {
         clearData();
         setUploadedFile(null);
+        setAllMetricsForStorj(null); // Clear Storj data too
         updateProcessingProgress(100, "Data cleared successfully");
       },
       onError: (error: unknown) => {
@@ -132,6 +154,95 @@ const HealthDataSelector: () => React.ReactElement = () => {
         }
       },
     });
+  };
+
+  /**
+   * Handle saving ALL Apple Health data to Storj
+   * This includes all 56+ metric types aggregated into daily summaries
+   */
+  const handleSaveToStorj = async (): Promise<void> => {
+    if (!allMetricsForStorj || !address || !signMessage) {
+      setStorjSaveStatus({
+        saving: false,
+        progress: 0,
+        message: "Cannot save: missing data or wallet connection",
+        error: "No data or wallet not connected",
+      });
+      return;
+    }
+
+    setStorjSaveStatus({
+      saving: true,
+      progress: 0,
+      message: "Starting Storj save...",
+    });
+
+    try {
+      // Get wallet encryption key
+      setStorjSaveStatus({
+        saving: true,
+        progress: 5,
+        message: "Requesting wallet signature for encryption...",
+      });
+
+      const encryptionKey = await getWalletDerivedEncryptionKey(
+        address,
+        signMessage,
+      );
+
+      // Initialize service and save
+      const service = new AppleHealthStorjService();
+
+      const result = await service.saveToStorj(
+        allMetricsForStorj,
+        encryptionKey,
+        (progress, message) => {
+          setStorjSaveStatus({
+            saving: true,
+            progress: 5 + progress * 0.95, // Scale to 5-100%
+            message,
+          });
+        },
+      );
+
+      if (result.success) {
+        setStorjSaveStatus({
+          saving: false,
+          progress: 100,
+          message: `Saved to Storj! ${result.manifest?.completeness.tier} tier (${result.manifest?.completeness.score}% complete)`,
+          success: true,
+          storjUri: result.storjUri,
+        });
+
+        console.log(`✅ [Storj] Apple Health data saved successfully:`, {
+          uri: result.storjUri,
+          metrics: result.manifest?.metricsPresent.length,
+          daysCovered: result.manifest?.completeness.daysCovered,
+          tier: result.manifest?.completeness.tier,
+        });
+
+        // Clear the pending data after successful save
+        setAllMetricsForStorj(null);
+
+        // Auto-clear status after 10 seconds
+        setTimeout(() => setStorjSaveStatus(null), 10000);
+      } else {
+        setStorjSaveStatus({
+          saving: false,
+          progress: 0,
+          message: result.error || "Failed to save to Storj",
+          error: result.error,
+        });
+      }
+    } catch (error) {
+      console.error("[Storj] Error saving Apple Health data:", error);
+      setStorjSaveStatus({
+        saving: false,
+        progress: 0,
+        message: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   };
 
   // Parse CSV file and convert to health data structure
@@ -372,10 +483,13 @@ const HealthDataSelector: () => React.ReactElement = () => {
         updateProcessingProgress(25, "Reading CSV file...");
         healthDataResults = await parseCSVFile(uploadedFile);
       } else {
-        // Parse XML file
+        // Parse XML file with captureAllForStorj enabled
+        // This captures ALL 56+ metric types in the background for Storj backup
+        // while only displaying the selected 9 metrics in the UI
         const parser = new XMLStreamParser({
           selectedMetrics,
           timeFrame,
+          captureAllForStorj: true, // Enable full metric capture for Storj
           onProgress: (progress): void => {
             updateProcessingProgress(
               progress.progress,
@@ -385,6 +499,16 @@ const HealthDataSelector: () => React.ReactElement = () => {
         });
 
         const results = await parser.parseFile(uploadedFile);
+
+        // Store ALL metrics data for potential Storj save
+        if (parser.hasStorjData()) {
+          const allData = parser.getAllMetricsData();
+          setAllMetricsForStorj(allData);
+          console.log(
+            `📦 [Storj] Captured ${Object.keys(allData).length} metric types for potential Storj backup:`,
+            Object.entries(allData).map(([k, v]) => `${k}: ${v.length}`),
+          );
+        }
 
         for (const [metricType, dataPoints] of Object.entries(results)) {
           const metricTypeKey = metricType as MetricType;
@@ -758,6 +882,90 @@ const HealthDataSelector: () => React.ReactElement = () => {
                   </svg>
                   <span className="text-red-700">{processingState.error}</span>
                 </div>
+              </div>
+            )}
+
+            {/* Storj Save Section - shows when ALL metrics data is available */}
+            {allMetricsForStorj && (
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                  <Upload className="h-5 w-5" />
+                  Save Complete Health Data to Storj
+                </h4>
+                <p className="text-sm text-blue-700 mb-3">
+                  All {Object.keys(allMetricsForStorj).length} metric types from
+                  your Apple Health export are ready to be encrypted and saved
+                  to decentralized storage. This includes daily summaries with
+                  proper aggregation for each metric type.
+                </p>
+
+                {!isConnected ? (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+                    Connect your wallet to enable Storj save functionality.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <button
+                      onClick={handleSaveToStorj}
+                      disabled={
+                        storjSaveStatus?.saving || storjSaveStatus?.success
+                      }
+                      className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {storjSaveStatus?.saving ? (
+                        <>
+                          <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                          Saving to Storj...
+                        </>
+                      ) : storjSaveStatus?.success ? (
+                        <>
+                          <CheckCircle className="h-5 w-5" />
+                          Saved Successfully!
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-5 w-5" />
+                          Save to Storj (Encrypted)
+                        </>
+                      )}
+                    </button>
+
+                    {/* Storj save progress */}
+                    {storjSaveStatus?.saving && (
+                      <div className="space-y-1">
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="h-2 rounded-full transition-all duration-300 bg-blue-600"
+                            style={{ width: `${storjSaveStatus.progress}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-blue-700 text-center">
+                          {storjSaveStatus.message}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Storj save status */}
+                    {storjSaveStatus && !storjSaveStatus.saving && (
+                      <div
+                        className={`flex items-center gap-2 text-sm p-2 rounded ${
+                          storjSaveStatus.success
+                            ? "bg-emerald-50 text-emerald-700"
+                            : storjSaveStatus.error
+                              ? "bg-red-50 text-red-700"
+                              : "bg-blue-50 text-blue-700"
+                        }`}
+                      >
+                        {storjSaveStatus.success ? (
+                          <CheckCircle className="h-4 w-4" />
+                        ) : storjSaveStatus.error ? (
+                          <AlertCircle className="h-4 w-4" />
+                        ) : null}
+                        <span>{storjSaveStatus.message}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

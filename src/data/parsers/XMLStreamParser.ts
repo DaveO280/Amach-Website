@@ -11,6 +11,11 @@ export interface XMLParserOptions {
     metricCounts: Record<string, number>;
   }) => void;
   existingData?: Record<string, HealthDataPoint[]>; // Optional: previous data for overlap prevention
+  /**
+   * When true, captures ALL metric types for Storj backup (not just selectedMetrics)
+   * The full data is available via getAllMetricsData() after parsing
+   */
+  captureAllForStorj?: boolean;
 }
 
 // Define interface for parser results
@@ -41,6 +46,13 @@ export class XMLStreamParser {
   private metricCounts: Record<string, number> = {};
   private dateRange: { startDate: Date; endDate: Date };
   private lastEndDates: Record<string, Record<string, Date>> = {};
+
+  /**
+   * When captureAllForStorj is enabled, this stores ALL metrics encountered
+   * (not just selectedMetrics) for comprehensive Storj backup
+   */
+  private allMetricsData: Record<string, HealthDataPoint[]> = {};
+  private allMetricsCounts: Record<string, number> = {};
 
   constructor(options: XMLParserOptions) {
     this.options = options;
@@ -109,7 +121,11 @@ export class XMLStreamParser {
           if (!typeMatch) return;
 
           const type = typeMatch[1];
-          if (!this.options.selectedMetrics.includes(type)) return;
+          const isSelectedMetric = this.options.selectedMetrics.includes(type);
+          const captureForStorj = this.options.captureAllForStorj;
+
+          // Skip if not a selected metric AND not capturing for Storj
+          if (!isSelectedMetric && !captureForStorj) return;
 
           const startDateMatch = recordStr.match(/startDate="([^"]+)"/);
           if (!startDateMatch) return;
@@ -182,9 +198,22 @@ export class XMLStreamParser {
             type, // Add type to help with later processing
           };
 
-          results[type].push(dataPoint);
-          this.metricCounts[type]++;
-          this.recordCount++;
+          // Add to selected metrics results (for UI)
+          if (isSelectedMetric) {
+            results[type].push(dataPoint);
+            this.metricCounts[type]++;
+            this.recordCount++;
+          }
+
+          // Add to allMetricsData for Storj (captures ALL metrics)
+          if (captureForStorj) {
+            if (!this.allMetricsData[type]) {
+              this.allMetricsData[type] = [];
+              this.allMetricsCounts[type] = 0;
+            }
+            this.allMetricsData[type].push(dataPoint);
+            this.allMetricsCounts[type]++;
+          }
 
           // Update lastEndDates so subsequent records in this run can detect overlaps
           const endDateObj = new Date(endDate);
@@ -500,5 +529,27 @@ export class XMLStreamParser {
       // On any error, return original to preserve functionality
       return dateStr;
     }
+  }
+
+  /**
+   * Get ALL metrics captured during parsing (when captureAllForStorj is enabled)
+   * Returns empty object if captureAllForStorj was not enabled
+   */
+  getAllMetricsData(): Record<string, HealthDataPoint[]> {
+    return this.allMetricsData;
+  }
+
+  /**
+   * Get counts for ALL metrics captured (when captureAllForStorj is enabled)
+   */
+  getAllMetricsCounts(): Record<string, number> {
+    return this.allMetricsCounts;
+  }
+
+  /**
+   * Check if any Storj data was captured
+   */
+  hasStorjData(): boolean {
+    return Object.keys(this.allMetricsData).length > 0;
   }
 }

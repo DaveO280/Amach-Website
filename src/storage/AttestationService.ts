@@ -187,8 +187,8 @@ function getRevertData(error: unknown): `0x${string}` | undefined {
   return undefined;
 }
 
-/** Turn a contract revert into a user-facing message when possible */
-function getAttestationErrorMessage(error: unknown): string {
+/** Turn a contract revert into a user-facing message when possible. Export for use in UI catch blocks. */
+export function getAttestationErrorMessage(error: unknown): string {
   const revertData = getRevertData(error);
   if (revertData) {
     try {

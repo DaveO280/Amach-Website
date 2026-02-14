@@ -26,36 +26,39 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useStorjPruning } from "@/hooks/useStorjPruning";
-import type { StorageService } from "@/storage/StorageService";
-import type { StorageReference } from "@/storage/StorjClient";
 import {
   storjItemsCache,
   type StorjItemCache,
 } from "@/data/store/storjItemsCache";
+import { useStorjPruning } from "@/hooks/useStorjPruning";
+import type { StorageService } from "@/storage/StorageService";
+import type { StorageReference } from "@/storage/StorjClient";
 import {
   EVENT_TYPE_DEFINITIONS,
   HealthEventType as TimelineHealthEventType,
 } from "@/types/healthEventTypes";
+import { isChainTrackedStorjDataType } from "@/utils/storjChainMarkerRegistry";
 import {
-  getWalletDerivedEncryptionKey,
   getKeyDerivationMessage,
+  getWalletDerivedEncryptionKey,
   type WalletEncryptionKey,
 } from "@/utils/walletEncryption";
-import { isChainTrackedStorjDataType } from "@/utils/storjChainMarkerRegistry";
 // Note: on-chain upload markers are recorded at upload time (Report Parser Viewer save flow).
 // This component enforces mandatory on-chain deletion markers for report deletes.
 import {
+  AttestationService,
+  getAttestationErrorMessage,
+} from "@/storage/AttestationService";
+import { getStorjReportService } from "@/storage/StorjReportService";
+import {
   AlertCircle,
+  Award,
   CheckCircle,
   Database,
   Info,
   Trash2,
-  Award,
 } from "lucide-react";
 import React, { useEffect, useState } from "react";
-import { AttestationService } from "@/storage/AttestationService";
-import { getStorjReportService } from "@/storage/StorjReportService";
 
 interface StorageManagementSectionProps {
   userAddress: string;
@@ -1135,7 +1138,7 @@ export function StorageManagementSection({
         throw new Error(result.error || "Attestation failed");
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
+      const msg = getAttestationErrorMessage(e);
       setAttestStatus(`❌ ${msg}`);
       setTimeout(() => setAttestStatus(""), 5000);
     } finally {

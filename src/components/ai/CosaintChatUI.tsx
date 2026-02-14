@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { conversationMemoryStore } from "@/data/store/conversationMemoryStore";
 import { storjItemsCache } from "@/data/store/storjItemsCache";
 import { useWalletService } from "@/hooks/useWalletService";
+import { getAttestationErrorMessage } from "@/storage/AttestationService";
 import { useAi } from "@/store/aiStore";
 import type { ConversationMemory } from "@/types/conversationMemory";
 import type { ParsedReportSummary } from "@/types/reportData";
@@ -33,8 +34,8 @@ import Papa from "papaparse";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { healthDataStore } from "../../data/store/healthDataStore";
 import { parsePDF } from "../../utils/pdfParser";
-import { ReportParserViewer } from "./ReportParserViewer";
 import MemoryInspector from "./MemoryInspector";
+import { ReportParserViewer } from "./ReportParserViewer";
 
 // Define types for our message interface
 interface MessageType {
@@ -878,8 +879,11 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     const walletClient = await walletService.getWalletClient();
     if (!walletClient) throw new Error("Failed to get wallet client");
 
-    const { SECURE_HEALTH_PROFILE_CONTRACT, secureHealthProfileAbi } =
-      await import("@/lib/contractConfig");
+    const {
+      SECURE_HEALTH_PROFILE_CONTRACT,
+      secureHealthProfileAbi,
+      computeStorjEventHash,
+    } = await import("@/lib/contractConfig");
     const { getActiveChain } = await import("@/lib/networkConfig");
     const { createPublicClient, http } = await import("viem");
     const rpcUrl =
@@ -909,14 +913,21 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       );
     }
 
+    const searchTagHex = searchTag as `0x${string}`;
+    const eventHash = computeStorjEventHash(
+      searchTagHex,
+      params.storjUri,
+      formattedHash,
+    );
+
     // Small delay before transaction to let Privy wallet stabilize
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     const txHash = await walletClient.writeContract({
       address: SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
       abi: secureHealthProfileAbi,
-      functionName: "addHealthEventWithStorj",
-      args: ["", searchTag as `0x${string}`, params.storjUri, formattedHash],
+      functionName: "addHealthEventV2",
+      args: [searchTagHex, params.storjUri, formattedHash, eventHash],
       chain: getActiveChain(),
       account: walletClient.account ?? (address as `0x${string}`),
       gas: 2000000n,
@@ -1053,8 +1064,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           }
         } catch (error) {
           console.error(`❌ Failed to save report:`, error);
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
+          const errorMessage = getAttestationErrorMessage(error);
           results.push({
             success: false,
             idx: originalIdx,
@@ -1072,7 +1082,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         );
       }
     } catch (e) {
-      setSaveReportsError(e instanceof Error ? e.message : "Save failed");
+      setSaveReportsError(getAttestationErrorMessage(e));
       throw e; // Re-throw so dialog can handle it
     } finally {
       setSavingReportsToStorj(false);

@@ -3,8 +3,8 @@
  */
 
 export {
-  createStorjClient,
   StorjClient,
+  createStorjClient,
   type DownloadResult,
   type StorageReference,
   type StorjConfig,
@@ -12,42 +12,42 @@ export {
 } from "./StorjClient";
 
 export {
+  StorageService,
   createStorageService,
   getStorageService,
-  StorageService,
   type RetrievedHealthData,
-  type StoredHealthData,
   type StoreOptions,
+  type StoredHealthData,
 } from "./StorageService";
 
 export {
+  StorjTimelineService,
   createStorjTimelineService,
   getStorjTimelineService,
-  StorjTimelineService,
   type BatchTimelineEventResult,
   type TimelineEventOptions,
   type TimelineEventResult,
 } from "./StorjTimelineService";
 
 export {
+  StorjConversationService,
   createStorjConversationService,
   getStorjConversationService,
-  StorjConversationService,
   type ConversationStorageOptions,
   type ConversationStorageResult,
 } from "./StorjConversationService";
 
 export {
+  StorjSyncService,
   createStorjSyncService,
   getStorjSyncService,
-  StorjSyncService,
   type SyncOptions,
   type SyncResult,
 } from "./StorjSyncService";
 
 export {
-  getStorjReportService,
   StorjReportService,
+  getStorjReportService,
   type ReportStorageOptions,
   type ReportStorageResult,
 } from "./StorjReportService";
@@ -55,6 +55,7 @@ export {
 export {
   AttestationService,
   attestationAbi,
+  getAttestationErrorMessage,
   type AttestationInput,
   type AttestationResult,
   type AttestationVerification,

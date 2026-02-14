@@ -1,4 +1,19 @@
+import { encodePacked, keccak256 } from "viem";
 import { getContractAddresses } from "./networkConfig";
+
+/** Compute eventHash for addHealthEventV2 (V2/V4 chain). Must be non-zero bytes32. */
+export function computeStorjEventHash(
+  searchTag: `0x${string}`,
+  storjUri: string,
+  contentHash: `0x${string}`,
+): `0x${string}` {
+  return keccak256(
+    encodePacked(
+      ["bytes32", "string", "bytes32"],
+      [searchTag, storjUri, contentHash],
+    ),
+  );
+}
 
 // Note: Chain definitions have been moved to networkConfig.ts
 // This file now only exports contract ABIs and addresses

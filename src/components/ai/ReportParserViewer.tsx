@@ -1,16 +1,22 @@
 "use client";
 
-import React, { useState } from "react";
-import type { ParsedReportSummary } from "@/types/reportData";
-import { formatReportsForAI } from "@/utils/reportFormatters";
 import { Button } from "@/components/ui/button";
-import { X, Upload, CheckCircle, AlertCircle } from "lucide-react";
-import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
 import { useWalletService } from "@/hooks/useWalletService";
+import {
+  AttestationService,
+  getAttestationErrorMessage,
+} from "@/storage/AttestationService";
+import type {
+  BloodworkReportData,
+  DexaReportData,
+  ParsedReportSummary,
+} from "@/types/reportData";
+import { formatReportsForAI } from "@/utils/reportFormatters";
 import { generateSearchTag, getUserSecret } from "@/utils/searchableEncryption";
 import { getChainEventTypeForReportType } from "@/utils/storjChainMarkerRegistry";
-import { AttestationService } from "@/storage/AttestationService";
-import type { DexaReportData, BloodworkReportData } from "@/types/reportData";
+import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
+import { AlertCircle, CheckCircle, Upload, X } from "lucide-react";
+import React, { useState } from "react";
 
 interface ReportParserViewerProps {
   reports: ParsedReportSummary[];
@@ -131,8 +137,11 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
       throw new Error("Wallet client not available");
     }
 
-    const { SECURE_HEALTH_PROFILE_CONTRACT, secureHealthProfileAbi } =
-      await import("@/lib/contractConfig");
+    const {
+      SECURE_HEALTH_PROFILE_CONTRACT,
+      secureHealthProfileAbi,
+      computeStorjEventHash,
+    } = await import("@/lib/contractConfig");
     const { getActiveChain } = await import("@/lib/networkConfig");
     const { createPublicClient, http } = await import("viem");
     const rpcUrl =
@@ -171,11 +180,17 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
       );
     }
 
+    const searchTagHex = searchTag as `0x${string}`;
+    const eventHash = computeStorjEventHash(
+      searchTagHex,
+      params.storjUri,
+      formattedHash,
+    );
     const txHash = await walletClient.writeContract({
       address: SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
       abi: secureHealthProfileAbi,
-      functionName: "addHealthEventWithStorj",
-      args: ["", searchTag as `0x${string}`, params.storjUri, formattedHash],
+      functionName: "addHealthEventV2",
+      args: [searchTagHex, params.storjUri, formattedHash, eventHash],
       chain: getActiveChain(),
       account: walletClient.account ?? (address as `0x${string}`),
       gas: 2000000n,
@@ -267,7 +282,7 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
       console.error("Failed to create attestation:", error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: getAttestationErrorMessage(error),
       };
     }
   };
@@ -342,6 +357,7 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
                     let successCount = savedCount; // Start with already saved count
                     let failCount = 0;
                     let newlySaved = 0;
+                    let attestationFailureMessage: string | null = null;
 
                     for (let i = 0; i < reports.length; i++) {
                       const report = reports[i];
@@ -399,9 +415,9 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
                             `🔗 Attestation created: ${attestResult.tier} tier`,
                           );
                         } else {
-                          console.warn(
-                            `⚠️ Attestation skipped: ${attestResult.error}`,
-                          );
+                          attestationFailureMessage =
+                            attestResult.error ||
+                            "Attestation failed (report may already be attested).";
                         }
 
                         successCount++;
@@ -418,7 +434,13 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
                       }
                     }
 
-                    if (failCount === 0) {
+                    if (attestationFailureMessage) {
+                      setSaveStatus({
+                        success: false,
+                        message: attestationFailureMessage,
+                      });
+                      setTimeout(() => setSaveStatus(null), 8000);
+                    } else if (failCount === 0) {
                       setSaveStatus({
                         success: true,
                         message:
@@ -426,22 +448,19 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
                             ? `${newlySaved} new report(s) saved! (${successCount} total)`
                             : `All ${successCount} report(s) already saved`,
                       });
+                      setTimeout(() => setSaveStatus(null), 5000);
                     } else {
                       setSaveStatus({
                         success: false,
                         message: `${newlySaved} saved, ${failCount} failed`,
                       });
+                      setTimeout(() => setSaveStatus(null), 5000);
                     }
-
-                    setTimeout(() => setSaveStatus(null), 5000);
                   } catch (error) {
                     console.error("Failed to save reports to Storj:", error);
                     setSaveStatus({
                       success: false,
-                      message:
-                        error instanceof Error
-                          ? error.message
-                          : "Unknown error",
+                      message: getAttestationErrorMessage(error),
                     });
                   } finally {
                     setSavingToStorj(false);

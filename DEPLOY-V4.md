@@ -42,3 +42,4 @@ pnpm exec hardhat run scripts/deploy-v4-attestation.js --network zksyncSepolia
 
 - Proxy address is unchanged; app and `contractConfig.ts` keep using it.
 - New implementation address is printed; you can save it for verification or records.
+- **Health event / timeline:** If a future version (V5+) changes the timeline or Storj write function, update the frontend to match. See **[deployments/HEALTH-EVENT-UPGRADE-NOTES.md](deployments/HEALTH-EVENT-UPGRADE-NOTES.md)** for what to check and where to change code.

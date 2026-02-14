@@ -18,6 +18,7 @@
  */
 
 import {
+  computeStorjEventHash,
   SECURE_HEALTH_PROFILE_CONTRACT,
   secureHealthProfileAbi,
 } from "@/lib/contractConfig";
@@ -528,10 +529,10 @@ export async function addHealthEventV2(
       );
     }
 
-    // 7. Submit to blockchain using V3 function (addHealthEventWithStorj)
+    // 7. Submit to blockchain using V2 function (addHealthEventV2)
     console.log("📤 Submitting to blockchain...");
     console.log("📋 Contract:", SECURE_HEALTH_PROFILE_CONTRACT);
-    console.log("📋 Using V3 function: addHealthEventWithStorj");
+    console.log("📋 Using V2 function: addHealthEventV2");
     console.log("📋 Args:", {
       encryptedData: "", // Empty as per V3 design (data is in Storj)
       searchTag,
@@ -577,19 +578,20 @@ export async function addHealthEventV2(
       );
     }
 
-    // V3: addHealthEventWithStorj(encryptedData, searchTag, storjUri, contentHash)
-    // Contract calculates eventHash internally - no need to pass it
-    console.log("📤 Submitting to blockchain using addHealthEventWithStorj...");
+    // V2/V4: addHealthEventV2(searchTag, storjUri, contentHash, eventHash)
+    const searchTagHex = searchTag as `0x${string}`;
+    const contentHashHex = formattedContentHash as `0x${string}`;
+    const eventHash = computeStorjEventHash(
+      searchTagHex,
+      storjUri,
+      contentHashHex,
+    );
+    console.log("📤 Submitting to blockchain using addHealthEventV2...");
     const hash = await walletClient.writeContract({
       address: SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
       abi: secureHealthProfileAbi,
-      functionName: "addHealthEventWithStorj",
-      args: [
-        "", // encryptedData (empty - data is in Storj)
-        searchTag as `0x${string}`,
-        storjUri,
-        formattedContentHash as `0x${string}`,
-      ],
+      functionName: "addHealthEventV2",
+      args: [searchTagHex, storjUri, contentHashHex, eventHash],
       account: walletAddress as `0x${string}`,
       chain: getActiveChain(),
       gas: 2000000n, // Higher gas limit for zkSync pubdata overhead (strings consume more gas)
@@ -642,16 +644,21 @@ export async function addHealthEventV2(
           });
 
           // Try to simulate the transaction to get revert reason
+          const eventHashSim = computeStorjEventHash(
+            searchTag as `0x${string}`,
+            storjUri,
+            formattedContentHash as `0x${string}`,
+          );
           try {
             await publicClient.simulateContract({
               address: SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
               abi: secureHealthProfileAbi,
-              functionName: "addHealthEventWithStorj",
+              functionName: "addHealthEventV2",
               args: [
-                "", // encryptedData (empty - data is in Storj)
                 searchTag as `0x${string}`,
                 storjUri,
                 formattedContentHash as `0x${string}`,
+                eventHashSim,
               ],
               account: walletAddress as `0x${string}`,
             });

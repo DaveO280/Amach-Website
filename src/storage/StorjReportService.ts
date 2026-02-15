@@ -261,7 +261,7 @@ export class StorjReportService {
         if (attestation.success) {
           console.log(`✅ Attestation created: ${attestation.tier} tier`);
           const { notifyAttestationCreated } =
-            await import("../hooks/useAttestations");
+            await import("../utils/attestationEvents");
           notifyAttestationCreated();
         } else {
           console.warn(`⚠️ Attestation failed: ${attestation.error}`);
@@ -363,7 +363,7 @@ export class StorjReportService {
         if (attestation.success) {
           console.log(`✅ Attestation created: ${attestation.tier} tier`);
           const { notifyAttestationCreated } =
-            await import("../hooks/useAttestations");
+            await import("../utils/attestationEvents");
           notifyAttestationCreated();
         } else {
           console.warn(`⚠️ Attestation failed: ${attestation.error}`);

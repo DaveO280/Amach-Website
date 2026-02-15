@@ -9,6 +9,9 @@ import {
   SECURE_HEALTH_PROFILE_CONTRACT,
   secureHealthProfileAbi,
 } from "../lib/contractConfig";
+import {
+  ATTESTATION_CREATED_EVENT,
+} from "../utils/attestationEvents";
 import { getTierFromScoreBasisPoints } from "../utils/attestationTier";
 
 // Data type enum (matches contract)
@@ -204,10 +207,5 @@ export function useAttestations(
   };
 }
 
-/** Dispatch this after creating an attestation so Verified Data refreshes */
-export const ATTESTATION_CREATED_EVENT = "attestation-created";
-export function notifyAttestationCreated(): void {
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(ATTESTATION_CREATED_EVENT));
-  }
-}
+/** Re-export for callers that import from this hook; implementation lives in utils/attestationEvents so API routes never pull in React hooks */
+export { ATTESTATION_CREATED_EVENT, notifyAttestationCreated } from "../utils/attestationEvents";

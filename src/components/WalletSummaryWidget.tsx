@@ -1,29 +1,29 @@
 "use client";
 
-import React, { useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
 import {
-  Wallet,
-  Shield,
+  Activity,
+  Bone,
+  Coins,
+  Droplet,
+  FileCheck,
+  Heart,
   Loader2,
   RefreshCw,
-  Coins,
-  FileCheck,
-  Activity,
-  Heart,
-  Bone,
-  Droplet,
+  Shield,
+  Wallet,
 } from "lucide-react";
-import { useWalletService } from "../hooks/useWalletService";
+import React, { useEffect } from "react";
 import {
-  useAttestations,
-  HealthDataType,
   AttestationTier,
   DATA_TYPE_LABELS,
+  HealthDataType,
   TIER_LABELS,
+  useAttestations,
 } from "../hooks/useAttestations";
+import { useWalletService } from "../hooks/useWalletService";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 // Icon mapping for data types
 const DATA_TYPE_ICONS: Record<HealthDataType, React.ReactNode> = {
@@ -154,7 +154,7 @@ export const WalletSummaryWidget: React.FC = () => {
                   {attestations.map((att) => (
                     <Badge
                       key={att.dataType}
-                      className={`${TIER_COLORS[att.highestTier]} flex items-center gap-1`}
+                      className={`${TIER_COLORS[att.highestTier] ?? TIER_COLORS[AttestationTier.NONE]} flex items-center gap-1`}
                       title={`${DATA_TYPE_LABELS[att.dataType]}: ${att.highestScore}% complete (${TIER_LABELS[att.highestTier]} tier) - ${att.count} attestation${att.count > 1 ? "s" : ""}`}
                     >
                       {DATA_TYPE_ICONS[att.dataType]}

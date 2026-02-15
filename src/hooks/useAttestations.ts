@@ -2,7 +2,7 @@
  * Hook to fetch user's health data attestations from the V4 contract
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPublicClient, http } from "viem";
 import { zkSync, zkSyncSepoliaTestnet } from "viem/chains";
 import {
@@ -106,20 +106,36 @@ export function useAttestations(
           });
 
           if (count > 0) {
-            // Get highest tier attestation
-            const [tier, attestation] = await publicClient.readContract({
+            // Get highest tier attestation (viem may return named tuple as object or array)
+            const raw = await publicClient.readContract({
               address: SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
               abi: secureHealthProfileAbi,
               functionName: "getHighestTierAttestation",
               args: [address as `0x${string}`, dataType],
             });
+            const result = raw as unknown;
+            const tierRaw = Array.isArray(result)
+              ? result[0]
+              : (result as Record<string, unknown>).tier;
+            const att = Array.isArray(result)
+              ? result[1]
+              : (result as Record<string, unknown>).attestation;
+            const attestation =
+              att && typeof att === "object" && "completenessScore" in att
+                ? (att as { completenessScore: unknown; timestamp: unknown })
+                : null;
+            const tierNum = Number(tierRaw);
+            const highestTier =
+              tierNum >= 0 && tierNum <= 3
+                ? (tierNum as AttestationTier)
+                : AttestationTier.NONE;
 
             summaries.push({
               dataType,
               count: Number(count),
-              highestTier: tier as AttestationTier,
-              highestScore: Number(attestation.completenessScore) / 100,
-              latestTimestamp: Number(attestation.timestamp),
+              highestTier,
+              highestScore: Number(attestation?.completenessScore ?? 0) / 100,
+              latestTimestamp: Number(attestation?.timestamp ?? 0),
             });
           }
         } catch {

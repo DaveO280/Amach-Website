@@ -2,13 +2,13 @@
 
 import {
   Activity,
-  Bone,
   Coins,
   Droplet,
   FileCheck,
   Heart,
   Loader2,
   RefreshCw,
+  ScanLine,
   Shield,
   Wallet,
 } from "lucide-react";
@@ -21,13 +21,14 @@ import {
   useAttestations,
 } from "../hooks/useAttestations";
 import { useWalletService } from "../hooks/useWalletService";
+import { getTierFromScorePercent } from "../utils/attestationTier";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 // Icon mapping for data types
 const DATA_TYPE_ICONS: Record<HealthDataType, React.ReactNode> = {
-  [HealthDataType.DEXA]: <Bone className="h-3 w-3" />,
+  [HealthDataType.DEXA]: <ScanLine className="h-3 w-3" />,
   [HealthDataType.BLOODWORK]: <Droplet className="h-3 w-3" />,
   [HealthDataType.APPLE_HEALTH]: <Heart className="h-3 w-3" />,
   [HealthDataType.CGM]: <Activity className="h-3 w-3" />,
@@ -152,14 +153,21 @@ export const WalletSummaryWidget: React.FC = () => {
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {attestations.map((att) => {
-                    const tier =
+                    const rawTier =
                       Number(att.highestTier) in TIER_COLORS
                         ? (Number(att.highestTier) as AttestationTier)
                         : AttestationTier.NONE;
+                    // Widget-level fallback: derive from score so tier color always shows (Badge default variant was overriding colors)
+                    const tierNum =
+                      rawTier !== AttestationTier.NONE
+                        ? rawTier
+                        : getTierFromScorePercent(att.highestScore);
+                    const tier = tierNum as AttestationTier;
                     return (
                       <Badge
                         key={att.dataType}
-                        className={`${TIER_COLORS[tier]} flex items-center gap-1`}
+                        variant="outline"
+                        className={`${TIER_COLORS[tier]} flex items-center gap-1 border`}
                         title={`${DATA_TYPE_LABELS[att.dataType]}: ${att.highestScore}% complete (${TIER_LABELS[tier]} tier) - ${att.count} attestation${att.count > 1 ? "s" : ""}`}
                       >
                         {DATA_TYPE_ICONS[att.dataType]}

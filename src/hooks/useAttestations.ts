@@ -9,6 +9,7 @@ import {
   SECURE_HEALTH_PROFILE_CONTRACT,
   secureHealthProfileAbi,
 } from "../lib/contractConfig";
+import { getTierFromScoreBasisPoints } from "../utils/attestationTier";
 
 // Data type enum (matches contract)
 export enum HealthDataType {
@@ -135,11 +136,9 @@ export function useAttestations(
               attestation?.completenessScore ?? 0,
             );
             if (highestTier === AttestationTier.NONE && scoreBasisPoints > 0) {
-              if (scoreBasisPoints >= 8000) highestTier = AttestationTier.GOLD;
-              else if (scoreBasisPoints >= 6000)
-                highestTier = AttestationTier.SILVER;
-              else if (scoreBasisPoints >= 4000)
-                highestTier = AttestationTier.BRONZE;
+              highestTier = getTierFromScoreBasisPoints(
+                scoreBasisPoints,
+              ) as AttestationTier;
             }
 
             summaries.push({

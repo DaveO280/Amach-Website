@@ -414,6 +414,9 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
                           console.log(
                             `🔗 Attestation created: ${attestResult.tier} tier`,
                           );
+                          const { notifyAttestationCreated } =
+                            await import("@/hooks/useAttestations");
+                          notifyAttestationCreated();
                         } else {
                           attestationFailureMessage =
                             attestResult.error ||

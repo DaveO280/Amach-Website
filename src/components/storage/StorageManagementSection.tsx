@@ -1153,6 +1153,9 @@ export function StorageManagementSection({
       if (result.success) {
         setAttestStatus(`✅ Attestation created: ${result.tier} tier`);
         setTimeout(() => setAttestStatus(""), 5000);
+        const { notifyAttestationCreated } =
+          await import("@/hooks/useAttestations");
+        notifyAttestationCreated();
       } else {
         throw new Error(result.error || "Attestation failed");
       }

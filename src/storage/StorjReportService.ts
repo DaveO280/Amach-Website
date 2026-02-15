@@ -8,19 +8,19 @@ import type {
   DexaReportData,
   ParsedReportSummary,
 } from "@/types/reportData";
-import type { WalletEncryptionKey } from "@/utils/walletEncryption";
-import { StorageService } from "./StorageService";
-import { convertDexaToFhir, convertFhirToDexa } from "@/utils/fhir/dexaToFhir";
 import {
   convertBloodworkToFhir,
   convertFhirToBloodwork,
 } from "@/utils/fhir/bloodworkToFhir";
 import type { FhirDiagnosticReport } from "@/utils/fhir/dexaToFhir";
+import { convertDexaToFhir, convertFhirToDexa } from "@/utils/fhir/dexaToFhir";
+import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 import { createHash } from "crypto";
 import type {
-  AttestationService,
   AttestationResult,
+  AttestationService,
 } from "./AttestationService";
+import { StorageService } from "./StorageService";
 
 export interface ReportStorageResult {
   success: boolean;
@@ -260,6 +260,9 @@ export class StorjReportService {
         );
         if (attestation.success) {
           console.log(`✅ Attestation created: ${attestation.tier} tier`);
+          const { notifyAttestationCreated } =
+            await import("../hooks/useAttestations");
+          notifyAttestationCreated();
         } else {
           console.warn(`⚠️ Attestation failed: ${attestation.error}`);
         }
@@ -359,6 +362,9 @@ export class StorjReportService {
         );
         if (attestation.success) {
           console.log(`✅ Attestation created: ${attestation.tier} tier`);
+          const { notifyAttestationCreated } =
+            await import("../hooks/useAttestations");
+          notifyAttestationCreated();
         } else {
           console.warn(`⚠️ Attestation failed: ${attestation.error}`);
         }

@@ -121,10 +121,25 @@ export function useAttestations(
             const att = Array.isArray(result)
               ? result[1]
               : (result as Record<string, unknown>).attestation;
-            const attestation =
-              att && typeof att === "object" && "completenessScore" in att
-                ? (att as { completenessScore: unknown; timestamp: unknown })
-                : null;
+            // Attestation struct: contentHash, dataType, startDate, endDate, completenessScore, recordCount, coreComplete, timestamp (index 4 and 7 if array)
+            const rawScore = (() => {
+              if (!att || typeof att !== "object") return 0;
+              if (Array.isArray(att)) return Number(att[4] ?? 0);
+              const a = att as Record<string, unknown>;
+              return Number(a.completenessScore ?? a[4] ?? 0);
+            })();
+            // Contract uses basis points (0-10000); some RPC/ABI may return percent (0-100). Normalize to percent 0-100.
+            const scorePercent =
+              rawScore > 100
+                ? Math.round(rawScore / 100)
+                : Math.round(rawScore);
+            const timestampRaw = (() => {
+              if (!att || typeof att !== "object") return 0;
+              if (Array.isArray(att)) return Number(att[7] ?? 0);
+              const a = att as Record<string, unknown>;
+              return Number(a.timestamp ?? a[7] ?? 0);
+            })();
+
             const tierNum = Number(tierRaw);
             let highestTier: AttestationTier =
               tierNum >= 0 && tierNum <= 3
@@ -132,12 +147,9 @@ export function useAttestations(
                 : AttestationTier.NONE;
 
             // Fallback: if contract returned 0 but we have a score, derive tier from score (matches contract thresholds)
-            const scoreBasisPoints = Number(
-              attestation?.completenessScore ?? 0,
-            );
-            if (highestTier === AttestationTier.NONE && scoreBasisPoints > 0) {
+            if (highestTier === AttestationTier.NONE && scorePercent > 0) {
               highestTier = getTierFromScoreBasisPoints(
-                scoreBasisPoints,
+                scorePercent * 100,
               ) as AttestationTier;
             }
 
@@ -145,8 +157,8 @@ export function useAttestations(
               dataType,
               count: Number(count),
               highestTier,
-              highestScore: scoreBasisPoints / 100,
-              latestTimestamp: Number(attestation?.timestamp ?? 0),
+              highestScore: scorePercent,
+              latestTimestamp: timestampRaw,
             });
           }
         } catch {
@@ -170,6 +182,19 @@ export function useAttestations(
     void fetchAttestations();
   }, [fetchAttestations]);
 
+  // Refetch when an attestation is created elsewhere (e.g. Storage Management, Health Data)
+  useEffect(() => {
+    const onAttestationCreated = (): void => {
+      void fetchAttestations();
+    };
+    window.addEventListener(ATTESTATION_CREATED_EVENT, onAttestationCreated);
+    return () =>
+      window.removeEventListener(
+        ATTESTATION_CREATED_EVENT,
+        onAttestationCreated,
+      );
+  }, [fetchAttestations]);
+
   return {
     attestations,
     isLoading,
@@ -177,4 +202,12 @@ export function useAttestations(
     refresh: fetchAttestations,
     hasAnyAttestations: attestations.length > 0,
   };
+}
+
+/** Dispatch this after creating an attestation so Verified Data refreshes */
+export const ATTESTATION_CREATED_EVENT = "attestation-created";
+export function notifyAttestationCreated(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(ATTESTATION_CREATED_EVENT));
+  }
 }

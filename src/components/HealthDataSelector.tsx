@@ -5,15 +5,27 @@ import {
   useClearHealthDataMutation,
   useSaveHealthDataMutation,
 } from "@/data/hooks/useHealthDataMutations";
+import { healthDataProcessor } from "@/data/processors/HealthDataProcessor";
+import { useWalletService } from "@/hooks/useWalletService";
+import { SECURE_HEALTH_PROFILE_CONTRACT } from "@/lib/contractConfig";
+import { getActiveChain } from "@/lib/networkConfig";
+import { AppleHealthStorjService } from "@/storage/appleHealth";
+import {
+  AttestationService,
+  getAttestationErrorMessage,
+} from "@/storage/AttestationService";
+import type { HealthDataByType, HealthDataPoint } from "@/types/healthData";
 import { deduplicateData } from "@/utils/dataDeduplicator";
+import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
+import { AlertCircle, CheckCircle, Upload } from "lucide-react";
 import Papa from "papaparse";
 import React, { useState } from "react";
+import { createPublicClient, http } from "viem";
 import { coreMetrics, timeFrameOptions } from "../core/metricDefinitions";
 import {
   validateHealthExportFile,
   XMLStreamParser,
 } from "../data/parsers/XMLStreamParser";
-import { healthDataProcessor } from "@/data/processors/HealthDataProcessor";
 import {
   ActiveEnergyMetric,
   DataSource,
@@ -31,18 +43,6 @@ import {
 } from "../data/types/healthMetrics";
 import { useSelection } from "../store/selectionStore";
 import { TimeFrame } from "../types/healthData";
-import type { HealthDataByType, HealthDataPoint } from "@/types/healthData";
-import { AppleHealthStorjService } from "@/storage/appleHealth";
-import { useWalletService } from "@/hooks/useWalletService";
-import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
-import { Upload, CheckCircle, AlertCircle } from "lucide-react";
-import {
-  AttestationService,
-  getAttestationErrorMessage,
-} from "@/storage/AttestationService";
-import { SECURE_HEALTH_PROFILE_CONTRACT } from "@/lib/contractConfig";
-import { createPublicClient, http } from "viem";
-import { getActiveChain } from "@/lib/networkConfig";
 
 const HealthDataSelector: () => React.ReactElement = () => {
   const {
@@ -255,21 +255,22 @@ const HealthDataSelector: () => React.ReactElement = () => {
               SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
             );
 
-            // Parse date range from manifest
-            const startDate = new Date(result.manifest.dateRange.start);
-            const endDate = new Date(result.manifest.dateRange.end);
-
-            attestationResult = await attestationService.attestAppleHealthData(
-              result.manifest.metricsPresent,
-              startDate,
-              endDate,
-              result.contentHash,
-            );
+            // Use manifest's pre-computed completeness so on-chain score matches storage UI (88% not 18%).
+            // Recomputing from manifest.metricsPresent would use normalized keys that don't match
+            // HealthKit IDs and produce a much lower score.
+            attestationResult =
+              await attestationService.attestAppleHealthFromManifest(
+                result.manifest,
+                result.contentHash,
+              );
 
             if (attestationResult.success) {
               console.log(
                 `✅ [Attestation] Apple Health attestation created: ${attestationResult.tier} tier`,
               );
+              const { notifyAttestationCreated } =
+                await import("@/hooks/useAttestations");
+              notifyAttestationCreated();
             } else {
               console.warn(
                 `⚠️ [Attestation] Failed to create attestation:`,

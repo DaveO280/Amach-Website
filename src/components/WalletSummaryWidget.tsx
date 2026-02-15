@@ -157,12 +157,12 @@ export const WalletSummaryWidget: React.FC = () => {
                       Number(att.highestTier) in TIER_COLORS
                         ? (Number(att.highestTier) as AttestationTier)
                         : AttestationTier.NONE;
-                    // Widget-level fallback: derive from score so tier color always shows (Badge default variant was overriding colors)
-                    const tierNum =
-                      rawTier !== AttestationTier.NONE
-                        ? rawTier
-                        : getTierFromScorePercent(att.highestScore);
-                    const tier = tierNum as AttestationTier;
+                    // Always prefer tier from score when we have a score, so Apple Health etc. never show grey
+                    const tierFromScore = getTierFromScorePercent(
+                      att.highestScore,
+                    );
+                    const tier = (Math.max(rawTier, tierFromScore) ||
+                      AttestationTier.NONE) as AttestationTier;
                     return (
                       <Badge
                         key={att.dataType}

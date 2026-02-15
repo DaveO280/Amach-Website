@@ -60,4 +60,16 @@ describe("attestationTier", () => {
       expect(TIER_THRESHOLDS.BRONZE_MIN_PERCENT).toBe(40);
     });
   });
+
+  describe("Verified Data display tier (widget logic)", () => {
+    it("88% score yields Gold tier for badge color", () => {
+      expect(getTierFromScorePercent(88)).toBe(3); // GOLD
+    });
+    it("score-based tier takes precedence over 0 so Apple Health is not grey", () => {
+      const rawTier = 0;
+      const tierFromScore = getTierFromScorePercent(88);
+      const displayTier = Math.max(rawTier, tierFromScore);
+      expect(displayTier).toBe(3);
+    });
+  });
 });

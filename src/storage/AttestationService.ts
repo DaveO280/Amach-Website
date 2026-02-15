@@ -340,7 +340,10 @@ export class AttestationService {
   }
 
   /**
-   * Create attestation for Apple Health data
+   * Create attestation for Apple Health data (recomputes completeness from metric list).
+   * Prefer attestAppleHealthFromManifest when you have a manifest so the on-chain score
+   * matches the manifest (manifest stores normalized metric keys that don't match our
+   * HealthKit ID list, which would produce a much lower score).
    */
   async attestAppleHealthData(
     presentMetrics: string[],
@@ -362,6 +365,35 @@ export class AttestationService {
       completenessScore: completeness.score,
       recordCount: completeness.daysCovered,
       coreComplete: completeness.coreComplete,
+    });
+  }
+
+  /**
+   * Create attestation for Apple Health using the manifest's pre-computed completeness.
+   * Use this after saving to Storj so the on-chain score matches what's shown in
+   * storage management (e.g. 88% not 18% from key mismatch).
+   */
+  async attestAppleHealthFromManifest(
+    manifest: {
+      dateRange: { start: string; end: string };
+      completeness: {
+        score: number;
+        coreComplete: boolean;
+        daysCovered: number;
+      };
+    },
+    contentHash: string,
+  ): Promise<AttestationResult> {
+    const startDate = new Date(manifest.dateRange.start);
+    const endDate = new Date(manifest.dateRange.end);
+    return this.createAttestation({
+      contentHash,
+      dataType: HealthDataType.APPLE_HEALTH,
+      startDate,
+      endDate,
+      completenessScore: manifest.completeness.score,
+      recordCount: manifest.completeness.daysCovered,
+      coreComplete: manifest.completeness.coreComplete,
     });
   }
 

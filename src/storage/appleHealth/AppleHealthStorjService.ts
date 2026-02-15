@@ -5,13 +5,12 @@
  * 1. Aggregating ALL Apple Health metrics into daily summaries
  * 2. De-identifying the data
  * 3. Building a manifest with completeness scoring
- * 4. Encrypting and uploading to Storj
+ * 4. Encrypting and uploading to Storj (via API route)
  * 5. Creating on-chain attestation
  */
 
 import type { HealthDataPoint } from "@/types/healthData";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
-import { StorageService } from "../StorageService";
 import {
   getAggregationStrategy,
   normalizeMetricKey,
@@ -93,10 +92,8 @@ export interface AppleHealthStorjResult {
 // ============================================
 
 export class AppleHealthStorjService {
-  private storageService: StorageService;
-
-  constructor(storageService?: StorageService) {
-    this.storageService = storageService || new StorageService();
+  constructor() {
+    // No dependencies - uses API route for Storj operations
   }
 
   /**
@@ -136,28 +133,49 @@ export class AppleHealthStorjService {
       // 5. Calculate content hash before encryption
       const contentHash = await this.computeContentHash(payload);
 
-      // 6. Save to Storj using the correct StorageService API
-      const storjResult = await this.storageService.storeHealthData(
-        payload,
-        walletKey.walletAddress,
-        walletKey,
-        {
+      // 6. Save to Storj via API route (server has Storj credentials)
+      const response = await fetch("/api/storj", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "storage/store",
+          userAddress: walletKey.walletAddress,
+          encryptionKey: walletKey,
+          data: payload,
           dataType: "apple-health-full-export",
-          metadata: {
-            version: "1",
-            dateRange: `${manifest.dateRange.start}_${manifest.dateRange.end}`,
-            metricsCount: String(manifest.metricsPresent.length),
-            completenessScore: String(manifest.completeness.score),
-            tier: manifest.completeness.tier,
+          options: {
+            metadata: {
+              version: "1",
+              dateRange: `${manifest.dateRange.start}_${manifest.dateRange.end}`,
+              metricsCount: String(manifest.metricsPresent.length),
+              completenessScore: String(manifest.completeness.score),
+              tier: manifest.completeness.tier,
+            },
           },
-        },
-      );
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.error || `API request failed: ${response.status}`,
+        );
+      }
+
+      const apiResult = await response.json();
+      if (!apiResult.success || !apiResult.result?.storjUri) {
+        throw new Error(
+          apiResult.error ||
+            apiResult.result?.error ||
+            "Failed to save to Storj",
+        );
+      }
 
       onProgress?.(100, "Complete!");
 
       return {
         success: true,
-        storjUri: storjResult.storjUri,
+        storjUri: apiResult.result.storjUri,
         contentHash,
         manifest,
       };

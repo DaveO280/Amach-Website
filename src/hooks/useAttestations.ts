@@ -125,16 +125,28 @@ export function useAttestations(
                 ? (att as { completenessScore: unknown; timestamp: unknown })
                 : null;
             const tierNum = Number(tierRaw);
-            const highestTier =
+            let highestTier: AttestationTier =
               tierNum >= 0 && tierNum <= 3
                 ? (tierNum as AttestationTier)
                 : AttestationTier.NONE;
+
+            // Fallback: if contract returned 0 but we have a score, derive tier from score (matches contract thresholds)
+            const scoreBasisPoints = Number(
+              attestation?.completenessScore ?? 0,
+            );
+            if (highestTier === AttestationTier.NONE && scoreBasisPoints > 0) {
+              if (scoreBasisPoints >= 8000) highestTier = AttestationTier.GOLD;
+              else if (scoreBasisPoints >= 6000)
+                highestTier = AttestationTier.SILVER;
+              else if (scoreBasisPoints >= 4000)
+                highestTier = AttestationTier.BRONZE;
+            }
 
             summaries.push({
               dataType,
               count: Number(count),
               highestTier,
-              highestScore: Number(attestation?.completenessScore ?? 0) / 100,
+              highestScore: scoreBasisPoints / 100,
               latestTimestamp: Number(attestation?.timestamp ?? 0),
             });
           }

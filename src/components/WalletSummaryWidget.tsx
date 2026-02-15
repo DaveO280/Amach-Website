@@ -151,21 +151,27 @@ export const WalletSummaryWidget: React.FC = () => {
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {attestations.map((att) => (
-                    <Badge
-                      key={att.dataType}
-                      className={`${TIER_COLORS[att.highestTier] ?? TIER_COLORS[AttestationTier.NONE]} flex items-center gap-1`}
-                      title={`${DATA_TYPE_LABELS[att.dataType]}: ${att.highestScore}% complete (${TIER_LABELS[att.highestTier]} tier) - ${att.count} attestation${att.count > 1 ? "s" : ""}`}
-                    >
-                      {DATA_TYPE_ICONS[att.dataType]}
-                      <span>{DATA_TYPE_LABELS[att.dataType]}</span>
-                      {att.highestTier > AttestationTier.NONE && (
-                        <span className="text-xs opacity-75">
-                          {TIER_LABELS[att.highestTier]}
-                        </span>
-                      )}
-                    </Badge>
-                  ))}
+                  {attestations.map((att) => {
+                    const tier =
+                      Number(att.highestTier) in TIER_COLORS
+                        ? (Number(att.highestTier) as AttestationTier)
+                        : AttestationTier.NONE;
+                    return (
+                      <Badge
+                        key={att.dataType}
+                        className={`${TIER_COLORS[tier]} flex items-center gap-1`}
+                        title={`${DATA_TYPE_LABELS[att.dataType]}: ${att.highestScore}% complete (${TIER_LABELS[tier]} tier) - ${att.count} attestation${att.count > 1 ? "s" : ""}`}
+                      >
+                        {DATA_TYPE_ICONS[att.dataType]}
+                        <span>{DATA_TYPE_LABELS[att.dataType]}</span>
+                        {tier > AttestationTier.NONE && (
+                          <span className="text-xs opacity-75">
+                            {TIER_LABELS[tier]}
+                          </span>
+                        )}
+                      </Badge>
+                    );
+                  })}
                 </div>
               )}
             </div>

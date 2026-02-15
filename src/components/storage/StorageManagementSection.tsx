@@ -274,7 +274,13 @@ export function StorageManagementSection({
               i.dataType === "conversation-history",
           ),
         );
-        setHealthDataItems(items.filter((i) => i.dataType === "health-raw"));
+        setHealthDataItems(
+          items.filter(
+            (i) =>
+              i.dataType === "health-raw" ||
+              i.dataType === "apple-health-full-export",
+          ),
+        );
         setContextItems(items.filter((i) => i.dataType === "timeline-event"));
         setTestsItems(
           items.filter(
@@ -544,8 +550,16 @@ export function StorageManagementSection({
     setHealthDataLoading(true);
     setHealthDataError("");
     try {
-      const items = await refreshFromStorj("health-raw");
-      setHealthDataItems(items);
+      // Fetch both health-raw and apple-health-full-export items
+      const [healthRaw, appleHealthExport] = await Promise.all([
+        refreshFromStorj("health-raw"),
+        refreshFromStorj("apple-health-full-export"),
+      ]);
+      // Combine and sort by uploadedAt descending
+      const combined = [...healthRaw, ...appleHealthExport].sort(
+        (a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0),
+      );
+      setHealthDataItems(combined);
     } catch (e) {
       setHealthDataError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -1867,28 +1881,98 @@ export function StorageManagementSection({
                     </div>
                   ) : (
                     <div className="divide-y">
-                      {healthDataItems.map((item) => (
-                        <div key={item.uri} className="p-3 hover:bg-gray-50">
-                          <div className="text-xs font-medium text-gray-900">
-                            {item.dataType}
+                      {healthDataItems.map((item) => {
+                        // Extract Apple Health metadata if present
+                        const isAppleHealth =
+                          item.dataType === "apple-health-full-export";
+                        const dateRange = getMetaValue(item, [
+                          "daterange",
+                          "dateRange",
+                          "date_range",
+                        ]);
+                        const metricsCount = getMetaValue(item, [
+                          "metricscount",
+                          "metricsCount",
+                          "metrics_count",
+                        ]);
+                        const tier = getMetaValue(item, ["tier"]);
+                        const completenessScore = getMetaValue(item, [
+                          "completenessscore",
+                          "completenessScore",
+                          "completeness_score",
+                        ]);
+
+                        // Parse date range (format: "YYYY-MM-DD_YYYY-MM-DD")
+                        const [startDate, endDate] = dateRange
+                          ? dateRange.split("_")
+                          : [null, null];
+
+                        // Tier badge colors
+                        const tierColors: Record<string, string> = {
+                          GOLD: "bg-yellow-100 text-yellow-700 border-yellow-300",
+                          SILVER:
+                            "bg-slate-100 text-slate-700 border-slate-300",
+                          BRONZE:
+                            "bg-amber-100 text-amber-700 border-amber-300",
+                          NONE: "bg-gray-100 text-gray-600 border-gray-300",
+                        };
+
+                        return (
+                          <div key={item.uri} className="p-3 hover:bg-gray-50">
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs font-medium text-gray-900">
+                                {isAppleHealth
+                                  ? "Apple Health Export"
+                                  : item.dataType}
+                              </div>
+                              {tier && (
+                                <span
+                                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${tierColors[tier.toUpperCase()] || tierColors.NONE}`}
+                                >
+                                  {tier}{" "}
+                                  {completenessScore &&
+                                    `(${completenessScore}%)`}
+                                </span>
+                              )}
+                            </div>
+                            {/* Apple Health specific metadata */}
+                            {isAppleHealth && (
+                              <div className="mt-1.5 flex flex-wrap gap-2">
+                                {metricsCount && (
+                                  <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded">
+                                    <span className="font-medium">
+                                      {metricsCount}
+                                    </span>{" "}
+                                    metrics
+                                  </span>
+                                )}
+                                {startDate && endDate && (
+                                  <span className="inline-flex items-center gap-1 text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
+                                    {startDate} to {endDate}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            <div className="text-[11px] text-gray-600 mt-1 break-all">
+                              {item.uri}
+                            </div>
+                            <div className="text-[11px] text-gray-500 mt-1 flex gap-2">
+                              <span>
+                                {item.uploadedAt
+                                  ? new Date(item.uploadedAt).toLocaleString()
+                                  : "unknown time"}
+                              </span>
+                              <span>•</span>
+                              <span>
+                                {item.size
+                                  ? (item.size / 1024).toFixed(1)
+                                  : "0"}{" "}
+                                KB
+                              </span>
+                            </div>
                           </div>
-                          <div className="text-[11px] text-gray-600 mt-1 break-all">
-                            {item.uri}
-                          </div>
-                          <div className="text-[11px] text-gray-500 mt-1 flex gap-2">
-                            <span>
-                              {item.uploadedAt
-                                ? new Date(item.uploadedAt).toLocaleString()
-                                : "unknown time"}
-                            </span>
-                            <span>•</span>
-                            <span>
-                              {item.size ? (item.size / 1024).toFixed(1) : "0"}{" "}
-                              KB
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

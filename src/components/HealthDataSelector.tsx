@@ -36,6 +36,13 @@ import { AppleHealthStorjService } from "@/storage/appleHealth";
 import { useWalletService } from "@/hooks/useWalletService";
 import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
 import { Upload, CheckCircle, AlertCircle } from "lucide-react";
+import {
+  AttestationService,
+  getAttestationErrorMessage,
+} from "@/storage/AttestationService";
+import { SECURE_HEALTH_PROFILE_CONTRACT } from "@/lib/contractConfig";
+import { createPublicClient, http } from "viem";
+import { getActiveChain } from "@/lib/networkConfig";
 
 const HealthDataSelector: () => React.ReactElement = () => {
   const {
@@ -59,8 +66,9 @@ const HealthDataSelector: () => React.ReactElement = () => {
   const { mutate: saveHealthData } = useSaveHealthDataMutation();
   const { mutate: clearHealthDataMutation } = useClearHealthDataMutation();
 
-  // Wallet integration for Storj save
-  const { isConnected, address, signMessage } = useWalletService();
+  // Wallet integration for Storj save and attestation
+  const { isConnected, address, signMessage, getWalletClient } =
+    useWalletService();
 
   // State for ALL metrics captured for Storj backup
   const [allMetricsForStorj, setAllMetricsForStorj] = useState<Record<
@@ -205,26 +213,115 @@ const HealthDataSelector: () => React.ReactElement = () => {
         },
       );
 
-      if (result.success) {
+      if (result.success && result.manifest && result.contentHash) {
+        // Update status for attestation step
         setStorjSaveStatus({
-          saving: false,
-          progress: 100,
-          message: `Saved to Storj! ${result.manifest?.completeness.tier} tier (${result.manifest?.completeness.score}% complete)`,
-          success: true,
-          storjUri: result.storjUri,
+          saving: true,
+          progress: 85,
+          message: "Creating on-chain attestation...",
         });
 
         console.log(`✅ [Storj] Apple Health data saved successfully:`, {
           uri: result.storjUri,
-          metrics: result.manifest?.metricsPresent.length,
-          daysCovered: result.manifest?.completeness.daysCovered,
-          tier: result.manifest?.completeness.tier,
+          metrics: result.manifest.metricsPresent.length,
+          daysCovered: result.manifest.completeness.daysCovered,
+          tier: result.manifest.completeness.tier,
+        });
+
+        // Create on-chain attestation
+        let attestationResult: {
+          success: boolean;
+          tier?: string;
+          error?: string;
+        } = {
+          success: false,
+          error: "Attestation skipped",
+        };
+
+        try {
+          const walletClient = await getWalletClient();
+          if (walletClient) {
+            const rpcUrl =
+              process.env.NEXT_PUBLIC_ZKSYNC_RPC_URL ||
+              "https://sepolia.era.zksync.dev";
+            const publicClient = createPublicClient({
+              chain: getActiveChain(),
+              transport: http(rpcUrl),
+            });
+
+            const attestationService = new AttestationService(
+              walletClient,
+              publicClient,
+              SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
+            );
+
+            // Parse date range from manifest
+            const startDate = new Date(result.manifest.dateRange.start);
+            const endDate = new Date(result.manifest.dateRange.end);
+
+            attestationResult = await attestationService.attestAppleHealthData(
+              result.manifest.metricsPresent,
+              startDate,
+              endDate,
+              result.contentHash,
+            );
+
+            if (attestationResult.success) {
+              console.log(
+                `✅ [Attestation] Apple Health attestation created: ${attestationResult.tier} tier`,
+              );
+            } else {
+              console.warn(
+                `⚠️ [Attestation] Failed to create attestation:`,
+                attestationResult.error,
+              );
+            }
+          } else {
+            console.warn(
+              "⚠️ [Attestation] No wallet client available for attestation",
+            );
+          }
+        } catch (attestError) {
+          console.error(
+            "[Attestation] Error creating attestation:",
+            attestError,
+          );
+          attestationResult = {
+            success: false,
+            error: getAttestationErrorMessage(attestError),
+          };
+        }
+
+        // Update final status
+        const attestationNote = attestationResult.success
+          ? ` On-chain attestation: ${attestationResult.tier}`
+          : attestationResult.error
+            ? ` (Attestation: ${attestationResult.error})`
+            : "";
+
+        setStorjSaveStatus({
+          saving: false,
+          progress: 100,
+          message: `Saved to Storj! ${result.manifest.completeness.tier} tier (${result.manifest.completeness.score}% complete)${attestationNote}`,
+          success: true,
+          storjUri: result.storjUri,
         });
 
         // Clear the pending data after successful save
         setAllMetricsForStorj(null);
 
         // Auto-clear status after 10 seconds
+        setTimeout(() => setStorjSaveStatus(null), 10000);
+      } else if (result.success) {
+        // Storj save succeeded but no manifest/hash for attestation
+        setStorjSaveStatus({
+          saving: false,
+          progress: 100,
+          message: `Saved to Storj! ${result.manifest?.completeness.tier || "Unknown"} tier`,
+          success: true,
+          storjUri: result.storjUri,
+        });
+        setAllMetricsForStorj(null);
         setTimeout(() => setStorjSaveStatus(null), 10000);
       } else {
         setStorjSaveStatus({

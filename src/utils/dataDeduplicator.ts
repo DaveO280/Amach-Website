@@ -11,6 +11,9 @@ const DEDUPLICATABLE_METRICS = new Set([
   "HKQuantityTypeIdentifierActiveEnergyBurned",
   "HKQuantityTypeIdentifierAppleExerciseTime",
   "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+  "HKQuantityTypeIdentifierRestingHeartRate",
+  "HKQuantityTypeIdentifierRespiratoryRate",
+  "HKQuantityTypeIdentifierVO2Max",
   "HKCategoryTypeIdentifierSleepAnalysis",
 ]);
 

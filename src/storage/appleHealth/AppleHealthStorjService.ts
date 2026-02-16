@@ -97,7 +97,11 @@ export class AppleHealthStorjService {
   }
 
   /**
-   * Main entry point: Process health data and save to Storj
+   * Main entry point: Process health data and save to Storj (incremental).
+   *
+   * On successive uploads the service fetches the existing Storj payload,
+   * merges new daily summaries into it (new data wins for the same day),
+   * and overwrites the previous object so only one copy exists.
    */
   async saveToStorj(
     allMetricsData: Record<string, HealthDataPoint[]>,
@@ -105,44 +109,62 @@ export class AppleHealthStorjService {
     onProgress?: (progress: number, message: string) => void,
   ): Promise<AppleHealthStorjResult> {
     try {
-      onProgress?.(10, "Aggregating daily summaries...");
+      onProgress?.(5, "Checking for existing Storj data...");
 
-      // 1. Build daily summaries from all metrics
-      const dailySummaries = this.buildDailySummaries(allMetricsData);
+      // 1. Look for a previous apple-health export on Storj
+      const existing = await this.fetchExistingPayload(walletKey);
 
-      onProgress?.(30, "De-identifying data...");
+      onProgress?.(15, "Aggregating daily summaries...");
 
-      // 2. De-identify (already done during aggregation - no device names)
-      // Additional de-identification could go here
+      // 2. Build daily summaries from the new upload
+      const newDailySummaries = this.buildDailySummaries(allMetricsData);
 
-      onProgress?.(50, "Calculating completeness...");
+      // 3. Merge with existing summaries (new data wins per day+metric)
+      const mergedSummaries = existing
+        ? this.mergeDailySummaries(
+            existing.payload.dailySummaries,
+            newDailySummaries,
+          )
+        : newDailySummaries;
 
-      // 3. Build manifest with completeness scoring
-      const manifest = this.buildManifest(allMetricsData, dailySummaries);
+      onProgress?.(40, "De-identifying data...");
 
-      onProgress?.(60, "Preparing payload...");
+      // 4. De-identify (already done during aggregation - no device names)
 
-      // 4. Create payload
+      onProgress?.(55, "Calculating completeness...");
+
+      // 5. Build manifest over the full merged dataset
+      const manifest = this.buildManifestFromSummaries(
+        allMetricsData,
+        mergedSummaries,
+        existing?.payload.manifest,
+      );
+
+      onProgress?.(65, "Preparing payload...");
+
+      // 6. Create payload
       const payload: AppleHealthStorjPayload = {
         manifest,
-        dailySummaries,
+        dailySummaries: mergedSummaries,
       };
 
-      onProgress?.(70, "Encrypting and uploading...");
+      onProgress?.(75, "Encrypting and uploading...");
 
-      // 5. Calculate content hash before encryption
+      // 7. Calculate content hash before encryption
       const contentHash = await this.computeContentHash(payload);
 
-      // 6. Save to Storj via API route (server has Storj credentials)
+      // 8. Save/update to Storj via API route
+      const isUpdate = !!existing?.storjUri;
       const response = await fetch("/api/storj", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "storage/store",
+          action: isUpdate ? "storage/update" : "storage/store",
           userAddress: walletKey.walletAddress,
           encryptionKey: walletKey,
           data: payload,
           dataType: "apple-health-full-export",
+          ...(isUpdate && { oldStorjUri: existing.storjUri }),
           options: {
             metadata: {
               version: "1",
@@ -186,6 +208,199 @@ export class AppleHealthStorjService {
         error: error instanceof Error ? error.message : "Unknown error",
       };
     }
+  }
+
+  /**
+   * Fetch the most recent apple-health-full-export from Storj (if any).
+   * Returns the payload and its URI so we can merge and update in-place.
+   */
+  private async fetchExistingPayload(walletKey: WalletEncryptionKey): Promise<{
+    payload: AppleHealthStorjPayload;
+    storjUri: string;
+  } | null> {
+    try {
+      // List all apple-health exports for this user
+      const listResponse = await fetch("/api/storj", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "storage/list",
+          userAddress: walletKey.walletAddress,
+          encryptionKey: walletKey,
+          dataType: "apple-health-full-export",
+        }),
+      });
+
+      if (!listResponse.ok) return null;
+
+      const listResult = await listResponse.json();
+      const items = listResult?.result as
+        | Array<{ uri: string; uploadedAt: number }>
+        | undefined;
+
+      if (!items || items.length === 0) return null;
+
+      // Pick the most recent export
+      const latest = items.reduce((a, b) =>
+        (a.uploadedAt || 0) > (b.uploadedAt || 0) ? a : b,
+      );
+
+      // Retrieve and decrypt it
+      const retrieveResponse = await fetch("/api/storj", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "storage/retrieve",
+          userAddress: walletKey.walletAddress,
+          encryptionKey: walletKey,
+          storjUri: latest.uri,
+        }),
+      });
+
+      if (!retrieveResponse.ok) return null;
+
+      const retrieveResult = await retrieveResponse.json();
+      const payload = retrieveResult?.result?.data as
+        | AppleHealthStorjPayload
+        | undefined;
+
+      if (
+        !payload ||
+        !payload.dailySummaries ||
+        typeof payload.dailySummaries !== "object"
+      ) {
+        return null;
+      }
+
+      return { payload, storjUri: latest.uri };
+    } catch (error) {
+      console.warn(
+        "[AppleHealthStorjService] Could not fetch existing Storj data, will create new:",
+        error,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Merge two sets of daily summaries. For each day, metrics from `newer`
+   * overwrite those in `existing`, but metrics only present in `existing`
+   * are preserved. This ensures successive uploads build on prior data.
+   */
+  mergeDailySummaries(
+    existing: Record<string, DailySummary>,
+    newer: Record<string, DailySummary>,
+  ): Record<string, DailySummary> {
+    const merged: Record<string, DailySummary> = {};
+
+    // Start with all existing days
+    for (const [dateKey, summary] of Object.entries(existing)) {
+      merged[dateKey] = { ...summary };
+    }
+
+    // Layer new data on top - new values win per metric within a day
+    for (const [dateKey, newSummary] of Object.entries(newer)) {
+      if (!merged[dateKey]) {
+        merged[dateKey] = { ...newSummary };
+      } else {
+        for (const [metricKey, value] of Object.entries(newSummary)) {
+          merged[dateKey][metricKey] = value;
+        }
+      }
+    }
+
+    return merged;
+  }
+
+  /**
+   * Build manifest that accounts for both new raw data and merged summaries.
+   * Extends date range and metrics list from a previous manifest if available.
+   */
+  private buildManifestFromSummaries(
+    newMetricsData: Record<string, HealthDataPoint[]>,
+    mergedSummaries: Record<string, DailySummary>,
+    previousManifest?: AppleHealthManifest,
+  ): AppleHealthManifest {
+    // Get metrics present across merged summaries
+    const metricsInSummaries = new Set<string>();
+    for (const summary of Object.values(mergedSummaries)) {
+      for (const key of Object.keys(summary)) {
+        metricsInSummaries.add(key);
+      }
+    }
+
+    // Also include raw metric keys from the new upload
+    const rawMetricKeys = Object.keys(newMetricsData)
+      .filter((k) => newMetricsData[k]?.length > 0)
+      .map(normalizeMetricKey);
+    for (const k of rawMetricKeys) {
+      metricsInSummaries.add(k);
+    }
+
+    // Preserve any metrics from the previous manifest
+    if (previousManifest) {
+      for (const k of previousManifest.metricsPresent) {
+        metricsInSummaries.add(k);
+      }
+    }
+
+    // Date range from merged summaries
+    const dateKeys = Object.keys(mergedSummaries).sort();
+    const startDate = dateKeys[0] || new Date().toISOString().split("T")[0];
+    const endDate =
+      dateKeys[dateKeys.length - 1] || new Date().toISOString().split("T")[0];
+
+    // Count sources from the new data
+    let totalRecords = 0;
+    let watchCount = 0;
+    let phoneCount = 0;
+    let otherCount = 0;
+
+    for (const dataPoints of Object.values(newMetricsData)) {
+      for (const point of dataPoints) {
+        totalRecords++;
+        const source = (point.source || point.device || "").toLowerCase();
+        if (source.includes("watch")) {
+          watchCount++;
+        } else if (source.includes("iphone") || source.includes("phone")) {
+          phoneCount++;
+        } else {
+          otherCount++;
+        }
+      }
+    }
+
+    // Use previous source ratios if no new data (shouldn't happen, but safe)
+    const total = watchCount + phoneCount + otherCount || 1;
+
+    // Calculate completeness over the merged date range
+    const completeness = calculateAppleHealthCompleteness(
+      Array.from(metricsInSummaries),
+      new Date(startDate),
+      new Date(endDate),
+    );
+    const tier = getAttestationTier(completeness);
+
+    return {
+      version: 1,
+      exportDate: new Date().toISOString().split("T")[0],
+      uploadDate: new Date().toISOString(),
+      dateRange: { start: startDate, end: endDate },
+      metricsPresent: Array.from(metricsInSummaries),
+      completeness: {
+        score: completeness.score,
+        tier,
+        coreComplete: completeness.coreComplete,
+        daysCovered: dateKeys.length,
+        recordCount:
+          totalRecords + (previousManifest?.completeness.recordCount || 0),
+      },
+      sources: {
+        watch: Math.round((watchCount / total) * 100),
+        phone: Math.round((phoneCount / total) * 100),
+        other: Math.round((otherCount / total) * 100),
+      },
+    };
   }
 
   /**
@@ -377,81 +592,6 @@ export class AppleHealthStorjService {
 
       dailySummaries[dateKey]["sleep"] = sleepSummary;
     }
-  }
-
-  /**
-   * Build manifest with completeness scoring
-   */
-  private buildManifest(
-    allMetricsData: Record<string, HealthDataPoint[]>,
-    dailySummaries: Record<string, DailySummary>,
-  ): AppleHealthManifest {
-    // Get all metric types present
-    const metricsPresent = Object.keys(allMetricsData).filter(
-      (k) => allMetricsData[k]?.length > 0,
-    );
-
-    // Calculate date range
-    let minDate = new Date();
-    let maxDate = new Date(0);
-    let totalRecords = 0;
-    let watchCount = 0;
-    let phoneCount = 0;
-    let otherCount = 0;
-
-    for (const dataPoints of Object.values(allMetricsData)) {
-      for (const point of dataPoints) {
-        totalRecords++;
-
-        const date = new Date(point.startDate);
-        if (date < minDate) minDate = date;
-        if (date > maxDate) maxDate = date;
-
-        // Count sources (de-identified)
-        const source = (point.source || point.device || "").toLowerCase();
-        if (source.includes("watch")) {
-          watchCount++;
-        } else if (source.includes("iphone") || source.includes("phone")) {
-          phoneCount++;
-        } else {
-          otherCount++;
-        }
-      }
-    }
-
-    // Calculate completeness
-    const completeness = calculateAppleHealthCompleteness(
-      metricsPresent,
-      minDate,
-      maxDate,
-    );
-    const tier = getAttestationTier(completeness);
-
-    // Calculate source percentages
-    const total = watchCount + phoneCount + otherCount || 1;
-
-    return {
-      version: 1,
-      exportDate: new Date().toISOString().split("T")[0],
-      uploadDate: new Date().toISOString(),
-      dateRange: {
-        start: this.formatDateKey(minDate),
-        end: this.formatDateKey(maxDate),
-      },
-      metricsPresent: metricsPresent.map(normalizeMetricKey),
-      completeness: {
-        score: completeness.score,
-        tier,
-        coreComplete: completeness.coreComplete,
-        daysCovered: Object.keys(dailySummaries).length,
-        recordCount: totalRecords,
-      },
-      sources: {
-        watch: Math.round((watchCount / total) * 100),
-        phone: Math.round((phoneCount / total) * 100),
-        other: Math.round((otherCount / total) * 100),
-      },
-    };
   }
 
   /**

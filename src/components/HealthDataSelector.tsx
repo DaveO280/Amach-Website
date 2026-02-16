@@ -6,6 +6,7 @@ import {
   useSaveHealthDataMutation,
 } from "@/data/hooks/useHealthDataMutations";
 import { healthDataProcessor } from "@/data/processors/HealthDataProcessor";
+import { healthDataStore } from "@/data/store/healthDataStore";
 import { useWalletService } from "@/hooks/useWalletService";
 import { SECURE_HEALTH_PROFILE_CONTRACT } from "@/lib/contractConfig";
 import { getActiveChain } from "@/lib/networkConfig";
@@ -584,10 +585,41 @@ const HealthDataSelector: () => React.ReactElement = () => {
         // Parse XML file with captureAllForStorj enabled
         // This captures ALL 56+ metric types in the background for Storj backup
         // while only displaying the selected 9 metrics in the UI
+
+        // Load existing data from IndexedDB for overlap prevention.
+        // Apple Health exports always contain the full dataset, so on successive
+        // uploads we skip records that already exist (startDate <= lastEndDate
+        // per metric+device) to avoid duplicating data.
+        updateProcessingProgress(
+          2,
+          "Loading existing data for deduplication...",
+        );
+        const existingRaw = await healthDataStore.getHealthData();
+        const existingData: Record<string, HealthDataPoint[]> | undefined =
+          existingRaw
+            ? Object.fromEntries(
+                Object.entries(existingRaw).map(([key, metrics]) => [
+                  key,
+                  metrics.map(
+                    (m): HealthDataPoint => ({
+                      startDate: m.startDate,
+                      endDate: m.endDate,
+                      value: m.value,
+                      unit: m.unit,
+                      source: m.source,
+                      device: m.device,
+                      type: m.type,
+                    }),
+                  ),
+                ]),
+              )
+            : undefined;
+
         const parser = new XMLStreamParser({
           selectedMetrics,
           timeFrame,
           captureAllForStorj: true, // Enable full metric capture for Storj
+          existingData, // Pass existing data for overlap prevention
           onProgress: (progress): void => {
             updateProcessingProgress(
               progress.progress,

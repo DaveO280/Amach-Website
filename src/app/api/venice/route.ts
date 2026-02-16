@@ -2,12 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Use Node.js runtime for longer timeout
 export const runtime = "nodejs";
-// Vercel timeout limits:
-// - Proxied Request Timeout: 120s (applies to all plans)
-// - With fluid compute: Hobby max 300s, Pro max 800s
-// - Without fluid compute: Hobby max 60s, Pro max 300s
-// Using 120s as a safe middle ground that should work on all plans
-export const maxDuration = 120; // seconds (2 minutes - should work without requiring fluid compute)
+// Vercel Hobby plan: max 60s, Pro plan: max 300s
+// Set to 300 for Pro plan, or 60 for Hobby
+export const maxDuration = 300;
 
 // Remove artificial timeout limits - let Venice API handle its own timeouts
 // Only use timeout if explicitly set in environment variable
@@ -35,7 +32,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.log("[Venice API Route] Request received", {
       timestamp: new Date().toISOString(),
       elapsedMs: Date.now() - startTime,
-      maxDurationSeconds: maxDuration,
     });
 
     // Get API credentials from environment variables (server-side only)
@@ -54,7 +50,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       hasApiKey: Boolean(apiKey),
       environment: process.env.NODE_ENV,
       modelName,
-      maxDurationSeconds: maxDuration,
       requestBody: {
         model: body.model,
         messageCount: body.messages?.length || 0,

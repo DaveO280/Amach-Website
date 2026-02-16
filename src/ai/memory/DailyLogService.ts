@@ -453,7 +453,7 @@ export class DailyLogService {
   /**
    * Get statistics about logs
    */
-  async getStats(userId: string): Promise<{
+  async getStats(_userId: string): Promise<{
     totalLogs: number;
     avgCompleteness: number;
     dateRange: { start: string | null; end: string | null };

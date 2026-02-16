@@ -8,7 +8,6 @@ import {
   HealthPattern,
   HealthGoal,
   CorrelationInsight,
-  WellnessPersona,
   DailyHealthLog,
 } from './types';
 import { HybridSearchIndex } from './HybridSearchIndex';

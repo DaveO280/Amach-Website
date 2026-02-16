@@ -20,7 +20,7 @@ import { HealthProfileStore, type HealthProfileStoreConfig } from './HealthProfi
 import { HybridSearchIndex, type HybridSearchIndexConfig } from './HybridSearchIndex';
 import { LocalStorageAdapter, type LocalStorageAdapterConfig } from './LocalStorageAdapter';
 import { MemoryEncryption, getMemoryEncryption } from './MemoryEncryption';
-import { type MemoryFeatureFlags, DEFAULT_MEMORY_FLAGS } from '../config/featureFlags';
+import { type MemoryFeatureFlags, DEFAULT_MEMORY_FLAGS } from './types';
 
 export interface MemorySystemConfig {
   featureFlags: MemoryFeatureFlags;

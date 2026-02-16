@@ -44,14 +44,14 @@ export class MemoryEncryption {
   private async deriveKey(keyMaterial: Uint8Array): Promise<CryptoKey> {
     const baseKey = await crypto.subtle.importKey(
       'raw',
-      keyMaterial,
+      keyMaterial.buffer as ArrayBuffer,
       { name: 'PBKDF2' },
       false,
       ['deriveKey']
     );
 
     // Generate a consistent salt for this key derivation
-    const salt = await crypto.subtle.digest('SHA-256', keyMaterial);
+    const salt = await crypto.subtle.digest('SHA-256', keyMaterial.buffer as ArrayBuffer);
 
     return crypto.subtle.deriveKey(
       {
@@ -98,7 +98,7 @@ export class MemoryEncryption {
     const ciphertext = await crypto.subtle.encrypt(
       {
         name: 'AES-GCM',
-        iv,
+        iv: iv.buffer as ArrayBuffer,
       },
       this.derivedKey,
       plaintext
@@ -106,8 +106,8 @@ export class MemoryEncryption {
 
     return {
       ciphertext: this.arrayBufferToBase64(ciphertext),
-      iv: this.arrayBufferToBase64(iv),
-      salt: this.arrayBufferToBase64(salt),
+      iv: this.arrayBufferToBase64(iv.buffer as ArrayBuffer),
+      salt: this.arrayBufferToBase64(salt.buffer as ArrayBuffer),
       authTag: undefined, // GCM includes auth tag in ciphertext
       algorithm: this.config.algorithm,
     };

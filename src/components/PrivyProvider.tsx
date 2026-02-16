@@ -92,7 +92,16 @@ export default function PrivyProvider({
   }, []);
 
   // Always render PrivyProviderBase with the same structure to maintain hook order
-  // Use the actual appId or a placeholder, but always render the same component tree
+  // Use the actual appId or skip rendering during build if missing
+  // During static generation (SSG/ISR), we can't use Privy, so return children directly
+  const isBuildTime = typeof window === "undefined" && !appId;
+
+  if (isBuildTime) {
+    // During build without app ID, just render children to allow static generation
+     
+    return children as JSX.Element;
+  }
+
   const effectiveAppId =
     appId && appId.trim() !== "" ? appId : "placeholder-missing-app-id";
 

@@ -265,7 +265,7 @@ export class LocalStorageAdapter {
             reject(new Error('Encryption key required'));
             return;
           }
-          const decrypted = await this.encryption.decrypt(entry.value as unknown as { ciphertext: string; iv: string; salt: string; algorithm: string });
+          const decrypted = await this.encryption.decrypt<DailyHealthLog>(entry.value as unknown as { ciphertext: string; iv: string; salt: string; algorithm: string });
           entry.value = decrypted;
         }
 

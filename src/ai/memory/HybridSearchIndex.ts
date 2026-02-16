@@ -166,7 +166,7 @@ export class HybridSearchIndex {
   /**
    * Add a document to the index
    */
-  private addDocument(id: string, text: string, metadata: Record<string, unknown>): void {
+  private addDocument(id: string, text: string, _metadata: Record<string, unknown>): void {
     const tokens = this.tokenize(text);
     const termFreq = new Map<string, number>();
 

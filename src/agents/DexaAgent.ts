@@ -41,7 +41,7 @@ export class DexaAgent extends BaseHealthAgent {
     "Visceral fat and android/gynoid distribution",
     "Bone density and osteoporosis risk",
   ];
-  systemPrompt = `You are the DEXA Composition Specialist within the Cosaint multi-agent team.
+  systemPrompt = `You are the DEXA Composition Specialist within the Luma multi-agent team.
 You analyze structured DEXA scan data to interpret body composition, visceral fat, muscular balance, and bone density metrics.
 
 Focus points:

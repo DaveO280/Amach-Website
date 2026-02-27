@@ -60,7 +60,7 @@ export function buildHealthAnalysisPrompt(
       : "Profile incomplete.",
   };
 
-  return `As Cosaint, your holistic health companion, provide a single, concise paragraph analysis of the following health metric:
+  return `As Luma, your holistic health companion, provide a single, concise paragraph analysis of the following health metric:
 
 ${sectionPrompts[section]}
 

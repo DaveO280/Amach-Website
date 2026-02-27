@@ -2,7 +2,7 @@
 "use client";
 
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
-import { CosaintAiService } from "@/services/CosaintAiService";
+import { LumaAiService } from "@/services/LumaAiService";
 import { chatHistoryStore } from "@/data/store/chatHistoryStore";
 import { getCachedWalletEncryptionKey } from "@/utils/walletEncryption";
 import React, { createContext, useContext, useState } from "react";
@@ -135,7 +135,7 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [aiService, setAiService] = useState<CosaintAiService | null>(null);
+  const [aiService, setAiService] = useState<LumaAiService | null>(null);
   const [useMultiAgent, setUseMultiAgent] = useState<boolean>(false);
   const [conversationMemory, setConversationMemory] =
     useState<ConversationMemory | null>(null);
@@ -154,9 +154,9 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [lastConversationSyncAtMs, setLastConversationSyncAtMs] = useState(0);
 
   // Initialize the AI service
-  const getAIService = async (): Promise<CosaintAiService> => {
+  const getAIService = async (): Promise<LumaAiService> => {
     if (!aiService) {
-      const service = CosaintAiService.createFromEnv();
+      const service = LumaAiService.createFromEnv();
       setAiService(service);
       return service;
     }
@@ -192,7 +192,7 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     if (typeof window !== "undefined") {
       window.addEventListener("conversation-memory-updated", onUpdated);
     }
-    return () => {
+    return (): void => {
       cancelled = true;
       if (typeof window !== "undefined") {
         window.removeEventListener("conversation-memory-updated", onUpdated);
@@ -230,7 +230,7 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
       // Update in-memory thread + decide if we should start a new thread (topic shift / inactivity).
       const prevThread = threadRef.current;
-      const shouldStartNewThread = (() => {
+      const shouldStartNewThread = ((): boolean => {
         if (!prevThread) return true;
         const inactivityMs = Date.now() - prevThread.lastMessageAtMs;
         if (inactivityMs > INACTIVITY_NEW_THREAD_MINUTES * 60_000) return true;
@@ -261,7 +261,7 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 ? `User asked about: ${lastUser.replace(/\s+/g, " ").trim()}`
                 : "",
               lastAssistant
-                ? `Cosaint advised: ${lastAssistant
+                ? `Luma advised: ${lastAssistant
                     .replace(/\s+/g, " ")
                     .trim()
                     .slice(0, 220)}${lastAssistant.length > 220 ? "…" : ""}`
@@ -472,7 +472,7 @@ const AiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         responseLength: response?.length || 0,
       });
 
-      console.log("[aiStore] Raw response from CosaintAiService:", {
+      console.log("[aiStore] Raw response from LumaAiService:", {
         responseLength: response.length,
         responsePreview: response.substring(0, 500),
         hasThinkTags: response.includes("<think>"),

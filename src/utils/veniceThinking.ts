@@ -34,18 +34,16 @@ function readEnvFlag(name: string): boolean | null {
  * - NEXT_PUBLIC_VENICE_DISABLE_THINKING_ANALYSIS=true
  *
  * Dev-only localStorage overrides (highest priority):
- * - cosaint_disable_thinking_all=true|false
- * - cosaint_disable_thinking_deep=true|false
- * - cosaint_disable_thinking_analysis=true|false
+ * - luma_disable_thinking_all=true|false
+ * - luma_disable_thinking_deep=true|false
+ * - luma_disable_thinking_analysis=true|false
  */
 export function shouldDisableVeniceThinking(
   scope: VeniceThinkingScope,
 ): boolean {
-  const devAll = readDevLocalStorageFlag("cosaint_disable_thinking_all");
+  const devAll = readDevLocalStorageFlag("luma_disable_thinking_all");
   if (devAll !== null) return devAll;
-  const devScoped = readDevLocalStorageFlag(
-    `cosaint_disable_thinking_${scope}`,
-  );
+  const devScoped = readDevLocalStorageFlag(`luma_disable_thinking_${scope}`);
   if (devScoped !== null) return devScoped;
 
   const envAll = readEnvFlag("NEXT_PUBLIC_VENICE_DISABLE_THINKING_ALL");

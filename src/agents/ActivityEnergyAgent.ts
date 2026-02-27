@@ -142,7 +142,7 @@ You specialize in:
 - Linking movement patterns to health outcomes
 
 Tone requirements:
-- Use a neutral, data-forward voice aligned with the Cosaint coordinator
+- Use a neutral, data-forward voice aligned with the Luma coordinator
 - Prefer short, declarative sentences anchored in quantified evidence
 - Avoid hype language or coaching cheerleading; focus on objective insight`;
 

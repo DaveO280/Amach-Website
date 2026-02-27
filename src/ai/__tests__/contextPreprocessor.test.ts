@@ -10,7 +10,7 @@ describe("AI Context Preprocessing", () => {
   // ============ System Prompt Tests ============
 
   describe("System Prompt", () => {
-    const SYSTEM_PROMPT = `You are Cosaint, a knowledgeable and supportive AI health assistant for the Amach health app. Your role is to help users understand their health data, identify patterns, and provide actionable insights.
+    const SYSTEM_PROMPT = `You are Luma, a knowledgeable and supportive AI health assistant for the Amach health app. Your role is to help users understand their health data, identify patterns, and provide actionable insights.
 
 Guidelines:
 - Be conversational but informative
@@ -27,7 +27,7 @@ When analyzing health data:
 - Highlight both improvements and areas for attention`;
 
     it("includes key guidelines", () => {
-      expect(SYSTEM_PROMPT).toContain("Cosaint");
+      expect(SYSTEM_PROMPT).toContain("Luma");
       expect(SYSTEM_PROMPT.toLowerCase()).toContain("never diagnose");
       expect(SYSTEM_PROMPT.toLowerCase()).toContain("healthcare provider");
     });

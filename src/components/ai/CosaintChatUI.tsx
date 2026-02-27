@@ -1676,7 +1676,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               ) : (
                 <span className="text-[11px] text-amber-700">
                   Deep mode uses your connected health data/reports and runs
-                  specialists before Cosaint replies (slower).
+                  specialists before Luma replies (slower).
                 </span>
               )}
 
@@ -2206,7 +2206,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-xs text-gray-600">
-                      These files are available to Cosaint during chat.
+                      These files are available to Luma during chat.
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {reports && reports.length > 0 && (
@@ -2625,7 +2625,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               <span className="text-2xl">🌿</span>
             </div>
             <h3 className="mb-2 text-lg font-semibold text-emerald-700">
-              Welcome to Cosaint AI Health Companion
+              Welcome to Luma AI Health Companion
             </h3>
             <p className="max-w-md text-sm">
               I&apos;m here to provide holistic health insights combining
@@ -2677,7 +2677,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             setInput(e.target.value)
           }
           onKeyDown={handleKeyDown}
-          placeholder="Ask Cosaint about your health..."
+          placeholder="Ask Luma about your health..."
           className="min-h-[60px] w-full resize-none rounded-md border border-gray-300 p-3 pr-12 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500"
           maxLength={500}
           disabled={isLoading}

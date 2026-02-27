@@ -3,7 +3,7 @@ import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { Button } from "@/components/ui/button";
 import { useSaveGoalsMutation } from "@/data/hooks/useGoalsMutation";
 import { useGoalsQuery } from "@/data/hooks/useGoalsQuery";
-import { CosaintAiService } from "@/services/CosaintAiService";
+import { LumaAiService } from "@/services/LumaAiService";
 import type { HealthGoal, UploadedFileSummary } from "@/types/HealthContext";
 import { CheckCircle2, Loader2, Pencil, Sparkles, Trash2 } from "lucide-react";
 import React, { useMemo, useState } from "react";
@@ -27,7 +27,7 @@ const GoalsTab: React.FC = (): JSX.Element => {
           ),
     [],
   );
-  const aiService = useMemo(() => new CosaintAiService(veniceApi), [veniceApi]);
+  const aiService = useMemo(() => new LumaAiService(veniceApi), [veniceApi]);
   const {
     mutate: saveGoals,
     isPending: isSaving,

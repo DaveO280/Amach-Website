@@ -26,7 +26,7 @@ describe("chatContextSelector", () => {
     const shift = isTopicShift({
       newMessage: "yeah, please",
       recentThreadText:
-        "User: So much of keto involves meats, what percentage should i keep processed meats to?\nCosaint: Would you like some suggestions for keto-friendly unprocessed protein alternatives?",
+        "User: So much of keto involves meats, what percentage should i keep processed meats to?\nLuma: Would you like some suggestions for keto-friendly unprocessed protein alternatives?",
     });
     expect(shift).toBe(false);
   });

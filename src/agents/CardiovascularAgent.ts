@@ -49,7 +49,7 @@ You specialize in:
 - Identifying risk patterns from heart rate metrics (tachycardia, elevated resting HR)
 
 Tone requirements:
-- Maintain a neutral, evidence-focused voice aligned with the Cosaint coordinator
+- Maintain a neutral, evidence-focused voice aligned with the Luma coordinator
 - Use concise, quantified statements before interpretation
 - Highlight risk only when supported by data (avoid alarmist language)`;
 

@@ -58,8 +58,8 @@ export class ChatHistoryStore {
 
     this.initPromise = new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, DB_VERSION);
-      req.onerror = () => reject(req.error);
-      req.onupgradeneeded = (event) => {
+      req.onerror = (): void => reject(req.error);
+      req.onupgradeneeded = (event): void => {
         const db = (event.target as IDBOpenDBRequest).result;
         if (!db.objectStoreNames.contains(THREADS_STORE)) {
           const store = db.createObjectStore(THREADS_STORE, { keyPath: "id" });
@@ -69,7 +69,7 @@ export class ChatHistoryStore {
           });
         }
       };
-      req.onsuccess = () => {
+      req.onsuccess = (): void => {
         this.db = req.result;
         resolve();
       };
@@ -92,8 +92,8 @@ export class ChatHistoryStore {
       const store = tx.objectStore(THREADS_STORE);
       const index = store.index("userId");
       const req = index.getAll(userId);
-      req.onerror = () => reject(req.error);
-      req.onsuccess = () => {
+      req.onerror = (): void => reject(req.error);
+      req.onsuccess = (): void => {
         const items = (req.result as ChatThread[]) || [];
         items.sort(
           (a, b) => safeDateMs(b.lastMessageAt) - safeDateMs(a.lastMessageAt),
@@ -115,8 +115,8 @@ export class ChatHistoryStore {
       const tx = db.transaction([THREADS_STORE], "readonly");
       const store = tx.objectStore(THREADS_STORE);
       const req = store.get(threadId);
-      req.onerror = () => reject(req.error);
-      req.onsuccess = () => resolve((req.result as ChatThread) || null);
+      req.onerror = (): void => reject(req.error);
+      req.onsuccess = (): void => resolve((req.result as ChatThread) || null);
     });
   }
 
@@ -126,8 +126,8 @@ export class ChatHistoryStore {
       const tx = db.transaction([THREADS_STORE], "readwrite");
       const store = tx.objectStore(THREADS_STORE);
       const req = store.put(thread);
-      req.onerror = () => reject(req.error);
-      req.onsuccess = () => resolve();
+      req.onerror = (): void => reject(req.error);
+      req.onsuccess = (): void => resolve();
     });
   }
 
@@ -137,8 +137,8 @@ export class ChatHistoryStore {
       const tx = db.transaction([THREADS_STORE], "readwrite");
       const store = tx.objectStore(THREADS_STORE);
       const req = store.delete(threadId);
-      req.onerror = () => reject(req.error);
-      req.onsuccess = () => resolve();
+      req.onerror = (): void => reject(req.error);
+      req.onsuccess = (): void => resolve();
     });
   }
 
@@ -258,7 +258,7 @@ export class ChatHistoryStore {
       sameTopic,
       maxChars: params.maxChars ?? 4500,
       // The latest user message is already stored in the thread before we build prompt context.
-      // Do not append it again here (CosaintAiService will add the current user message once).
+      // Do not append it again here (LumaAiService will add the current user message once).
       includeNewMessage: false,
     });
 

@@ -1,4 +1,4 @@
-// src/services/CosaintAiService.ts
+// src/services/LumaAiService.ts
 import type { CoordinatorResult } from "@/agents/CoordinatorAgent";
 import { CachedInsightsStore, DataHasher } from "@/ai/optimization";
 import {
@@ -35,7 +35,7 @@ import {
 import { randomChoice } from "@/utils/utils";
 import { VeniceApiService } from "../api/venice/VeniceApiService";
 import CharacteristicsLoader from "../components/ai/characteristicsLoader";
-import cosaintCharacteristics from "../components/ai/cosaint";
+import lumaCharacteristics from "../components/ai/luma";
 import type { HealthContextMetrics } from "../types/HealthContext";
 import type { HealthDataByType } from "../types/healthData";
 import { logger } from "../utils/logger";
@@ -81,8 +81,8 @@ Response style:
 // Feature flag for tool use - set via environment variable
 const ENABLE_TOOL_USE = process.env.NEXT_PUBLIC_ENABLE_TOOL_USE === "true";
 
-const COSAINT_SERVICE_BUILD_STAMP =
-  "cosaint-service-build-2026-01-22TquickTokensOverride-v1";
+const LUMA_SERVICE_BUILD_STAMP =
+  "luma-service-build-2026-01-22TquickTokensOverride-v1";
 
 function getQuickMaxTokensOverride(): number | null {
   // Dev-only: allow temporarily increasing Quick mode token budget to inspect full output.
@@ -104,8 +104,8 @@ function getQuickMaxTokensOverride(): number | null {
 
   // Dev-only trace so we can verify the browser is running the latest bundle.
   if (typeof window !== "undefined") {
-    console.log("[CosaintAiService] Quick max_tokens override trace", {
-      build: COSAINT_SERVICE_BUILD_STAMP,
+    console.log("[LumaAiService] Quick max_tokens override trace", {
+      build: LUMA_SERVICE_BUILD_STAMP,
       localRaw,
       envVal: envVal ?? null,
       rawChosenBeforeClamp: raw ?? null,
@@ -170,13 +170,13 @@ function formatConversationMemoryCapsule(
   return `Conversation memory (from prior chats):\n${lines.join("\n")}`;
 }
 
-export class CosaintAiService {
+export class LumaAiService {
   private veniceApi: VeniceApiService;
   private characteristics: CharacteristicsLoader;
 
   constructor(veniceApi: VeniceApiService) {
     this.veniceApi = veniceApi;
-    this.characteristics = new CharacteristicsLoader(cosaintCharacteristics);
+    this.characteristics = new CharacteristicsLoader(lumaCharacteristics);
   }
 
   /**
@@ -271,7 +271,7 @@ export class CosaintAiService {
   ): Promise<string> {
     try {
       // Log health data status
-      console.log("[CosaintAiService] Health data received:", {
+      console.log("[LumaAiService] Health data received:", {
         hasHealthData: Boolean(healthData),
         availableMetrics: healthData ? Object.keys(healthData) : [],
       });
@@ -285,7 +285,7 @@ export class CosaintAiService {
 
       // Log the prompt for debugging (you can remove this in production)
       console.log(
-        "[CosaintAiService] Generated prompt:",
+        "[LumaAiService] Generated prompt:",
         prompt.substring(0, 500) + "...",
         "Total length:",
         prompt.length,
@@ -335,7 +335,7 @@ export class CosaintAiService {
 
       // Log health data and file status
       if (!isQuick) {
-        console.log("[CosaintAiService] Health data received:", {
+        console.log("[LumaAiService] Health data received:", {
           hasHealthData: Boolean(healthData),
           availableMetrics: healthData ? Object.keys(healthData) : [],
           uploadedFilesCount: uploadedFiles?.length || 0,
@@ -413,7 +413,7 @@ export class CosaintAiService {
             forceInitialAnalysis,
           );
 
-          console.log("[CosaintAiService] Analysis mode determined:", {
+          console.log("[LumaAiService] Analysis mode determined:", {
             mode: analysisMode,
             forceInitial: forceInitialAnalysis,
             dataRange: dataRange
@@ -439,7 +439,7 @@ export class CosaintAiService {
                 dataHasher.generateFingerprint(metricData);
 
               if (flags.logCacheHits) {
-                console.log("[CosaintAiService] Data fingerprint:", {
+                console.log("[LumaAiService] Data fingerprint:", {
                   hash: dataFingerprint.hash.substring(0, 16) + "...",
                   totalDataPoints: dataFingerprint.totalDataPoints,
                   metricTypes: dataFingerprint.metricTypes.length,
@@ -453,7 +453,7 @@ export class CosaintAiService {
                 coordinatorResult = cacheResult.result;
                 usedCache = true;
                 console.log(
-                  "[CosaintAiService] Cache HIT - using cached coordinator insights",
+                  "[LumaAiService] Cache HIT - using cached coordinator insights",
                   {
                     ageMs: cacheResult.ageMs,
                     ageSec: Math.round((cacheResult.ageMs || 0) / 1000),
@@ -462,16 +462,13 @@ export class CosaintAiService {
               } else {
                 if (flags.logCacheHits) {
                   console.log(
-                    "[CosaintAiService] Cache MISS:",
+                    "[LumaAiService] Cache MISS:",
                     cacheResult.reason,
                   );
                 }
               }
             } catch (cacheError) {
-              console.warn(
-                "[CosaintAiService] Cache lookup failed:",
-                cacheError,
-              );
+              console.warn("[LumaAiService] Cache lookup failed:", cacheError);
             }
           }
 
@@ -502,11 +499,11 @@ export class CosaintAiService {
                   coordinatorResult,
                 );
                 console.log(
-                  "[CosaintAiService] Cached coordinator insights for future use",
+                  "[LumaAiService] Cached coordinator insights for future use",
                 );
               } catch (cacheError) {
                 console.warn(
-                  "[CosaintAiService] Failed to cache insights:",
+                  "[LumaAiService] Failed to cache insights:",
                   cacheError,
                 );
               }
@@ -529,25 +526,22 @@ export class CosaintAiService {
             // Update analysis state after successful analysis
             if (dataRange) {
               updateAnalysisState(analysisMode, dataRange);
-              console.log("[CosaintAiService] Analysis state updated:", {
+              console.log("[LumaAiService] Analysis state updated:", {
                 mode: analysisMode,
                 date: new Date().toISOString(),
               });
             }
           } else {
-            console.warn(
-              "[CosaintAiService] Coordinator analysis returned null",
-              {
-                hasMetricData: Boolean(
-                  metricData && Object.keys(metricData).length > 0,
-                ),
-                hasReports: Boolean(reports && reports.length > 0),
-              },
-            );
+            console.warn("[LumaAiService] Coordinator analysis returned null", {
+              hasMetricData: Boolean(
+                metricData && Object.keys(metricData).length > 0,
+              ),
+              hasReports: Boolean(reports && reports.length > 0),
+            });
           }
         } catch (coordinatorError) {
           console.warn(
-            "[CosaintAiService] Coordinator analysis failed:",
+            "[LumaAiService] Coordinator analysis failed:",
             coordinatorError,
           );
         }
@@ -564,14 +558,14 @@ export class CosaintAiService {
           const preComputed = generator.generate(metricData);
           if (preComputed.promptSummary) {
             preComputedMetricsSummary = preComputed.promptSummary;
-            console.log("[CosaintAiService] Pre-computed metrics generated:", {
+            console.log("[LumaAiService] Pre-computed metrics generated:", {
               metricCount: Object.keys(preComputed.last7Days).length,
               summaryLength: preComputed.promptSummary.length,
             });
           }
         } catch (preComputeError) {
           console.warn(
-            "[CosaintAiService] Pre-computed metrics failed:",
+            "[LumaAiService] Pre-computed metrics failed:",
             preComputeError,
           );
         }
@@ -595,7 +589,7 @@ export class CosaintAiService {
 
       // Dev-only: log prompt stats without dumping full prompt content.
       if (process.env.NODE_ENV === "development") {
-        console.log("[CosaintAiService] Prompt stats", {
+        console.log("[LumaAiService] Prompt stats", {
           systemChars: prompt.split("\n\n")[0]?.length ?? undefined,
           totalChars: prompt.length,
         });
@@ -611,7 +605,7 @@ export class CosaintAiService {
       // Quick can still be overridden via localStorage/env, but defaults high.
       const maxTokens = useMultiAgent ? 8000 : (debugQuickMaxTokens ?? 8000);
       if (process.env.NODE_ENV === "development" && !useMultiAgent) {
-        console.log("[CosaintAiService] Quick max_tokens override", {
+        console.log("[LumaAiService] Quick max_tokens override", {
           fromLocalStorage:
             typeof window !== "undefined"
               ? window.localStorage.getItem("cosaint_quick_max_tokens")
@@ -620,7 +614,7 @@ export class CosaintAiService {
           chosen: maxTokens,
         });
       }
-      console.log("[CosaintAiService] Calling Venice API", {
+      console.log("[LumaAiService] Calling Venice API", {
         promptLength: prompt.length,
         maxTokens,
         userMessage: userMessage.substring(0, 100),
@@ -647,7 +641,7 @@ export class CosaintAiService {
         veniceParams,
       );
 
-      console.log("[CosaintAiService] Venice API response received", {
+      console.log("[LumaAiService] Venice API response received", {
         hasResponse: Boolean(response),
         responseLength: response?.length || 0,
         responsePreview: response?.substring(0, 200),
@@ -660,7 +654,7 @@ export class CosaintAiService {
         // QUICK: retry once on empty response (we've seen occasional empty choices)
         if (!useMultiAgent) {
           console.warn(
-            "⚠️ [CosaintAiService] Empty response from Venice API (quick) - retrying once",
+            "⚠️ [LumaAiService] Empty response from Venice API (quick) - retrying once",
             { userMessage: userMessage.substring(0, 100) },
           );
           // Retry up to 2 times (very small additional latency) before falling back.
@@ -678,7 +672,7 @@ export class CosaintAiService {
 
         if (!response) {
           console.warn(
-            "⚠️ [CosaintAiService] Empty response from Venice API - returning fallback",
+            "⚠️ [LumaAiService] Empty response from Venice API - returning fallback",
             { userMessage: userMessage.substring(0, 100) },
           );
           logger.warn("Empty response from Venice API", { userMessage });
@@ -692,9 +686,7 @@ export class CosaintAiService {
         useMultiAgent &&
         ToolResponseParser.hasToolCalls(response)
       ) {
-        console.log(
-          "[CosaintAiService] Tool calls detected, executing tools...",
-        );
+        console.log("[LumaAiService] Tool calls detected, executing tools...");
         let iterationCount = 0;
         const maxIterations = 3; // Prevent infinite loops
         let conversationContext = userMessage;
@@ -706,17 +698,17 @@ export class CosaintAiService {
         ) {
           iterationCount++;
           console.log(
-            `[CosaintAiService] Tool execution iteration ${iterationCount}`,
+            `[LumaAiService] Tool execution iteration ${iterationCount}`,
           );
 
           // Extract tool calls
           const toolCalls = ToolResponseParser.parseToolCalls(response);
           console.log(
-            `[CosaintAiService] Found ${toolCalls.length} tool call(s):`,
+            `[LumaAiService] Found ${toolCalls.length} tool call(s):`,
             toolCalls.map((tc) => tc.tool),
           );
           console.log(
-            "[CosaintAiService] Tool call details:",
+            "[LumaAiService] Tool call details:",
             JSON.stringify(toolCalls, null, 2),
           );
 
@@ -728,7 +720,7 @@ export class CosaintAiService {
           // Format results for AI
           const resultsText = this.formatToolResults(toolResults);
           console.log(
-            "[CosaintAiService] Tool execution complete, sending results to AI",
+            "[LumaAiService] Tool execution complete, sending results to AI",
           );
 
           // Update context with tool results and get new response
@@ -746,7 +738,7 @@ export class CosaintAiService {
 
           if (!newResponse) {
             console.warn(
-              "[CosaintAiService] No response from AI after tool execution",
+              "[LumaAiService] No response from AI after tool execution",
             );
             break;
           }
@@ -761,17 +753,17 @@ export class CosaintAiService {
 
         if (iterationCount >= maxIterations) {
           console.warn(
-            "[CosaintAiService] Max tool iterations reached, returning last response",
+            "[LumaAiService] Max tool iterations reached, returning last response",
           );
         }
       }
 
-      console.log("✅ [CosaintAiService] Returning successful response");
+      console.log("✅ [LumaAiService] Returning successful response");
       return (
         response || this.getFallbackResponse(userMessage, conversationHistory)
       );
     } catch (error) {
-      console.error("❌ [CosaintAiService] Error generating AI response:", {
+      console.error("❌ [LumaAiService] Error generating AI response:", {
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
         userMessage: userMessage.substring(0, 100),
@@ -807,7 +799,7 @@ ${formattedHistory}
 
 User: ${userMessage}
 
-Please provide a helpful response as Cosaint, keeping in mind the user's health data if available. Your response should be friendly, empathetic and evidence-informed.`;
+Please provide a helpful response as Luma, keeping in mind the user's health data if available. Your response should be friendly, empathetic and evidence-informed.`;
   }
 
   /**
@@ -881,7 +873,7 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
     // Add pre-computed metrics summary if available (reduces need for tool calls)
     if (preComputedMetricsSummary) {
       systemMessage += "\n\n" + preComputedMetricsSummary;
-      console.log("[CosaintAI] Added pre-computed metrics to prompt");
+      console.log("[LumaAI] Added pre-computed metrics to prompt");
     }
 
     // Keep data availability compact. Do not dump raw values into the system prompt.
@@ -901,7 +893,7 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
     }
 
     // Debug: Check if coordinator summary exists
-    console.log("[CosaintAI] Coordinator result check:", {
+    console.log("[LumaAI] Coordinator result check:", {
       hasCoordinatorResult: !!coordinatorResult,
       hasCombinedSummary: !!coordinatorResult?.combinedSummary,
       summaryPreview: coordinatorResult?.combinedSummary
@@ -911,7 +903,7 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
 
     if (coordinatorResult?.combinedSummary) {
       const summary = coordinatorResult.combinedSummary;
-      console.log("[CosaintAI] Adding coordinator summary to system message");
+      console.log("[LumaAI] Adding coordinator summary to system message");
       systemMessage +=
         "\n\nLatest multi-agent synthesis (do not repeat profile details already mentioned in the summary):";
       systemMessage += `\nSummary: ${summary.summary}`;
@@ -933,7 +925,7 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
       systemMessage +=
         "\n\nIMPORTANT FORMATTING INSTRUCTIONS:\n" +
         "- Present the analysis using the same structure as shown above (Summary, Key Findings, Priority Actions, Watch Items)\n" +
-        "- DO NOT add introductory greetings like 'Hello! I'm Cosaint' - jump straight into the analysis\n" +
+        "- DO NOT add introductory greetings like 'Hello! I'm Luma' - jump straight into the analysis\n" +
         "- DO NOT use markdown headers (###) or bold formatting (**) for section titles\n" +
         "- Keep your warm, conversational tone with natural flow and helpful context\n" +
         "- Use plain text section labels (e.g., 'Summary:' not '### Summary')\n" +
@@ -993,8 +985,8 @@ Please provide a helpful response as Cosaint, keeping in mind the user's health 
 
     const tailInstruction =
       promptStyle === "quick"
-        ? "Please provide a helpful response as Cosaint. Be friendly, empathetic, and evidence-informed."
-        : "Please provide a helpful response as Cosaint, keeping in mind the user's health data, profile, and uploaded files if available. Your response should be friendly, empathetic and evidence-informed.";
+        ? "Please provide a helpful response as Luma. Be friendly, empathetic, and evidence-informed."
+        : "Please provide a helpful response as Luma, keeping in mind the user's health data, profile, and uploaded files if available. Your response should be friendly, empathetic and evidence-informed.";
 
     // Debug: Check final prompt includes coordinator summary
     const finalPrompt = `${systemMessage}
@@ -1007,7 +999,7 @@ ${tailInstruction}`;
 
     // Dev-only: log prompt sizes for debugging without printing sensitive content.
     if (process.env.NODE_ENV === "development") {
-      console.log("[CosaintAI] Prompt sizes", {
+      console.log("[LumaAI] Prompt sizes", {
         systemChars: systemMessage.length,
         historyChars: formattedHistory.length,
         userMessageChars: userMessage.length,
@@ -1041,7 +1033,7 @@ ${tailInstruction}`;
     const includePersonaDetails =
       options?.includePersonaDetails ?? promptStyle === "deep";
 
-    let systemMessage = `You are Cosaint, a holistic health AI companion developed by Amach Health.`;
+    let systemMessage = `You are Luma, a holistic health AI companion developed by Amach Health.`;
     if (includePersonaDetails) {
       systemMessage += `\n\n${this.characteristics.getBio()}\n\nYour personality is:\n- Empathetic: You genuinely care about the user's wellbeing\n- Evidence-informed: You provide helpful health insights based on research\n- Holistic: You consider the interconnectedness of health factors\n- Practical: You offer actionable suggestions that are realistic to implement
 
@@ -1245,7 +1237,7 @@ Keep responses conversational and natural. If you mention research, weave it int
     if (history.length <= 6) {
       return history
         .map((msg) => {
-          const role = msg.role === "user" ? "User" : "Cosaint";
+          const role = msg.role === "user" ? "User" : "Luma";
           return `${role}: ${msg.content}`;
         })
         .join("\n\n");
@@ -1258,7 +1250,7 @@ Keep responses conversational and natural. If you mention research, weave it int
     const summary = this.summarizeOlderMessages(olderMessages);
     const recentFormatted = recentMessages
       .map((msg) => {
-        const role = msg.role === "user" ? "User" : "Cosaint";
+        const role = msg.role === "user" ? "User" : "Luma";
         return `${role}: ${msg.content}`;
       })
       .join("\n\n");
@@ -1382,7 +1374,7 @@ Keep responses conversational and natural. If you mention research, weave it int
         );
       }
 
-      // Generic "yes" continuation: if Cosaint just offered to elaborate on keto options,
+      // Generic "yes" continuation: if Luma just offered to elaborate on keto options,
       // provide a concrete next step instead of saying "missing context".
       if (
         contextText.includes("keto") &&
@@ -1419,7 +1411,7 @@ Keep responses conversational and natural. If you mention research, weave it int
     }
 
     // Check if the message relates to any known topics
-    for (const topic of cosaintCharacteristics.responseContext.topics) {
+    for (const topic of lumaCharacteristics.responseContext.topics) {
       for (const keyword of topic.keywords) {
         if (userMessage.toLowerCase().includes(keyword.toLowerCase())) {
           return randomChoice(topic.responses);
@@ -1428,23 +1420,21 @@ Keep responses conversational and natural. If you mention research, weave it int
     }
 
     // Default fallback
-    return randomChoice(
-      cosaintCharacteristics.responseContext.defaultResponses,
-    );
+    return randomChoice(lumaCharacteristics.responseContext.defaultResponses);
   }
 
   /**
    * Creates a singleton instance using environment variables
    */
-  static createFromEnv(): CosaintAiService {
+  static createFromEnv(): LumaAiService {
     // Create the Venice API service instance with the correct configuration
     const veniceApi = new VeniceApiService(
       process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.7",
       process.env.NODE_ENV === "development",
     );
 
-    // Return the Cosaint service
-    return new CosaintAiService(veniceApi);
+    // Return the Luma service
+    return new LumaAiService(veniceApi);
   }
 
   /**
@@ -1504,10 +1494,7 @@ ${summary}`;
     if (process.env.NODE_ENV === "development") {
       // Log the prompt for debugging
 
-      console.log(
-        "[CosaintAiService] Venice goal generation prompt:\n",
-        prompt,
-      );
+      console.log("[LumaAiService] Venice goal generation prompt:\n", prompt);
     }
 
     const response = await this.veniceApi.generateVeniceResponse(prompt, 500, {
@@ -1545,7 +1532,7 @@ ${summary}`;
         error: result.error,
       };
     } catch (error) {
-      console.error("[CosaintAiService] Tool execution error:", error);
+      console.error("[LumaAiService] Tool execution error:", error);
       return {
         success: false,
         tool: toolCall.tool,
@@ -1659,7 +1646,7 @@ ${summary}`;
         }
 
         // Log the size of data being sent to AI
-        console.log(`[CosaintAiService] Tool result size for ${result.tool}:`, {
+        console.log(`[LumaAiService] Tool result size for ${result.tool}:`, {
           length: dataStr.length,
           truncated: dataStr.includes("truncated"),
         });

@@ -62,7 +62,7 @@ export class BloodworkAgent extends BaseHealthAgent {
     "Cardiometabolic and endocrine panel review",
     "Inflammation and hematology assessment",
   ];
-  systemPrompt = `You are the Clinical Bloodwork Specialist within the Cosaint multi-agent team.
+  systemPrompt = `You are the Clinical Bloodwork Specialist within the Luma multi-agent team.
 You analyze structured bloodwork metrics to identify out-of-range values, trends across panels, and their implications for metabolic, cardiovascular, hormonal, and inflammatory health.
 
 Focus points:

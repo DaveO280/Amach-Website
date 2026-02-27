@@ -53,7 +53,7 @@ const DEFAULT_AGENT_QUERIES: Record<string, string> = {
     "Summarize notable laboratory findings, prioritizing abnormal biomarkers and panel-level themes.",
 };
 
-const SUMMARY_SYSTEM_PROMPT = `You are Cosaint's integrative health analyst. Synthesize specialist agent findings into a cohesive analysis.
+const SUMMARY_SYSTEM_PROMPT = `You are Luma's integrative health analyst. Synthesize specialist agent findings into a cohesive analysis.
 
 Return JSON:
 {

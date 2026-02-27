@@ -2,7 +2,7 @@
  * IAiService - Abstract interface for AI health assistant operations
  *
  * Implementations:
- * - VeniceAiService (web): Current Venice API implementation (Cosaint)
+ * - VeniceAiService (web): Current Venice API implementation (Luma)
  * - AppleIntelligenceService (iOS): Future native iOS Apple Intelligence
  * - MockAiService (tests): Mock AI for unit tests
  *

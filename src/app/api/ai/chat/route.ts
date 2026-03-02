@@ -174,7 +174,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Configure based on mode
     const mode = body.options?.mode ?? "quick";
-    const maxTokens = body.options?.maxTokens ?? (mode === "deep" ? 2000 : 800);
+    // GLM-4.7 uses thinking tokens before responding; budget must cover both.
+    // With health context, thinking alone can consume 600-800 tokens — so
+    // quick mode needs at least 2000 to leave room for a real response.
+    const maxTokens = body.options?.maxTokens ?? (mode === "deep" ? 4000 : 2000);
     const temperature =
       body.options?.temperature ?? (mode === "deep" ? 0.7 : 0.6);
 

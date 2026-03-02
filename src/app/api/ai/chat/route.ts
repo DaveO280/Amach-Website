@@ -198,6 +198,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           max_tokens: maxTokens,
           temperature,
           stream: false,
+          venice_parameters: {
+            strip_thinking_response: true,
+            include_venice_system_prompt: false,
+          },
         }),
       },
     );

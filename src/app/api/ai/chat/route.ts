@@ -42,6 +42,9 @@ interface HealthContext {
     hrv?: HealthMetricSummary;
     sleep?: HealthMetricSummary;
     exercise?: HealthMetricSummary;
+    restingHeartRate?: HealthMetricSummary;
+    vo2Max?: HealthMetricSummary;
+    respiratoryRate?: HealthMetricSummary;
   };
   profile?: {
     age?: number;
@@ -108,14 +111,30 @@ function buildContextMessage(context: HealthContext): string {
 
   if (context.metrics.sleep) {
     const sleep = context.metrics.sleep;
+    // iOS sends sleep in hours already
     parts.push(
-      `- Sleep: ${sleep.latest ? (sleep.latest / 60).toFixed(1) : "N/A"} hrs last night`,
+      `- Sleep: ${sleep.latest?.toFixed(1) ?? "N/A"} hrs last night, avg ${sleep.average?.toFixed(1) ?? "N/A"} hrs/night (trend: ${sleep.trend ?? "N/A"})`,
     );
   }
 
   if (context.metrics.exercise) {
     const ex = context.metrics.exercise;
     parts.push(`- Exercise: ${ex.latest ?? "N/A"} mins today`);
+  }
+
+  if (context.metrics.restingHeartRate) {
+    const rhr = context.metrics.restingHeartRate;
+    parts.push(`- Resting Heart Rate: ${rhr.latest ?? "N/A"} bpm`);
+  }
+
+  if (context.metrics.vo2Max) {
+    const vo2 = context.metrics.vo2Max;
+    parts.push(`- VO2 Max: ${vo2.latest?.toFixed(1) ?? "N/A"} mL/kg/min`);
+  }
+
+  if (context.metrics.respiratoryRate) {
+    const rr = context.metrics.respiratoryRate;
+    parts.push(`- Respiratory Rate: ${rr.latest?.toFixed(1) ?? "N/A"} breaths/min`);
   }
 
   if (context.dateRange) {

@@ -17,3 +17,13 @@
 - Type check passes (`pnpm type-check`)
 - Lint passes with warnings only (`pnpm lint`)
 - Tests pass (`pnpm test`: 14 suites, 179 tests)
+
+## AmachHealth-iOS Initial Progress (as of 3/1)
+
+- Established the iOS project foundation with Xcode project/scheme setup, source wiring, and `.gitignore` cleanup for shared collaboration.
+- Delivered a full architecture baseline (AppState, SSE chat streaming, navigation, chart/chat components) with reusable UI component sets.
+- Implemented Luma proactive intelligence end-to-end, including anomaly detection, profile settings controls, and chat integration.
+- Resolved major compile and Swift 6/concurrency issues across the app to restore stable local builds.
+- Built a complete preview catalog and design/brand implementation pass, including updated wordmark/shimmer styling and consistency refinements.
+- Added a comprehensive unit test suite that runs without Simulator to support regression checks early in development.
+- Updated default backend base URL to production (`amachhealth.com`) and aligned app branding treatment in dashboard/onboarding surfaces.

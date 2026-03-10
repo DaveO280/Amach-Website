@@ -63,10 +63,26 @@ interface HealthContext {
   contextBlocks?: Array<{ type: string; content: string }>;
 }
 
+/**
+ * Lab/report data that iOS fetches from Storj and forwards to the chat endpoint.
+ * Each entry represents a parsed report (bloodwork, DEXA, etc.).
+ */
+interface LabDataEntry {
+  type: string; // "bloodwork" | "dexa" | etc.
+  title?: string;
+  date?: string;
+  content: string; // Pre-formatted report text
+}
+
 interface ChatRequestBody {
   message: string;
   context?: HealthContext;
   history?: ChatMessage[];
+  /**
+   * Lab/report data retrieved from Storj by the iOS app.
+   * Accepts either an array of structured entries or a raw string.
+   */
+  labData?: LabDataEntry[] | string;
   options?: {
     mode?: "quick" | "deep";
     maxTokens?: number;
@@ -141,7 +157,9 @@ function buildContextMessage(context: HealthContext): string {
 
   if (context.metrics.respiratoryRate) {
     const rr = context.metrics.respiratoryRate;
-    parts.push(`- Respiratory Rate: ${rr.latest?.toFixed(1) ?? "N/A"} breaths/min`);
+    parts.push(
+      `- Respiratory Rate: ${rr.latest?.toFixed(1) ?? "N/A"} breaths/min`,
+    );
   }
 
   if (context.dateRange) {
@@ -210,6 +228,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
+    // Add lab/report data if provided (fetched from Storj by iOS)
+    if (body.labData) {
+      let labContent: string;
+
+      if (typeof body.labData === "string") {
+        labContent = body.labData;
+      } else if (Array.isArray(body.labData)) {
+        labContent = body.labData
+          .map((entry) => {
+            const header = [entry.title, entry.type, entry.date]
+              .filter(Boolean)
+              .join(" — ");
+            return header ? `### ${header}\n${entry.content}` : entry.content;
+          })
+          .join("\n\n");
+      } else {
+        labContent = "";
+      }
+
+      if (labContent) {
+        console.log(`[AI Chat] injecting labData (${labContent.length} chars)`);
+        messages.push({
+          role: "system",
+          content: `The following lab and report data was retrieved from the user's encrypted health vault. Use this data to inform your responses:\n\n${labContent}`,
+        });
+      }
+    }
+
     // Add conversation history
     if (body.history && Array.isArray(body.history)) {
       // Limit history to last 10 exchanges to manage token usage
@@ -225,7 +271,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // GLM-4.7 uses thinking tokens before responding; budget must cover both.
     // With health context, thinking alone can consume 600-800 tokens — so
     // quick mode needs at least 2000 to leave room for a real response.
-    const maxTokens = body.options?.maxTokens ?? (mode === "deep" ? 4000 : 2000);
+    const maxTokens =
+      body.options?.maxTokens ?? (mode === "deep" ? 4000 : 2000);
     const temperature =
       body.options?.temperature ?? (mode === "deep" ? 0.7 : 0.6);
 

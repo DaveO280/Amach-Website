@@ -63,10 +63,26 @@ interface HealthContext {
   contextBlocks?: Array<{ type: string; content: string }>;
 }
 
+/**
+ * Lab/report data that iOS fetches from Storj and forwards to the chat endpoint.
+ * Each entry represents a parsed report (bloodwork, DEXA, etc.).
+ */
+interface LabDataEntry {
+  type: string; // "bloodwork" | "dexa" | etc.
+  title?: string;
+  date?: string;
+  content: string; // Pre-formatted report text
+}
+
 interface ChatRequestBody {
   message: string;
   context?: HealthContext;
   history?: ChatMessage[];
+  /**
+   * Lab/report data retrieved from Storj by the iOS app.
+   * Accepts either an array of structured entries or a raw string.
+   */
+  labData?: LabDataEntry[] | string;
   options?: {
     mode?: "quick" | "deep";
     maxTokens?: number;
@@ -141,7 +157,9 @@ function buildContextMessage(context: HealthContext): string {
 
   if (context.metrics.respiratoryRate) {
     const rr = context.metrics.respiratoryRate;
-    parts.push(`- Respiratory Rate: ${rr.latest?.toFixed(1) ?? "N/A"} breaths/min`);
+    parts.push(
+      `- Respiratory Rate: ${rr.latest?.toFixed(1) ?? "N/A"} breaths/min`,
+    );
   }
 
   if (context.dateRange) {
@@ -210,6 +228,99 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
+    // Add lab/report data if provided (fetched from Storj by iOS)
+    // iOS may send labData at top-level OR nested inside context
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const rawLabData =
+      body.labData ??
+      (body.context as Record<string, any> | undefined)?.labData;
+
+    if (rawLabData) {
+      // Diagnostic: dump the shape of what arrived so we can debug mismatches
+      const labType = typeof rawLabData;
+      const isArr = Array.isArray(rawLabData);
+      console.log(
+        `[AI Chat] labData received — type: ${labType}, isArray: ${isArr}, ` +
+          `preview: ${JSON.stringify(rawLabData).slice(0, 500)}`,
+      );
+
+      let labContent: string;
+
+      if (typeof rawLabData === "string") {
+        labContent = rawLabData;
+      } else if (isArr) {
+        labContent = (rawLabData as Record<string, any>[])
+          .map((entry, i) => {
+            // Log each entry's keys so we can see what iOS actually sends
+            console.log(
+              `[AI Chat] labData[${i}] keys: [${Object.keys(entry).join(", ")}]`,
+            );
+
+            // Try multiple possible content fields that iOS might use
+            const text =
+              entry.content ??
+              entry.data ??
+              entry.report ??
+              entry.rawText ??
+              entry.text ??
+              entry.summary ??
+              entry.formattedContent;
+
+            // If the content field is an object (e.g. FHIR), stringify it
+            const contentStr =
+              typeof text === "string"
+                ? text
+                : text != null
+                  ? JSON.stringify(text, null, 2)
+                  : "";
+
+            if (!contentStr) {
+              console.warn(
+                `[AI Chat] labData[${i}] has no recognized content field. ` +
+                  `Keys: ${Object.keys(entry).join(", ")}. ` +
+                  `Full entry: ${JSON.stringify(entry).slice(0, 300)}`,
+              );
+              // Last resort: stringify the entire entry so we don't lose data
+              return `### Report ${i + 1}\n${JSON.stringify(entry, null, 2)}`;
+            }
+
+            const header = [
+              entry.title,
+              entry.type ?? entry.reportType,
+              entry.date ?? entry.reportDate,
+            ]
+              .filter(Boolean)
+              .join(" — ");
+            return header ? `### ${header}\n${contentStr}` : contentStr;
+          })
+          .join("\n\n");
+      } else if (typeof rawLabData === "object" && rawLabData !== null) {
+        // Single object — stringify it
+        console.log(
+          `[AI Chat] labData is a single object, keys: [${Object.keys(rawLabData).join(", ")}]`,
+        );
+        labContent = JSON.stringify(rawLabData, null, 2);
+      } else {
+        labContent = "";
+      }
+
+      if (labContent) {
+        console.log(`[AI Chat] injecting labData (${labContent.length} chars)`);
+        messages.push({
+          role: "system",
+          content: `The following lab and report data was retrieved from the user's encrypted health vault. Use this data to inform your responses:\n\n${labContent}`,
+        });
+      }
+    } else {
+      console.log(
+        `[AI Chat] no labData found. Top-level keys: [${Object.keys(body).join(", ")}]` +
+          (body.context
+            ? `, context keys: [${Object.keys(body.context).join(", ")}]`
+            : ""),
+      );
+    }
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+
     // Add conversation history
     if (body.history && Array.isArray(body.history)) {
       // Limit history to last 10 exchanges to manage token usage
@@ -225,7 +336,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // GLM-4.7 uses thinking tokens before responding; budget must cover both.
     // With health context, thinking alone can consume 600-800 tokens — so
     // quick mode needs at least 2000 to leave room for a real response.
-    const maxTokens = body.options?.maxTokens ?? (mode === "deep" ? 4000 : 2000);
+    const maxTokens =
+      body.options?.maxTokens ?? (mode === "deep" ? 4000 : 2000);
     const temperature =
       body.options?.temperature ?? (mode === "deep" ? 0.7 : 0.6);
 

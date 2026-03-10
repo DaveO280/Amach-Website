@@ -182,15 +182,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Add health context if provided
     if (body.context) {
+      // Diagnostic: log what keys iOS is actually sending so we can verify contextBlocks arrive
+      const ctxKeys = Object.keys(body.context);
+      const hasBlocks = Array.isArray(body.context.contextBlocks);
+      const blockCount = hasBlocks ? body.context.contextBlocks!.length : 0;
+      console.log(
+        `[AI Chat] context keys: [${ctxKeys.join(", ")}], contextBlocks: ${hasBlocks} (${blockCount})`,
+      );
+
       if (body.context.contextBlocks?.length) {
         // iOS sends pre-formatted context blocks — inject each verbatim as a system message.
         // This is the preferred path: iOS owns all formatting, backend is a pass-through.
         // New data sources (CGM, Whoop, Oura) require no backend changes — just new blocks.
         for (const block of body.context.contextBlocks) {
+          console.log(
+            `[AI Chat] injecting block type="${block.type}" (${block.content.length} chars)`,
+          );
           messages.push({ role: "system", content: block.content });
         }
       } else {
         // Fallback: legacy typed-field formatting (web app or older iOS builds)
+        console.log("[AI Chat] using legacy buildContextMessage fallback");
         const contextMessage = buildContextMessage(body.context);
         if (contextMessage) {
           messages.push({ role: "system", content: contextMessage });
@@ -221,6 +233,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       process.env.NEXT_PUBLIC_VENICE_MODEL_NAME ||
       process.env.VENICE_MODEL_NAME ||
       "zai-org-glm-4.7";
+
+    // Log message summary before calling Venice
+    const systemMsgCount = messages.filter((m) => m.role === "system").length;
+    const totalChars = messages.reduce((sum, m) => sum + m.content.length, 0);
+    console.log(
+      `[AI Chat] sending ${messages.length} messages (${systemMsgCount} system, ${totalChars} total chars) to ${modelName}`,
+    );
 
     // Call Venice API
     const response = await fetch(

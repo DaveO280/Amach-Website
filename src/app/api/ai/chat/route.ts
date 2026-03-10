@@ -54,6 +54,13 @@ interface HealthContext {
     start: string;
     end: string;
   };
+  /**
+   * Pre-formatted context blocks assembled on iOS.
+   * Each block is injected verbatim as a system message.
+   * When present, these replace the individual typed fields above.
+   * Adding a new data source (CGM, Whoop, Oura) = new block on iOS, no backend change needed.
+   */
+  contextBlocks?: Array<{ type: string; content: string }>;
 }
 
 interface ChatRequestBody {
@@ -175,9 +182,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Add health context if provided
     if (body.context) {
-      const contextMessage = buildContextMessage(body.context);
-      if (contextMessage) {
-        messages.push({ role: "system", content: contextMessage });
+      if (body.context.contextBlocks?.length) {
+        // iOS sends pre-formatted context blocks — inject each verbatim as a system message.
+        // This is the preferred path: iOS owns all formatting, backend is a pass-through.
+        // New data sources (CGM, Whoop, Oura) require no backend changes — just new blocks.
+        for (const block of body.context.contextBlocks) {
+          messages.push({ role: "system", content: block.content });
+        }
+      } else {
+        // Fallback: legacy typed-field formatting (web app or older iOS builds)
+        const contextMessage = buildContextMessage(body.context);
+        if (contextMessage) {
+          messages.push({ role: "system", content: contextMessage });
+        }
       }
     }
 

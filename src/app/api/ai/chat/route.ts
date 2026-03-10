@@ -229,20 +229,77 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Add lab/report data if provided (fetched from Storj by iOS)
-    if (body.labData) {
+    // iOS may send labData at top-level OR nested inside context
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const rawLabData =
+      body.labData ??
+      (body.context as Record<string, any> | undefined)?.labData;
+
+    if (rawLabData) {
+      // Diagnostic: dump the shape of what arrived so we can debug mismatches
+      const labType = typeof rawLabData;
+      const isArr = Array.isArray(rawLabData);
+      console.log(
+        `[AI Chat] labData received — type: ${labType}, isArray: ${isArr}, ` +
+          `preview: ${JSON.stringify(rawLabData).slice(0, 500)}`,
+      );
+
       let labContent: string;
 
-      if (typeof body.labData === "string") {
-        labContent = body.labData;
-      } else if (Array.isArray(body.labData)) {
-        labContent = body.labData
-          .map((entry) => {
-            const header = [entry.title, entry.type, entry.date]
+      if (typeof rawLabData === "string") {
+        labContent = rawLabData;
+      } else if (isArr) {
+        labContent = (rawLabData as Record<string, any>[])
+          .map((entry, i) => {
+            // Log each entry's keys so we can see what iOS actually sends
+            console.log(
+              `[AI Chat] labData[${i}] keys: [${Object.keys(entry).join(", ")}]`,
+            );
+
+            // Try multiple possible content fields that iOS might use
+            const text =
+              entry.content ??
+              entry.data ??
+              entry.report ??
+              entry.rawText ??
+              entry.text ??
+              entry.summary ??
+              entry.formattedContent;
+
+            // If the content field is an object (e.g. FHIR), stringify it
+            const contentStr =
+              typeof text === "string"
+                ? text
+                : text != null
+                  ? JSON.stringify(text, null, 2)
+                  : "";
+
+            if (!contentStr) {
+              console.warn(
+                `[AI Chat] labData[${i}] has no recognized content field. ` +
+                  `Keys: ${Object.keys(entry).join(", ")}. ` +
+                  `Full entry: ${JSON.stringify(entry).slice(0, 300)}`,
+              );
+              // Last resort: stringify the entire entry so we don't lose data
+              return `### Report ${i + 1}\n${JSON.stringify(entry, null, 2)}`;
+            }
+
+            const header = [
+              entry.title,
+              entry.type ?? entry.reportType,
+              entry.date ?? entry.reportDate,
+            ]
               .filter(Boolean)
               .join(" — ");
-            return header ? `### ${header}\n${entry.content}` : entry.content;
+            return header ? `### ${header}\n${contentStr}` : contentStr;
           })
           .join("\n\n");
+      } else if (typeof rawLabData === "object" && rawLabData !== null) {
+        // Single object — stringify it
+        console.log(
+          `[AI Chat] labData is a single object, keys: [${Object.keys(rawLabData).join(", ")}]`,
+        );
+        labContent = JSON.stringify(rawLabData, null, 2);
       } else {
         labContent = "";
       }
@@ -254,7 +311,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           content: `The following lab and report data was retrieved from the user's encrypted health vault. Use this data to inform your responses:\n\n${labContent}`,
         });
       }
+    } else {
+      console.log(
+        `[AI Chat] no labData found. Top-level keys: [${Object.keys(body).join(", ")}]` +
+          (body.context
+            ? `, context keys: [${Object.keys(body.context).join(", ")}]`
+            : ""),
+      );
     }
+    /* eslint-enable @typescript-eslint/no-explicit-any */
 
     // Add conversation history
     if (body.history && Array.isArray(body.history)) {

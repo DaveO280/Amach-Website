@@ -20,7 +20,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -331,15 +331,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Add user message
     messages.push({ role: "user", content: body.message });
 
-    // Configure based on mode
+    // Configure based on mode — match web route defaults (4000 tokens, 0.7 temp)
     const mode = body.options?.mode ?? "quick";
-    // GLM-4.7 uses thinking tokens before responding; budget must cover both.
-    // With health context, thinking alone can consume 600-800 tokens — so
-    // quick mode needs at least 2000 to leave room for a real response.
     const maxTokens =
-      body.options?.maxTokens ?? (mode === "deep" ? 4000 : 2000);
+      body.options?.maxTokens ?? (mode === "deep" ? 4000 : 4000);
     const temperature =
-      body.options?.temperature ?? (mode === "deep" ? 0.7 : 0.6);
+      body.options?.temperature ?? (mode === "deep" ? 0.7 : 0.7);
 
     const modelName =
       process.env.NEXT_PUBLIC_VENICE_MODEL_NAME ||

@@ -127,7 +127,7 @@ export class PrivyWalletService {
 
       if (ready && authenticated && wallets.length > 0) {
         const wallet = wallets[0];
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+         
         const address = wallet.address as string;
 
         if (address) {
@@ -190,9 +190,8 @@ export class PrivyWalletService {
     try {
       // Clear encryption key cache on disconnect for security
       if (this.account?.address) {
-        const { clearEncryptionKeyOnDisconnect } = await import(
-          "../utils/walletEncryption"
-        );
+        const { clearEncryptionKeyOnDisconnect } =
+          await import("../utils/walletEncryption");
         clearEncryptionKeyOnDisconnect(this.account.address);
       }
 
@@ -260,7 +259,7 @@ export class PrivyWalletService {
         },
       );
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+       
       const signature = result.signature as string;
       console.log("✍️ Message signed successfully with Privy");
       return signature;
@@ -292,9 +291,8 @@ export class PrivyWalletService {
 
     try {
       // Use signature-based encryption (validated - Privy signatures are deterministic)
-      const { getCachedWalletEncryptionKey } = await import(
-        "../utils/walletEncryption"
-      );
+      const { getCachedWalletEncryptionKey } =
+        await import("../utils/walletEncryption");
 
       console.log("🔑 Attempting signature-based key derivation with Privy...");
       const encryptionKey = await getCachedWalletEncryptionKey(
@@ -334,7 +332,7 @@ export class PrivyWalletService {
    * Placeholder for updateHealthProfile - to be implemented
    */
   async updateHealthProfile(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     _profile: HealthProfileData,
   ): Promise<{ success: boolean; error?: string; txHash?: string }> {
     // TODO: Implement profile update
@@ -345,7 +343,7 @@ export class PrivyWalletService {
    * Placeholder for verifyProfileZKsync - to be implemented
    */
   async verifyProfileZKsync(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     _email: string,
   ): Promise<{ success: boolean; txHash?: string; error?: string }> {
     // TODO: Implement profile verification
@@ -368,7 +366,7 @@ export class PrivyWalletService {
    * Placeholder for saveContextVault - to be implemented
    */
   async saveContextVault(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     _vault: WalletContextVault,
   ): Promise<{ success: boolean; error?: string }> {
     // TODO: Implement context vault save
@@ -386,3 +384,13 @@ export class PrivyWalletService {
 
 // Export singleton instance (will be initialized with Privy hooks from React component)
 export const privyWalletService = new PrivyWalletService();
+
+// Placeholder stubs for server-side clients; these can be wired to viem
+// public/wallet clients when Privy integration is fully server-aware.
+export function getPublicClient() {
+  throw new Error("getPublicClient is not implemented in this environment");
+}
+
+export async function getWalletClient() {
+  throw new Error("getWalletClient is not implemented in this environment");
+}

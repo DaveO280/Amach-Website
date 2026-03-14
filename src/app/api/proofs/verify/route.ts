@@ -4,8 +4,11 @@ import type {
   HealthMetricProofVerificationResult,
 } from "@/types/healthMetricProof";
 import { computeProofHash } from "@/services/proofs/hash";
-import { getAttestationsForAddress } from "@/services/attestations";
-import { verifySignature } from "@/services/signing";
+import {
+  getAttestationsForAddress,
+  verifyAttestationOnChain,
+} from "@/services/attestations";
+import { verifySignature, getServerAttesterAddress } from "@/services/signing";
 
 export const runtime = "nodejs";
 
@@ -40,6 +43,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const proof = body.proof;
 
+    // Step 1: Verify proof hash integrity
     const recomputedHash = computeProofHash(proof);
     if (recomputedHash !== proof.evidence.proofHash) {
       const result: HealthMetricProofVerificationResult = {
@@ -50,6 +54,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(result, { status: 200 });
     }
 
+    // Step 2: Verify signature (accepts both user wallet and server attester)
     const sigOk = await verifySignature({
       walletAddress: proof.prover.walletAddress,
       messageHash: proof.evidence.proofHash,
@@ -65,17 +70,43 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(result, { status: 200 });
     }
 
-    const attestations = await getAttestationsForAddress(
+    // Step 3: Check on-chain attestation
+    // First try the user's address, then the server attester address
+    let attestationFound = false;
+
+    // Check user's attestations
+    const userAttestations = await getAttestationsForAddress(
       proof.prover.walletAddress,
     );
+    attestationFound = userAttestations.some(
+      (a) =>
+        a.contentHash.toLowerCase() === proof.evidence.proofHash.toLowerCase(),
+    );
 
-    const matching = attestations.find((a) => {
-      return (
-        a.contentHash.toLowerCase() === proof.evidence.proofHash.toLowerCase()
+    // If not found on user, check the server attester wallet
+    if (!attestationFound) {
+      const serverAddress = getServerAttesterAddress();
+      if (serverAddress) {
+        const serverAttestations =
+          await getAttestationsForAddress(serverAddress);
+        attestationFound = serverAttestations.some(
+          (a) =>
+            a.contentHash.toLowerCase() ===
+            proof.evidence.proofHash.toLowerCase(),
+        );
+      }
+    }
+
+    // As a final fallback, try direct verification by content hash
+    if (!attestationFound) {
+      const directCheck = await verifyAttestationOnChain(
+        proof.prover.walletAddress,
+        proof.evidence.proofHash,
       );
-    });
+      attestationFound = directCheck.exists;
+    }
 
-    if (!matching) {
+    if (!attestationFound) {
       const result: HealthMetricProofVerificationResult = {
         isValid: false,
         reason: "No matching on-chain attestation found for this proof hash",

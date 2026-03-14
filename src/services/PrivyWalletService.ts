@@ -127,7 +127,7 @@ export class PrivyWalletService {
 
       if (ready && authenticated && wallets.length > 0) {
         const wallet = wallets[0];
-         
+
         const address = wallet.address as string;
 
         if (address) {
@@ -259,7 +259,6 @@ export class PrivyWalletService {
         },
       );
 
-       
       const signature = result.signature as string;
       console.log("✍️ Message signed successfully with Privy");
       return signature;
@@ -332,7 +331,6 @@ export class PrivyWalletService {
    * Placeholder for updateHealthProfile - to be implemented
    */
   async updateHealthProfile(
-     
     _profile: HealthProfileData,
   ): Promise<{ success: boolean; error?: string; txHash?: string }> {
     // TODO: Implement profile update
@@ -343,7 +341,6 @@ export class PrivyWalletService {
    * Placeholder for verifyProfileZKsync - to be implemented
    */
   async verifyProfileZKsync(
-     
     _email: string,
   ): Promise<{ success: boolean; txHash?: string; error?: string }> {
     // TODO: Implement profile verification
@@ -366,7 +363,6 @@ export class PrivyWalletService {
    * Placeholder for saveContextVault - to be implemented
    */
   async saveContextVault(
-     
     _vault: WalletContextVault,
   ): Promise<{ success: boolean; error?: string }> {
     // TODO: Implement context vault save

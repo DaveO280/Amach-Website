@@ -149,10 +149,10 @@ export default function PrivacyPolicy(): JSX.Element {
             If you have questions about this Privacy Policy, please contact us
             at{" "}
             <a
-              href="mailto:privacy@amach.health"
+              href="mailto:amachhealth@gmail.com"
               className="text-emerald-400 hover:underline"
             >
-              privacy@amach.health
+              amachhealth@gmail.com
             </a>
             .
           </p>

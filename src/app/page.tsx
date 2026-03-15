@@ -412,6 +412,12 @@ const MainPage: React.FC = (): JSX.Element => {
             © 2025 Amach Health - Transforming Healthcare Through Data
             Liberation
           </p>
+          <a
+            href="/privacy"
+            className="text-sm text-emerald-600 hover:text-emerald-700 hover:underline mt-2 inline-block"
+          >
+            Privacy Policy
+          </a>
         </div>
       </div>
     </div>

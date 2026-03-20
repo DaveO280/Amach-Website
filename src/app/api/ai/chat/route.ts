@@ -349,11 +349,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Configure based on mode — match web route defaults (4000 tokens, 0.7 temp)
     const mode = body.options?.mode ?? "quick";
-    // GLM-4.7 uses thinking tokens before responding; budget must cover both.
-    // With health context, thinking alone can consume 600-800 tokens — so
-    // quick mode needs at least 2000 to leave room for a real response.
+    // GLM-4.7 burns thinking tokens before the visible response. With
+    // strip_thinking_response=true, the entire thinking budget is hidden.
+    // If max_tokens is too low the model spends everything on thinking and
+    // returns empty visible content. 4000 gives enough headroom for both.
     const maxTokens =
-      body.options?.maxTokens ?? (mode === "deep" ? 4000 : 2000);
+      body.options?.maxTokens ?? (mode === "deep" ? 8000 : 4000);
     const temperature =
       body.options?.temperature ?? (mode === "deep" ? 0.7 : 0.7);
 
@@ -402,7 +403,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content ?? "";
+    let content = data.choices?.[0]?.message?.content ?? "";
+
+    // GLM-4.7 with strip_thinking_response can return empty content if the
+    // model exhausted its token budget on thinking. Detect and provide a
+    // meaningful response instead of sending an empty string to the client.
+    if (!content.trim()) {
+      const completionTokens = data.usage?.completion_tokens ?? 0;
+      console.warn(
+        `[AI Chat] Venice returned empty content (${completionTokens} completion tokens used). ` +
+          `Model likely exhausted budget on thinking.`,
+      );
+      content =
+        "I'm processing a lot right now. Could you try rephrasing or narrowing your question?";
+    }
 
     return NextResponse.json({
       content,

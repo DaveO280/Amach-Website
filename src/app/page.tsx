@@ -1,23 +1,56 @@
 "use client";
 
 import AiCompanionModal from "@/components/AiCompanionModal";
-import BetaNotification from "@/components/BetaNotification"; // Import the new component
+import BetaNotification from "@/components/BetaNotification";
 import HealthDashboardModal from "@/components/HealthDashboardModal";
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { OnboardingModal } from "@/components/OnboardingModal";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import WalletConnectButton from "@/components/WalletConnectButton";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { WalletSetupWizard } from "@/components/WalletSetupWizard";
-import { Brain, Leaf, Lock, Menu, Sparkles, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 
+// ── Icon components ──────────────────────────────────────────
+function IconLock(): JSX.Element {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
+
+function IconSparkle(): JSX.Element {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
+    </svg>
+  );
+}
+
+function IconArrow(): JSX.Element {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="5" y1="12" x2="19" y2="12" />
+      <polyline points="12 5 19 12 12 19" />
+    </svg>
+  );
+}
+
+function IconAppleHealth(): JSX.Element {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402 0-3.791 3.068-5.191 5.281-5.191 1.312 0 4.151.501 5.719 4.457 1.59-3.968 4.464-4.447 5.726-4.447 2.54 0 5.274 1.621 5.274 5.181 0 4.069-5.136 8.625-11 14.402z" />
+    </svg>
+  );
+}
+
+// ── Main page ────────────────────────────────────────────────
 const MainPage: React.FC = (): JSX.Element => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [activeCard, setActiveCard] = useState(0);
 
-  // Use the shared context instead of local state
   const {
     isDashboardOpen,
     setIsDashboardOpen,
@@ -25,67 +58,26 @@ const MainPage: React.FC = (): JSX.Element => {
     setIsAiCompanionOpen,
   } = useHealthDataContext();
 
-  // Keep the beta notification state local
   const [showBetaNotification, setShowBetaNotification] = useState(false);
-
-  // Onboarding state
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingInitialStep, setOnboardingInitialStep] = useState(0);
-
-  // Wallet wizard state
   const [showWalletWizard, setShowWalletWizard] = useState(false);
 
-  // Check if user has seen onboarding
   useEffect(() => {
     const hasSeenOnboarding = localStorage.getItem("amach-onboarding-complete");
     if (!hasSeenOnboarding) {
-      // Show onboarding after a brief delay for better UX
-      const timer = setTimeout(() => {
-        setShowOnboarding(true);
-      }, 500);
+      const timer = setTimeout(() => setShowOnboarding(true), 500);
       return (): void => clearTimeout(timer);
     }
   }, []);
 
   useEffect(() => {
     const handleResize = (): void => {
-      if (window.innerWidth >= 768) {
-        setIsMobileMenuOpen(false);
-      }
+      if (window.innerWidth >= 768) setIsMobileMenuOpen(false);
     };
     window.addEventListener("resize", handleResize);
-    return (): void => {
-      return window.removeEventListener("resize", handleResize);
-    };
+    return (): void => window.removeEventListener("resize", handleResize);
   }, []);
-
-  const cards = [
-    {
-      icon: Brain,
-      title: "AI Integration",
-      description:
-        "Leveraging advanced AI to analyze health patterns and provide personalized insights",
-    },
-    {
-      icon: Leaf,
-      title: "Holistic Health",
-      description:
-        "Bridging traditional wisdom with modern health data analytics",
-    },
-    {
-      icon: Lock,
-      title: "Data Sovereignty",
-      description:
-        "Encrypted storage on IPFS with zkSync verification for complete data control",
-    },
-  ];
-
-  useEffect(() => {
-    const timer = setInterval((): void => {
-      setActiveCard((current: number): number => (current + 1) % cards.length);
-    }, 4000);
-    return (): void => clearInterval(timer);
-  }, [cards.length]);
 
   const navItems = [
     { label: "How it Works", href: "/how-it-works" },
@@ -93,37 +85,21 @@ const MainPage: React.FC = (): JSX.Element => {
     { label: "Whitepaper", href: "/whitepaper" },
   ];
 
-  // Allow users to restart the tour
-  const restartOnboarding = (): void => {
-    setShowOnboarding(true);
-  };
-
-  // Handler to show notification instead of directly opening dashboard
   const handleDashboardClick = (): void => {
     setShowBetaNotification(true);
     setIsMobileMenuOpen(false);
-    const clickEvent = new MouseEvent("mousedown", {
-      bubbles: true,
-      cancelable: true,
-      view: window,
-    });
+    const clickEvent = new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window });
     document.body.dispatchEvent(clickEvent);
   };
 
-  // Only open dashboard after notification is dismissed with "Got it" button
-  const openDashboard = (): void => {
-    setIsDashboardOpen(true);
-  };
+  const openDashboard = (): void => setIsDashboardOpen(true);
 
-  // Handle onboarding close
   const handleOnboardingClose = (): void => {
     setShowOnboarding(false);
     localStorage.setItem("amach-onboarding-complete", "true");
   };
 
-  // Onboarding action handlers
   const handleOnboardingConnectWallet = (): void => {
-    // Close onboarding and open the wallet setup wizard
     handleOnboardingClose();
     setShowWalletWizard(true);
   };
@@ -138,19 +114,19 @@ const MainPage: React.FC = (): JSX.Element => {
     setIsAiCompanionOpen(true);
   };
 
-  // Wizard completion handler
   const handleWizardComplete = (): void => {
     setShowWalletWizard(false);
-    // After completing wizard, show onboarding modal at step 3 (Upload Health Data)
     setShowOnboarding(true);
-    setOnboardingInitialStep(2); // Step 3 is index 2
-    // Store completion in localStorage
+    setOnboardingInitialStep(2);
     localStorage.setItem("amach-wallet-setup-complete", "true");
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-emerald-50">
-      {/* Onboarding modal for first-time users */}
+    <div
+      className="page-bg"
+      style={{ background: "var(--color-bg-primary)", color: "var(--color-text-primary)" }}
+    >
+      {/* ── Modals — keep wired, just preserved ── */}
       <OnboardingModal
         isOpen={showOnboarding}
         onClose={handleOnboardingClose}
@@ -159,261 +135,669 @@ const MainPage: React.FC = (): JSX.Element => {
         onUploadData={handleOnboardingUploadData}
         onOpenAI={handleOnboardingOpenAI}
       />
-
-      {/* Wallet Setup Wizard */}
       <WalletSetupWizard
         isOpen={showWalletWizard}
         onClose={() => setShowWalletWizard(false)}
         onComplete={handleWizardComplete}
       />
-
-      {/* Health dashboard modal */}
       <HealthDashboardModal
         isOpen={isDashboardOpen}
         onClose={() => setIsDashboardOpen(false)}
       />
-
-      {/* AI Companion modal */}
       <AiCompanionModal
         isOpen={isAiCompanionOpen}
         onClose={() => setIsAiCompanionOpen(false)}
       />
-
-      {/* Beta notification component */}
       <BetaNotification
         isOpen={showBetaNotification}
         onClose={() => setShowBetaNotification(false)}
-        onConfirm={openDashboard} // Open dashboard after notification is dismissed
+        onConfirm={openDashboard}
       />
 
-      <header className="border-b border-amber-100 relative">
-        <div className="container mx-auto py-4">
-          <div className="flex justify-between items-center max-w-7xl mx-auto">
-            <div className="flex items-center gap-3">
-              <div className="flex flex-col">
-                <div className="flex items-center space-x-3">
-                  <h1 className="text-2xl font-black text-emerald-900 whitespace-nowrap">
-                    Amach Health
-                  </h1>
-                  <span className="text-base md:text-lg lg:text-xl font-normal italic text-emerald-900 hidden sm:inline-block">
-                    - &quot;Driven by Data, Guided by Nature&quot;
-                  </span>
-                </div>
-                {/* Powered by Venice */}
-                <div className="flex items-center gap-1.5 mt-1 text-xs text-amber-800/60">
-                  <span>Powered by</span>
-                  <a
-                    href="https://venice.ai/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Visit Venice AI website"
-                    className="inline-flex cursor-pointer"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      try {
-                        window.open(
-                          "https://venice.ai/",
-                          "_blank",
-                          "noopener,noreferrer",
-                        );
-                      } catch {
-                        window.location.href = "https://venice.ai/";
-                      }
-                    }}
-                  >
-                    <Image
-                      src="/venice-logo/Venice Lockup SVG/venice-logo-lockup-black.svg"
-                      alt="Venice AI"
-                      width={60}
-                      height={15}
-                      className="opacity-60 hover:opacity-100 transition-opacity"
-                    />
-                  </a>
-                </div>
-              </div>
-              {/* Removed wallet status indicator on main page */}
-            </div>
-
-            <nav className="hidden md:flex items-center justify-end w-1/2">
-              <div className="flex items-center justify-between w-full">
-                <div className="flex items-center space-x-16 ml-auto mr-16">
-                  {navItems.map((item) => (
-                    <a
-                      key={item.label}
-                      href={item.href}
-                      className="text-amber-900 hover:text-emerald-600"
-                    >
-                      {item.label}
-                    </a>
-                  ))}
-                </div>
-
-                {/* Wallet connection button */}
-                <WalletConnectButton
-                  onDashboardClick={handleDashboardClick}
-                  onAiCompanionClick={() => setIsAiCompanionOpen(true)}
-                />
-              </div>
-            </nav>
-
-            <Button
-              variant="outline"
-              className="md:hidden"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            >
-              {isMobileMenuOpen ? (
-                <X className="h-5 w-5" />
-              ) : (
-                <Menu className="h-5 w-5" />
-              )}
-            </Button>
-          </div>
-        </div>
-
+      {/* ══════════════════════════════════════════
+          NAV
+      ══════════════════════════════════════════ */}
+      <header
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 100,
+          background: "var(--color-bg-nav)",
+          borderBottom: "1px solid var(--color-border)",
+          backdropFilter: "blur(12px)",
+        }}
+      >
         <div
-          className={`absolute left-0 right-0 bg-white shadow-lg transition-all duration-300 ease-in-out z-50 border-b border-amber-100 ${
-            isMobileMenuOpen
-              ? "opacity-100 translate-y-0"
-              : "opacity-0 -translate-y-2 pointer-events-none"
-          } md:hidden`}
+          style={{
+            maxWidth: 1200,
+            margin: "0 auto",
+            padding: "0 24px",
+            height: 64,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
         >
-          <div className="container mx-auto py-4 px-4 space-y-4">
+          {/* Wordmark */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span className="amach-wordmark" style={{ fontSize: "1.1rem", lineHeight: 1 }}>
+              Amach Health
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, opacity: 0.5 }}>
+              <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>Powered by</span>
+              <a
+                href="https://venice.ai/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Visit Venice AI"
+                onClick={(e) => {
+                  e.preventDefault();
+                  try { window.open("https://venice.ai/", "_blank", "noopener,noreferrer"); }
+                  catch { window.location.href = "https://venice.ai/"; }
+                }}
+              >
+                <Image
+                  src="/venice-logo/Venice Lockup SVG/venice-logo-lockup-black.svg"
+                  alt="Venice AI"
+                  width={52}
+                  height={13}
+                  style={{ opacity: 0.7 }}
+                />
+              </a>
+            </div>
+          </div>
+
+          {/* Desktop nav */}
+          <nav
+            className="hidden md:flex"
+            style={{ alignItems: "center", gap: 40 }}
+          >
             {navItems.map((item) => (
               <a
                 key={item.label}
                 href={item.href}
-                className="block text-lg text-amber-900 hover:text-emerald-600 py-2"
+                style={{
+                  fontSize: "0.875rem",
+                  color: "var(--color-text-secondary)",
+                  textDecoration: "none",
+                  transition: "color 0.15s ease",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-emerald)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--color-text-secondary)")}
+              >
+                {item.label}
+              </a>
+            ))}
+            <ThemeToggle />
+            <WalletConnectButton
+              onDashboardClick={handleDashboardClick}
+              onAiCompanionClick={() => setIsAiCompanionOpen(true)}
+            />
+          </nav>
+
+          {/* Mobile: theme toggle + hamburger */}
+          <div className="flex md:hidden" style={{ alignItems: "center", gap: 12 }}>
+            <ThemeToggle />
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              aria-label="Toggle menu"
+              style={{
+                width: 36,
+                height: 36,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: "1px solid var(--color-border)",
+                borderRadius: 8,
+                background: "transparent",
+                cursor: "pointer",
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              {isMobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile menu */}
+        {isMobileMenuOpen && (
+          <div
+            style={{
+              background: "var(--color-bg-surface)",
+              borderTop: "1px solid var(--color-border)",
+              padding: "16px 24px 24px",
+            }}
+            className="md:hidden"
+          >
+            {navItems.map((item) => (
+              <a
+                key={item.label}
+                href={item.href}
+                style={{
+                  display: "block",
+                  padding: "10px 0",
+                  fontSize: "1rem",
+                  color: "var(--color-text-secondary)",
+                  textDecoration: "none",
+                  borderBottom: "1px solid var(--color-border)",
+                }}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 {item.label}
               </a>
             ))}
-
-            {/* Wallet connection button for mobile */}
-            <div className="pt-4 border-t border-amber-200">
+            <div style={{ paddingTop: 16 }}>
               <WalletConnectButton
-                onDashboardClick={() => {
-                  handleDashboardClick();
-                  setIsMobileMenuOpen(false);
-                }}
-                onAiCompanionClick={() => {
-                  setIsAiCompanionOpen(true);
-                  setIsMobileMenuOpen(false);
-                }}
+                onDashboardClick={() => { handleDashboardClick(); setIsMobileMenuOpen(false); }}
+                onAiCompanionClick={() => { setIsAiCompanionOpen(true); setIsMobileMenuOpen(false); }}
               />
             </div>
           </div>
-        </div>
+        )}
       </header>
 
-      <section className="relative overflow-hidden">
-        <div className="container mx-auto px-4 py-12">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div className="space-y-6">
-              <div className="text-sm font-semibold text-emerald-600 tracking-wide">
-                YOUR HEALTH, YOUR CHOICE
+      {/* ══════════════════════════════════════════
+          HERO
+      ══════════════════════════════════════════ */}
+      <section
+        className="shimmer-texture"
+        style={{
+          minHeight: "90vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "80px 24px",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        {/* Luma sparkle — decorative background mark */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            fontSize: "320px",
+            lineHeight: 1,
+            color: "#6366F1",
+            opacity: 0.05,
+            fontWeight: 800,
+            pointerEvents: "none",
+            userSelect: "none",
+            zIndex: 0,
+          }}
+        >
+          ✦
+        </div>
+
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            maxWidth: 760,
+            margin: "0 auto",
+            textAlign: "center",
+          }}
+        >
+          {/* Wordmark */}
+          <div className="amach-wordmark" style={{ fontSize: "0.8rem", marginBottom: 32, opacity: 0.8 }}>
+            Amach Health
+          </div>
+
+          {/* Headline */}
+          <h1
+            style={{
+              fontSize: "clamp(2rem, 5vw, 3.5rem)",
+              fontWeight: 800,
+              lineHeight: 1.15,
+              color: "var(--color-text-primary)",
+              marginBottom: 24,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            Your health data has been{" "}
+            <span style={{ color: "var(--color-emerald)" }}>
+              someone else&apos;s asset
+            </span>{" "}
+            for long enough.
+          </h1>
+
+          {/* Subhead */}
+          <p
+            style={{
+              fontSize: "clamp(1rem, 2.5vw, 1.25rem)",
+              lineHeight: 1.7,
+              color: "var(--color-text-secondary)",
+              marginBottom: 48,
+              maxWidth: 600,
+              margin: "0 auto 48px",
+            }}
+          >
+            Amach returns it to you — encrypted, on-chain, and readable by an
+            intelligence built for your biology, not the average.
+          </p>
+
+          {/* CTAs */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+            <button
+              className="btn-emerald"
+              style={{ fontSize: "1.05rem", padding: "16px 40px" }}
+              onClick={() => window.location.href = "mailto:amachhealth@gmail.com?subject=Early Protocol Access"}
+            >
+              Request Early Access →
+            </button>
+            <a href="/how-it-works" className="link-muted">
+              Learn how it works
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════════════
+          TWO FUTURES
+      ══════════════════════════════════════════ */}
+      <section style={{ padding: "80px 24px", maxWidth: 1100, margin: "0 auto" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+            gap: 24,
+          }}
+        >
+          {/* Card 1 — default future */}
+          <div
+            className="amach-card"
+            style={{
+              padding: "40px 36px",
+              opacity: 0.75,
+            }}
+          >
+            <p
+              style={{
+                fontSize: "0.7rem",
+                fontWeight: 600,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                color: "var(--color-text-muted)",
+                marginBottom: 24,
+              }}
+            >
+              The default
+            </p>
+            <p
+              style={{
+                fontSize: "1.15rem",
+                lineHeight: 1.8,
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              Your data leaves your device.<br />
+              It passes through servers you don&apos;t control,<br />
+              anonymised and sold upstream.<br />
+              Your doctor gets 7 minutes.<br />
+              You get a bill.
+            </p>
+          </div>
+
+          {/* Card 2 — Amach future */}
+          <div
+            className="amach-card"
+            style={{
+              padding: "40px 36px",
+              borderColor: "var(--color-border-strong)",
+            }}
+          >
+            <p
+              style={{
+                fontSize: "0.7rem",
+                fontWeight: 600,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                color: "var(--color-emerald)",
+                marginBottom: 24,
+              }}
+            >
+              With Amach
+            </p>
+            <p
+              style={{
+                fontSize: "1.15rem",
+                lineHeight: 1.8,
+                color: "var(--color-text-primary)",
+              }}
+            >
+              Your data stays encrypted.<br />
+              It lives on-chain — verifiable, yours.<br />
+              Luma reads a year of your biology<br />
+              and tells you what it actually means.<br />
+              You walk into that appointment prepared.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════════════
+          HOW IT WORKS
+      ══════════════════════════════════════════ */}
+      <section
+        style={{
+          padding: "80px 24px",
+          background: "var(--color-bg-surface)",
+          borderTop: "1px solid var(--color-border)",
+          borderBottom: "1px solid var(--color-border)",
+        }}
+      >
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <p
+            style={{
+              fontSize: "0.7rem",
+              fontWeight: 600,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              color: "var(--color-text-muted)",
+              textAlign: "center",
+              marginBottom: 56,
+            }}
+          >
+            How it works
+          </p>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              gap: 48,
+            }}
+          >
+            {/* Own it */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ color: "var(--color-emerald)" }}>
+                <IconLock />
               </div>
-              <h2 className="text-4xl font-light text-amber-900 leading-relaxed">
-                Amach — from the Gaelic word for &quot;outsider&quot; or
-                &quot;rebellion&quot; — embodies our vision for healthcare
-                transformation.
-              </h2>
-              <p className="text-xl text-amber-800/80 leading-relaxed">
-                Your health data is scattered across a dizzying number of
-                systems. Amach Health brings it together, encrypts it with keys
-                only you control, and lets AI reveal insights that clinical
-                evidence alone misses.
+              <h3
+                style={{
+                  fontSize: "1.2rem",
+                  fontWeight: 700,
+                  color: "var(--color-text-primary)",
+                  margin: 0,
+                }}
+              >
+                Own it
+              </h3>
+              <p style={{ fontSize: "0.95rem", lineHeight: 1.7, color: "var(--color-text-secondary)", margin: 0 }}>
+                Your data is encrypted before it leaves your device. Stored on
+                Storj. Verified on-chain. Not a policy — the architecture.
               </p>
-              <div className="flex flex-col items-center mt-8 space-y-4">
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <Button
-                    variant="outline"
-                    className="px-8 py-6 text-lg text-emerald-600 hover:bg-emerald-50 border-emerald-600 transition-all duration-300"
-                    onClick={() => (window.location.href = "/learn")}
-                  >
-                    Learn More
-                  </Button>
-                  <Button
-                    className="px-8 py-6 text-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-all duration-300 hover:scale-105"
-                    onClick={() =>
-                      (window.location.href =
-                        "mailto:amachhealth@gmail.com?subject=Early Protocol Access")
-                    }
-                  >
-                    Join Whitelist
-                  </Button>
-                </div>
-
-                {/* New User Button */}
-                <div className="pt-4 border-t border-amber-100/50 w-full max-w-md">
-                  <Button
-                    variant="outline"
-                    className="w-full px-6 py-4 text-base bg-gradient-to-r from-amber-50 to-emerald-50 hover:from-amber-100 hover:to-emerald-100 border-2 border-emerald-300 text-emerald-700 hover:text-emerald-800 transition-all duration-300 hover:shadow-md group"
-                    onClick={restartOnboarding}
-                  >
-                    <Sparkles className="h-5 w-5 mr-2 group-hover:rotate-12 transition-transform" />
-                    New User? Start Your Journey Here
-                  </Button>
-                </div>
-
-                <p className="text-sm text-amber-800/80 max-w-md text-center">
-                  Join our early access list to be among the first to experience
-                  the future of health data sovereignty.
-                </p>
-              </div>
             </div>
 
-            <div className="relative h-[400px] w-full">
-              {cards.map((card, index) => {
-                const Icon = card.icon;
-                return (
-                  <div
-                    key={index}
-                    className={`absolute inset-0 transition-all duration-2000 ${
-                      index === activeCard
-                        ? "integrate z-10"
-                        : "disintegrate z-0"
-                    }`}
-                  >
-                    <Card className="h-full bg-white/90 border-none shadow-lg backdrop-blur-sm">
-                      <CardContent className="p-8 flex flex-col items-center justify-center h-full">
-                        <Icon className="h-16 w-16 text-emerald-600 mb-6" />
-                        <h3 className="text-2xl font-semibold text-amber-900 mb-4">
-                          {card.title}
-                        </h3>
-                        <p className="text-lg text-amber-800/80 text-center leading-relaxed">
-                          {card.description}
-                        </p>
-                        <div className="mt-6 flex gap-2">
-                          {cards.map((_, i) => (
-                            <div
-                              key={i}
-                              className={`h-1.5 w-1.5 rounded-full transition-all duration-500 ${
-                                i === activeCard
-                                  ? "bg-emerald-600 w-4"
-                                  : "bg-emerald-200"
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                );
-              })}
+            {/* Read it */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ color: "var(--color-indigo)" }}>
+                <IconSparkle />
+              </div>
+              <h3
+                style={{
+                  fontSize: "1.2rem",
+                  fontWeight: 700,
+                  color: "var(--color-text-primary)",
+                  margin: 0,
+                }}
+              >
+                Read it
+              </h3>
+              <p style={{ fontSize: "0.95rem", lineHeight: 1.7, color: "var(--color-text-secondary)", margin: 0 }}>
+                Luma reads your HRV, glucose, sleep, and bloodwork as a system —
+                not a dashboard. Patterns, not prescriptions.
+              </p>
+            </div>
+
+            {/* Keep the value */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ color: "var(--color-amber)" }}>
+                <IconArrow />
+              </div>
+              <h3
+                style={{
+                  fontSize: "1.2rem",
+                  fontWeight: 700,
+                  color: "var(--color-text-primary)",
+                  margin: 0,
+                }}
+              >
+                Keep the value
+              </h3>
+              <p style={{ fontSize: "0.95rem", lineHeight: 1.7, color: "var(--color-text-secondary)", margin: 0 }}>
+                The value your data creates flows back to you. Verified on-chain.
+                Not a promise — a protocol.
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      <div className="mt-24 py-8 border-t border-emerald-100">
-        <div className="text-center text-amber-800/60">
-          <p className="text-sm">
-            © 2025 Amach Health - Transforming Healthcare Through Data
-            Liberation
+      {/* ══════════════════════════════════════════
+          LUMA INTRODUCTION
+      ══════════════════════════════════════════ */}
+      <section
+        className="shimmer-texture"
+        style={{
+          padding: "80px 24px",
+          background: "var(--color-bg-primary)",
+        }}
+      >
+        <div style={{ maxWidth: 720, margin: "0 auto" }}>
+          <div
+            className="luma-card"
+            style={{ padding: "56px 48px", textAlign: "center" }}
+          >
+            {/* Luma mark */}
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: "50%",
+                background: "rgba(99, 102, 241, 0.12)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 28px",
+                fontSize: "28px",
+                color: "var(--color-indigo)",
+              }}
+            >
+              ✦
+            </div>
+
+            <h2
+              style={{
+                fontSize: "clamp(1.75rem, 4vw, 2.5rem)",
+                fontWeight: 800,
+                color: "var(--color-text-primary)",
+                marginBottom: 20,
+                letterSpacing: "-0.02em",
+              }}
+            >
+              This is Luma.
+            </h2>
+            <p
+              style={{
+                fontSize: "1.1rem",
+                lineHeight: 1.75,
+                color: "var(--color-text-secondary)",
+                maxWidth: 520,
+                margin: "0 auto 32px",
+              }}
+            >
+              She reads your health data and tells you what it means — your
+              trends, your patterns, your specific numbers. Not general health
+              advice. Your health, read clearly.
+            </p>
+            <button
+              className="btn-emerald"
+              onClick={() => setIsAiCompanionOpen(true)}
+            >
+              Talk to Luma
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════════════
+          DATA SOURCES
+      ══════════════════════════════════════════ */}
+      <section
+        style={{
+          padding: "80px 24px",
+          background: "var(--color-bg-surface)",
+          borderTop: "1px solid var(--color-border)",
+          borderBottom: "1px solid var(--color-border)",
+        }}
+      >
+        <div style={{ maxWidth: 600, margin: "0 auto" }}>
+          <p
+            style={{
+              fontSize: "0.7rem",
+              fontWeight: 600,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              color: "var(--color-text-muted)",
+              marginBottom: 40,
+            }}
+          >
+            Connected sources
+          </p>
+
+          {[
+            {
+              label: "Apple Health",
+              icon: <span style={{ color: "#ef4444", display: "flex" }}><IconAppleHealth /></span>,
+              status: "Connected",
+              statusStyle: { background: "rgba(0,107,79,0.12)", color: "var(--color-emerald)" },
+              dot: true,
+            },
+            {
+              label: "DEXA Scan",
+              icon: <span style={{ fontSize: "18px" }}>🦴</span>,
+              status: "Upload",
+              statusStyle: { background: "var(--color-amber-muted)", color: "var(--color-amber)" },
+              dot: false,
+            },
+            {
+              label: "Bloodwork",
+              icon: <span style={{ fontSize: "18px" }}>🩸</span>,
+              status: "Upload",
+              statusStyle: { background: "var(--color-amber-muted)", color: "var(--color-amber)" },
+              dot: false,
+            },
+            {
+              label: "CGM",
+              icon: <span style={{ fontSize: "18px" }}>📈</span>,
+              status: "Coming soon",
+              statusStyle: { background: "rgba(100,100,100,0.08)", color: "var(--color-text-muted)" },
+              dot: false,
+            },
+            {
+              label: "Wallet (Privy)",
+              icon: <span style={{ fontSize: "18px" }}>🔐</span>,
+              status: "Connect",
+              statusStyle: { background: "rgba(99,102,241,0.10)", color: "var(--color-indigo)" },
+              dot: false,
+            },
+          ].map((source, i) => (
+            <div
+              key={source.label}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "16px 0",
+                borderBottom: i < 4 ? "1px solid var(--color-border)" : "none",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <span style={{ width: 24, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {source.icon}
+                </span>
+                <span style={{ fontSize: "0.95rem", fontWeight: 500, color: "var(--color-text-primary)" }}>
+                  {source.label}
+                </span>
+              </div>
+              <span
+                className="status-pill"
+                style={source.statusStyle}
+              >
+                {source.dot && (
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-emerald)", flexShrink: 0 }} />
+                )}
+                {source.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════════════
+          FOOTER CTA
+      ══════════════════════════════════════════ */}
+      <section
+        className="shimmer-texture"
+        style={{
+          padding: "100px 24px",
+          background: "var(--color-bg-primary)",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ maxWidth: 560, margin: "0 auto", position: "relative", zIndex: 1 }}>
+          <h2
+            style={{
+              fontSize: "clamp(1.75rem, 4vw, 2.75rem)",
+              fontWeight: 800,
+              lineHeight: 1.25,
+              color: "var(--color-text-primary)",
+              marginBottom: 40,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            Own your data.<br />
+            Keep the value.<br />
+            Read the signals.
+          </h2>
+
+          <button
+            className="btn-emerald"
+            style={{ fontSize: "1.05rem", padding: "16px 40px", marginBottom: 20 }}
+            onClick={() => window.location.href = "mailto:amachhealth@gmail.com?subject=Early Protocol Access"}
+          >
+            Request Early Access
+          </button>
+
+          <p
+            style={{
+              fontSize: "0.8rem",
+              color: "var(--color-text-muted)",
+              marginTop: 16,
+            }}
+          >
+            Private beta. ~50 users. Built in public.
           </p>
         </div>
-      </div>
+      </section>
+
+      {/* ── Footer ── */}
+      <footer
+        style={{
+          borderTop: "1px solid var(--color-border)",
+          padding: "24px",
+          textAlign: "center",
+          background: "var(--color-bg-surface)",
+        }}
+      >
+        <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", margin: 0 }}>
+          © 2025 Amach Health — Own your data. Keep the value. Read the signals.
+        </p>
+      </footer>
     </div>
   );
 };

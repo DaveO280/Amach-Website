@@ -260,7 +260,7 @@ const HowItWorksPage: React.FC = () => {
           icon={<IconLock />}
           headline="Encrypted before it leaves your device"
           tag="Live"
-          body="Your data is encrypted with AES-256 using keys derived from your wallet signature before it ever leaves your browser. No one at Amach has access to the plaintext. Not in transit, not at rest. The architecture makes it impossible, not just policy."
+          body="Your data is encrypted with AES-256 using keys derived from your wallet signature before it ever leaves your browser. No one at Amach has access to the plaintext. Not in transit, not at rest. The keys never exist on our servers, only in your browser session."
         />
 
         <StepCard
@@ -284,7 +284,7 @@ const HowItWorksPage: React.FC = () => {
           icon={<IconChat />}
           headline="Luma reads your data and talks to you about it"
           tag="Live"
-          body="Luma is Amach&apos;s AI, powered by Venice AI. She has access to your full health record: every metric, every uploaded document, every data point you&apos;ve collected. Ask her about your HRV trends, your bloodwork patterns, how your sleep correlates with recovery. She reads your biology, not a textbook average."
+          body="Luma is Amach&apos;s AI, powered by Venice AI. She has access to your full health record: every metric, every uploaded document, every data point you&apos;ve collected. Venice is privacy-native by design: no conversation data is stored on their servers, and their infrastructure has been verified private through cryptographic attestations. Ask Luma about your HRV trends, your bloodwork patterns, how your sleep correlates with recovery. She reads your biology, not a textbook average."
         />
       </section>
 

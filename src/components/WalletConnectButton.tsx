@@ -66,9 +66,9 @@ const WalletConnectButton: React.FC<WalletConnectButtonProps> = ({
       {/* Basic AI button - always visible */}
       <Button
         className="text-white transition-all duration-300 hover:scale-105 px-6 whitespace-nowrap rounded-full"
-        style={{ backgroundColor: "#6366F1" }}
-        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#4F46E5"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#6366F1"; }}
+        style={{ backgroundColor: "var(--color-emerald, #006B4F)" }}
+        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#004D38"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--color-emerald, #006B4F)"; }}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();

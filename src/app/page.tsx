@@ -178,10 +178,36 @@ const MainPage: React.FC = (): JSX.Element => {
             justifyContent: "space-between",
           }}
         >
-          {/* Wordmark — larger, more breathing room from top */}
-          <div className="amach-wordmark-wrap" style={{ fontSize: "1rem", letterSpacing: "0.28em" }}>
-            <span className="amach-wordmark-line">Amach</span>
-            <span className="amach-wordmark-line-sub">Health</span>
+          {/* Left cluster: wordmark + Venice side by side */}
+          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+            <div className="amach-wordmark-wrap" style={{ fontSize: "1rem", letterSpacing: "0.28em" }}>
+              <span className="amach-wordmark-line">Amach</span>
+              <span className="amach-wordmark-line-sub">Health</span>
+            </div>
+            {/* Divider */}
+            <span style={{ width: 1, height: 28, background: "var(--color-border)", flexShrink: 0 }} aria-hidden="true" />
+            {/* Venice — sits right beside the wordmark */}
+            <a
+              href="https://venice.ai/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Visit Venice AI"
+              style={{ display: "flex", alignItems: "center", gap: 5, opacity: 0.55, textDecoration: "none" }}
+              onClick={(e) => {
+                e.preventDefault();
+                try { window.open("https://venice.ai/", "_blank", "noopener,noreferrer"); }
+                catch { window.location.href = "https://venice.ai/"; }
+              }}
+            >
+              <span style={{ fontSize: "0.68rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Powered by</span>
+              <Image
+                src="/venice-logo/Venice Lockup SVG/venice-logo-lockup-black.svg"
+                alt="Venice AI"
+                width={52}
+                height={13}
+                className="venice-logo"
+              />
+            </a>
           </div>
 
           {/* Desktop nav */}
@@ -205,30 +231,6 @@ const MainPage: React.FC = (): JSX.Element => {
                 {item.label}
               </a>
             ))}
-
-            {/* Powered by Venice — right side of nav */}
-            <a
-              href="https://venice.ai/"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Visit Venice AI"
-              style={{ display: "flex", alignItems: "center", gap: 5, opacity: 0.55, textDecoration: "none" }}
-              onClick={(e) => {
-                e.preventDefault();
-                try { window.open("https://venice.ai/", "_blank", "noopener,noreferrer"); }
-                catch { window.location.href = "https://venice.ai/"; }
-              }}
-            >
-              <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Powered by</span>
-              <Image
-                src="/venice-logo/Venice Lockup SVG/venice-logo-lockup-black.svg"
-                alt="Venice AI"
-                width={52}
-                height={13}
-                className="venice-logo"
-              />
-            </a>
-
             <ThemeToggle />
             <WalletConnectButton
               onDashboardClick={handleDashboardClick}
@@ -342,12 +344,6 @@ const MainPage: React.FC = (): JSX.Element => {
             textAlign: "center",
           }}
         >
-          {/* Wordmark */}
-          <div className="amach-wordmark-wrap" style={{ fontSize: "0.72rem", letterSpacing: "0.28em", marginBottom: 32, opacity: 0.9, alignItems: "center" }}>
-            <span className="amach-wordmark-line">Amach</span>
-            <span className="amach-wordmark-line-sub">Health</span>
-          </div>
-
           {/* Headline */}
           <h1
             style={{
@@ -647,96 +643,180 @@ const MainPage: React.FC = (): JSX.Element => {
       </section>
 
       {/* ══════════════════════════════════════════
-          DATA SOURCES
+          YOUR DATA, YOUR TERMS
       ══════════════════════════════════════════ */}
       <section
         style={{
-          padding: "80px 24px",
+          padding: "96px 24px",
           background: "var(--color-bg-surface)",
           borderTop: "1px solid var(--color-border)",
           borderBottom: "1px solid var(--color-border)",
         }}
       >
-        <div style={{ maxWidth: 600, margin: "0 auto" }}>
-          <p
-            style={{
-              fontSize: "0.7rem",
-              fontWeight: 600,
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-              color: "var(--color-text-muted)",
-              marginBottom: 40,
-            }}
-          >
-            Connected sources
-          </p>
-
-          {[
-            {
-              label: "Apple Health",
-              icon: <span style={{ color: "#ef4444", display: "flex" }}><IconAppleHealth /></span>,
-              status: "Connected",
-              statusStyle: { background: "rgba(0,107,79,0.12)", color: "var(--color-emerald)" },
-              dot: true,
-            },
-            {
-              label: "DEXA Scan",
-              icon: <span style={{ fontSize: "18px" }}>🦴</span>,
-              status: "Upload",
-              statusStyle: { background: "var(--color-amber-muted)", color: "var(--color-amber)" },
-              dot: false,
-            },
-            {
-              label: "Bloodwork",
-              icon: <span style={{ fontSize: "18px" }}>🩸</span>,
-              status: "Upload",
-              statusStyle: { background: "var(--color-amber-muted)", color: "var(--color-amber)" },
-              dot: false,
-            },
-            {
-              label: "CGM",
-              icon: <span style={{ fontSize: "18px" }}>📈</span>,
-              status: "Coming soon",
-              statusStyle: { background: "rgba(100,100,100,0.08)", color: "var(--color-text-muted)" },
-              dot: false,
-            },
-            {
-              label: "Wallet (Privy)",
-              icon: <span style={{ fontSize: "18px" }}>🔐</span>,
-              status: "Connect",
-              statusStyle: { background: "rgba(99,102,241,0.10)", color: "var(--color-indigo)" },
-              dot: false,
-            },
-          ].map((source, i) => (
-            <div
-              key={source.label}
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          {/* Header */}
+          <div style={{ maxWidth: 620, marginBottom: 64 }}>
+            <p
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "16px 0",
-                borderBottom: i < 4 ? "1px solid var(--color-border)" : "none",
+                fontSize: "0.7rem",
+                fontWeight: 600,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                color: "var(--color-text-muted)",
+                marginBottom: 16,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <span style={{ width: 24, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {source.icon}
-                </span>
-                <span style={{ fontSize: "0.95rem", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                  {source.label}
+              Your data, your terms
+            </p>
+            <h2
+              style={{
+                fontSize: "clamp(1.6rem, 3.5vw, 2.25rem)",
+                fontWeight: 800,
+                lineHeight: 1.2,
+                color: "var(--color-text-primary)",
+                letterSpacing: "-0.02em",
+                marginBottom: 20,
+              }}
+            >
+              Every health signal you generate, brought together and kept yours.
+            </h2>
+            <p style={{ fontSize: "1rem", lineHeight: 1.75, color: "var(--color-text-secondary)" }}>
+              Most platforms take your data and keep it. Amach inverts that —
+              your data is encrypted before it leaves your device, stored on
+              infrastructure you control, and readable only by you and the AI
+              you choose to trust. No siloed records. No third-party access.
+              Just a complete picture of your biology, finally in one place.
+            </p>
+          </div>
+
+          {/* Source cards grid */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 20,
+              marginBottom: 56,
+            }}
+          >
+            {/* Apple Health / Wearables */}
+            <div
+              className="amach-card-surface"
+              style={{ padding: "28px 24px", display: "flex", flexDirection: "column", gap: 14 }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "22px" }}>⌚</span>
+                <span className="status-pill" style={{ background: "rgba(0,107,79,0.10)", color: "var(--color-emerald)" }}>
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--color-emerald)", flexShrink: 0 }} />
+                  Live sync
                 </span>
               </div>
-              <span
-                className="status-pill"
-                style={source.statusStyle}
-              >
-                {source.dot && (
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-emerald)", flexShrink: 0 }} />
-                )}
-                {source.status}
-              </span>
+              <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
+                Wearables &amp; Apple Health
+              </h3>
+              <p style={{ fontSize: "0.875rem", lineHeight: 1.65, color: "var(--color-text-secondary)", margin: 0 }}>
+                Steps, VO₂ max, resting heart rate, HRV, active energy, sleep
+                stages, and respiratory rate — streamed continuously and stored
+                encrypted. Luma reads months of this data at once to surface
+                trends your watch never shows you.
+              </p>
             </div>
-          ))}
+
+            {/* Bloodwork */}
+            <div
+              className="amach-card-surface"
+              style={{ padding: "28px 24px", display: "flex", flexDirection: "column", gap: 14 }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "22px" }}>🩸</span>
+                <span className="status-pill" style={{ background: "var(--color-amber-muted)", color: "var(--color-amber)" }}>
+                  Upload PDF
+                </span>
+              </div>
+              <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
+                Bloodwork &amp; Labs
+              </h3>
+              <p style={{ fontSize: "0.875rem", lineHeight: 1.65, color: "var(--color-text-secondary)", margin: 0 }}>
+                Upload your lab reports directly. Amach parses CBC, metabolic
+                panel, lipids, thyroid, hormones, and inflammation markers.
+                Luma cross-references your results with your wearable data to
+                find the connections your GP doesn&apos;t have time to draw.
+              </p>
+            </div>
+
+            {/* DEXA */}
+            <div
+              className="amach-card-surface"
+              style={{ padding: "28px 24px", display: "flex", flexDirection: "column", gap: 14 }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "22px" }}>🦴</span>
+                <span className="status-pill" style={{ background: "var(--color-amber-muted)", color: "var(--color-amber)" }}>
+                  Upload PDF
+                </span>
+              </div>
+              <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
+                DEXA Scan
+              </h3>
+              <p style={{ fontSize: "0.875rem", lineHeight: 1.65, color: "var(--color-text-secondary)", margin: 0 }}>
+                Body composition at the segment level — lean mass, fat mass,
+                and bone density by region. Luma tracks your scans over time
+                and contextualises changes against your training load, diet
+                signals, and bloodwork for a complete recomposition picture.
+              </p>
+            </div>
+
+            {/* CGM */}
+            <div
+              className="amach-card-surface"
+              style={{ padding: "28px 24px", display: "flex", flexDirection: "column", gap: 14, opacity: 0.7 }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "22px" }}>📈</span>
+                <span className="status-pill" style={{ background: "rgba(100,100,100,0.07)", color: "var(--color-text-muted)" }}>
+                  Coming soon
+                </span>
+              </div>
+              <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
+                Continuous Glucose
+              </h3>
+              <p style={{ fontSize: "0.875rem", lineHeight: 1.65, color: "var(--color-text-secondary)", margin: 0 }}>
+                CGM integration (Dexcom, Libre) to bring real-time glucose
+                variability into the picture. Luma will correlate your glucose
+                curves with sleep quality, exercise timing, and meal patterns
+                to give you personalised metabolic feedback.
+              </p>
+            </div>
+          </div>
+
+          {/* Bottom bar: encryption assurance */}
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 32,
+              paddingTop: 40,
+              borderTop: "1px solid var(--color-border)",
+            }}
+          >
+            {[
+              { icon: "🔐", label: "AES-256 encrypted", detail: "Before it leaves your device" },
+              { icon: "⛓", label: "On-chain verification", detail: "ZKsync Era — tamper-evident" },
+              { icon: "🗄️", label: "Decentralised storage", detail: "Storj — no single point of control" },
+              { icon: "🔑", label: "Your keys only", detail: "Wallet-derived — no Amach access" },
+            ].map((item) => (
+              <div key={item.label} style={{ display: "flex", alignItems: "flex-start", gap: 12, flex: "1 1 180px" }}>
+                <span style={{ fontSize: "18px", marginTop: 1 }}>{item.icon}</span>
+                <div>
+                  <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", margin: "0 0 2px" }}>
+                    {item.label}
+                  </p>
+                  <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", margin: 0 }}>
+                    {item.detail}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -782,7 +862,7 @@ const MainPage: React.FC = (): JSX.Element => {
               marginTop: 16,
             }}
           >
-            Private beta. ~50 users. Built in public.
+            Private beta. Built in public.
           </p>
         </div>
       </section>

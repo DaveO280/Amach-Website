@@ -1,7 +1,6 @@
 "use client";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
-import Image from "next/image";
 import Link from "next/link";
 import React from "react";
 
@@ -131,16 +130,10 @@ const MissionPage: React.FC = () => {
         }}
       >
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Image src="/amach-logo.svg" alt="Amach Health" width={28} height={28} />
-          <span
-            style={{
-              fontWeight: 700,
-              fontSize: "1.05rem",
-              color: "var(--color-text-primary)",
-            }}
-          >
-            Amach Health
-          </span>
+          <div className="amach-wordmark-wrap" style={{ fontSize: "1rem", letterSpacing: "0.28em" }}>
+            <span className="amach-wordmark-line">Amach</span>
+            <span className="amach-wordmark-line-sub">Health</span>
+          </div>
         </Link>
 
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -206,7 +199,7 @@ const MissionPage: React.FC = () => {
           }}
         >
           Modern medicine measures everything and understands too little. We think
-          the answer isn&apos;t less data — it&apos;s data that belongs to you,
+          the answer isn&apos;t less data. It&apos;s data that belongs to you,
           interpreted for your biology, and never sold to anyone.
         </p>
       </section>
@@ -247,11 +240,12 @@ const MissionPage: React.FC = () => {
             icon={<IconData />}
             label="Data"
             headline="Measure what matters. Own what you measure."
-            body="Wearables, bloodwork, genetics, sleep — the numbers that define your
+            body="Wearables, bloodwork, genetics, sleep. The numbers that define your
               health exist right now, scattered across silos no one gave you the
-              key to. We collect them in one encrypted vault. Yours alone. The
-              data doesn't become valuable when a corporation aggregates it.
-              It was always valuable. You just weren't holding it."
+              key to. We've created the tools for you to collect them in one
+              encrypted vault. Yours alone. The data doesn't become valuable
+              because a corporation aggregates it. It was always valuable.
+              You just weren't holding it."
           />
 
           <PrincipleCard
@@ -259,10 +253,10 @@ const MissionPage: React.FC = () => {
             label="Nature"
             headline="Your biology isn't average. Your health intelligence shouldn't be either."
             body="Population averages flatten the very variation that matters most.
-              What's optimal for you — your HRV baseline, your sleep architecture,
-              your cortisol curve — is written in your own longitudinal data.
-              Amach reads that signal and reflects it back to you, not a
-              statistical ghost that looks nothing like you."
+              Your HRV baseline, your sleep architecture, your cortisol curve
+              are written in your own longitudinal data. Amach reads that signal
+              and reflects it back to you, not a statistical ghost that looks
+              nothing like you."
           />
 
           <PrincipleCard
@@ -270,7 +264,7 @@ const MissionPage: React.FC = () => {
             label="Sovereignty"
             headline="Privacy isn't a feature. It's the foundation."
             body="Your health data is the most intimate thing about you. We built
-              the architecture around that fact — end-to-end encrypted, stored
+              the architecture around that fact: end-to-end encrypted, stored
               on decentralized infrastructure, verified on-chain. No one at
               Amach can read your records. No advertiser will. No data broker
               ever will. Sovereignty isn't a setting you enable. It's the
@@ -327,7 +321,7 @@ const MissionPage: React.FC = () => {
               }}
             >
               Every health app you&apos;ve used, every lab you&apos;ve visited, every wearable
-              you&apos;ve worn — each one captures a fragment of your biology and keeps it.
+              you&apos;ve worn. Each one captures a fragment of your biology and keeps it.
               Your records don&apos;t follow you. They follow the business model.
             </p>
             <p
@@ -337,8 +331,8 @@ const MissionPage: React.FC = () => {
                 color: "var(--color-text-secondary)",
               }}
             >
-              The result is a fragmented picture of your health that no one —
-              including you — can see whole. Decisions get made on partial data.
+              The result is a fragmented picture of your health that no one,
+              including you, can see whole. Decisions get made on partial data.
               Patterns go unnoticed. And somewhere, your information is being
               sold to people who&apos;ve never met you.
             </p>

@@ -365,7 +365,7 @@ const MainPage: React.FC = (): JSX.Element => {
               margin: "0 auto 48px",
             }}
           >
-            Amach returns it to you — encrypted, on-chain, and readable by an
+            Amach returns it to you. Encrypted, on-chain, and readable by an
             intelligence built for your biology, not the average.
           </p>
 
@@ -459,7 +459,7 @@ const MainPage: React.FC = (): JSX.Element => {
               }}
             >
               Your data stays encrypted.<br />
-              It lives on-chain — verifiable, yours.<br />
+              It lives on-chain. Verifiable, yours.<br />
               Luma reads a year of your biology<br />
               and tells you what it actually means.<br />
               You walk into that appointment prepared.
@@ -518,7 +518,7 @@ const MainPage: React.FC = (): JSX.Element => {
               </h3>
               <p style={{ fontSize: "0.95rem", lineHeight: 1.7, color: "var(--color-text-secondary)", margin: 0 }}>
                 Your data is encrypted before it leaves your device. Stored on
-                Storj. Verified on-chain. Not a policy — the architecture.
+                Storj. Verified on-chain. Not a policy. The architecture.
               </p>
             </div>
 
@@ -560,7 +560,7 @@ const MainPage: React.FC = (): JSX.Element => {
               </h3>
               <p style={{ fontSize: "0.95rem", lineHeight: 1.7, color: "var(--color-text-secondary)", margin: 0 }}>
                 The value your data creates flows back to you. Verified on-chain.
-                Not a promise — a protocol.
+                Not a promise. A protocol.
               </p>
             </div>
           </div>
@@ -620,7 +620,7 @@ const MainPage: React.FC = (): JSX.Element => {
                 margin: "0 auto 32px",
               }}
             >
-              She reads your health data and tells you what it means — your
+              She reads your health data and tells you what it means: your
               trends, your patterns, your specific numbers. Not general health
               advice. Your health, read clearly.
             </p>
@@ -707,7 +707,7 @@ const MainPage: React.FC = (): JSX.Element => {
               </h3>
               <p style={{ fontSize: "0.875rem", lineHeight: 1.65, color: "var(--color-text-secondary)", margin: 0 }}>
                 Steps, VO₂ max, resting heart rate, HRV, active energy, sleep
-                stages, and respiratory rate — streamed continuously and stored
+                stages, and respiratory rate. Streamed continuously and stored
                 encrypted. Luma reads months of this data at once to surface
                 trends your watch never shows you.
               </p>
@@ -750,7 +750,7 @@ const MainPage: React.FC = (): JSX.Element => {
                 DEXA Scan
               </h3>
               <p style={{ fontSize: "0.875rem", lineHeight: 1.65, color: "var(--color-text-secondary)", margin: 0 }}>
-                Body composition at the segment level — lean mass, fat mass,
+                Body composition at the segment level: lean mass, fat mass,
                 and bone density by region. Luma tracks your scans over time
                 and contextualises changes against your training load, diet
                 signals, and bloodwork for a complete recomposition picture.
@@ -792,9 +792,9 @@ const MainPage: React.FC = (): JSX.Element => {
           >
             {[
               { icon: "🔐", label: "AES-256 encrypted", detail: "Before it leaves your device" },
-              { icon: "⛓", label: "On-chain verification", detail: "ZKsync Era — tamper-evident" },
-              { icon: "🗄️", label: "Decentralised storage", detail: "Storj — no single point of control" },
-              { icon: "🔑", label: "Your keys only", detail: "Wallet-derived — no Amach access" },
+              { icon: "⛓", label: "On-chain verification", detail: "ZKsync Era, tamper-evident" },
+              { icon: "🗄️", label: "Decentralised storage", detail: "Storj, no single point of control" },
+              { icon: "🔑", label: "Your keys only", detail: "Wallet-derived, no Amach access" },
             ].map((item) => (
               <div key={item.label} style={{ display: "flex", alignItems: "flex-start", gap: 12, flex: "1 1 180px" }}>
                 <span style={{ fontSize: "18px", marginTop: 1 }}>{item.icon}</span>
@@ -869,7 +869,7 @@ const MainPage: React.FC = (): JSX.Element => {
         }}
       >
         <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", margin: 0 }}>
-          © 2025 Amach Health — Own your data. Keep the value. Read the signals.
+          © 2025 Amach Health · Own your data. Keep the value. Read the signals.
         </p>
       </footer>
     </div>

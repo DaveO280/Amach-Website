@@ -172,40 +172,16 @@ const MainPage: React.FC = (): JSX.Element => {
             maxWidth: 1200,
             margin: "0 auto",
             padding: "0 24px",
-            height: 64,
+            height: 76,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
           }}
         >
-          {/* Wordmark */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <div className="amach-wordmark-wrap" style={{ fontSize: "0.78rem", letterSpacing: "0.28em" }}>
-              <span className="amach-wordmark-line">Amach</span>
-              <span className="amach-wordmark-line-sub">Health</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, opacity: 0.5 }}>
-              <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>Powered by</span>
-              <a
-                href="https://venice.ai/"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Visit Venice AI"
-                onClick={(e) => {
-                  e.preventDefault();
-                  try { window.open("https://venice.ai/", "_blank", "noopener,noreferrer"); }
-                  catch { window.location.href = "https://venice.ai/"; }
-                }}
-              >
-                <Image
-                  src="/venice-logo/Venice Lockup SVG/venice-logo-lockup-black.svg"
-                  alt="Venice AI"
-                  width={52}
-                  height={13}
-                  style={{ opacity: 0.7 }}
-                />
-              </a>
-            </div>
+          {/* Wordmark — larger, more breathing room from top */}
+          <div className="amach-wordmark-wrap" style={{ fontSize: "1rem", letterSpacing: "0.28em" }}>
+            <span className="amach-wordmark-line">Amach</span>
+            <span className="amach-wordmark-line-sub">Health</span>
           </div>
 
           {/* Desktop nav */}
@@ -229,6 +205,30 @@ const MainPage: React.FC = (): JSX.Element => {
                 {item.label}
               </a>
             ))}
+
+            {/* Powered by Venice — right side of nav */}
+            <a
+              href="https://venice.ai/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Visit Venice AI"
+              style={{ display: "flex", alignItems: "center", gap: 5, opacity: 0.55, textDecoration: "none" }}
+              onClick={(e) => {
+                e.preventDefault();
+                try { window.open("https://venice.ai/", "_blank", "noopener,noreferrer"); }
+                catch { window.location.href = "https://venice.ai/"; }
+              }}
+            >
+              <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Powered by</span>
+              <Image
+                src="/venice-logo/Venice Lockup SVG/venice-logo-lockup-black.svg"
+                alt="Venice AI"
+                width={52}
+                height={13}
+                className="venice-logo"
+              />
+            </a>
+
             <ThemeToggle />
             <WalletConnectButton
               onDashboardClick={handleDashboardClick}

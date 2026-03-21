@@ -336,6 +336,20 @@ const MainPage: React.FC = (): JSX.Element => {
             textAlign: "center",
           }}
         >
+          {/* Eyebrow tagline */}
+          <p
+            style={{
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              color: "var(--color-emerald)",
+              marginBottom: 20,
+            }}
+          >
+            Driven by Data, Guided by Nature
+          </p>
+
           {/* Headline */}
           <h1
             style={{

@@ -145,10 +145,94 @@
 }
 
 @layer components {
-  /* ── Typography ── */
+  /* ── Silver shimmer sweep — matches iOS GoldShimmerModifier exactly.
+        Sweeps a narrow #CBD5E1 → white → #CBD5E1 highlight left to right
+        across the emerald wordmark text, clipped to the text shape. ── */
+  @keyframes shimmer-sweep {
+    0%   { background-position: -200% center; }
+    100% { background-position: 300% center; }
+  }
+
+  /* ── Wordmark — serif, stacked, wide tracking ── */
+  /* Applied to the outer wrapper — sets font only */
+  .amach-wordmark-wrap {
+    font-family: var(--font-serif, "Libre Baskerville", Georgia, serif);
+    font-weight: 700;
+    text-transform: uppercase;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+  }
+
+  /* Each line gets the shimmer via background-clip: text */
+  .amach-wordmark-line {
+    background: linear-gradient(
+      90deg,
+      #006B4F 0%,
+      #006B4F 28%,
+      #CBD5E1 42%,
+      #FFFFFF 50%,
+      #CBD5E1 58%,
+      #006B4F 72%,
+      #006B4F 100%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer-sweep 4.5s linear infinite;
+    animation-delay: 0.6s;
+    display: block;
+  }
+
+  /* Second line: lower opacity shimmer, slightly longer delay */
+  .amach-wordmark-line-sub {
+    background: linear-gradient(
+      90deg,
+      #006B4F 0%,
+      #006B4F 28%,
+      #CBD5E1 42%,
+      #FFFFFF 50%,
+      #CBD5E1 58%,
+      #006B4F 72%,
+      #006B4F 100%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer-sweep 4.5s linear infinite;
+    animation-delay: 1.4s;
+    display: block;
+    opacity: 0.7;
+  }
+
+  /* Dark mode — brighter emerald base so shimmer reads on dark bg */
+  [data-theme="dark"] .amach-wordmark-line,
+  [data-theme="dark"] .amach-wordmark-line-sub {
+    background: linear-gradient(
+      90deg,
+      #10B981 0%,
+      #10B981 28%,
+      #E2E8F0 42%,
+      #FFFFFF 50%,
+      #E2E8F0 58%,
+      #10B981 72%,
+      #10B981 100%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer-sweep 4.5s linear infinite;
+  }
+  [data-theme="dark"] .amach-wordmark-line { animation-delay: 0.6s; }
+  [data-theme="dark"] .amach-wordmark-line-sub { animation-delay: 1.4s; }
+
+  /* Legacy class — kept for other pages that still use .amach-wordmark */
   .amach-wordmark {
-    font-family: var(--font-sans, Inter, sans-serif);
-    font-weight: 800;
+    font-family: var(--font-serif, "Libre Baskerville", Georgia, serif);
+    font-weight: 700;
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: var(--color-emerald);

@@ -4,7 +4,7 @@ import { PrivyErrorBoundary } from "@/components/PrivyErrorBoundary";
 import QueryProvider from "@/components/QueryProvider";
 import { SelectionProvider } from "@/store/selectionStore/provider";
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Libre_Baskerville } from "next/font/google";
 import React, { Suspense } from "react";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
@@ -20,6 +20,12 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500"],
   variable: "--font-mono",
+});
+
+const libreBaskerville = Libre_Baskerville({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-serif",
 });
 
 export const metadata: Metadata = {
@@ -74,7 +80,7 @@ export default function RootLayout({
         {/* Theme init — must run before paint to avoid flash */}
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className={`${inter.variable} ${jetbrainsMono.variable} ${inter.className}`}>
+      <body className={`${inter.variable} ${jetbrainsMono.variable} ${libreBaskerville.variable} ${inter.className}`}>
         <ErudaLoader />
         <PrivyErrorBoundary>
           <Suspense fallback={<div>Loading...</div>}>

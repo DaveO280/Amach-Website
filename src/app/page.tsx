@@ -180,9 +180,10 @@ const MainPage: React.FC = (): JSX.Element => {
         >
           {/* Wordmark */}
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <span className="amach-wordmark" style={{ fontSize: "1.1rem", lineHeight: 1 }}>
-              Amach Health
-            </span>
+            <div className="amach-wordmark-wrap" style={{ fontSize: "0.78rem", letterSpacing: "0.28em" }}>
+              <span className="amach-wordmark-line">Amach</span>
+              <span className="amach-wordmark-line-sub">Health</span>
+            </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, opacity: 0.5 }}>
               <span style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>Powered by</span>
               <a
@@ -342,8 +343,9 @@ const MainPage: React.FC = (): JSX.Element => {
           }}
         >
           {/* Wordmark */}
-          <div className="amach-wordmark" style={{ fontSize: "0.8rem", marginBottom: 32, opacity: 0.8 }}>
-            Amach Health
+          <div className="amach-wordmark-wrap" style={{ fontSize: "0.72rem", letterSpacing: "0.28em", marginBottom: 32, opacity: 0.9, alignItems: "center" }}>
+            <span className="amach-wordmark-line">Amach</span>
+            <span className="amach-wordmark-line-sub">Health</span>
           </div>
 
           {/* Headline */}

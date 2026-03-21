@@ -65,7 +65,10 @@ const WalletConnectButton: React.FC<WalletConnectButtonProps> = ({
     <div className="wallet-connect-container flex items-center gap-3">
       {/* Basic AI button - always visible */}
       <Button
-        className="bg-emerald-600 hover:bg-emerald-700 text-white transition-all duration-300 hover:scale-105 px-6 leading-tight whitespace-nowrap rounded-full"
+        className="text-white transition-all duration-300 hover:scale-105 px-6 whitespace-nowrap rounded-full"
+        style={{ backgroundColor: "#6366F1" }}
+        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#4F46E5"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#6366F1"; }}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -74,10 +77,7 @@ const WalletConnectButton: React.FC<WalletConnectButtonProps> = ({
           }
         }}
       >
-        <span className="flex flex-col items-center">
-          <span className="whitespace-nowrap">Try Our</span>
-          <span>AI</span>
-        </span>
+        Chat with Luma
       </Button>
 
       {/* Wallet connection/dropdown */}

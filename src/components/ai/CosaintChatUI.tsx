@@ -1622,11 +1622,11 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
 
   const containerClasses = isExpanded
     ? "flex h-full flex-col gap-4 overflow-hidden"
-    : "flex flex-col min-h-[75vh] max-h-[90vh] lg:h-[calc(100vh-220px)]";
+    : "flex flex-col min-h-[45vh] sm:min-h-[65vh] max-h-[90vh] lg:h-[calc(100vh-220px)]";
 
   const chatHistoryClasses = isExpanded
     ? "flex-1 overflow-y-auto rounded-3xl border border-emerald-100 bg-white p-6 shadow-lg"
-    : "mb-4 flex-1 overflow-y-auto rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm";
+    : "mb-4 flex-1 overflow-y-auto rounded-2xl border border-emerald-100 bg-white p-3 sm:p-5 shadow-sm";
 
   const chatLayout = (
     <div className={containerClasses}>

@@ -579,7 +579,9 @@
   }
   .companion-notification {
     background: var(--color-companion-notification-bg);
-    border: none;
+    border-top: none;
+    border-right: none;
+    border-bottom: none;
     border-left: 3px solid var(--color-companion-notification-border);
   }
   .companion-notification-text {

@@ -664,7 +664,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                     style={{
                       marginBottom: isMobile ? 10 : 16,
                       padding: isMobile ? "10px 12px" : "14px 16px",
-                      borderRadius: 10,
+                      borderRadius: "0 8px 8px 0",
                     }}
                   >
                     <p

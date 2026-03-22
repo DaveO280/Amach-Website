@@ -1647,7 +1647,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                       : "companion-btn-inactive"
                   }`}
                 >
-                  Quick (general advice)
+                  Quick
                 </button>
                 <button
                   type="button"
@@ -2575,7 +2575,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       </Dialog>
 
       {!isExpanded && (
-        <div className="mb-2 text-sm companion-mode-text">
+        <div className="mb-2 text-sm companion-welcome-text">
           Available Metrics:{" "}
           {metrics
             ? Object.keys(metrics)
@@ -2628,11 +2628,13 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             <div className="mb-4">
               <span style={{ fontSize: "28px", color: "#6366F1", lineHeight: 1 }}>✦</span>
             </div>
-            <h3 className="mb-2 text-lg font-semibold companion-mode-text">
-              Hi, I&apos;m Luma
+            <h3 className="mb-2 text-lg font-semibold">
+              This is Luma.
             </h3>
             <p className="max-w-xs text-sm">
-              Ask me anything about your health — I&apos;ll help you make sense of it.
+              She reads your health data and tells you what it means — your
+              trends, your patterns, your specific numbers. Not general health
+              advice. Your health, read clearly.
             </p>
           </div>
         ) : (

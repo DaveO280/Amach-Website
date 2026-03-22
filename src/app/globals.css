@@ -142,14 +142,14 @@
     --shimmer-opacity: 0.04;
 
     /* ── AI Companion chat tokens — dark mode ── */
-    --color-companion-surface: #080D0A;
+    --color-companion-surface: #0A0F0C;
     --color-companion-surface-border: rgba(255, 255, 255, 0.05);
     --color-companion-pill-bg: rgba(255, 255, 255, 0.04);
     --color-companion-pill-border: rgba(255, 255, 255, 0.1);
-    --color-companion-btn-active-bg: #005A42;
+    --color-companion-btn-active-bg: #006B4F;
     --color-companion-btn-hover: rgba(0, 107, 79, 0.15);
     --color-companion-outline-btn-color: #6B8C7A;
-    --color-companion-outline-btn-border: rgba(255, 255, 255, 0.1);
+    --color-companion-outline-btn-border: rgba(0, 107, 79, 0.35);
     --color-companion-label-bg: rgba(255, 255, 255, 0.05);
     --color-companion-label-text: #6B8C7A;
     --color-companion-user-bubble: rgba(0, 107, 79, 0.18);
@@ -166,7 +166,7 @@
     --color-companion-textarea-bg: #080D0A;
     --color-companion-textarea-border: rgba(255, 255, 255, 0.07);
     --color-companion-mode-text: #6B8C7A;
-    --color-companion-hint-text: #A07830;
+    --color-companion-hint-text: #6B8C7A;
     --color-companion-notification-bg: rgba(245, 158, 11, 0.04);
     --color-companion-notification-border: rgba(245, 158, 11, 0.45);
     --color-companion-notification-text: #A07830;

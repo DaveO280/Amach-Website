@@ -662,9 +662,9 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                   <div
                     className="companion-notification"
                     style={{
-                      marginBottom: isMobile ? 10 : 16,
-                      padding: isMobile ? "10px 12px" : "14px 16px",
-                      borderRadius: "0 8px 8px 0",
+                      marginBottom: isMobile ? 8 : 12,
+                      padding: isMobile ? "5px 10px" : "6px 12px",
+                      borderRadius: "0 6px 6px 0",
                     }}
                   >
                     <p

@@ -29,7 +29,7 @@ import {
   getCachedWalletEncryptionKey,
   getWalletDerivedEncryptionKey,
 } from "@/utils/walletEncryption";
-import { FileText, Send } from "lucide-react";
+import { FileText, Minimize2, Send } from "lucide-react";
 import Papa from "papaparse";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { healthDataStore } from "../../data/store/healthDataStore";
@@ -1626,10 +1626,23 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
 
   const chatHistoryClasses = isExpanded
     ? "flex-1 overflow-y-auto rounded-3xl companion-chat-surface p-6 shadow-lg"
-    : "mb-4 flex-1 overflow-y-auto rounded-2xl companion-chat-surface p-3 sm:p-5 shadow-sm";
+    : "flex-1 overflow-y-auto rounded-2xl companion-chat-surface p-3 sm:p-5 shadow-sm";
 
   const chatLayout = (
     <div className={containerClasses}>
+      {isExpanded && (
+        <div className="flex justify-end mb-4">
+          <button
+            type="button"
+            className="text-gray-500 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10"
+            onClick={() => setIsExpanded(false)}
+            aria-label="Minimize"
+          >
+            <Minimize2 className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+      {!isExpanded && (
       <div className="flex flex-col gap-3">
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-1">
@@ -2153,6 +2166,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           </div>
         )}
       </div>
+      )}
 
       <Dialog
         open={showFileManager}
@@ -2595,7 +2609,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         </div>
       )}
 
-      {messages.length > 0 && (
+      {!isExpanded && messages.length > 0 && (
         <div className="mb-2 flex justify-end">
           <Button
             size="sm"
@@ -2704,6 +2718,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         </Button>
       </div>
 
+      {!isExpanded && (
       <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
         <div>
           {lastResponseMs !== null
@@ -2712,6 +2727,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         </div>
         <div>{input.length}/500</div>
       </div>
+      )}
 
       {/* Message Limit Popup */}
       {!isConnected && (
@@ -2728,11 +2744,11 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   return (
     <>
       {isExpanded && (
-        <div className="fixed inset-0 z-40 bg-emerald-950/40 backdrop-blur-sm transition-opacity" />
+        <div className="fixed inset-0 z-40 bg-black/90 transition-opacity" />
       )}
       {isExpanded ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
-          <div className="flex h-[calc(100dvh-1.5rem)] sm:h-[calc(100dvh-3rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/60 to-white p-4 sm:p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center sm:p-6">
+          <div className="flex h-full sm:h-[calc(100dvh-3rem)] w-full max-w-6xl flex-col overflow-hidden sm:rounded-3xl bg-[#050807] px-4 py-4 sm:px-8 sm:py-6 shadow-2xl">
             {chatLayout}
           </div>
         </div>

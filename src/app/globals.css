@@ -142,16 +142,16 @@
     --shimmer-opacity: 0.04;
 
     /* ── AI Companion chat tokens — dark mode ── */
-    --color-companion-surface: #0E1812;
-    --color-companion-surface-border: rgba(0, 107, 79, 0.2);
-    --color-companion-pill-bg: rgba(0, 107, 79, 0.1);
-    --color-companion-pill-border: rgba(110, 231, 183, 0.2);
+    --color-companion-surface: #080D0A;
+    --color-companion-surface-border: rgba(255, 255, 255, 0.05);
+    --color-companion-pill-bg: rgba(255, 255, 255, 0.04);
+    --color-companion-pill-border: rgba(255, 255, 255, 0.1);
     --color-companion-btn-active-bg: #005A42;
-    --color-companion-btn-hover: rgba(0, 107, 79, 0.18);
-    --color-companion-outline-btn-color: #6EE7B7;
-    --color-companion-outline-btn-border: rgba(110, 231, 183, 0.25);
-    --color-companion-label-bg: rgba(0, 107, 79, 0.12);
-    --color-companion-label-text: #6EE7B7;
+    --color-companion-btn-hover: rgba(0, 107, 79, 0.15);
+    --color-companion-outline-btn-color: #6B8C7A;
+    --color-companion-outline-btn-border: rgba(255, 255, 255, 0.1);
+    --color-companion-label-bg: rgba(255, 255, 255, 0.05);
+    --color-companion-label-text: #6B8C7A;
     --color-companion-user-bubble: rgba(0, 107, 79, 0.18);
     --color-companion-user-bubble-border: rgba(0, 107, 79, 0.35);
     --color-companion-user-bubble-text: #F0F7F3;
@@ -159,17 +159,17 @@
     --color-companion-assistant-bubble-border: rgba(99, 102, 241, 0.3);
     --color-companion-assistant-bubble-text: #F0F7F3;
     --color-companion-assistant-duration-text: rgba(240, 247, 243, 0.6);
-    --color-companion-badge-bg: rgba(0, 107, 79, 0.18);
-    --color-companion-badge-text: #6EE7B7;
-    --color-companion-welcome-text: #9DB8A8;
-    --color-companion-icon-bg: rgba(0, 107, 79, 0.12);
-    --color-companion-textarea-bg: #0E1812;
-    --color-companion-textarea-border: rgba(0, 107, 79, 0.28);
-    --color-companion-mode-text: #6EE7B7;
-    --color-companion-hint-text: #D4A853;
-    --color-companion-notification-bg: rgba(245, 158, 11, 0.1);
-    --color-companion-notification-border: rgba(245, 158, 11, 0.7);
-    --color-companion-notification-text: #D4A853;
+    --color-companion-badge-bg: rgba(255, 255, 255, 0.05);
+    --color-companion-badge-text: #6B8C7A;
+    --color-companion-welcome-text: #6B8C7A;
+    --color-companion-icon-bg: rgba(255, 255, 255, 0.05);
+    --color-companion-textarea-bg: #080D0A;
+    --color-companion-textarea-border: rgba(255, 255, 255, 0.07);
+    --color-companion-mode-text: #6B8C7A;
+    --color-companion-hint-text: #A07830;
+    --color-companion-notification-bg: rgba(245, 158, 11, 0.04);
+    --color-companion-notification-border: rgba(245, 158, 11, 0.45);
+    --color-companion-notification-text: #A07830;
 
     /* ── Health Dashboard dark tokens ── */
     --color-dashboard-bg: linear-gradient(to bottom right, #0A1209, #111A15, #0A1812);
@@ -586,6 +586,24 @@
   }
   .companion-notification-text {
     color: var(--color-companion-notification-text);
+  }
+
+  /* ── Dark mode: chat history + textarea as one continuous surface ── */
+  [data-theme="dark"] .companion-chat-surface {
+    border-bottom: none;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    margin-bottom: 0 !important;
+    box-shadow: none !important;
+  }
+  [data-theme="dark"] .companion-textarea {
+    border-top: none !important;
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+  }
+  [data-theme="dark"] .companion-textarea:focus {
+    box-shadow: none;
+    border-bottom: 1px solid rgba(0, 107, 79, 0.25);
   }
 
   /* ── Health Dashboard UI — theme-aware classes ── */

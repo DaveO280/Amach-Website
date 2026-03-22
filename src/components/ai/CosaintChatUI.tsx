@@ -1661,7 +1661,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                   } ${!isConnected ? "opacity-50 cursor-not-allowed" : ""}`}
                   style={{ padding: "5px 14px" }}
                 >
-                  Deep (uses your health data)
+                  Deep
                 </button>
                 {!isConnected && (
                   <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-emerald-900/95 text-white text-xs rounded-md invisible group-hover:visible pointer-events-none whitespace-nowrap z-50">
@@ -2085,7 +2085,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           </div>
           <div className="flex flex-col gap-1"></div>
           <div className="flex items-center gap-3 self-end sm:self-auto">
-            <label className="flex items-center gap-2 rounded-full companion-label px-3 py-1 text-xs font-medium shadow-sm">
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--color-text-muted)", cursor: "pointer" }}>
               <input
                 type="checkbox"
                 className="h-3.5 w-3.5 accent-emerald-600"
@@ -2601,10 +2601,9 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
 
       {messages.length > 0 && (
         <div className="mb-2 flex justify-end">
-          <Button
-            size="sm"
-            variant="outline"
-            className="rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400"
+          <button
+            className="companion-tertiary-btn rounded-lg"
+            style={{ fontSize: 13, padding: "6px 12px" }}
             onClick={() => {
               clearMessages();
               clearChatHistory();
@@ -2612,7 +2611,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             disabled={isLoading}
           >
             Clear Chat
-          </Button>
+          </button>
         </div>
       )}
 
@@ -2654,12 +2653,12 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                       ? "companion-user-bubble"
                       : "companion-assistant-bubble"
                   }`}
-                  style={{ padding: "10px 14px" }}
+                  style={{ padding: "12px 16px" }}
                 >
                   {message.content}
                   {message.role === "assistant" &&
                     message.durationMs !== undefined && (
-                      <div className="mt-2 pt-2 border-t companion-assistant-duration text-xs">
+                      <div className="companion-assistant-duration">
                         {formatDuration(message.durationMs)}
                       </div>
                     )}
@@ -2693,12 +2692,13 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           }
           onKeyDown={handleKeyDown}
           placeholder="Ask Luma about your health..."
-          className="min-h-[60px] w-full resize-none rounded-2xl companion-textarea p-3 pr-12"
+          className="min-h-[60px] w-full resize-none rounded-xl companion-textarea pr-12"
+          style={{ padding: "12px 16px", paddingRight: 48 }}
           maxLength={500}
           disabled={isLoading}
         />
         <Button
-          className="absolute bottom-2 right-2 rounded-full companion-send-btn"
+          className="absolute bottom-2 right-2 rounded-lg companion-send-btn"
           size="sm"
           onClick={handleSendMessage}
           disabled={isLoading || input.trim() === ""}
@@ -2714,7 +2714,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         </Button>
       </div>
 
-      <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
+      <div className="mt-1 flex items-center justify-between" style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
         <div>
           {lastResponseMs !== null
             ? `Last: ${formatDuration(lastResponseMs)}`
@@ -2738,11 +2738,11 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   return (
     <>
       {isExpanded && (
-        <div className="fixed inset-0 z-40 bg-emerald-950/40 backdrop-blur-sm transition-opacity" />
+        <div className="fixed inset-0 z-40 backdrop-blur-sm transition-opacity" style={{ background: "rgba(0,0,0,0.65)" }} />
       )}
       {isExpanded ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
-          <div className="flex h-[calc(100dvh-1.5rem)] sm:h-[calc(100dvh-3rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/60 to-white p-4 sm:p-6 shadow-2xl">
+          <div className="flex h-[calc(100dvh-1.5rem)] sm:h-[calc(100dvh-3rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl" style={{ background: "var(--color-companion-surface)", border: "0.5px solid var(--color-border)" }}>
             {chatLayout}
           </div>
         </div>

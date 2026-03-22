@@ -372,8 +372,8 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
     <div
       className="fixed inset-0 z-[100] overflow-hidden flex"
       style={{
-        background: "rgba(0,0,0,0.45)",
-        backdropFilter: "blur(6px)",
+        background: "rgba(0,0,0,0.65)",
+        backdropFilter: "blur(4px)",
         // On desktop: center the modal. On mobile: fill the screen.
         ...(isMobile
           ? { alignItems: "flex-end" }
@@ -384,7 +384,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
         ref={modalRef}
         className="relative w-full overflow-hidden animate-in fade-in duration-300"
         style={{
-          background: "var(--color-bg-surface)",
+          background: "var(--color-companion-surface)",
           // Mobile: slide-up sheet, no rounding on bottom, full width
           // Desktop: centred floating modal
           ...(isMobile
@@ -424,28 +424,16 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
           }}
         >
           {/* Wordmark */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 18, color: "#6366F1", lineHeight: 1 }}>✦</span>
             <span
-              className="amach-wordmark-line"
               style={{
-                fontFamily: "var(--font-serif, 'Libre Baskerville', Georgia, serif)",
-                fontWeight: 700,
-                fontSize: "0.95rem",
-                letterSpacing: "0.18em",
-                textTransform: "uppercase",
+                fontSize: 16,
+                fontWeight: 500,
+                color: "var(--color-text-primary)",
               }}
             >
               Luma
-            </span>
-            <span
-              style={{
-                fontSize: "0.65rem",
-                letterSpacing: "0.1em",
-                textTransform: "uppercase",
-                color: "var(--color-text-muted)",
-              }}
-            >
-              by Amach Health
             </span>
           </div>
 
@@ -460,18 +448,17 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
               width: 36,
               height: 36,
               borderRadius: "50%",
-              border: "1px solid var(--color-border)",
+              border: "none",
               background: "transparent",
               color: "var(--color-text-muted)",
               cursor: "pointer",
-              transition: "color 0.15s, background 0.15s",
+              transition: "color 0.15s",
+              fontSize: 20,
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = "var(--color-emerald-muted)";
-              (e.currentTarget as HTMLButtonElement).style.color = "var(--color-emerald)";
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)";
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = "transparent";
               (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-muted)";
             }}
           >

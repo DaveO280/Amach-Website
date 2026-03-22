@@ -53,7 +53,7 @@
     --color-companion-user-bubble-border: rgba(0, 107, 79, 0.25);
     --color-companion-assistant-bubble-bg: #EEF2FF;
     --color-companion-assistant-bubble-border: rgba(99, 102, 241, 0.2);
-    --color-companion-assistant-bubble-text: #0A1A0F;
+    --color-companion-assistant-bubble-text: #3730A3;
     --color-companion-assistant-duration-text: rgba(10, 26, 15, 0.45);
     --color-companion-badge-bg: rgba(0, 107, 79, 0.08);
     --color-companion-badge-text: #004838;
@@ -141,7 +141,7 @@
     --shimmer-opacity: 0.04;
 
     /* ── AI Companion chat tokens — dark mode ── */
-    --color-companion-surface: #0E1812;
+    --color-companion-surface: #0F1A13;
     --color-companion-surface-border: rgba(0, 107, 79, 0.2);
     --color-companion-pill-bg: rgba(0, 107, 79, 0.1);
     --color-companion-pill-container-bg: rgba(255, 255, 255, 0.06);
@@ -496,7 +496,7 @@
   /* ── AI Companion UI — theme-aware classes ── */
   .companion-chat-surface {
     background: var(--color-companion-surface);
-    border: 1px solid var(--color-companion-surface-border);
+    border: 0.5px solid var(--color-companion-surface-border);
   }
   .companion-mode-pill {
     display: inline-flex;
@@ -512,21 +512,36 @@
     color: #ffffff !important;
   }
   .companion-btn-inactive {
-    color: var(--color-companion-mode-text);
+    color: var(--color-text-muted);
+    background: transparent;
   }
   .companion-btn-inactive:hover {
     background: var(--color-companion-btn-hover);
+    color: var(--color-text-primary);
   }
   .companion-outline-btn {
-    border: 1px solid var(--color-companion-outline-btn-border);
-    color: var(--color-companion-outline-btn-color);
+    border: 0.5px solid rgba(0, 107, 79, 0.35);
+    color: var(--color-text-secondary);
+    background: transparent;
   }
   .companion-outline-btn:hover {
+    border-color: rgba(0, 107, 79, 0.6);
+    color: var(--color-text-primary);
     background: var(--color-companion-btn-hover);
   }
+  .companion-tertiary-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+  .companion-tertiary-btn:hover {
+    color: #E24B4A;
+    background: rgba(226, 75, 74, 0.06);
+  }
   .companion-label {
-    background: var(--color-companion-label-bg);
-    color: var(--color-companion-label-text);
+    background: transparent;
+    color: var(--color-text-muted);
   }
   .companion-user-bubble {
     background: var(--color-companion-user-bubble);
@@ -541,8 +556,10 @@
     border-radius: 4px 12px 12px 12px;
   }
   .companion-assistant-duration {
-    border-color: var(--color-companion-assistant-bubble-border);
-    color: var(--color-companion-assistant-duration-text);
+    font-size: 11px;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+    margin-top: 4px;
   }
   .companion-badge {
     background: var(--color-companion-badge-bg);

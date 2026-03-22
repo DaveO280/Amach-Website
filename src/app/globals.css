@@ -36,6 +36,8 @@
 
     --indigo-900: 224 71% 4%;
     --indigo-600: 226 70% 55.5%;
+    --color-companion-assistant-bubble-bg: #EEF2FF;
+    --color-companion-assistant-bubble-text: #3730A3;
   }
 
   .dark {
@@ -66,6 +68,11 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 142.4 71.8% 29.2%;
+  }
+
+  [data-theme="dark"] {
+    --color-companion-assistant-bubble-bg: #3730A3;
+    --color-companion-assistant-bubble-text: #F0F7F3;
   }
 
   @keyframes circuit-glow {
@@ -152,6 +159,11 @@
   /* Onboarding Modal Classes */
   .animate-pulse-slow {
     animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .companion-notification {
+    border-left: 2px solid var(--color-amber);
+    border-radius: 0 8px 8px 0;
   }
 }
 

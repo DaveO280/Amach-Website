@@ -369,19 +369,40 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
   ];
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-hidden flex justify-center items-center p-2"
-      style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(6px)" }}
+    <div
+      className="fixed inset-0 z-[100] overflow-hidden flex"
+      style={{
+        background: "rgba(0,0,0,0.45)",
+        backdropFilter: "blur(6px)",
+        // On desktop: center the modal. On mobile: fill the screen.
+        ...(isMobile
+          ? { alignItems: "flex-end" }
+          : { alignItems: "center", justifyContent: "center", padding: 8 }),
+      }}
     >
       <div
         ref={modalRef}
-        className={`relative w-full overflow-hidden animate-in fade-in duration-300 ${
-          isMobile ? "max-w-full max-h-[95vh]" : "max-w-[95vw] max-h-[90vh]"
-        }`}
+        className="relative w-full overflow-hidden animate-in fade-in duration-300"
         style={{
           background: "var(--color-bg-surface)",
-          borderRadius: 20,
-          boxShadow: "0 24px 80px rgba(0,0,0,0.18)",
-          border: "1px solid var(--color-border)",
+          // Mobile: slide-up sheet, no rounding on bottom, full width
+          // Desktop: centred floating modal
+          ...(isMobile
+            ? {
+                maxWidth: "100%",
+                height: "96dvh",
+                maxHeight: "96dvh",
+                borderRadius: "16px 16px 0 0",
+                border: "1px solid var(--color-border)",
+                borderBottom: "none",
+              }
+            : {
+                maxWidth: "95vw",
+                maxHeight: "90vh",
+                borderRadius: 20,
+                boxShadow: "0 24px 80px rgba(0,0,0,0.18)",
+                border: "1px solid var(--color-border)",
+              }),
         }}
         onClick={handleModalClick}
       >
@@ -395,8 +416,8 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
             background: "var(--color-bg-nav)",
             backdropFilter: "blur(12px)",
             borderBottom: "1px solid var(--color-border)",
-            padding: "0 20px",
-            height: 60,
+            padding: isMobile ? "0 14px" : "0 20px",
+            height: 56,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -462,8 +483,8 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
         <div
           className="overflow-auto relative"
           style={{
-            maxHeight: "calc(90vh - 60px)",
-            padding: isMobile ? "16px 12px" : "24px",
+            maxHeight: isMobile ? "calc(96dvh - 56px)" : "calc(90vh - 56px)",
+            padding: isMobile ? "12px 10px" : "24px",
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -474,7 +495,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
               display: "flex",
               gap: 0,
               borderBottom: "1px solid var(--color-border)",
-              marginBottom: 24,
+              marginBottom: isMobile ? 14 : 24,
             }}
           >
             {tabs.map(({ id, label }) => {
@@ -487,8 +508,8 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                     disabled={isLocked}
                     style={{
                       width: "100%",
-                      padding: "12px 8px",
-                      fontSize: "0.9rem",
+                      padding: isMobile ? "10px 4px" : "12px 8px",
+                      fontSize: isMobile ? "0.82rem" : "0.9rem",
                       fontWeight: isActive ? 700 : 500,
                       color: isActive
                         ? "var(--color-emerald)"
@@ -535,14 +556,14 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                 {!isConnected && showWalletBanner && (
                   <div
                     style={{
-                      marginBottom: 20,
-                      padding: "16px 20px",
+                      marginBottom: isMobile ? 12 : 20,
+                      padding: isMobile ? "10px 14px" : "16px 20px",
                       background: "var(--color-emerald-muted)",
                       border: "1px solid var(--color-border-strong)",
-                      borderRadius: 12,
+                      borderRadius: 10,
                       display: "flex",
                       alignItems: "flex-start",
-                      gap: 12,
+                      gap: 10,
                     }}
                   >
                     <div style={{ flex: 1 }}>
@@ -550,23 +571,36 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                         style={{
                           fontWeight: 700,
                           color: "var(--color-emerald)",
-                          fontSize: "0.9rem",
-                          marginBottom: 6,
+                          fontSize: isMobile ? "0.82rem" : "0.9rem",
+                          marginBottom: isMobile ? 2 : 6,
                         }}
                       >
                         Unlock your permanent health vault
                       </p>
-                      <p
-                        style={{
-                          fontSize: "0.85rem",
-                          lineHeight: 1.6,
-                          color: "var(--color-text-secondary)",
-                        }}
-                      >
-                        Connect a wallet to encrypt and store your data on
-                        Storj, anchor your profile on ZKsync, and access
-                        everything from any device.
-                      </p>
+                      {!isMobile && (
+                        <p
+                          style={{
+                            fontSize: "0.85rem",
+                            lineHeight: 1.6,
+                            color: "var(--color-text-secondary)",
+                          }}
+                        >
+                          Connect a wallet to encrypt and store your data on
+                          Storj, anchor your profile on ZKsync, and access
+                          everything from any device.
+                        </p>
+                      )}
+                      {isMobile && (
+                        <p
+                          style={{
+                            fontSize: "0.78rem",
+                            lineHeight: 1.5,
+                            color: "var(--color-text-secondary)",
+                          }}
+                        >
+                          Storj storage + ZKsync identity + cross-device access.
+                        </p>
+                      )}
                     </div>
                     <button
                       onClick={handleDismissBanner}
@@ -587,7 +621,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
 
                 {/* Health stats */}
                 {hasHealthData && (
-                  <div style={{ marginBottom: 16 }}>
+                  <div style={{ marginBottom: isMobile ? 10 : 16 }}>
                     <button
                       onClick={() => setShowStats(!showStats)}
                       style={{
@@ -595,15 +629,15 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
-                        padding: "10px 14px",
+                        padding: isMobile ? "8px 12px" : "10px 14px",
                         background: "var(--color-emerald-muted)",
                         border: "1px solid var(--color-border)",
                         borderRadius: 10,
-                        marginBottom: showStats ? 12 : 0,
+                        marginBottom: showStats ? (isMobile ? 8 : 12) : 0,
                         cursor: "pointer",
                         color: "var(--color-emerald)",
                         fontWeight: 600,
-                        fontSize: "0.88rem",
+                        fontSize: isMobile ? "0.8rem" : "0.88rem",
                       }}
                     >
                       <span>Your Health Overview</span>
@@ -627,8 +661,8 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                 {!hasHealthData && (
                   <div
                     style={{
-                      marginBottom: 16,
-                      padding: "14px 16px",
+                      marginBottom: isMobile ? 10 : 16,
+                      padding: isMobile ? "10px 12px" : "14px 16px",
                       background: "var(--color-amber-muted)",
                       border: "1px solid var(--color-border)",
                       borderRadius: 10,
@@ -636,7 +670,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                   >
                     <p
                       style={{
-                        fontSize: "0.88rem",
+                        fontSize: isMobile ? "0.82rem" : "0.88rem",
                         color: "var(--color-text-secondary)",
                         lineHeight: 1.6,
                       }}

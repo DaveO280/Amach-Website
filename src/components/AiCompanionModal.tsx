@@ -508,9 +508,9 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                     disabled={isLocked}
                     style={{
                       width: "100%",
-                      padding: isMobile ? "10px 4px" : "12px 8px",
-                      fontSize: isMobile ? "0.82rem" : "0.9rem",
-                      fontWeight: isActive ? 700 : 500,
+                      padding: isMobile ? "10px 4px" : "10px 18px",
+                      fontSize: 13,
+                      fontWeight: isActive ? 500 : 400,
                       color: isActive
                         ? "var(--color-emerald)"
                         : "var(--color-text-muted)",
@@ -663,8 +663,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                     className="companion-notification"
                     style={{
                       marginBottom: isMobile ? 10 : 16,
-                      padding: isMobile ? "10px 12px" : "14px 16px",
-                      borderRadius: 10,
+                      padding: isMobile ? "10px 12px" : "10px 14px",
                     }}
                   >
                     <p
@@ -691,7 +690,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                           fontWeight: 600,
                           fontSize: "inherit",
                           cursor: "pointer",
-                          textDecoration: "underline",
+                          textDecoration: "none",
                         }}
                       >
                         Health Dashboard

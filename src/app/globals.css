@@ -42,17 +42,19 @@
     --color-companion-surface: #FFFFFF;
     --color-companion-surface-border: rgba(0, 107, 79, 0.15);
     --color-companion-pill-bg: #FFFFFF;
+    --color-companion-pill-container-bg: rgba(0, 0, 0, 0.04);
     --color-companion-btn-active-bg: #006B4F;
     --color-companion-btn-hover: rgba(0, 107, 79, 0.07);
     --color-companion-outline-btn-color: #005A42;
     --color-companion-outline-btn-border: rgba(0, 107, 79, 0.3);
     --color-companion-label-bg: rgba(255, 255, 255, 0.75);
     --color-companion-label-text: #005A42;
-    --color-companion-user-bubble: #006B4F;
-    --color-companion-assistant-bubble-bg: #FFFBF0;
-    --color-companion-assistant-bubble-border: rgba(217, 119, 6, 0.2);
-    --color-companion-assistant-bubble-text: #451A00;
-    --color-companion-assistant-duration-text: rgba(69, 26, 0, 0.6);
+    --color-companion-user-bubble: rgba(0, 107, 79, 0.12);
+    --color-companion-user-bubble-border: rgba(0, 107, 79, 0.25);
+    --color-companion-assistant-bubble-bg: #EEF2FF;
+    --color-companion-assistant-bubble-border: rgba(99, 102, 241, 0.2);
+    --color-companion-assistant-bubble-text: #0A1A0F;
+    --color-companion-assistant-duration-text: rgba(10, 26, 15, 0.45);
     --color-companion-badge-bg: rgba(0, 107, 79, 0.08);
     --color-companion-badge-text: #004838;
     --color-companion-welcome-text: #6B8C7A;
@@ -142,22 +144,24 @@
     --color-companion-surface: #0E1812;
     --color-companion-surface-border: rgba(0, 107, 79, 0.2);
     --color-companion-pill-bg: rgba(0, 107, 79, 0.1);
+    --color-companion-pill-container-bg: rgba(255, 255, 255, 0.06);
     --color-companion-btn-active-bg: #005A42;
     --color-companion-btn-hover: rgba(0, 107, 79, 0.18);
     --color-companion-outline-btn-color: #6EE7B7;
     --color-companion-outline-btn-border: rgba(110, 231, 183, 0.25);
     --color-companion-label-bg: rgba(0, 107, 79, 0.12);
     --color-companion-label-text: #6EE7B7;
-    --color-companion-user-bubble: #004d38;
-    --color-companion-assistant-bubble-bg: #1A130A;
-    --color-companion-assistant-bubble-border: rgba(180, 110, 0, 0.22);
-    --color-companion-assistant-bubble-text: #D4B483;
-    --color-companion-assistant-duration-text: rgba(212, 180, 131, 0.6);
+    --color-companion-user-bubble: rgba(0, 107, 79, 0.2);
+    --color-companion-user-bubble-border: rgba(0, 107, 79, 0.4);
+    --color-companion-assistant-bubble-bg: #3730A3;
+    --color-companion-assistant-bubble-border: rgba(99, 102, 241, 0.3);
+    --color-companion-assistant-bubble-text: #F0F7F3;
+    --color-companion-assistant-duration-text: rgba(240, 247, 243, 0.45);
     --color-companion-badge-bg: rgba(0, 107, 79, 0.18);
     --color-companion-badge-text: #6EE7B7;
     --color-companion-welcome-text: #9DB8A8;
     --color-companion-icon-bg: rgba(0, 107, 79, 0.12);
-    --color-companion-textarea-bg: #0E1812;
+    --color-companion-textarea-bg: rgba(255, 255, 255, 0.05);
     --color-companion-textarea-border: rgba(0, 107, 79, 0.28);
     --color-companion-mode-text: #6EE7B7;
     --color-companion-hint-text: #D4A853;
@@ -242,6 +246,11 @@
   @keyframes pulse-slow {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.7; }
+  }
+
+  @keyframes luma-pulse {
+    0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1); }
   }
 
   @keyframes fade-up {
@@ -490,7 +499,13 @@
     border: 1px solid var(--color-companion-surface-border);
   }
   .companion-mode-pill {
-    background: var(--color-companion-pill-bg);
+    display: inline-flex;
+    width: fit-content;
+    background: var(--color-companion-pill-container-bg);
+    border: 0.5px solid var(--color-border);
+    border-radius: 20px;
+    padding: 3px;
+    gap: 2px;
   }
   .companion-btn-active {
     background: var(--color-companion-btn-active-bg) !important;
@@ -515,12 +530,15 @@
   }
   .companion-user-bubble {
     background: var(--color-companion-user-bubble);
-    color: #ffffff;
+    border: 0.5px solid var(--color-companion-user-bubble-border);
+    color: var(--color-text-primary);
+    border-radius: 12px 4px 12px 12px;
   }
   .companion-assistant-bubble {
     background: var(--color-companion-assistant-bubble-bg);
-    border: 1px solid var(--color-companion-assistant-bubble-border);
+    border: 0.5px solid var(--color-companion-assistant-bubble-border);
     color: var(--color-companion-assistant-bubble-text);
+    border-radius: 4px 12px 12px 12px;
   }
   .companion-assistant-duration {
     border-color: var(--color-companion-assistant-bubble-border);
@@ -538,13 +556,16 @@
   }
   .companion-textarea {
     background: var(--color-companion-textarea-bg);
-    border: 1px solid var(--color-companion-textarea-border);
+    border: 0.5px solid var(--color-companion-textarea-border);
     color: var(--color-text-primary);
+    font-family: var(--font-sans);
+  }
+  .companion-textarea::placeholder {
+    color: var(--color-text-muted);
   }
   .companion-textarea:focus {
-    border-color: var(--color-companion-btn-active-bg);
+    border-color: var(--color-border-strong);
     outline: none;
-    box-shadow: 0 0 0 2px rgba(0, 107, 79, 0.18);
   }
   .companion-send-btn {
     background: var(--color-companion-btn-active-bg) !important;
@@ -561,7 +582,8 @@
   }
   .companion-notification {
     background: var(--color-companion-notification-bg);
-    border: 1px solid var(--color-companion-notification-border);
+    border-left: 2px solid var(--color-amber);
+    border-radius: 0 8px 8px 0;
   }
   .companion-notification-text {
     color: var(--color-companion-notification-text);
@@ -640,6 +662,26 @@
     background: var(--color-dashboard-status-bg);
     color: var(--color-dashboard-status-text);
   }
+
+  /* ── Luma thinking indicator ── */
+  .luma-thinking {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 14px;
+    background: var(--color-companion-assistant-bubble-bg);
+    border: 0.5px solid var(--color-companion-assistant-bubble-border);
+    border-radius: 4px 12px 12px 12px;
+  }
+  .luma-thinking span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #6366F1;
+    animation: luma-pulse 1.2s ease-in-out infinite;
+  }
+  .luma-thinking span:nth-child(2) { animation-delay: 0.2s; }
+  .luma-thinking span:nth-child(3) { animation-delay: 0.4s; }
 
   /* ── Luma indigo gradient border ── */
   .luma-card {

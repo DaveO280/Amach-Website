@@ -1633,31 +1633,33 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       <div className="flex flex-col gap-3">
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide companion-mode-text">
-              Chat mode
+            <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>
+              CHAT MODE
             </span>
             <div className="flex flex-col gap-1">
-              <div className="inline-flex w-fit rounded-full border border-emerald-200 companion-mode-pill shadow-sm relative group overflow-hidden">
+              <div className="companion-mode-pill relative group">
                 <button
                   type="button"
                   onClick={() => setUseMultiAgent(false)}
-                  className={`whitespace-nowrap px-4 py-1.5 text-xs font-semibold transition-colors ${
+                  className={`whitespace-nowrap text-[12px] font-medium transition-all rounded-2xl ${
                     !useMultiAgent
-                      ? "companion-btn-active shadow-sm"
+                      ? "companion-btn-active"
                       : "companion-btn-inactive"
                   }`}
+                  style={{ padding: "5px 14px" }}
                 >
-                  Quick (general advice)
+                  Quick
                 </button>
                 <button
                   type="button"
                   onClick={() => isConnected && setUseMultiAgent(true)}
                   disabled={!isConnected}
-                  className={`whitespace-nowrap px-4 py-1.5 text-xs font-semibold transition-colors relative ${
+                  className={`whitespace-nowrap text-[12px] font-medium transition-all rounded-2xl relative ${
                     useMultiAgent
-                      ? "companion-btn-active shadow-sm"
+                      ? "companion-btn-active"
                       : "companion-btn-inactive"
                   } ${!isConnected ? "opacity-50 cursor-not-allowed" : ""}`}
+                  style={{ padding: "5px 14px" }}
                 >
                   Deep (uses your health data)
                 </button>
@@ -1669,14 +1671,12 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                 )}
               </div>
               {!useMultiAgent ? (
-                <span className="text-[11px] companion-hint-text">
-                  Quick mode uses chat history only (no health data/reports).
-                  Switch to Deep for personalized, data-informed answers.
+                <span className="text-[11px] italic" style={{ color: "var(--color-text-muted)", marginTop: 4 }}>
+                  Chat history only. Switch to Deep for data-informed answers.
                 </span>
               ) : (
-                <span className="text-[11px] companion-hint-text">
-                  Deep mode uses your connected health data/reports and runs
-                  specialists before Luma replies (slower).
+                <span className="text-[11px] italic" style={{ color: "var(--color-text-muted)", marginTop: 4 }}>
+                  Uses your health data and runs specialists before replying.
                 </span>
               )}
 
@@ -2111,7 +2111,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               <Button
                 ref={uploadFileButtonRef}
                 size="sm"
-                className="w-fit rounded-full companion-send-btn"
+                className="w-fit rounded-full companion-outline-btn"
                 onClick={() => {
                   setShowFileManager(true);
                   setFileManagerTab("upload");
@@ -2575,10 +2575,11 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       </Dialog>
 
       {!isExpanded && (
-        <div className="mb-2 text-sm companion-mode-text">
+        <div className="mb-2" style={{ fontSize: 11, color: "var(--color-text-muted)", fontStyle: "italic" }}>
           Available Metrics:{" "}
-          {metrics
-            ? Object.keys(metrics)
+          {metrics && Object.keys(metrics).length > 0 ? (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-emerald-light)", fontStyle: "normal" }}>
+              {Object.keys(metrics)
                 .map((key) => {
                   if (key === "hrv") return "HRV";
                   if (key === "restingHR") return "Resting HR";
@@ -2590,8 +2591,11 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                       .join(" ")
                   );
                 })
-                .join(", ")
-            : "None"}
+                .join(", ")}
+            </span>
+          ) : (
+            "None"
+          )}
         </div>
       )}
 
@@ -2624,16 +2628,15 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             </p>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center text-center companion-welcome-text">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full companion-icon-bg">
-              <span className="text-2xl">🌿</span>
-            </div>
-            <h3 className="mb-2 text-lg font-semibold companion-mode-text">
-              Welcome to Luma AI Health Companion
+          <div className="flex h-full flex-col items-center justify-center text-center" style={{ padding: "32px 16px" }}>
+            <span style={{ fontSize: 32, color: "#6366F1", marginBottom: 16, display: "block", lineHeight: 1 }}>✦</span>
+            <h3 style={{ fontSize: 18, fontWeight: 500, color: "var(--color-text-primary)", marginBottom: 12 }}>
+              This is Luma.
             </h3>
-            <p className="max-w-md text-sm">
-              I&apos;m here to provide holistic health insights combining
-              traditional wisdom with modern science. How can I help you today?
+            <p style={{ fontSize: 14, color: "var(--color-text-secondary)", lineHeight: 1.7, maxWidth: 380 }}>
+              She reads your health data and tells you what it means — your
+              trends, your patterns, your specific numbers. Not general health
+              advice. Your health, read clearly.
             </p>
           </div>
         ) : (
@@ -2646,11 +2649,12 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                 }`}
               >
                 <div
-                  className={`max-w-[80%] break-words rounded-xl px-4 py-3 text-sm leading-relaxed whitespace-pre-line shadow-sm ${
+                  className={`max-w-[80%] break-words text-sm leading-relaxed whitespace-pre-line ${
                     message.role === "user"
                       ? "companion-user-bubble"
                       : "companion-assistant-bubble"
                   }`}
+                  style={{ padding: "10px 14px" }}
                 >
                   {message.content}
                   {message.role === "assistant" &&
@@ -2662,6 +2666,13 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                 </div>
               </div>
             ))}
+            {isLoading && (
+              <div className="flex justify-start">
+                <div className="luma-thinking">
+                  <span /><span /><span />
+                </div>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
         )}

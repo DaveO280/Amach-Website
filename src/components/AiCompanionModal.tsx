@@ -426,13 +426,13 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
           {/* Wordmark */}
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
             <span
+              className="amach-wordmark-line"
               style={{
                 fontFamily: "var(--font-serif, 'Libre Baskerville', Georgia, serif)",
                 fontWeight: 700,
                 fontSize: "0.95rem",
                 letterSpacing: "0.18em",
                 textTransform: "uppercase",
-                color: "var(--color-emerald)",
               }}
             >
               Luma

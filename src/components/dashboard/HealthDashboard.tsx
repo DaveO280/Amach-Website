@@ -182,21 +182,21 @@ export const HealthDashboard: () => JSX.Element = () => {
   if (isLoading || processingState.isProcessing) {
     // Loading state display...
     return (
-      <div className="min-h-screen bg-[linear-gradient(to_bottom_right,var(--warm-bg)_0%,white_50%,var(--primary-light)_100%)]">
+      <div className="min-h-screen">
         <div className="container mx-auto px-4 py-12">
           <Card className="w-full border-none shadow-lg bg-transparent backdrop-blur-sm">
-            <CardHeader className="border-b border-amber-50/20">
+            <CardHeader className="dashboard-card">
               <CardTitle
-                className="text-emerald-900 font-bold"
+                className="dashboard-title font-bold"
                 style={{ color: "#006B4F" }}
               >
                 Loading Health Dashboard
               </CardTitle>
-              <CardDescription className="text-emerald-800">
+              <CardDescription className="dashboard-description">
                 Please wait while we load your health data...
               </CardDescription>
             </CardHeader>
-            <CardContent className="py-8 bg-white/10 backdrop-blur-sm">
+            <CardContent className="py-8 backdrop-blur-sm">
               <div className="flex justify-center">
                 <div className="animate-pulse-slow rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-600"></div>
               </div>
@@ -210,21 +210,21 @@ export const HealthDashboard: () => JSX.Element = () => {
   if (!metrics) {
     // No data display...
     return (
-      <div className="min-h-screen bg-[linear-gradient(to_bottom_right,var(--warm-bg)_0%,white_50%,var(--primary-light)_100%)]">
+      <div className="min-h-screen">
         <div className="container mx-auto px-4 py-12">
           <Card className="w-full border-none shadow-lg bg-transparent backdrop-blur-sm">
-            <CardHeader className="border-b border-amber-50/20">
+            <CardHeader className="dashboard-card">
               <CardTitle
-                className="text-emerald-900 font-bold"
+                className="dashboard-title font-bold"
                 style={{ color: "#006B4F" }}
               >
                 Health Dashboard
               </CardTitle>
-              <CardDescription className="text-emerald-800 italic">
+              <CardDescription className="dashboard-description italic">
                 &quot;Driven by Data, Guided by Nature&quot;
               </CardDescription>
             </CardHeader>
-            <CardContent className="py-6 bg-white/10 backdrop-blur-sm">
+            <CardContent className="py-6 backdrop-blur-sm">
               <Alert className="bg-amber-50/30 border-amber-100 text-amber-900 mt-4">
                 <p>To view your health data visualizations, please:</p>
                 <ol className="list-decimal ml-5 mt-2 space-y-1">
@@ -249,17 +249,17 @@ export const HealthDashboard: () => JSX.Element = () => {
           <CardHeader className="flex flex-row items-center justify-between border-b border-amber-50/20">
             <div>
               <CardTitle
-                className="text-2xl text-emerald-900 font-bold"
+                className="text-2xl dashboard-title font-bold"
                 style={{ color: "#006B4F" }}
               >
                 Health Dashboard
               </CardTitle>
-              <CardDescription className="text-emerald-800 italic">
+              <CardDescription className="dashboard-description italic">
                 &quot;Driven by Data, Guided by Nature&quot; Health Overview
               </CardDescription>
             </div>
             <div className="flex items-center space-x-3">
-              <div className="flex items-center text-emerald-800 text-xs px-3 py-1 rounded-full bg-emerald-50/30 border border-emerald-100/30">
+              <div className="flex items-center text-xs px-3 py-1 rounded-full dashboard-lock-badge">
                 <Lock className="w-3 h-3 mr-1" />
                 <span>Data Secured</span>
               </div>
@@ -267,7 +267,7 @@ export const HealthDashboard: () => JSX.Element = () => {
                 onClick={() => {
                   // Implement download logic here
                 }}
-                className="bg-emerald-50/30 text-emerald-800 hover:bg-emerald-100/40 border border-emerald-200/30"
+                className="dashboard-lock-badge hover:opacity-80"
                 disabled={isDownloading}
               >
                 {isDownloading ? (
@@ -297,7 +297,7 @@ export const HealthDashboard: () => JSX.Element = () => {
               <TabsList className="w-full p-0 bg-transparent">
                 <TabsTrigger
                   value="heart"
-                  className="w-full data-[state=active]:bg-white/20 data-[state=active]:text-emerald-800 data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 py-3"
+                  className="w-full data-[state=active]:bg-[#006B4F] data-[state=active]:text-white data-[state=active]:border-b-2 data-[state=active]:border-[#004d38] dashboard-tab-inactive py-3"
                 >
                   <Heart className="w-4 h-4 mr-2" /> Heart
                 </TabsTrigger>
@@ -309,7 +309,7 @@ export const HealthDashboard: () => JSX.Element = () => {
               <TabsList className="w-full p-0 bg-transparent">
                 <TabsTrigger
                   value="activity"
-                  className="w-full data-[state=active]:bg-white/20 data-[state=active]:text-emerald-800 data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 py-3"
+                  className="w-full data-[state=active]:bg-[#006B4F] data-[state=active]:text-white data-[state=active]:border-b-2 data-[state=active]:border-[#004d38] dashboard-tab-inactive py-3"
                 >
                   <Activity className="w-4 h-4 mr-2" /> Activity
                 </TabsTrigger>
@@ -321,7 +321,7 @@ export const HealthDashboard: () => JSX.Element = () => {
               <TabsList className="w-full p-0 bg-transparent">
                 <TabsTrigger
                   value="sleep"
-                  className="w-full data-[state=active]:bg-white/20 data-[state=active]:text-emerald-800 data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 py-3"
+                  className="w-full data-[state=active]:bg-[#006B4F] data-[state=active]:text-white data-[state=active]:border-b-2 data-[state=active]:border-[#004d38] dashboard-tab-inactive py-3"
                 >
                   <Moon className="w-4 h-4 mr-2" /> Sleep
                 </TabsTrigger>
@@ -333,7 +333,7 @@ export const HealthDashboard: () => JSX.Element = () => {
               <TabsList className="w-full p-0 bg-transparent">
                 <TabsTrigger
                   value="overview"
-                  className="w-full data-[state=active]:bg-white/20 data-[state=active]:text-emerald-800 data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 py-3"
+                  className="w-full data-[state=active]:bg-[#006B4F] data-[state=active]:text-white data-[state=active]:border-b-2 data-[state=active]:border-[#004d38] dashboard-tab-inactive py-3"
                 >
                   Overview
                 </TabsTrigger>
@@ -343,31 +343,31 @@ export const HealthDashboard: () => JSX.Element = () => {
 
           <TabsContent value="heart" className="space-y-6">
             <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-              <CardHeader className="border-b border-amber-50/20">
-                <CardTitle className="text-emerald-900 text-xl font-bold">
+              <CardHeader className="dashboard-card">
+                <CardTitle className="dashboard-title text-xl font-bold">
                   Heart Rate Over Time
                 </CardTitle>
-                <CardDescription className="text-emerald-800">
+                <CardDescription className="dashboard-description">
                   Daily average, minimum, and maximum heart rate
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+              <CardContent className="pt-6 backdrop-blur-sm">
                 <HeartRateChart data={heartRateForCharts} height={400} />
               </CardContent>
             </Card>
 
             {heartRateForCharts.length > 0 && (
               <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-                <CardHeader className="border-b border-amber-50/20">
-                  <CardTitle className="text-emerald-900 text-xl font-bold">
+                <CardHeader className="dashboard-card">
+                  <CardTitle className="dashboard-title text-xl font-bold">
                     Heart Rate Distribution
                   </CardTitle>
-                  <CardDescription className="text-emerald-800">
+                  <CardDescription className="dashboard-description">
                     Distribution of heart rate readings across different
                     intensity zones
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                <CardContent className="pt-6 backdrop-blur-sm">
                   <HRDistributionChart data={heartRateForCharts} height={400} />
                 </CardContent>
               </Card>
@@ -375,15 +375,15 @@ export const HealthDashboard: () => JSX.Element = () => {
 
             {hrvForCharts.length > 0 && (
               <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-                <CardHeader className="border-b border-amber-50/20">
-                  <CardTitle className="text-emerald-900 text-xl font-bold">
+                <CardHeader className="dashboard-card">
+                  <CardTitle className="dashboard-title text-xl font-bold">
                     Heart Rate Variability
                   </CardTitle>
-                  <CardDescription className="text-emerald-800">
+                  <CardDescription className="dashboard-description">
                     Daily average heart rate variability (HRV)
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                <CardContent className="pt-6 backdrop-blur-sm">
                   <HRVChart data={hrvForCharts} height={400} />
                 </CardContent>
               </Card>
@@ -392,30 +392,30 @@ export const HealthDashboard: () => JSX.Element = () => {
 
           <TabsContent value="activity" className="space-y-6">
             <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-              <CardHeader className="border-b border-amber-50/20">
-                <CardTitle className="text-emerald-900 text-xl font-bold">
+              <CardHeader className="dashboard-card">
+                <CardTitle className="dashboard-title text-xl font-bold">
                   Step Count
                 </CardTitle>
-                <CardDescription className="text-emerald-800">
+                <CardDescription className="dashboard-description">
                   Daily step count and trends
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+              <CardContent className="pt-6 backdrop-blur-sm">
                 <StepCountChart data={stepCountForCharts} height={400} />
               </CardContent>
             </Card>
 
             {distanceForCharts.length > 0 && (
               <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-                <CardHeader className="border-b border-amber-50/20">
-                  <CardTitle className="text-emerald-900 text-xl font-bold">
+                <CardHeader className="dashboard-card">
+                  <CardTitle className="dashboard-title text-xl font-bold">
                     Distance Walking/Running
                   </CardTitle>
-                  <CardDescription className="text-emerald-800">
+                  <CardDescription className="dashboard-description">
                     Daily distance covered
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                <CardContent className="pt-6 backdrop-blur-sm">
                   <DistanceChart data={distanceForCharts} height={400} />
                 </CardContent>
               </Card>
@@ -423,15 +423,15 @@ export const HealthDashboard: () => JSX.Element = () => {
 
             {activeEnergyForCharts.length > 0 && (
               <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-                <CardHeader className="border-b border-amber-50/20">
-                  <CardTitle className="text-emerald-900 text-xl font-bold">
+                <CardHeader className="dashboard-card">
+                  <CardTitle className="dashboard-title text-xl font-bold">
                     Active Energy Burned
                   </CardTitle>
-                  <CardDescription className="text-emerald-800">
+                  <CardDescription className="dashboard-description">
                     Daily active calories burned
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                <CardContent className="pt-6 backdrop-blur-sm">
                   <ActiveEnergyChart
                     data={activeEnergyForCharts}
                     height={400}
@@ -442,15 +442,15 @@ export const HealthDashboard: () => JSX.Element = () => {
 
             {exerciseTimeForCharts.length > 0 && (
               <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-                <CardHeader className="border-b border-amber-50/20">
-                  <CardTitle className="text-emerald-900 text-xl font-bold">
+                <CardHeader className="dashboard-card">
+                  <CardTitle className="dashboard-title text-xl font-bold">
                     Exercise Time
                   </CardTitle>
-                  <CardDescription className="text-emerald-800">
+                  <CardDescription className="dashboard-description">
                     Daily exercise duration
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                <CardContent className="pt-6 backdrop-blur-sm">
                   <ExerciseTimeChart
                     data={exerciseTimeForCharts}
                     height={400}
@@ -464,15 +464,15 @@ export const HealthDashboard: () => JSX.Element = () => {
             {(sleepDailyProcessed.length > 0 ||
               sleepRawFallback.length > 0) && (
               <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-                <CardHeader className="border-b border-amber-50/20">
-                  <CardTitle className="text-emerald-900 text-xl font-bold">
+                <CardHeader className="dashboard-card">
+                  <CardTitle className="dashboard-title text-xl font-bold">
                     Sleep Analysis
                   </CardTitle>
-                  <CardDescription className="text-emerald-800">
+                  <CardDescription className="dashboard-description">
                     Sleep duration, efficiency, and stage breakdown
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                <CardContent className="pt-6 backdrop-blur-sm">
                   <SleepAnalysisChart
                     data={sleepRawFallback}
                     processedData={
@@ -490,45 +490,45 @@ export const HealthDashboard: () => JSX.Element = () => {
           <TabsContent value="overview" className="space-y-6">
             {/* Health Score Cards */}
             <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-              <CardHeader className="border-b border-amber-50/20">
-                <CardTitle className="text-emerald-900 text-xl font-bold">
+              <CardHeader className="dashboard-card">
+                <CardTitle className="dashboard-title text-xl font-bold">
                   Health Score Overview
                 </CardTitle>
-                <CardDescription className="text-emerald-800">
+                <CardDescription className="dashboard-description">
                   Your health scores across different categories
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+              <CardContent className="pt-6 backdrop-blur-sm">
                 <HealthScoreCards />
               </CardContent>
             </Card>
 
             {/* Health Score Trends */}
             <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-              <CardHeader className="border-b border-amber-50/20">
-                <CardTitle className="text-emerald-900 text-xl font-bold">
+              <CardHeader className="dashboard-card">
+                <CardTitle className="dashboard-title text-xl font-bold">
                   Health Score Trends
                 </CardTitle>
-                <CardDescription className="text-emerald-800">
+                <CardDescription className="dashboard-description">
                   Historical trends for your health scores
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+              <CardContent className="pt-6 backdrop-blur-sm">
                 <HealthScoreTrends />
               </CardContent>
             </Card>
 
             {/* Health Metrics Summary */}
             <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-              <CardHeader className="border-b border-amber-50/20">
-                <CardTitle className="text-emerald-900 text-xl font-bold">
+              <CardHeader className="dashboard-card">
+                <CardTitle className="dashboard-title text-xl font-bold">
                   Health Metrics Summary
                 </CardTitle>
-                <CardDescription className="text-emerald-800">
+                <CardDescription className="dashboard-description">
                   Overview of your selected health metrics
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+              <CardContent className="pt-6 backdrop-blur-sm">
                 <MetricSummary metricData={metrics ? metrics : undefined} />
               </CardContent>
             </Card>

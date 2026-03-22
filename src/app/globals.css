@@ -38,6 +38,33 @@
     /* ── Shimmer texture opacity ── */
     --shimmer-opacity: 0.06;
 
+    /* ── AI Companion chat tokens ── */
+    --color-companion-surface: #FFFFFF;
+    --color-companion-surface-border: rgba(0, 107, 79, 0.15);
+    --color-companion-pill-bg: #FFFFFF;
+    --color-companion-btn-active-bg: #006B4F;
+    --color-companion-btn-hover: rgba(0, 107, 79, 0.07);
+    --color-companion-outline-btn-color: #005A42;
+    --color-companion-outline-btn-border: rgba(0, 107, 79, 0.3);
+    --color-companion-label-bg: rgba(255, 255, 255, 0.75);
+    --color-companion-label-text: #005A42;
+    --color-companion-user-bubble: #006B4F;
+    --color-companion-assistant-bubble-bg: #FFFBF0;
+    --color-companion-assistant-bubble-border: rgba(217, 119, 6, 0.2);
+    --color-companion-assistant-bubble-text: #451A00;
+    --color-companion-assistant-duration-text: rgba(69, 26, 0, 0.6);
+    --color-companion-badge-bg: rgba(0, 107, 79, 0.08);
+    --color-companion-badge-text: #004838;
+    --color-companion-welcome-text: #6B8C7A;
+    --color-companion-icon-bg: rgba(0, 107, 79, 0.08);
+    --color-companion-textarea-bg: #FFFFFF;
+    --color-companion-textarea-border: rgba(0, 107, 79, 0.22);
+    --color-companion-mode-text: #005A42;
+    --color-companion-hint-text: #B45309;
+    --color-companion-notification-bg: rgba(251, 191, 36, 0.08);
+    --color-companion-notification-border: rgba(180, 83, 9, 0.18);
+    --color-companion-notification-text: #451A00;
+
     /* ── shadcn/ui compatibility tokens ── */
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
@@ -79,6 +106,33 @@
     --color-border-strong: rgba(0, 107, 79, 0.4);
 
     --shimmer-opacity: 0.04;
+
+    /* ── AI Companion chat tokens — dark mode ── */
+    --color-companion-surface: #0E1812;
+    --color-companion-surface-border: rgba(0, 107, 79, 0.2);
+    --color-companion-pill-bg: rgba(0, 107, 79, 0.1);
+    --color-companion-btn-active-bg: #005A42;
+    --color-companion-btn-hover: rgba(0, 107, 79, 0.18);
+    --color-companion-outline-btn-color: #6EE7B7;
+    --color-companion-outline-btn-border: rgba(110, 231, 183, 0.25);
+    --color-companion-label-bg: rgba(0, 107, 79, 0.12);
+    --color-companion-label-text: #6EE7B7;
+    --color-companion-user-bubble: #004d38;
+    --color-companion-assistant-bubble-bg: #1A130A;
+    --color-companion-assistant-bubble-border: rgba(180, 110, 0, 0.22);
+    --color-companion-assistant-bubble-text: #D4B483;
+    --color-companion-assistant-duration-text: rgba(212, 180, 131, 0.6);
+    --color-companion-badge-bg: rgba(0, 107, 79, 0.18);
+    --color-companion-badge-text: #6EE7B7;
+    --color-companion-welcome-text: #9DB8A8;
+    --color-companion-icon-bg: rgba(0, 107, 79, 0.12);
+    --color-companion-textarea-bg: #0E1812;
+    --color-companion-textarea-border: rgba(0, 107, 79, 0.28);
+    --color-companion-mode-text: #6EE7B7;
+    --color-companion-hint-text: #D4A853;
+    --color-companion-notification-bg: rgba(80, 55, 0, 0.28);
+    --color-companion-notification-border: rgba(160, 100, 0, 0.25);
+    --color-companion-notification-text: #D4A853;
 
     /* shadcn/ui dark overrides */
     --background: 142 20% 6%;
@@ -366,6 +420,89 @@
 
   .animate-fade-up {
     animation: fade-up 0.6s ease forwards;
+  }
+
+  /* ── AI Companion UI — theme-aware classes ── */
+  .companion-chat-surface {
+    background: var(--color-companion-surface);
+    border: 1px solid var(--color-companion-surface-border);
+  }
+  .companion-mode-pill {
+    background: var(--color-companion-pill-bg);
+  }
+  .companion-btn-active {
+    background: var(--color-companion-btn-active-bg) !important;
+    color: #ffffff !important;
+  }
+  .companion-btn-inactive {
+    color: var(--color-companion-mode-text);
+  }
+  .companion-btn-inactive:hover {
+    background: var(--color-companion-btn-hover);
+  }
+  .companion-outline-btn {
+    border: 1px solid var(--color-companion-outline-btn-border);
+    color: var(--color-companion-outline-btn-color);
+  }
+  .companion-outline-btn:hover {
+    background: var(--color-companion-btn-hover);
+  }
+  .companion-label {
+    background: var(--color-companion-label-bg);
+    color: var(--color-companion-label-text);
+  }
+  .companion-user-bubble {
+    background: var(--color-companion-user-bubble);
+    color: #ffffff;
+  }
+  .companion-assistant-bubble {
+    background: var(--color-companion-assistant-bubble-bg);
+    border: 1px solid var(--color-companion-assistant-bubble-border);
+    color: var(--color-companion-assistant-bubble-text);
+  }
+  .companion-assistant-duration {
+    border-color: var(--color-companion-assistant-bubble-border);
+    color: var(--color-companion-assistant-duration-text);
+  }
+  .companion-badge {
+    background: var(--color-companion-badge-bg);
+    color: var(--color-companion-badge-text);
+  }
+  .companion-welcome-text {
+    color: var(--color-companion-welcome-text);
+  }
+  .companion-icon-bg {
+    background: var(--color-companion-icon-bg);
+  }
+  .companion-textarea {
+    background: var(--color-companion-textarea-bg);
+    border: 1px solid var(--color-companion-textarea-border);
+    color: var(--color-text-primary);
+  }
+  .companion-textarea:focus {
+    border-color: var(--color-companion-btn-active-bg);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 107, 79, 0.18);
+  }
+  .companion-send-btn {
+    background: var(--color-companion-btn-active-bg) !important;
+    color: #ffffff !important;
+  }
+  .companion-send-btn:hover {
+    filter: brightness(0.88);
+  }
+  .companion-mode-text {
+    color: var(--color-companion-mode-text);
+  }
+  .companion-hint-text {
+    color: var(--color-companion-hint-text);
+  }
+  .companion-notification {
+    background: var(--color-companion-notification-bg);
+    border: 1px solid var(--color-companion-notification-border);
+  }
+  .companion-notification-text {
+    color: var(--color-companion-notification-text);
   }
 
   /* ── Luma indigo gradient border ── */

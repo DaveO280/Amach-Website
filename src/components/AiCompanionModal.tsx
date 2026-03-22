@@ -630,12 +630,12 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                         alignItems: "center",
                         justifyContent: "space-between",
                         padding: isMobile ? "8px 12px" : "10px 14px",
-                        background: "var(--color-emerald-muted)",
-                        border: "1px solid var(--color-border)",
+                        background: "var(--color-companion-btn-hover)",
+                        border: "1px solid var(--color-companion-surface-border)",
                         borderRadius: 10,
                         marginBottom: showStats ? (isMobile ? 8 : 12) : 0,
                         cursor: "pointer",
-                        color: "var(--color-emerald)",
+                        color: "var(--color-companion-mode-text)",
                         fontWeight: 600,
                         fontSize: isMobile ? "0.8rem" : "0.88rem",
                       }}
@@ -660,18 +660,17 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                 {/* No health data nudge */}
                 {!hasHealthData && (
                   <div
+                    className="companion-notification"
                     style={{
                       marginBottom: isMobile ? 10 : 16,
                       padding: isMobile ? "10px 12px" : "14px 16px",
-                      background: "var(--color-amber-muted)",
-                      border: "1px solid var(--color-border)",
                       borderRadius: 10,
                     }}
                   >
                     <p
+                      className="companion-notification-text"
                       style={{
                         fontSize: isMobile ? "0.82rem" : "0.88rem",
-                        color: "var(--color-text-secondary)",
                         lineHeight: 1.6,
                       }}
                     >

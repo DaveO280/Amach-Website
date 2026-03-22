@@ -1625,26 +1625,26 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
     : "flex flex-col min-h-[45vh] sm:min-h-[65vh] max-h-[90vh] lg:h-[calc(100vh-220px)]";
 
   const chatHistoryClasses = isExpanded
-    ? "flex-1 overflow-y-auto rounded-3xl border border-emerald-100 bg-white p-6 shadow-lg"
-    : "mb-4 flex-1 overflow-y-auto rounded-2xl border border-emerald-100 bg-white p-3 sm:p-5 shadow-sm";
+    ? "flex-1 overflow-y-auto rounded-3xl companion-chat-surface p-6 shadow-lg"
+    : "mb-4 flex-1 overflow-y-auto rounded-2xl companion-chat-surface p-3 sm:p-5 shadow-sm";
 
   const chatLayout = (
     <div className={containerClasses}>
       <div className="flex flex-col gap-3">
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+            <span className="text-xs font-semibold uppercase tracking-wide companion-mode-text">
               Chat mode
             </span>
             <div className="flex flex-col gap-1">
-              <div className="inline-flex w-fit rounded-full border border-emerald-200 bg-white shadow-sm relative group overflow-hidden">
+              <div className="inline-flex w-fit rounded-full border border-emerald-200 companion-mode-pill shadow-sm relative group overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setUseMultiAgent(false)}
                   className={`whitespace-nowrap px-4 py-1.5 text-xs font-semibold transition-colors ${
                     !useMultiAgent
-                      ? "bg-emerald-600 text-white shadow-sm"
-                      : "text-emerald-700 hover:bg-emerald-50"
+                      ? "companion-btn-active shadow-sm"
+                      : "companion-btn-inactive"
                   }`}
                 >
                   Quick (general advice)
@@ -1655,8 +1655,8 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                   disabled={!isConnected}
                   className={`whitespace-nowrap px-4 py-1.5 text-xs font-semibold transition-colors relative ${
                     useMultiAgent
-                      ? "bg-emerald-600 text-white shadow-sm"
-                      : "text-emerald-700 hover:bg-emerald-50"
+                      ? "companion-btn-active shadow-sm"
+                      : "companion-btn-inactive"
                   } ${!isConnected ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   Deep (uses your health data)
@@ -1669,12 +1669,12 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                 )}
               </div>
               {!useMultiAgent ? (
-                <span className="text-[11px] text-amber-700">
+                <span className="text-[11px] companion-hint-text">
                   Quick mode uses chat history only (no health data/reports).
                   Switch to Deep for personalized, data-informed answers.
                 </span>
               ) : (
-                <span className="text-[11px] text-amber-700">
+                <span className="text-[11px] companion-hint-text">
                   Deep mode uses your connected health data/reports and runs
                   specialists before Luma replies (slower).
                 </span>
@@ -2085,7 +2085,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           </div>
           <div className="flex flex-col gap-1"></div>
           <div className="flex items-center gap-3 self-end sm:self-auto">
-            <label className="flex items-center gap-2 rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-emerald-700 shadow-sm">
+            <label className="flex items-center gap-2 rounded-full companion-label px-3 py-1 text-xs font-medium shadow-sm">
               <input
                 type="checkbox"
                 className="h-3.5 w-3.5 accent-emerald-600"
@@ -2097,7 +2097,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             <Button
               size="sm"
               variant="outline"
-              className="whitespace-nowrap rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400"
+              className="whitespace-nowrap rounded-full companion-outline-btn"
               onClick={() => setIsExpanded((prev) => !prev)}
             >
               {isExpanded ? "Exit expanded view" : "Expand view"}
@@ -2111,7 +2111,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               <Button
                 ref={uploadFileButtonRef}
                 size="sm"
-                className="w-fit rounded-full bg-emerald-600 text-white hover:bg-emerald-700"
+                className="w-fit rounded-full companion-send-btn"
                 onClick={() => {
                   setShowFileManager(true);
                   setFileManagerTab("upload");
@@ -2127,7 +2127,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               <Button
                 size="sm"
                 variant="outline"
-                className="w-fit rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400"
+                className="w-fit rounded-full companion-outline-btn"
                 onClick={() => {
                   setShowFileManager(true);
                   setFileManagerTab("attached");
@@ -2138,7 +2138,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                 }}
               >
                 Manage files
-                <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-800">
+                <span className="ml-2 rounded-full companion-badge px-2 py-0.5 text-[11px]">
                   {uploadedFiles.length} attached
                 </span>
               </Button>
@@ -2575,7 +2575,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       </Dialog>
 
       {!isExpanded && (
-        <div className="mb-2 text-sm text-emerald-800">
+        <div className="mb-2 text-sm companion-mode-text">
           Available Metrics:{" "}
           {metrics
             ? Object.keys(metrics)
@@ -2624,11 +2624,11 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             </p>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center text-center text-gray-500">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
+          <div className="flex h-full flex-col items-center justify-center text-center companion-welcome-text">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full companion-icon-bg">
               <span className="text-2xl">🌿</span>
             </div>
-            <h3 className="mb-2 text-lg font-semibold text-emerald-700">
+            <h3 className="mb-2 text-lg font-semibold companion-mode-text">
               Welcome to Luma AI Health Companion
             </h3>
             <p className="max-w-md text-sm">
@@ -2648,14 +2648,14 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                 <div
                   className={`max-w-[80%] break-words rounded-xl px-4 py-3 text-sm leading-relaxed whitespace-pre-line shadow-sm ${
                     message.role === "user"
-                      ? "bg-emerald-600 text-white"
-                      : "border border-amber-100 bg-amber-50 text-amber-900"
+                      ? "companion-user-bubble"
+                      : "companion-assistant-bubble"
                   }`}
                 >
                   {message.content}
                   {message.role === "assistant" &&
                     message.durationMs !== undefined && (
-                      <div className="mt-2 pt-2 border-t border-amber-200 text-xs text-amber-700/70">
+                      <div className="mt-2 pt-2 border-t companion-assistant-duration text-xs">
                         {formatDuration(message.durationMs)}
                       </div>
                     )}
@@ -2682,12 +2682,12 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           }
           onKeyDown={handleKeyDown}
           placeholder="Ask Luma about your health..."
-          className="min-h-[60px] w-full resize-none rounded-2xl border border-emerald-200 p-3 pr-12 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="min-h-[60px] w-full resize-none rounded-2xl companion-textarea p-3 pr-12"
           maxLength={500}
           disabled={isLoading}
         />
         <Button
-          className="absolute bottom-2 right-2 rounded-full bg-emerald-600 text-white hover:bg-emerald-700"
+          className="absolute bottom-2 right-2 rounded-full companion-send-btn"
           size="sm"
           onClick={handleSendMessage}
           disabled={isLoading || input.trim() === ""}

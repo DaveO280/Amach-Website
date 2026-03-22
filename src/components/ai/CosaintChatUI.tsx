@@ -1637,7 +1637,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               Chat mode
             </span>
             <div className="flex flex-col gap-1">
-              <div className="inline-flex w-fit rounded-full border border-emerald-200 companion-mode-pill shadow-sm relative group overflow-hidden">
+              <div className="inline-flex w-fit rounded-full border companion-mode-pill shadow-sm relative group overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setUseMultiAgent(false)}
@@ -1659,7 +1659,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                       : "companion-btn-inactive"
                   } ${!isConnected ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
-                  Deep (uses your health data)
+                  Deep
                 </button>
                 {!isConnected && (
                   <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-emerald-900/95 text-white text-xs rounded-md invisible group-hover:visible pointer-events-none whitespace-nowrap z-50">
@@ -2111,7 +2111,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               <Button
                 ref={uploadFileButtonRef}
                 size="sm"
-                className="w-fit rounded-full companion-send-btn"
+                className="w-fit rounded-full companion-outline-btn"
                 onClick={() => {
                   setShowFileManager(true);
                   setFileManagerTab("upload");
@@ -2600,7 +2600,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           <Button
             size="sm"
             variant="outline"
-            className="rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400"
+            className="rounded-full companion-tertiary-btn"
             onClick={() => {
               clearMessages();
               clearChatHistory();
@@ -2625,15 +2625,14 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           </div>
         ) : messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center companion-welcome-text">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full companion-icon-bg">
-              <span className="text-2xl">🌿</span>
+            <div className="mb-4">
+              <span style={{ fontSize: "28px", color: "#6366F1", lineHeight: 1 }}>✦</span>
             </div>
             <h3 className="mb-2 text-lg font-semibold companion-mode-text">
-              Welcome to Luma AI Health Companion
+              Hi, I&apos;m Luma
             </h3>
-            <p className="max-w-md text-sm">
-              I&apos;m here to provide holistic health insights combining
-              traditional wisdom with modern science. How can I help you today?
+            <p className="max-w-xs text-sm">
+              Ask me anything about your health — I&apos;ll help you make sense of it.
             </p>
           </div>
         ) : (

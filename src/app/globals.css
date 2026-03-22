@@ -42,17 +42,20 @@
     --color-companion-surface: #FFFFFF;
     --color-companion-surface-border: rgba(0, 107, 79, 0.15);
     --color-companion-pill-bg: #FFFFFF;
+    --color-companion-pill-border: rgba(0, 107, 79, 0.2);
     --color-companion-btn-active-bg: #006B4F;
     --color-companion-btn-hover: rgba(0, 107, 79, 0.07);
     --color-companion-outline-btn-color: #005A42;
     --color-companion-outline-btn-border: rgba(0, 107, 79, 0.3);
     --color-companion-label-bg: rgba(255, 255, 255, 0.75);
     --color-companion-label-text: #005A42;
-    --color-companion-user-bubble: #006B4F;
-    --color-companion-assistant-bubble-bg: #FFFBF0;
-    --color-companion-assistant-bubble-border: rgba(217, 119, 6, 0.2);
-    --color-companion-assistant-bubble-text: #451A00;
-    --color-companion-assistant-duration-text: rgba(69, 26, 0, 0.6);
+    --color-companion-user-bubble: rgba(0, 107, 79, 0.12);
+    --color-companion-user-bubble-border: rgba(0, 107, 79, 0.3);
+    --color-companion-user-bubble-text: var(--color-text-primary);
+    --color-companion-assistant-bubble-bg: #EEF2FF;
+    --color-companion-assistant-bubble-border: rgba(99, 102, 241, 0.25);
+    --color-companion-assistant-bubble-text: #3730A3;
+    --color-companion-assistant-duration-text: rgba(55, 48, 163, 0.6);
     --color-companion-badge-bg: rgba(0, 107, 79, 0.08);
     --color-companion-badge-text: #004838;
     --color-companion-welcome-text: #6B8C7A;
@@ -61,8 +64,8 @@
     --color-companion-textarea-border: rgba(0, 107, 79, 0.22);
     --color-companion-mode-text: #005A42;
     --color-companion-hint-text: #B45309;
-    --color-companion-notification-bg: rgba(251, 191, 36, 0.08);
-    --color-companion-notification-border: rgba(180, 83, 9, 0.18);
+    --color-companion-notification-bg: rgba(245, 158, 11, 0.08);
+    --color-companion-notification-border: rgba(245, 158, 11, 0.8);
     --color-companion-notification-text: #451A00;
 
     /* ── Health Dashboard tokens ── */
@@ -142,17 +145,20 @@
     --color-companion-surface: #0E1812;
     --color-companion-surface-border: rgba(0, 107, 79, 0.2);
     --color-companion-pill-bg: rgba(0, 107, 79, 0.1);
+    --color-companion-pill-border: rgba(110, 231, 183, 0.2);
     --color-companion-btn-active-bg: #005A42;
     --color-companion-btn-hover: rgba(0, 107, 79, 0.18);
     --color-companion-outline-btn-color: #6EE7B7;
     --color-companion-outline-btn-border: rgba(110, 231, 183, 0.25);
     --color-companion-label-bg: rgba(0, 107, 79, 0.12);
     --color-companion-label-text: #6EE7B7;
-    --color-companion-user-bubble: #004d38;
-    --color-companion-assistant-bubble-bg: #1A130A;
-    --color-companion-assistant-bubble-border: rgba(180, 110, 0, 0.22);
-    --color-companion-assistant-bubble-text: #D4B483;
-    --color-companion-assistant-duration-text: rgba(212, 180, 131, 0.6);
+    --color-companion-user-bubble: rgba(0, 107, 79, 0.18);
+    --color-companion-user-bubble-border: rgba(0, 107, 79, 0.35);
+    --color-companion-user-bubble-text: #F0F7F3;
+    --color-companion-assistant-bubble-bg: #3730A3;
+    --color-companion-assistant-bubble-border: rgba(99, 102, 241, 0.3);
+    --color-companion-assistant-bubble-text: #F0F7F3;
+    --color-companion-assistant-duration-text: rgba(240, 247, 243, 0.6);
     --color-companion-badge-bg: rgba(0, 107, 79, 0.18);
     --color-companion-badge-text: #6EE7B7;
     --color-companion-welcome-text: #9DB8A8;
@@ -161,8 +167,8 @@
     --color-companion-textarea-border: rgba(0, 107, 79, 0.28);
     --color-companion-mode-text: #6EE7B7;
     --color-companion-hint-text: #D4A853;
-    --color-companion-notification-bg: rgba(80, 55, 0, 0.28);
-    --color-companion-notification-border: rgba(160, 100, 0, 0.25);
+    --color-companion-notification-bg: rgba(245, 158, 11, 0.1);
+    --color-companion-notification-border: rgba(245, 158, 11, 0.7);
     --color-companion-notification-text: #D4A853;
 
     /* ── Health Dashboard dark tokens ── */
@@ -491,6 +497,7 @@
   }
   .companion-mode-pill {
     background: var(--color-companion-pill-bg);
+    border-color: var(--color-companion-pill-border);
   }
   .companion-btn-active {
     background: var(--color-companion-btn-active-bg) !important;
@@ -509,13 +516,24 @@
   .companion-outline-btn:hover {
     background: var(--color-companion-btn-hover);
   }
+  .companion-tertiary-btn {
+    border: none;
+    background: transparent;
+    color: var(--color-companion-outline-btn-color);
+    opacity: 0.6;
+  }
+  .companion-tertiary-btn:hover {
+    opacity: 1;
+    background: var(--color-companion-btn-hover);
+  }
   .companion-label {
     background: var(--color-companion-label-bg);
     color: var(--color-companion-label-text);
   }
   .companion-user-bubble {
     background: var(--color-companion-user-bubble);
-    color: #ffffff;
+    border: 1px solid var(--color-companion-user-bubble-border);
+    color: var(--color-companion-user-bubble-text);
   }
   .companion-assistant-bubble {
     background: var(--color-companion-assistant-bubble-bg);
@@ -561,7 +579,8 @@
   }
   .companion-notification {
     background: var(--color-companion-notification-bg);
-    border: 1px solid var(--color-companion-notification-border);
+    border: none;
+    border-left: 3px solid var(--color-companion-notification-border);
   }
   .companion-notification-text {
     color: var(--color-companion-notification-text);

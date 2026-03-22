@@ -370,7 +370,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
 
   return (
     <div
-      className="fixed inset-0 z-[100] overflow-hidden flex"
+      className="fixed inset-0 z-[200] overflow-hidden flex"
       style={{
         background: "rgba(0,0,0,0.45)",
         backdropFilter: "blur(6px)",

@@ -65,6 +65,37 @@
     --color-companion-notification-border: rgba(180, 83, 9, 0.18);
     --color-companion-notification-text: #451A00;
 
+    /* ── Health Dashboard tokens ── */
+    --color-dashboard-bg: linear-gradient(to bottom right, #FFE3B4, #ffffff, #CAF2DD);
+    --color-dashboard-header-bg: rgba(255, 255, 255, 0.92);
+    --color-dashboard-header-border: rgba(251, 191, 36, 0.2);
+    --color-dashboard-title: #006B4F;
+    --color-dashboard-description: #065F46;
+    --color-dashboard-card-bg: rgba(255, 255, 255, 0.1);
+    --color-dashboard-card-border: rgba(251, 191, 36, 0.15);
+    --color-dashboard-tab-inactive-bg: #FFFFFF;
+    --color-dashboard-tab-inactive-text: #006B4F;
+    --color-dashboard-tab-inactive-border: rgba(0, 107, 79, 0.3);
+    --color-dashboard-badge-connected-bg: rgba(209, 250, 229, 0.8);
+    --color-dashboard-badge-connected-text: #065F46;
+    --color-dashboard-badge-chain-bg: rgba(254, 243, 199, 0.8);
+    --color-dashboard-badge-chain-text: #92400E;
+    --color-dashboard-lock-bg: rgba(236, 253, 245, 0.3);
+    --color-dashboard-lock-border: rgba(167, 243, 208, 0.3);
+    --color-dashboard-lock-text: #065F46;
+    --color-dashboard-close-text: #92400E;
+    --color-dashboard-selector-title: #006B4F;
+    --color-dashboard-selector-subtitle: #065F46;
+    --color-dashboard-selector-hint: rgba(120, 53, 15, 0.8);
+    --color-dashboard-upload-info-bg: rgba(255, 251, 235, 0.8);
+    --color-dashboard-upload-info-border: rgba(251, 191, 36, 0.3);
+    --color-dashboard-upload-info-text: #92400E;
+    --color-dashboard-metric-inactive-bg: rgba(255, 255, 255, 0.8);
+    --color-dashboard-metric-inactive-text: #006B4F;
+    --color-dashboard-metric-inactive-border: rgba(0, 107, 79, 0.3);
+    --color-dashboard-status-bg: rgba(209, 250, 229, 0.5);
+    --color-dashboard-status-text: #065F46;
+
     /* ── shadcn/ui compatibility tokens ── */
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
@@ -133,6 +164,37 @@
     --color-companion-notification-bg: rgba(80, 55, 0, 0.28);
     --color-companion-notification-border: rgba(160, 100, 0, 0.25);
     --color-companion-notification-text: #D4A853;
+
+    /* ── Health Dashboard dark tokens ── */
+    --color-dashboard-bg: linear-gradient(to bottom right, #0A1209, #111A15, #0A1812);
+    --color-dashboard-header-bg: rgba(17, 26, 21, 0.97);
+    --color-dashboard-header-border: rgba(0, 107, 79, 0.28);
+    --color-dashboard-title: #F0F7F3;
+    --color-dashboard-description: #9DB8A8;
+    --color-dashboard-card-bg: rgba(14, 24, 18, 0.5);
+    --color-dashboard-card-border: rgba(0, 107, 79, 0.18);
+    --color-dashboard-tab-inactive-bg: rgba(0, 107, 79, 0.1);
+    --color-dashboard-tab-inactive-text: #6EE7B7;
+    --color-dashboard-tab-inactive-border: rgba(110, 231, 183, 0.2);
+    --color-dashboard-badge-connected-bg: rgba(0, 77, 56, 0.4);
+    --color-dashboard-badge-connected-text: #6EE7B7;
+    --color-dashboard-badge-chain-bg: rgba(80, 55, 0, 0.35);
+    --color-dashboard-badge-chain-text: #D4A853;
+    --color-dashboard-lock-bg: rgba(0, 107, 79, 0.1);
+    --color-dashboard-lock-border: rgba(0, 107, 79, 0.2);
+    --color-dashboard-lock-text: #9DB8A8;
+    --color-dashboard-close-text: #9DB8A8;
+    --color-dashboard-selector-title: #F0F7F3;
+    --color-dashboard-selector-subtitle: #6EE7B7;
+    --color-dashboard-selector-hint: rgba(212, 168, 83, 0.9);
+    --color-dashboard-upload-info-bg: rgba(80, 55, 0, 0.2);
+    --color-dashboard-upload-info-border: rgba(180, 110, 0, 0.25);
+    --color-dashboard-upload-info-text: #D4A853;
+    --color-dashboard-metric-inactive-bg: rgba(0, 107, 79, 0.1);
+    --color-dashboard-metric-inactive-text: #6EE7B7;
+    --color-dashboard-metric-inactive-border: rgba(110, 231, 183, 0.2);
+    --color-dashboard-status-bg: rgba(0, 77, 56, 0.3);
+    --color-dashboard-status-text: #6EE7B7;
 
     /* shadcn/ui dark overrides */
     --background: 142 20% 6%;
@@ -503,6 +565,80 @@
   }
   .companion-notification-text {
     color: var(--color-companion-notification-text);
+  }
+
+  /* ── Health Dashboard UI — theme-aware classes ── */
+  .dashboard-modal-bg {
+    background: var(--color-dashboard-bg);
+  }
+  .dashboard-header {
+    background: var(--color-dashboard-header-bg);
+    border-bottom: 1px solid var(--color-dashboard-header-border);
+    backdrop-filter: blur(12px);
+  }
+  .dashboard-title {
+    color: var(--color-dashboard-title) !important;
+  }
+  .dashboard-description {
+    color: var(--color-dashboard-description) !important;
+  }
+  .dashboard-card {
+    background: var(--color-dashboard-card-bg);
+    border-bottom: 1px solid var(--color-dashboard-card-border);
+  }
+  .dashboard-tab-inactive {
+    background: var(--color-dashboard-tab-inactive-bg);
+    color: var(--color-dashboard-tab-inactive-text);
+    border: 1px solid var(--color-dashboard-tab-inactive-border);
+  }
+  .dashboard-tab-inactive:hover {
+    background: var(--color-companion-btn-hover);
+  }
+  .dashboard-badge-connected {
+    background: var(--color-dashboard-badge-connected-bg);
+    color: var(--color-dashboard-badge-connected-text);
+  }
+  .dashboard-badge-chain {
+    background: var(--color-dashboard-badge-chain-bg);
+    color: var(--color-dashboard-badge-chain-text);
+  }
+  .dashboard-lock-badge {
+    background: var(--color-dashboard-lock-bg);
+    border: 1px solid var(--color-dashboard-lock-border);
+    color: var(--color-dashboard-lock-text);
+  }
+  .dashboard-close-btn {
+    color: var(--color-dashboard-close-text);
+  }
+  .dashboard-close-btn:hover {
+    color: var(--color-companion-mode-text);
+    background: var(--color-companion-btn-hover);
+  }
+  .dashboard-selector-title {
+    color: var(--color-dashboard-selector-title);
+  }
+  .dashboard-selector-subtitle {
+    color: var(--color-dashboard-selector-subtitle);
+  }
+  .dashboard-selector-hint {
+    color: var(--color-dashboard-selector-hint);
+  }
+  .dashboard-upload-info {
+    background: var(--color-dashboard-upload-info-bg);
+    border: 1px solid var(--color-dashboard-upload-info-border);
+    color: var(--color-dashboard-upload-info-text);
+  }
+  .dashboard-metric-inactive {
+    background: var(--color-dashboard-metric-inactive-bg);
+    color: var(--color-dashboard-metric-inactive-text);
+    border: 1px solid var(--color-dashboard-metric-inactive-border);
+  }
+  .dashboard-metric-inactive:hover {
+    background: var(--color-companion-btn-hover);
+  }
+  .dashboard-status {
+    background: var(--color-dashboard-status-bg);
+    color: var(--color-dashboard-status-text);
   }
 
   /* ── Luma indigo gradient border ── */

@@ -797,13 +797,13 @@ const HealthDataSelector: () => React.ReactElement = () => {
     <div className="max-w-4xl mx-auto p-6">
       <div className="border-none shadow-lg bg-transparent p-6">
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-emerald-900">
+          <h2 className="text-2xl font-bold dashboard-selector-title">
             Health Data Selector
           </h2>
         </div>
 
         <div className="mb-8">
-          <h3 className="text-xl font-semibold mb-4 text-emerald-700">
+          <h3 className="text-xl font-semibold mb-4 dashboard-selector-subtitle">
             Select Time Frame
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -817,7 +817,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
                 className={`p-3 rounded-lg text-sm font-medium transition-colors ${
                   timeFrame === option.value
                     ? "bg-[#006B4F] text-white border-b-2 border-[#005540]"
-                    : "bg-white/80 text-[#006B4F] hover:bg-[#E8F5F0]/30 border border-[#006B4F]/30"
+                    : "dashboard-metric-inactive"
                 }`}
               >
                 {option.label}
@@ -828,10 +828,10 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-semibold text-emerald-700">
+            <h3 className="text-xl font-semibold dashboard-selector-subtitle">
               Health Metrics
             </h3>
-            <span className="text-sm text-amber-800/80">
+            <span className="text-sm dashboard-selector-hint">
               (
               {
                 selectedMetrics.filter((id) =>
@@ -853,7 +853,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
                 className={`p-3 rounded-lg text-sm transition-colors ${
                   selectedMetrics.includes(metric.id)
                     ? "bg-[#006B4F] text-white border-b-2 border-[#005540]"
-                    : "bg-white/80 text-[#006B4F] hover:bg-[#E8F5F0]/30 border border-[#006B4F]/30"
+                    : "dashboard-metric-inactive"
                 }`}
               >
                 {metric.name}
@@ -863,16 +863,16 @@ const HealthDataSelector: () => React.ReactElement = () => {
         </div>
 
         <div className="border-t border-amber-50/20 pt-6">
-          <h3 className="text-xl font-semibold mb-4 text-emerald-700">
+          <h3 className="text-xl font-semibold mb-4 dashboard-selector-subtitle">
             Upload Health Export
           </h3>
-          <p className="text-sm text-gray-600 mb-3">
+          <p className="text-sm dashboard-description mb-3">
             Upload your Apple Health export.xml file or a previously exported
             CSV file
           </p>
 
           {/* Warning for XML files */}
-          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="mb-4 p-3 dashboard-upload-info rounded-lg">
             <div className="flex items-start gap-2">
               <svg
                 className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0"
@@ -951,7 +951,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
                   !uploadedFile ||
                   selectedMetrics.length === 0
                 }
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 companion-send-btn text-white py-3 px-4 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {processingState.isProcessing
                   ? "Processing..."
@@ -967,7 +967,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
               </button>
             </div>
 
-            <div className="mt-2 text-center text-sm text-gray-600">
+            <div className="mt-2 text-center text-sm dashboard-description">
               {selectedMetrics.length === 0 ? (
                 <span className="text-red-500">
                   Please select at least one metric to process
@@ -980,13 +980,13 @@ const HealthDataSelector: () => React.ReactElement = () => {
             </div>
 
             {processingState.status && (
-              <div className="p-3 rounded-lg text-sm bg-emerald-50 text-emerald-800">
+              <div className="p-3 rounded-lg text-sm dashboard-status">
                 {processingState.status}
               </div>
             )}
 
             {processingState.isProcessing && (
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="w-full rounded-full h-2" style={{ background: "var(--color-companion-surface-border)" }}>
                 <div
                   className="h-2 rounded-full transition-all duration-300 bg-emerald-600"
                   style={{
@@ -1030,7 +1030,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
                 </p>
 
                 {!isConnected ? (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+                  <div className="p-3 dashboard-upload-info rounded text-sm">
                     Connect your wallet to enable Storj save functionality.
                   </div>
                 ) : (
@@ -1063,7 +1063,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
                     {/* Storj save progress */}
                     {storjSaveStatus?.saving && (
                       <div className="space-y-1">
-                        <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="w-full rounded-full h-2" style={{ background: "var(--color-companion-surface-border)" }}>
                           <div
                             className="h-2 rounded-full transition-all duration-300 bg-blue-600"
                             style={{ width: `${storjSaveStatus.progress}%` }}

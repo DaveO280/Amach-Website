@@ -1637,11 +1637,11 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               Chat mode
             </span>
             <div className="flex flex-col gap-1">
-              <div className="inline-flex w-fit rounded-lg border border-emerald-200 bg-white shadow-sm relative group">
+              <div className="inline-flex w-fit rounded-full border border-emerald-200 bg-white shadow-sm relative group overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setUseMultiAgent(false)}
-                  className={`whitespace-nowrap px-3 py-1 text-xs font-medium transition-colors ${
+                  className={`whitespace-nowrap px-4 py-1.5 text-xs font-semibold transition-colors ${
                     !useMultiAgent
                       ? "bg-emerald-600 text-white shadow-sm"
                       : "text-emerald-700 hover:bg-emerald-50"
@@ -1653,7 +1653,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                   type="button"
                   onClick={() => isConnected && setUseMultiAgent(true)}
                   disabled={!isConnected}
-                  className={`whitespace-nowrap px-3 py-1 text-xs font-medium transition-colors relative ${
+                  className={`whitespace-nowrap px-4 py-1.5 text-xs font-semibold transition-colors relative ${
                     useMultiAgent
                       ? "bg-emerald-600 text-white shadow-sm"
                       : "text-emerald-700 hover:bg-emerald-50"
@@ -2097,7 +2097,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             <Button
               size="sm"
               variant="outline"
-              className="whitespace-nowrap"
+              className="whitespace-nowrap rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400"
               onClick={() => setIsExpanded((prev) => !prev)}
             >
               {isExpanded ? "Exit expanded view" : "Expand view"}
@@ -2111,7 +2111,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               <Button
                 ref={uploadFileButtonRef}
                 size="sm"
-                className="w-fit bg-emerald-600 text-white hover:bg-emerald-700"
+                className="w-fit rounded-full bg-emerald-600 text-white hover:bg-emerald-700"
                 onClick={() => {
                   setShowFileManager(true);
                   setFileManagerTab("upload");
@@ -2127,7 +2127,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               <Button
                 size="sm"
                 variant="outline"
-                className="w-fit"
+                className="w-fit rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400"
                 onClick={() => {
                   setShowFileManager(true);
                   setFileManagerTab("attached");
@@ -2214,7 +2214,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                           size="sm"
                           variant="outline"
                           onClick={() => setShowReportViewer(true)}
-                          className="flex items-center gap-1"
+                          className="flex items-center gap-1 rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50"
                         >
                           <FileText className="h-3 w-3" />
                           View Parsed Reports ({reports.length})
@@ -2226,6 +2226,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                           <Button
                             size="sm"
                             variant="outline"
+                            className="rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50"
                             disabled={
                               savingReportsToStorj ||
                               reports.filter((r) => !r.storjUri).length === 0
@@ -2389,6 +2390,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                     <Button
                       variant="outline"
                       size="sm"
+                      className="rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50"
                       onClick={loadStorjReportsList}
                       disabled={storjImportLoading}
                     >
@@ -2400,7 +2402,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                       disabled={
                         storjImportLoading || selectedStorjUris.size === 0
                       }
-                      className="bg-emerald-600 text-white hover:bg-emerald-700"
+                      className="rounded-full bg-emerald-600 text-white hover:bg-emerald-700"
                     >
                       {storjImportLoading
                         ? "Importing..."
@@ -2537,6 +2539,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             <div className="flex gap-2 justify-end">
               <Button
                 variant="outline"
+                className="rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50"
                 onClick={() => {
                   setShowSaveToStorjDialog(false);
                   setPendingReportsToSave([]);
@@ -2559,7 +2562,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                   }
                 }}
                 disabled={savingReportsToStorj}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white"
               >
                 {savingReportsToStorj ? "Saving..." : "Yes, Save to Storj"}
               </Button>
@@ -2596,7 +2599,8 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         <div className="mb-2 flex justify-end">
           <Button
             size="sm"
-            variant="secondary"
+            variant="outline"
+            className="rounded-full border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400"
             onClick={() => {
               clearMessages();
               clearChatHistory();
@@ -2678,12 +2682,12 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           }
           onKeyDown={handleKeyDown}
           placeholder="Ask Luma about your health..."
-          className="min-h-[60px] w-full resize-none rounded-md border border-gray-300 p-3 pr-12 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="min-h-[60px] w-full resize-none rounded-2xl border border-emerald-200 p-3 pr-12 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500"
           maxLength={500}
           disabled={isLoading}
         />
         <Button
-          className="absolute bottom-2 right-2"
+          className="absolute bottom-2 right-2 rounded-full bg-emerald-600 text-white hover:bg-emerald-700"
           size="sm"
           onClick={handleSendMessage}
           disabled={isLoading || input.trim() === ""}
@@ -2726,8 +2730,8 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         <div className="fixed inset-0 z-40 bg-emerald-950/40 backdrop-blur-sm transition-opacity" />
       )}
       {isExpanded ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
-          <div className="flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/60 to-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
+          <div className="flex h-[calc(100dvh-1.5rem)] sm:h-[calc(100dvh-3rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/60 to-white p-4 sm:p-6 shadow-2xl">
             {chatLayout}
           </div>
         </div>

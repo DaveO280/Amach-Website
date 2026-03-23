@@ -114,23 +114,18 @@ export default function VisualTimeline({
           ))}
 
           {other.length > 0 && (
-            <details className="text-sm mt-2">
-              <summary className="cursor-pointer text-emerald-600 hover:text-emerald-700 font-medium text-xs">
-                More details ({other.length})
-              </summary>
-              <div className="mt-2 space-y-1 pl-3 border-l-2 border-emerald-200">
-                {other.map(([key, value]) => (
-                  <div key={key}>
-                    <span className="font-medium text-emerald-700 capitalize text-xs">
-                      {key.replace(/([A-Z])/g, " $1").trim()}:
-                    </span>{" "}
-                    <span className="text-gray-600 text-xs whitespace-pre-wrap">
-                      {formatValue(value)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </details>
+            <div className="mt-2 space-y-1 pl-3 border-l-2 border-emerald-200">
+              {other.map(([key, value]) => (
+                <div key={key}>
+                  <span className="font-medium text-emerald-700 capitalize text-xs">
+                    {key.replace(/([A-Z])/g, " $1").trim()}:
+                  </span>{" "}
+                  <span className="text-gray-600 text-xs whitespace-pre-wrap">
+                    {formatValue(value)}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       );
@@ -155,15 +150,18 @@ export default function VisualTimeline({
 
   return (
     <div className="relative">
-      {/* Timeline axis - hidden on mobile, visible on desktop */}
-      <div className="hidden md:block absolute left-8 top-0 bottom-0 w-0.5 bg-gradient-to-b from-emerald-200 via-emerald-300 to-emerald-200"></div>
-
       {/* Events grouped by date */}
       <div className="space-y-6">
         {eventsByDate.map(([dateKey, dateEvents]) => (
           <div key={dateKey} className="relative">
+            {/* Timeline axis — starts below date header, hidden on mobile */}
+            <div
+              className="hidden md:block absolute left-8 w-0.5 bg-gradient-to-b from-emerald-300 to-emerald-200"
+              style={{ top: 80, bottom: 0 }}
+            ></div>
+
             {/* Date Header */}
-            <div className="flex items-center gap-4 mb-4">
+            <div className="flex items-center gap-4 mb-4 relative z-10">
               {/* Date badge - desktop */}
               <div className="hidden md:flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 border-4 border-white shadow-md z-10 flex-shrink-0">
                 <div className="text-center">

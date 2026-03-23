@@ -56,9 +56,9 @@ Visit `http://localhost:3000` to see the app.
 - Encrypted storage in Storj with blockchain references
 - Visual timeline with filtering by category and date range
 
-### 🤖 AI Companion (Cosaint)
+### 🤖 AI Companion (Luma)
 
-- 6 specialized agents: Activity, Bloodwork, Cardiovascular, DEXA, Recovery, Sleep
+- 9 specialized agents: Activity, Bloodwork, Cardiovascular, DEXA, Recovery, Sleep
 - Coordinator orchestrates multi-agent analysis
 - Context-aware health insights based on your data
 
@@ -78,7 +78,7 @@ Visit `http://localhost:3000` to see the app.
 
 ```
 src/
-├── agents/           # 6 specialized health AI agents + coordinator
+├── agents/           # 9 specialized health AI agents + coordinator
 ├── ai/               # AI preprocessing and relevance scoring
 ├── app/              # Next.js pages and API routes
 ├── components/       # React components (wallet, timeline, AI, etc.)

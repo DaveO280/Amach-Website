@@ -700,6 +700,9 @@
     mask-composite: exclude;
     pointer-events: none;
   }
+  [data-theme="dark"] .luma-card {
+    background: rgba(10, 15, 12, 0.95);
+  }
 }
 
 /* ── Whitepaper styles ── */

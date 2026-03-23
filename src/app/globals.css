@@ -39,6 +39,7 @@
     --shimmer-opacity: 0.06;
 
     /* ── AI Companion chat tokens ── */
+    --color-companion-modal-bg: #FFFFFF;
     --color-companion-surface: #FFFFFF;
     --color-companion-surface-border: rgba(0, 107, 79, 0.15);
     --color-companion-pill-bg: #FFFFFF;
@@ -142,6 +143,7 @@
     --shimmer-opacity: 0.04;
 
     /* ── AI Companion chat tokens — dark mode ── */
+    --color-companion-modal-bg: rgba(10, 15, 12, 0.98);
     --color-companion-surface: #0A0F0C;
     --color-companion-surface-border: rgba(255, 255, 255, 0.05);
     --color-companion-pill-bg: rgba(255, 255, 255, 0.04);

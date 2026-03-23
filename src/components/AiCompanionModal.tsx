@@ -384,7 +384,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
         ref={modalRef}
         className="relative w-full overflow-hidden animate-in fade-in duration-300"
         style={{
-          background: "var(--color-bg-surface)",
+          background: "var(--color-companion-modal-bg)",
           // Mobile: slide-up sheet, no rounding on bottom, full width
           // Desktop: centred floating modal
           ...(isMobile

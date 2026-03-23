@@ -1006,25 +1006,17 @@
 
 /* ── DARK MODE ──────────────────────────────────────────────── */
 
+/* Gradient border wrapper — visible in dark mode only */
+.luma-light .luma-gradient-border {
+  padding: 0;
+  background: transparent;
+}
+.luma-dark .luma-gradient-border {
+  padding: 1px;
+  background: linear-gradient(135deg, #006b4f 0%, #6366f1 100%);
+}
 .luma-dark .luma-modal-panel {
   background: #111f1a;
-  border: 1px solid rgba(0, 107, 79, 0.3);
-  position: relative;
-}
-.luma-dark .luma-modal-panel::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(135deg, #006b4f, #6366f1);
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-  opacity: 0.5;
 }
 
 .luma-dark .luma-header {
@@ -1098,7 +1090,19 @@
 /* Chat surface */
 .luma-dark .companion-chat-surface {
   background: rgba(10, 21, 18, 0.6) !important;
-  border: 1px solid rgba(0, 107, 79, 0.12) !important;
+  border: 1px solid rgba(0, 107, 79, 0.1) !important;
+  border-radius: 14px !important;
+}
+
+/* "This is Luma." title */
+.luma-dark .companion-welcome-text h3 {
+  color: #f9fafb !important;
+  -webkit-text-fill-color: #f9fafb !important;
+}
+
+/* Available Metrics spacing */
+.luma-dark .companion-welcome-text {
+  margin-top: 8px;
 }
 
 /* Chat bubbles */

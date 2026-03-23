@@ -32,6 +32,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
     "chat",
   );
   const [showWalletBanner, setShowWalletBanner] = useState(true);
+  const [lumaTheme, setLumaTheme] = useState<"light" | "dark">("light");
 
   // Popup state management
   const [showHealthDashboardPopup, setShowHealthDashboardPopup] =
@@ -73,6 +74,20 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
       setShowWalletBanner(false);
     }
   }, []);
+
+  // Load luma theme preference from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem("luma-theme");
+    if (stored === "dark" || stored === "light") {
+      setLumaTheme(stored);
+    }
+  }, []);
+
+  const toggleLumaTheme = (): void => {
+    const next = lumaTheme === "light" ? "dark" : "light";
+    setLumaTheme(next);
+    localStorage.setItem("luma-theme", next);
+  };
 
   // Check if popups should be shown when modal opens
   useEffect(() => {
@@ -370,11 +385,10 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
 
   return (
     <div
-      className="fixed inset-0 z-[200] overflow-hidden flex"
+      className={`fixed inset-0 z-[200] overflow-hidden flex ${lumaTheme === "dark" ? "luma-dark" : "luma-light"}`}
       style={{
         background: "rgba(0,0,0,0.45)",
         backdropFilter: "blur(6px)",
-        // On desktop: center the modal. On mobile: fill the screen.
         ...(isMobile
           ? { alignItems: "flex-end" }
           : { alignItems: "center", justifyContent: "center", padding: 8 }),
@@ -382,53 +396,41 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
     >
       <div
         ref={modalRef}
-        className="relative w-full overflow-hidden animate-in fade-in duration-300"
+        className="luma-modal-panel relative w-full overflow-hidden animate-in fade-in duration-300"
         style={{
-          background: "var(--color-companion-modal-bg)",
-          // Mobile: slide-up sheet, no rounding on bottom, full width
-          // Desktop: centred floating modal
           ...(isMobile
             ? {
                 maxWidth: "100%",
                 height: "96dvh",
                 maxHeight: "96dvh",
                 borderRadius: "16px 16px 0 0",
-                border: "1px solid var(--color-border)",
-                borderBottom: "none",
               }
             : {
                 maxWidth: "95vw",
                 maxHeight: "90vh",
                 borderRadius: 20,
                 boxShadow: "0 24px 80px rgba(0,0,0,0.18)",
-                border: "1px solid var(--color-border)",
               }),
         }}
         onClick={handleModalClick}
       >
-
         {/* ── Header ──────────────────────────────────────── */}
-        <header
-          style={{
-            position: "sticky",
-            top: 0,
-            zIndex: 10,
-            background: "var(--color-bg-nav)",
-            backdropFilter: "blur(12px)",
-            borderBottom: "1px solid var(--color-border)",
-            padding: isMobile ? "0 14px" : "0 20px",
-            height: 56,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          {/* Wordmark */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        <header className="luma-header">
+          {/* Wordmark — isolation prevents shimmer text-fill leaking */}
+          <div
+            style={{
+              isolation: "isolate",
+              transform: "translateZ(0)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "1px",
+            }}
+          >
             <span
               className="amach-wordmark-line"
               style={{
-                fontFamily: "var(--font-serif, 'Libre Baskerville', Georgia, serif)",
+                fontFamily:
+                  "var(--font-serif, 'Libre Baskerville', Georgia, serif)",
                 fontWeight: 700,
                 fontSize: "0.95rem",
                 letterSpacing: "0.18em",
@@ -438,45 +440,61 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
               Luma
             </span>
             <span
+              className="luma-text-muted"
               style={{
                 fontSize: "0.65rem",
                 letterSpacing: "0.1em",
                 textTransform: "uppercase",
-                color: "var(--color-text-muted)",
               }}
             >
               by Amach Health
             </span>
           </div>
 
-          {/* Close */}
-          <button
-            onClick={props.onClose}
-            aria-label="Close"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 36,
-              height: 36,
-              borderRadius: "50%",
-              border: "1px solid var(--color-border)",
-              background: "transparent",
-              color: "var(--color-text-muted)",
-              cursor: "pointer",
-              transition: "color 0.15s, background 0.15s",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = "var(--color-emerald-muted)";
-              (e.currentTarget as HTMLButtonElement).style.color = "var(--color-emerald)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-              (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-muted)";
-            }}
-          >
-            <X style={{ width: 16, height: 16 }} />
-          </button>
+          {/* Right cluster: theme toggle + close */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Theme toggle */}
+            <button
+              onClick={toggleLumaTheme}
+              aria-label={
+                lumaTheme === "dark"
+                  ? "Switch to light mode"
+                  : "Switch to dark mode"
+              }
+              className="luma-btn"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                fontSize: "14px",
+                lineHeight: 1,
+              }}
+            >
+              {lumaTheme === "dark" ? "☀" : "☾"}
+            </button>
+
+            {/* Close */}
+            <button
+              onClick={props.onClose}
+              aria-label="Close"
+              className="luma-btn"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+              }}
+            >
+              <X style={{ width: 16, height: 16 }} />
+            </button>
+          </div>
         </header>
 
         {/* ── Body ────────────────────────────────────────── */}
@@ -488,15 +506,10 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-
           {/* ── Tab Navigation ──────────────────────────── */}
           <div
-            style={{
-              display: "flex",
-              gap: 0,
-              borderBottom: "1px solid var(--color-border)",
-              marginBottom: isMobile ? 14 : 24,
-            }}
+            className="luma-tab-bar"
+            style={{ marginBottom: isMobile ? 14 : 24 }}
           >
             {tabs.map(({ id, label }) => {
               const isActive = activeTab === id;
@@ -506,18 +519,19 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                   <button
                     onClick={() => !isLocked && setActiveTab(id)}
                     disabled={isLocked}
+                    className={
+                      isActive ? "luma-tab-active" : "luma-tab-inactive"
+                    }
                     style={{
                       width: "100%",
-                      padding: isMobile ? "10px 4px" : "12px 8px",
-                      fontSize: isMobile ? "0.82rem" : "0.9rem",
-                      fontWeight: isActive ? 700 : 500,
-                      color: isActive
-                        ? "var(--color-emerald)"
-                        : "var(--color-text-muted)",
+                      padding: "10px 20px",
+                      fontFamily: "var(--font-sans)",
+                      fontSize: "13px",
+                      fontWeight: 500,
                       background: "none",
                       border: "none",
                       borderBottom: isActive
-                        ? "2px solid var(--color-emerald)"
+                        ? undefined
                         : "2px solid transparent",
                       marginBottom: -1,
                       cursor: isLocked ? "not-allowed" : "pointer",
@@ -531,8 +545,9 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                     <div
                       className="absolute top-full left-1/2 -translate-x-1/2 mt-2 invisible group-hover:visible pointer-events-none"
                       style={{
-                        background: "var(--color-text-primary)",
+                        background: "#111827",
                         color: "#fff",
+                        WebkitTextFillColor: "#fff",
                         fontSize: "0.75rem",
                         padding: "6px 12px",
                         borderRadius: 8,
@@ -555,11 +570,10 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                 {/* Wallet banner */}
                 {!isConnected && showWalletBanner && (
                   <div
+                    className="luma-alert"
                     style={{
                       marginBottom: isMobile ? 12 : 20,
                       padding: isMobile ? "10px 14px" : "16px 20px",
-                      background: "var(--color-emerald-muted)",
-                      border: "1px solid var(--color-border-strong)",
                       borderRadius: 10,
                       display: "flex",
                       alignItems: "flex-start",
@@ -568,9 +582,9 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                   >
                     <div style={{ flex: 1 }}>
                       <p
+                        className="luma-text-body"
                         style={{
                           fontWeight: 700,
-                          color: "var(--color-emerald)",
                           fontSize: isMobile ? "0.82rem" : "0.9rem",
                           marginBottom: isMobile ? 2 : 6,
                         }}
@@ -579,11 +593,8 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                       </p>
                       {!isMobile && (
                         <p
-                          style={{
-                            fontSize: "0.85rem",
-                            lineHeight: 1.6,
-                            color: "var(--color-text-secondary)",
-                          }}
+                          className="luma-text-secondary"
+                          style={{ fontSize: "0.85rem", lineHeight: 1.6 }}
                         >
                           Connect a wallet to encrypt and store your data on
                           Storj, anchor your profile on ZKsync, and access
@@ -592,11 +603,8 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                       )}
                       {isMobile && (
                         <p
-                          style={{
-                            fontSize: "0.78rem",
-                            lineHeight: 1.5,
-                            color: "var(--color-text-secondary)",
-                          }}
+                          className="luma-text-secondary"
+                          style={{ fontSize: "0.78rem", lineHeight: 1.5 }}
                         >
                           Storj storage + ZKsync identity + cross-device access.
                         </p>
@@ -605,11 +613,11 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                     <button
                       onClick={handleDismissBanner}
                       aria-label="Dismiss"
+                      className="luma-text-muted"
                       style={{
                         flexShrink: 0,
                         background: "none",
                         border: "none",
-                        color: "var(--color-text-muted)",
                         cursor: "pointer",
                         padding: 2,
                       }}
@@ -624,18 +632,16 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                   <div style={{ marginBottom: isMobile ? 10 : 16 }}>
                     <button
                       onClick={() => setShowStats(!showStats)}
+                      className="luma-btn"
                       style={{
                         width: "100%",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
                         padding: isMobile ? "8px 12px" : "10px 14px",
-                        background: "var(--color-companion-btn-hover)",
-                        border: "1px solid var(--color-companion-surface-border)",
                         borderRadius: 10,
                         marginBottom: showStats ? (isMobile ? 8 : 12) : 0,
                         cursor: "pointer",
-                        color: "var(--color-companion-mode-text)",
                         fontWeight: 600,
                         fontSize: isMobile ? "0.8rem" : "0.88rem",
                       }}
@@ -649,7 +655,13 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                     </button>
 
                     {showStats && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 12,
+                        }}
+                      >
                         <HealthStatCards />
                         <HealthReport />
                       </div>
@@ -660,7 +672,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                 {/* No health data nudge */}
                 {!hasHealthData && (
                   <div
-                    className="companion-notification"
+                    className="luma-alert"
                     style={{
                       marginBottom: isMobile ? 8 : 12,
                       padding: isMobile ? "5px 10px" : "6px 12px",
@@ -668,7 +680,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
                     }}
                   >
                     <p
-                      className="companion-notification-text"
+                      className="luma-text-secondary"
                       style={{
                         fontSize: isMobile ? "0.82rem" : "0.88rem",
                         lineHeight: 1.6,
@@ -779,9 +791,9 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
         content={
           <div>
             <p style={{ lineHeight: 1.6 }}>
-              Upload PDFs such as lab results, DEXA scans, or doctor notes.
-              Luma reads them alongside your Apple Health data to give you a
-              complete picture.
+              Upload PDFs such as lab results, DEXA scans, or doctor notes. Luma
+              reads them alongside your Apple Health data to give you a complete
+              picture.
             </p>
           </div>
         }

@@ -10,25 +10,30 @@
 @layer base {
   :root {
     /* ── Backgrounds ── */
-    --gradient-hero: linear-gradient(to bottom right, #FFFBEB, #FFFFFF, #ECFDF5);
+    --gradient-hero: linear-gradient(
+      to bottom right,
+      #fffbeb,
+      #ffffff,
+      #ecfdf5
+    );
     --color-bg-primary: var(--gradient-hero);
-    --color-bg-surface: #FFFFFF;
+    --color-bg-surface: #ffffff;
     --color-bg-card: rgba(255, 255, 255, 0.85);
     --color-bg-nav: rgba(255, 251, 235, 0.92);
 
     /* ── Brand colors (same in light + dark) ── */
-    --color-emerald: #006B4F;
+    --color-emerald: #006b4f;
     --color-emerald-light: #4ade80;
     --color-emerald-muted: rgba(0, 107, 79, 0.15);
-    --color-amber: #F59E0B;
+    --color-amber: #f59e0b;
     --color-amber-muted: rgba(245, 158, 11, 0.12);
-    --color-indigo: #6366F1;
-    --color-indigo-dark: #3730A3;
+    --color-indigo: #6366f1;
+    --color-indigo-dark: #3730a3;
 
     /* ── Text ── */
-    --color-text-primary: #0A1A0F;
-    --color-text-secondary: #3D5A47;
-    --color-text-muted: #6B8C7A;
+    --color-text-primary: #0a1a0f;
+    --color-text-secondary: #3d5a47;
+    --color-text-muted: #6b8c7a;
     --color-text-accent: var(--color-emerald);
 
     /* ── Borders ── */
@@ -39,66 +44,71 @@
     --shimmer-opacity: 0.06;
 
     /* ── AI Companion chat tokens ── */
-    --color-companion-modal-bg: #FFFFFF;
-    --color-companion-surface: #FFFFFF;
+    --color-companion-modal-bg: #ffffff;
+    --color-companion-surface: #ffffff;
     --color-companion-surface-border: rgba(0, 107, 79, 0.15);
-    --color-companion-pill-bg: #FFFFFF;
+    --color-companion-pill-bg: #ffffff;
     --color-companion-pill-border: rgba(0, 107, 79, 0.2);
-    --color-companion-btn-active-bg: #006B4F;
+    --color-companion-btn-active-bg: #006b4f;
     --color-companion-btn-hover: rgba(0, 107, 79, 0.07);
-    --color-companion-outline-btn-color: #005A42;
+    --color-companion-outline-btn-color: #005a42;
     --color-companion-outline-btn-border: rgba(0, 107, 79, 0.3);
     --color-companion-label-bg: rgba(255, 255, 255, 0.75);
-    --color-companion-label-text: #005A42;
+    --color-companion-label-text: #005a42;
     --color-companion-user-bubble: rgba(0, 107, 79, 0.12);
     --color-companion-user-bubble-border: rgba(0, 107, 79, 0.3);
     --color-companion-user-bubble-text: var(--color-text-primary);
-    --color-companion-assistant-bubble-bg: #EEF2FF;
+    --color-companion-assistant-bubble-bg: #eef2ff;
     --color-companion-assistant-bubble-border: rgba(99, 102, 241, 0.25);
-    --color-companion-assistant-bubble-text: #3730A3;
+    --color-companion-assistant-bubble-text: #3730a3;
     --color-companion-assistant-duration-text: rgba(55, 48, 163, 0.6);
     --color-companion-badge-bg: rgba(0, 107, 79, 0.08);
     --color-companion-badge-text: #004838;
-    --color-companion-welcome-text: #6B8C7A;
+    --color-companion-welcome-text: #6b8c7a;
     --color-companion-icon-bg: rgba(0, 107, 79, 0.08);
-    --color-companion-textarea-bg: #FFFFFF;
+    --color-companion-textarea-bg: #ffffff;
     --color-companion-textarea-border: rgba(0, 107, 79, 0.22);
-    --color-companion-mode-text: #005A42;
-    --color-companion-hint-text: #B45309;
+    --color-companion-mode-text: #005a42;
+    --color-companion-hint-text: #b45309;
     --color-companion-notification-bg: rgba(245, 158, 11, 0.08);
     --color-companion-notification-border: rgba(245, 158, 11, 0.8);
     --color-companion-notification-text: var(--color-text-secondary);
 
     /* ── Health Dashboard tokens ── */
-    --color-dashboard-bg: linear-gradient(to bottom right, #FFE3B4, #ffffff, #CAF2DD);
+    --color-dashboard-bg: linear-gradient(
+      to bottom right,
+      #ffe3b4,
+      #ffffff,
+      #caf2dd
+    );
     --color-dashboard-header-bg: rgba(255, 255, 255, 0.92);
     --color-dashboard-header-border: rgba(251, 191, 36, 0.2);
-    --color-dashboard-title: #006B4F;
-    --color-dashboard-description: #065F46;
+    --color-dashboard-title: #006b4f;
+    --color-dashboard-description: #065f46;
     --color-dashboard-card-bg: rgba(255, 255, 255, 0.1);
     --color-dashboard-card-border: rgba(251, 191, 36, 0.15);
-    --color-dashboard-tab-inactive-bg: #FFFFFF;
-    --color-dashboard-tab-inactive-text: #006B4F;
+    --color-dashboard-tab-inactive-bg: #ffffff;
+    --color-dashboard-tab-inactive-text: #006b4f;
     --color-dashboard-tab-inactive-border: rgba(0, 107, 79, 0.3);
     --color-dashboard-badge-connected-bg: rgba(209, 250, 229, 0.8);
-    --color-dashboard-badge-connected-text: #065F46;
+    --color-dashboard-badge-connected-text: #065f46;
     --color-dashboard-badge-chain-bg: rgba(254, 243, 199, 0.8);
-    --color-dashboard-badge-chain-text: #92400E;
+    --color-dashboard-badge-chain-text: #92400e;
     --color-dashboard-lock-bg: rgba(236, 253, 245, 0.3);
     --color-dashboard-lock-border: rgba(167, 243, 208, 0.3);
-    --color-dashboard-lock-text: #065F46;
-    --color-dashboard-close-text: #92400E;
-    --color-dashboard-selector-title: #006B4F;
-    --color-dashboard-selector-subtitle: #065F46;
+    --color-dashboard-lock-text: #065f46;
+    --color-dashboard-close-text: #92400e;
+    --color-dashboard-selector-title: #006b4f;
+    --color-dashboard-selector-subtitle: #065f46;
     --color-dashboard-selector-hint: rgba(120, 53, 15, 0.8);
     --color-dashboard-upload-info-bg: rgba(255, 251, 235, 0.8);
     --color-dashboard-upload-info-border: rgba(251, 191, 36, 0.3);
-    --color-dashboard-upload-info-text: #92400E;
+    --color-dashboard-upload-info-text: #92400e;
     --color-dashboard-metric-inactive-bg: rgba(255, 255, 255, 0.8);
-    --color-dashboard-metric-inactive-text: #006B4F;
+    --color-dashboard-metric-inactive-text: #006b4f;
     --color-dashboard-metric-inactive-border: rgba(0, 107, 79, 0.3);
     --color-dashboard-status-bg: rgba(209, 250, 229, 0.5);
-    --color-dashboard-status-text: #065F46;
+    --color-dashboard-status-text: #065f46;
 
     /* ── shadcn/ui compatibility tokens ── */
     --background: 0 0% 100%;
@@ -128,14 +138,14 @@
   /* ── Dark Mode ── */
   [data-theme="dark"] {
     --gradient-hero: none;
-    --color-bg-primary: #111A15;
-    --color-bg-surface: #1A2620;
+    --color-bg-primary: #111a15;
+    --color-bg-surface: #1a2620;
     --color-bg-card: rgba(17, 31, 22, 0.85);
     --color-bg-nav: rgba(17, 26, 21, 0.95);
 
-    --color-text-primary: #F0F7F3;
-    --color-text-secondary: #9DB8A8;
-    --color-text-muted: #6B8C7A;
+    --color-text-primary: #f0f7f3;
+    --color-text-secondary: #9db8a8;
+    --color-text-muted: #6b8c7a;
 
     --color-border: rgba(0, 107, 79, 0.25);
     --color-border-strong: rgba(0, 107, 79, 0.4);
@@ -144,65 +154,70 @@
 
     /* ── AI Companion chat tokens — dark mode ── */
     --color-companion-modal-bg: rgba(10, 15, 12, 0.98);
-    --color-companion-surface: #0A0F0C;
+    --color-companion-surface: #0a0f0c;
     --color-companion-surface-border: rgba(255, 255, 255, 0.05);
     --color-companion-pill-bg: rgba(255, 255, 255, 0.04);
     --color-companion-pill-border: rgba(255, 255, 255, 0.1);
-    --color-companion-btn-active-bg: #006B4F;
+    --color-companion-btn-active-bg: #006b4f;
     --color-companion-btn-hover: rgba(0, 107, 79, 0.15);
-    --color-companion-outline-btn-color: #6B8C7A;
+    --color-companion-outline-btn-color: #6b8c7a;
     --color-companion-outline-btn-border: rgba(0, 107, 79, 0.55);
     --color-companion-label-bg: rgba(255, 255, 255, 0.05);
-    --color-companion-label-text: #6B8C7A;
+    --color-companion-label-text: #6b8c7a;
     --color-companion-user-bubble: rgba(0, 107, 79, 0.18);
     --color-companion-user-bubble-border: rgba(0, 107, 79, 0.35);
-    --color-companion-user-bubble-text: #F0F7F3;
-    --color-companion-assistant-bubble-bg: #3730A3;
+    --color-companion-user-bubble-text: #f0f7f3;
+    --color-companion-assistant-bubble-bg: #3730a3;
     --color-companion-assistant-bubble-border: rgba(99, 102, 241, 0.3);
-    --color-companion-assistant-bubble-text: #F0F7F3;
+    --color-companion-assistant-bubble-text: #f0f7f3;
     --color-companion-assistant-duration-text: rgba(240, 247, 243, 0.6);
     --color-companion-badge-bg: rgba(255, 255, 255, 0.05);
-    --color-companion-badge-text: #6B8C7A;
-    --color-companion-welcome-text: #6B8C7A;
+    --color-companion-badge-text: #6b8c7a;
+    --color-companion-welcome-text: #6b8c7a;
     --color-companion-icon-bg: rgba(255, 255, 255, 0.05);
-    --color-companion-textarea-bg: #080D0A;
+    --color-companion-textarea-bg: #080d0a;
     --color-companion-textarea-border: rgba(255, 255, 255, 0.07);
-    --color-companion-mode-text: #6B8C7A;
-    --color-companion-hint-text: #6B8C7A;
+    --color-companion-mode-text: #6b8c7a;
+    --color-companion-hint-text: #6b8c7a;
     --color-companion-notification-bg: rgba(245, 158, 11, 0.04);
     --color-companion-notification-border: rgba(245, 158, 11, 0.45);
     --color-companion-notification-text: var(--color-text-secondary);
 
     /* ── Health Dashboard dark tokens ── */
-    --color-dashboard-bg: linear-gradient(to bottom right, #0A1209, #111A15, #0A1812);
+    --color-dashboard-bg: linear-gradient(
+      to bottom right,
+      #0a1209,
+      #111a15,
+      #0a1812
+    );
     --color-dashboard-header-bg: rgba(17, 26, 21, 0.97);
     --color-dashboard-header-border: rgba(0, 107, 79, 0.28);
-    --color-dashboard-title: #F0F7F3;
-    --color-dashboard-description: #9DB8A8;
+    --color-dashboard-title: #f0f7f3;
+    --color-dashboard-description: #9db8a8;
     --color-dashboard-card-bg: rgba(14, 24, 18, 0.5);
     --color-dashboard-card-border: rgba(0, 107, 79, 0.18);
     --color-dashboard-tab-inactive-bg: rgba(0, 107, 79, 0.1);
-    --color-dashboard-tab-inactive-text: #6EE7B7;
+    --color-dashboard-tab-inactive-text: #6ee7b7;
     --color-dashboard-tab-inactive-border: rgba(110, 231, 183, 0.2);
     --color-dashboard-badge-connected-bg: rgba(0, 77, 56, 0.4);
-    --color-dashboard-badge-connected-text: #6EE7B7;
+    --color-dashboard-badge-connected-text: #6ee7b7;
     --color-dashboard-badge-chain-bg: rgba(80, 55, 0, 0.35);
-    --color-dashboard-badge-chain-text: #D4A853;
+    --color-dashboard-badge-chain-text: #d4a853;
     --color-dashboard-lock-bg: rgba(0, 107, 79, 0.1);
     --color-dashboard-lock-border: rgba(0, 107, 79, 0.2);
-    --color-dashboard-lock-text: #9DB8A8;
-    --color-dashboard-close-text: #9DB8A8;
-    --color-dashboard-selector-title: #F0F7F3;
-    --color-dashboard-selector-subtitle: #6EE7B7;
+    --color-dashboard-lock-text: #9db8a8;
+    --color-dashboard-close-text: #9db8a8;
+    --color-dashboard-selector-title: #f0f7f3;
+    --color-dashboard-selector-subtitle: #6ee7b7;
     --color-dashboard-selector-hint: rgba(212, 168, 83, 0.9);
     --color-dashboard-upload-info-bg: rgba(80, 55, 0, 0.2);
     --color-dashboard-upload-info-border: rgba(180, 110, 0, 0.25);
-    --color-dashboard-upload-info-text: #D4A853;
+    --color-dashboard-upload-info-text: #d4a853;
     --color-dashboard-metric-inactive-bg: rgba(0, 107, 79, 0.1);
-    --color-dashboard-metric-inactive-text: #6EE7B7;
+    --color-dashboard-metric-inactive-text: #6ee7b7;
     --color-dashboard-metric-inactive-border: rgba(110, 231, 183, 0.2);
     --color-dashboard-status-bg: rgba(0, 77, 56, 0.3);
-    --color-dashboard-status-text: #6EE7B7;
+    --color-dashboard-status-text: #6ee7b7;
 
     /* shadcn/ui dark overrides */
     --background: 142 20% 6%;
@@ -228,33 +243,69 @@
 
   /* ── Animations ── */
   @keyframes circuit-glow {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 0.8; }
+    0%,
+    100% {
+      opacity: 0.4;
+    }
+    50% {
+      opacity: 0.8;
+    }
   }
 
   @keyframes branch-grow {
-    from { stroke-dashoffset: 1000; }
-    to { stroke-dashoffset: 0; }
+    from {
+      stroke-dashoffset: 1000;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
   }
 
   @keyframes disintegrate {
-    0% { opacity: 1; filter: blur(0px); transform: scale(1); }
-    100% { opacity: 0; filter: blur(8px); transform: scale(0.95); }
+    0% {
+      opacity: 1;
+      filter: blur(0px);
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      filter: blur(8px);
+      transform: scale(0.95);
+    }
   }
 
   @keyframes integrate {
-    0% { opacity: 0; filter: blur(8px); transform: scale(1.05); }
-    100% { opacity: 1; filter: blur(0px); transform: scale(1); }
+    0% {
+      opacity: 0;
+      filter: blur(8px);
+      transform: scale(1.05);
+    }
+    100% {
+      opacity: 1;
+      filter: blur(0px);
+      transform: scale(1);
+    }
   }
 
   @keyframes pulse-slow {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
   }
 
   @keyframes fade-up {
-    0% { opacity: 0; transform: translateY(16px); }
-    100% { opacity: 1; transform: translateY(0); }
+    0% {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 }
 
@@ -273,8 +324,12 @@
         Sweeps a narrow #CBD5E1 → white → #CBD5E1 highlight left to right
         across the emerald wordmark text, clipped to the text shape. ── */
   @keyframes shimmer-sweep {
-    0%   { background-position: -200% center; }
-    100% { background-position: 300% center; }
+    0% {
+      background-position: -200% center;
+    }
+    100% {
+      background-position: 300% center;
+    }
   }
 
   /* ── Wordmark — serif, stacked, wide tracking ── */
@@ -292,13 +347,13 @@
   .amach-wordmark-line {
     background: linear-gradient(
       90deg,
-      #006B4F 0%,
-      #006B4F 28%,
-      #CBD5E1 42%,
-      #FFFFFF 50%,
-      #CBD5E1 58%,
-      #006B4F 72%,
-      #006B4F 100%
+      #006b4f 0%,
+      #006b4f 28%,
+      #cbd5e1 42%,
+      #ffffff 50%,
+      #cbd5e1 58%,
+      #006b4f 72%,
+      #006b4f 100%
     );
     background-size: 200% auto;
     -webkit-background-clip: text;
@@ -313,13 +368,13 @@
   .amach-wordmark-line-sub {
     background: linear-gradient(
       90deg,
-      #006B4F 0%,
-      #006B4F 28%,
-      #CBD5E1 42%,
-      #FFFFFF 50%,
-      #CBD5E1 58%,
-      #006B4F 72%,
-      #006B4F 100%
+      #006b4f 0%,
+      #006b4f 28%,
+      #cbd5e1 42%,
+      #ffffff 50%,
+      #cbd5e1 58%,
+      #006b4f 72%,
+      #006b4f 100%
     );
     background-size: 200% auto;
     -webkit-background-clip: text;
@@ -336,13 +391,13 @@
   [data-theme="dark"] .amach-wordmark-line-sub {
     background: linear-gradient(
       90deg,
-      #10B981 0%,
-      #10B981 28%,
-      #E2E8F0 42%,
-      #FFFFFF 50%,
-      #E2E8F0 58%,
-      #10B981 72%,
-      #10B981 100%
+      #10b981 0%,
+      #10b981 28%,
+      #e2e8f0 42%,
+      #ffffff 50%,
+      #e2e8f0 58%,
+      #10b981 72%,
+      #10b981 100%
     );
     background-size: 200% auto;
     -webkit-background-clip: text;
@@ -350,8 +405,12 @@
     -webkit-text-fill-color: transparent;
     animation: shimmer-sweep 4.5s linear infinite;
   }
-  [data-theme="dark"] .amach-wordmark-line { animation-delay: 0.6s; }
-  [data-theme="dark"] .amach-wordmark-line-sub { animation-delay: 1.4s; }
+  [data-theme="dark"] .amach-wordmark-line {
+    animation-delay: 0.6s;
+  }
+  [data-theme="dark"] .amach-wordmark-line-sub {
+    animation-delay: 1.4s;
+  }
 
   /* Venice logo — invert to white in dark mode (logo is black SVG) */
   .venice-logo {
@@ -381,7 +440,8 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background: repeating-linear-gradient(
+    background:
+      repeating-linear-gradient(
         45deg,
         transparent,
         transparent 40px,
@@ -437,7 +497,9 @@
     font-size: 1rem;
     border: none;
     cursor: pointer;
-    transition: opacity 0.15s ease, transform 0.15s ease;
+    transition:
+      opacity 0.15s ease,
+      transform 0.15s ease;
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -698,8 +760,10 @@
     inset: 0;
     border-radius: 20px;
     padding: 1px;
-    background: linear-gradient(135deg, #6366F1, #006B4F);
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    background: linear-gradient(135deg, #6366f1, #006b4f);
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     pointer-events: none;
@@ -776,11 +840,14 @@
     page-break-after: always;
   }
 
-  h1, h2, h3 {
+  h1,
+  h2,
+  h3 {
     page-break-after: avoid;
   }
 
-  img, table {
+  img,
+  table {
     page-break-inside: avoid;
   }
 
@@ -791,4 +858,287 @@
   .page-bg {
     background: white !important;
   }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   LUMA COMPANION — Isolated light/dark theming
+   These classes scope ONLY to the AI Companion modal.
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Shared structure ── */
+.luma-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(12px);
+  padding: 0 20px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.luma-tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid rgba(0, 107, 79, 0.12);
+  background: transparent;
+}
+
+/* ── LIGHT MODE ─────────────────────────────────────────────── */
+
+.luma-light .luma-modal-panel {
+  background: linear-gradient(160deg, #fffbeb 0%, #ffffff 45%, #ecfdf5 100%);
+  border: 1px solid rgba(0, 107, 79, 0.12);
+}
+
+.luma-light .luma-header {
+  background: linear-gradient(
+    to right,
+    rgba(255, 251, 235, 0.97),
+    rgba(236, 253, 245, 0.92)
+  );
+  border-bottom: 1px solid rgba(0, 107, 79, 0.12);
+}
+
+/* Buttons */
+.luma-light .luma-btn {
+  background: #006b4f;
+  border: 1.5px solid #006b4f;
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 107, 79, 0.25);
+  transition: background 0.15s;
+}
+.luma-light .luma-btn:hover {
+  background: #004d38;
+}
+
+/* CosaintChatUI buttons via companion classes */
+.luma-light .companion-btn-active {
+  background: #006b4f !important;
+  border: 1.5px solid #006b4f !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  box-shadow: 0 1px 4px rgba(0, 107, 79, 0.25);
+}
+.luma-light .companion-btn-active:hover {
+  background: #004d38 !important;
+}
+.luma-light .companion-btn-inactive {
+  background: #10b981 !important;
+  border: 1.5px solid #10b981 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+.luma-light .companion-outline-btn {
+  background: #006b4f !important;
+  border: 1.5px solid #006b4f !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  box-shadow: 0 1px 4px rgba(0, 107, 79, 0.25);
+}
+.luma-light .companion-outline-btn:hover {
+  background: #004d38 !important;
+}
+.luma-light .companion-send-btn {
+  background: #006b4f !important;
+  border: 1.5px solid #006b4f !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+.luma-light .companion-send-btn:hover {
+  background: #004d38 !important;
+}
+
+/* Alert / notification banner */
+.luma-light .luma-alert {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+/* Input */
+.luma-light .companion-textarea {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1.5px solid rgba(0, 107, 79, 0.2) !important;
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+}
+.luma-light .companion-textarea:focus {
+  border-color: #006b4f !important;
+  box-shadow: 0 0 0 3px rgba(0, 107, 79, 0.08) !important;
+}
+
+/* Chat surface */
+.luma-light .companion-chat-surface {
+  background: rgba(255, 255, 255, 0.55) !important;
+  border: 1px solid rgba(0, 107, 79, 0.1) !important;
+}
+
+/* Text */
+.luma-light .luma-text-body {
+  color: #111827;
+  -webkit-text-fill-color: #111827;
+}
+.luma-light .luma-text-secondary {
+  color: #4b5563;
+  -webkit-text-fill-color: #4b5563;
+}
+.luma-light .luma-text-muted {
+  color: #9ca3af;
+  -webkit-text-fill-color: #9ca3af;
+}
+
+/* Tab bar */
+.luma-light .luma-tab-active {
+  color: #006b4f;
+  -webkit-text-fill-color: #006b4f;
+  border-bottom: 2px solid #006b4f;
+}
+.luma-light .luma-tab-inactive {
+  color: #9ca3af;
+  -webkit-text-fill-color: #9ca3af;
+}
+.luma-light .luma-tab-inactive:hover {
+  color: #006b4f;
+  -webkit-text-fill-color: #006b4f;
+}
+
+/* ── DARK MODE ──────────────────────────────────────────────── */
+
+.luma-dark .luma-modal-panel {
+  background: #111f1a;
+  border: 1px solid rgba(0, 107, 79, 0.3);
+  position: relative;
+}
+.luma-dark .luma-modal-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, #006b4f, #6366f1);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.luma-dark .luma-header {
+  background: #1a2e26;
+  border-bottom: 1px solid rgba(0, 107, 79, 0.2);
+}
+
+/* Buttons */
+.luma-dark .luma-btn {
+  background: #006b4f;
+  border: 1.5px solid #006b4f;
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+  transition: background 0.15s;
+}
+.luma-dark .luma-btn:hover {
+  background: #004d38;
+}
+
+.luma-dark .companion-btn-active {
+  background: #006b4f !important;
+  border: 1.5px solid #006b4f !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+.luma-dark .companion-btn-active:hover {
+  background: #004d38 !important;
+}
+.luma-dark .companion-btn-inactive {
+  background: #10b981 !important;
+  border: 1.5px solid #10b981 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+.luma-dark .companion-outline-btn {
+  background: #006b4f !important;
+  border: 1.5px solid #006b4f !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+.luma-dark .companion-outline-btn:hover {
+  background: #004d38 !important;
+}
+.luma-dark .companion-send-btn {
+  background: #006b4f !important;
+  border: 1.5px solid #006b4f !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+.luma-dark .companion-send-btn:hover {
+  background: #004d38 !important;
+}
+
+/* Alert */
+.luma-dark .luma-alert {
+  background: rgba(26, 46, 38, 0.8);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+/* Input */
+.luma-dark .companion-textarea {
+  background: #1a2e26 !important;
+  border: 1.5px solid rgba(0, 107, 79, 0.2) !important;
+  color: #f9fafb !important;
+  -webkit-text-fill-color: #f9fafb !important;
+}
+.luma-dark .companion-textarea:focus {
+  border-color: #10b981 !important;
+}
+
+/* Chat surface */
+.luma-dark .companion-chat-surface {
+  background: rgba(10, 21, 18, 0.6) !important;
+  border: 1px solid rgba(0, 107, 79, 0.12) !important;
+}
+
+/* Chat bubbles */
+.luma-dark .companion-assistant-bubble {
+  background: #3730a3 !important;
+  border: 1px solid #6366f1 !important;
+  color: #c7d2fe !important;
+  -webkit-text-fill-color: #c7d2fe !important;
+}
+.luma-dark .companion-user-bubble {
+  background: #006b4f !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Text */
+.luma-dark .luma-text-body {
+  color: #f9fafb;
+  -webkit-text-fill-color: #f9fafb;
+}
+.luma-dark .luma-text-secondary {
+  color: #9ca3af;
+  -webkit-text-fill-color: #9ca3af;
+}
+.luma-dark .luma-text-muted {
+  color: #6b7280;
+  -webkit-text-fill-color: #6b7280;
+}
+
+/* Tab bar */
+.luma-dark .luma-tab-active {
+  color: #10b981;
+  -webkit-text-fill-color: #10b981;
+  border-bottom: 2px solid #10b981;
+}
+.luma-dark .luma-tab-inactive {
+  color: #9ca3af;
+  -webkit-text-fill-color: #9ca3af;
+}
+.luma-dark .luma-tab-inactive:hover {
+  color: #10b981;
+  -webkit-text-fill-color: #10b981;
 }

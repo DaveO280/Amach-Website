@@ -67,7 +67,7 @@
     --color-companion-hint-text: #B45309;
     --color-companion-notification-bg: rgba(245, 158, 11, 0.08);
     --color-companion-notification-border: rgba(245, 158, 11, 0.8);
-    --color-companion-notification-text: #451A00;
+    --color-companion-notification-text: var(--color-text-secondary);
 
     /* ── Health Dashboard tokens ── */
     --color-dashboard-bg: linear-gradient(to bottom right, #FFE3B4, #ffffff, #CAF2DD);
@@ -151,7 +151,7 @@
     --color-companion-btn-active-bg: #006B4F;
     --color-companion-btn-hover: rgba(0, 107, 79, 0.15);
     --color-companion-outline-btn-color: #6B8C7A;
-    --color-companion-outline-btn-border: rgba(0, 107, 79, 0.35);
+    --color-companion-outline-btn-border: rgba(0, 107, 79, 0.55);
     --color-companion-label-bg: rgba(255, 255, 255, 0.05);
     --color-companion-label-text: #6B8C7A;
     --color-companion-user-bubble: rgba(0, 107, 79, 0.18);
@@ -171,7 +171,7 @@
     --color-companion-hint-text: #6B8C7A;
     --color-companion-notification-bg: rgba(245, 158, 11, 0.04);
     --color-companion-notification-border: rgba(245, 158, 11, 0.45);
-    --color-companion-notification-text: #A07830;
+    --color-companion-notification-text: var(--color-text-secondary);
 
     /* ── Health Dashboard dark tokens ── */
     --color-dashboard-bg: linear-gradient(to bottom right, #0A1209, #111A15, #0A1812);
@@ -517,7 +517,7 @@
     color: var(--color-companion-outline-btn-color) !important;
   }
   .companion-outline-btn:hover {
-    background: var(--color-companion-btn-hover) !important;
+    background: rgba(0, 107, 79, 0.08) !important;
   }
   .companion-tertiary-btn {
     border: none;
@@ -586,6 +586,8 @@
     border-right: none;
     border-bottom: none;
     border-left: 3px solid var(--color-companion-notification-border);
+    margin: 8px 16px;
+    border-radius: 0 6px 6px 0;
   }
   .companion-notification-text {
     color: var(--color-companion-notification-text);

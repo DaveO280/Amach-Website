@@ -931,10 +931,10 @@
   background: #004d38 !important;
 }
 .luma-light .companion-btn-inactive {
-  background: #10b981 !important;
-  border: 1.5px solid #10b981 !important;
-  color: #ffffff !important;
-  -webkit-text-fill-color: #ffffff !important;
+  background: transparent !important;
+  border: 1px solid rgba(0, 107, 79, 0.2) !important;
+  color: #6b7280 !important;
+  -webkit-text-fill-color: #6b7280 !important;
 }
 .luma-light .companion-outline-btn {
   background: #006b4f !important;
@@ -1052,10 +1052,10 @@
   background: #004d38 !important;
 }
 .luma-dark .companion-btn-inactive {
-  background: #10b981 !important;
-  border: 1.5px solid #10b981 !important;
-  color: #ffffff !important;
-  -webkit-text-fill-color: #ffffff !important;
+  background: transparent !important;
+  border: 1px solid rgba(0, 107, 79, 0.2) !important;
+  color: #6b8c7a !important;
+  -webkit-text-fill-color: #6b8c7a !important;
 }
 .luma-dark .companion-outline-btn {
   background: #006b4f !important;

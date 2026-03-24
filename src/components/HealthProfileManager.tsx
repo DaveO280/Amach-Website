@@ -563,7 +563,9 @@ export const HealthProfileManager: React.FC = () => {
           <div className="space-y-4">
             <div className="text-center py-4">
               <User className="h-12 w-12 text-[#9CA3AF] mx-auto mb-4" />
-              <h3 className="text-lg font-medium mb-2">Health Profile</h3>
+              <h3 className="text-lg font-medium mb-2 text-[#0A1A0F] dark:text-[#F0F7F3]">
+                Health Profile
+              </h3>
               <p className="text-[#6B7280] text-sm mb-4">
                 Load your existing profile or create a new one
               </p>
@@ -591,7 +593,9 @@ export const HealthProfileManager: React.FC = () => {
             </div>
 
             <div className="border-t pt-4">
-              <h4 className="text-lg font-medium mb-2">Create New Profile</h4>
+              <h4 className="text-lg font-medium mb-2 text-[#0A1A0F] dark:text-[#F0F7F3]">
+                Create New Profile
+              </h4>
               <p className="text-[#6B7280] text-sm mb-4">
                 Your health data will be encrypted and stored securely on the
                 blockchain

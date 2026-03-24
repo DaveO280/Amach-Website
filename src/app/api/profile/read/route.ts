@@ -16,7 +16,10 @@ import { getAddress } from "viem";
 import { getContractAddresses, getActiveChain } from "@/lib/networkConfig";
 import { secureHealthProfileAbi } from "@/lib/contractConfig";
 import { decryptHealthData } from "@/utils/secureHealthEncryption";
-import type { OnChainEncryptedProfile } from "@/utils/secureHealthEncryption";
+import type {
+  OnChainEncryptedProfile,
+  SecureHealthProfile,
+} from "@/utils/secureHealthEncryption";
 
 export const runtime = "nodejs";
 
@@ -39,6 +42,31 @@ function isEthAddress(addr: string): boolean {
     /^0x[a-fA-F0-9]{40}$/.test(addr.trim()) ||
     /^[a-fA-F0-9]{40}$/.test(addr.trim())
   );
+}
+
+/**
+ * PBKDF2 input is the exact wallet string used at encryption time (Privy is
+ * usually EIP-55; iOS sends lowercase). Try checksum first, then lowercase.
+ */
+async function decryptProfileFlexible(
+  onChainProfile: OnChainEncryptedProfile,
+  userAddressInput: string,
+): Promise<SecureHealthProfile> {
+  const trimmed = userAddressInput.trim();
+  const with0x = (trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`) as `0x${string}`;
+  const variants = [getAddress(with0x), with0x.toLowerCase()];
+  const seen = new Set<string>();
+  let lastError: unknown;
+  for (const v of variants) {
+    if (seen.has(v)) continue;
+    seen.add(v);
+    try {
+      return await decryptHealthData(onChainProfile, v, undefined);
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -122,16 +150,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       nonce: encryptedProfile.nonce ?? "",
     };
 
-    // Profile was encrypted with the EIP-55 checksummed address (web app
-    // uses wallet.address from Privy which is checksummed). iOS sends
-    // lowercased addresses, so normalize to checksum before deriving the
-    // decryption key — the PBKDF2 passphrase must match exactly.
-    const checksumAddress = getAddress(address);
-
-    const decrypted = await decryptHealthData(
+    const decrypted = await decryptProfileFlexible(
       onChainProfile,
-      checksumAddress,
-      undefined,
+      userAddress,
     );
 
     const timestampMs =

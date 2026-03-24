@@ -12,6 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getAddress } from "viem";
 import { getContractAddresses, getActiveChain } from "@/lib/networkConfig";
 import { secureHealthProfileAbi } from "@/lib/contractConfig";
 import { decryptHealthData } from "@/utils/secureHealthEncryption";
@@ -121,9 +122,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       nonce: encryptedProfile.nonce ?? "",
     };
 
+    // Profile was encrypted with the EIP-55 checksummed address (web app
+    // uses wallet.address from Privy which is checksummed). iOS sends
+    // lowercased addresses, so normalize to checksum before deriving the
+    // decryption key — the PBKDF2 passphrase must match exactly.
+    const checksumAddress = getAddress(address);
+
     const decrypted = await decryptHealthData(
       onChainProfile,
-      userAddress,
+      checksumAddress,
       undefined,
     );
 

@@ -11,7 +11,6 @@ import { QuarterlyAggregateGenerator } from "../../components/health/QuarterlyAg
 import React, { useCallback, useEffect, useState } from "react";
 import { useWalletService } from "../../hooks/useWalletService";
 import { useHealthDataContext } from "../../components/HealthDataContextWrapper";
-import { Button } from "../../components/ui/button";
 import {
   Home,
   LayoutDashboard,
@@ -22,12 +21,6 @@ import {
   Wallet,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../components/ui/card";
 
 export default function WalletPage(): JSX.Element {
   const {
@@ -103,7 +96,6 @@ export default function WalletPage(): JSX.Element {
       });
 
       // If wallet is connected, user has a wallet - show wallet interface
-      // Health profile setup is separate and handled within the wallet interface
       if (isConnected && address) {
         try {
           const result = await loadProfileFromBlockchain();
@@ -116,26 +108,20 @@ export default function WalletPage(): JSX.Element {
 
           if (!isMounted) return;
 
-          // User has a wallet connected, so show wallet interface
-          // Health profile can be set up later within the wallet interface
           console.log("✅ Wallet connected - showing wallet interface");
           setHasCompletedSetup(true);
 
-          // Load wallet data
           void getBalance();
           if (result.success) refreshProfile();
         } catch (error) {
           if (!isMounted) return;
           console.log("Checking setup status:", error);
-          // Even if profile loading fails, if wallet is connected, show interface
           setHasCompletedSetup(true);
           void getBalance();
         }
       } else {
-        // Not connected - let user manually start wizard via button
         if (isMounted) {
           setHasCompletedSetup(false);
-          // Don't auto-open wizard to prevent loops: setShowWalletWizard(true);
         }
       }
 
@@ -150,19 +136,16 @@ export default function WalletPage(): JSX.Element {
       isMounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, isConnected, address]); // Run when Privy ready state or connection state changes
+  }, [ready, isConnected, address]);
 
   const handleWizardComplete = useCallback((): void => {
-    // Mark wizard as just completed to prevent useEffect from running
     wizardJustCompletedRef.current = true;
 
     setShowWalletWizard(false);
     setHasCompletedSetup(true);
-    setIsCheckingSetup(false); // Stop the checking state immediately
+    setIsCheckingSetup(false);
     localStorage.setItem("amach-wallet-setup-complete", "true");
 
-    // Defer data fetching to break the render cycle
-    // Let the page's natural mount/update cycle handle data loading
     setTimeout(() => {
       if (isConnected) {
         void getBalance();
@@ -172,12 +155,11 @@ export default function WalletPage(): JSX.Element {
         })();
       }
 
-      // Reset the flag after data is loaded
       setTimeout(() => {
         wizardJustCompletedRef.current = false;
-        lastCheckedStateRef.current = null; // Allow future checks
+        lastCheckedStateRef.current = null;
       }, 1000);
-    }, 100); // Small delay to let state updates complete
+    }, 100);
   }, [isConnected, getBalance, loadProfileFromBlockchain, refreshProfile]);
 
   const handleCloseWizard = useCallback((): void => {
@@ -214,135 +196,102 @@ export default function WalletPage(): JSX.Element {
   };
 
   return (
-    <div
-      className="min-h-screen"
-      style={{ background: "var(--color-bg-primary)" }}
-    >
-      {/* Navigation Bar - Mobile Optimized */}
+    <div className="min-h-screen bg-white dark:bg-[#050A07]">
+      {/* Navigation Bar */}
       <nav
-        className="sticky top-0 z-50"
-        style={{
-          background: "var(--color-bg-nav)",
-          borderBottom: "1px solid rgba(0,107,79,0.12)",
-          backdropFilter: "blur(12px)",
-        }}
+        className="sticky top-0 z-50 border-b border-[rgba(0,107,79,0.12)] backdrop-blur-md"
+        style={{ background: "var(--color-bg-nav)" }}
       >
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             {/* Mobile Menu Button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="md:hidden"
+            <button
+              className="md:hidden p-2 rounded-lg text-[#006B4F] hover:bg-[rgba(0,107,79,0.08)] transition-colors"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              aria-label="Toggle menu"
             >
               {isMobileMenuOpen ? (
                 <X className="h-5 w-5" />
               ) : (
                 <Menu className="h-5 w-5" />
               )}
-            </Button>
+            </button>
 
             {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center gap-2 w-full">
-              <Button
-                variant="ghost"
-                size="sm"
+            <div className="hidden md:flex items-center gap-1 w-full">
+              <button
                 onClick={handleNavigateHome}
-                className="flex items-center gap-2"
-                style={{ color: "#006B4F" }}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-[#006B4F] hover:bg-[rgba(0,107,79,0.08)] font-medium text-sm transition-colors"
               >
                 <Home className="h-4 w-4" />
                 <span>Home</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
+              </button>
+              <button
                 onClick={handleNavigateDashboard}
-                className="flex items-center gap-2"
-                style={{ color: "#006B4F" }}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-[#006B4F] hover:bg-[rgba(0,107,79,0.08)] font-medium text-sm transition-colors"
               >
                 <LayoutDashboard className="h-4 w-4" />
                 <span>Dashboard</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
+              </button>
+              <button
                 onClick={handleNavigateAICompanion}
-                className="flex items-center gap-2"
-                style={{ color: "#006B4F" }}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-[#006B4F] hover:bg-[rgba(0,107,79,0.08)] font-medium text-sm transition-colors"
               >
                 <Brain className="h-4 w-4" />
                 <span>AI Companion</span>
-              </Button>
+              </button>
               <div className="ml-auto">
-                <Button
-                  variant="outline"
-                  size="sm"
+                <button
                   onClick={handleDisconnect}
-                  className="flex items-center gap-2 text-red-600 border-red-300 hover:bg-red-50"
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-red-600 border border-red-200 hover:bg-red-50 font-medium text-sm transition-colors"
                 >
                   <LogOut className="h-4 w-4" />
                   <span>Disconnect</span>
-                </Button>
+                </button>
               </div>
             </div>
 
             {/* Page Title - Mobile */}
-            <h1
-              className="text-lg font-bold md:hidden"
-              style={{ color: "var(--color-text-primary)" }}
-            >
+            <h1 className="text-lg font-bold md:hidden text-[#0A1A0F] dark:text-[#F0F7F3]">
               Wallet
             </h1>
 
-            {/* Disconnect Button - Mobile (when menu closed) */}
+            {/* Disconnect Button - Mobile */}
             {!isMobileMenuOpen && (
-              <Button
-                variant="outline"
-                size="sm"
+              <button
                 onClick={handleDisconnect}
-                className="md:hidden flex items-center gap-1 text-red-600 border-red-300 hover:bg-red-50"
+                className="md:hidden flex items-center gap-1 px-3 py-1.5 rounded-lg text-red-600 border border-red-200 hover:bg-red-50 font-medium text-sm transition-colors"
               >
                 <LogOut className="h-4 w-4" />
                 <span className="hidden sm:inline">Disconnect</span>
-              </Button>
+              </button>
             )}
           </div>
 
           {/* Mobile Menu Dropdown */}
           {isMobileMenuOpen && (
-            <div className="md:hidden mt-4 pb-2 space-y-2">
-              <Button
-                variant="ghost"
-                size="sm"
+            <div className="md:hidden mt-3 pb-2 space-y-1 border-t border-[rgba(0,107,79,0.12)] pt-3">
+              <button
                 onClick={handleNavigateHome}
-                className="w-full justify-start flex items-center gap-3"
-                style={{ color: "#006B4F" }}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[#006B4F] hover:bg-[rgba(0,107,79,0.08)] font-medium text-sm transition-colors"
               >
                 <Home className="h-5 w-5" />
                 <span>Home</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
+              </button>
+              <button
                 onClick={handleNavigateDashboard}
-                className="w-full justify-start flex items-center gap-3"
-                style={{ color: "#006B4F" }}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[#006B4F] hover:bg-[rgba(0,107,79,0.08)] font-medium text-sm transition-colors"
               >
                 <LayoutDashboard className="h-5 w-5" />
                 <span>Dashboard</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
+              </button>
+              <button
                 onClick={handleNavigateAICompanion}
-                className="w-full justify-start flex items-center gap-3"
-                style={{ color: "#006B4F" }}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[#006B4F] hover:bg-[rgba(0,107,79,0.08)] font-medium text-sm transition-colors"
               >
                 <Brain className="h-5 w-5" />
                 <span>AI Companion</span>
-              </Button>
+              </button>
             </div>
           )}
         </div>
@@ -353,44 +302,42 @@ export default function WalletPage(): JSX.Element {
         {isCheckingSetup ? (
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-              <p className="text-[#6b8c7a]">Checking wallet status...</p>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#006B4F] mx-auto mb-4" />
+              <p className="text-[#6B8C7A]">Checking wallet status...</p>
             </div>
           </div>
         ) : !hasCompletedSetup ? (
           <div className="max-w-2xl mx-auto">
-            <Card className="dashboard-content-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-[#0a1a0f] dark:text-[#F0F7F3]">
-                  <Wallet className="h-5 w-5 text-emerald-600" />
+            <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Wallet className="h-5 w-5 text-[#006B4F]" />
+                <h2 className="text-lg font-semibold text-[#0A1A0F] dark:text-[#F0F7F3]">
                   Wallet Setup Required
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-[#6b8c7a]">
-                  Please complete the wallet setup process to access your wallet
-                  and health profile.
-                </p>
-                <Button
-                  onClick={() => setShowWalletWizard(true)}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                >
-                  Start Wallet Setup
-                </Button>
-              </CardContent>
-            </Card>
+                </h2>
+              </div>
+              <p className="text-[#6B8C7A] mb-4">
+                Please complete the wallet setup process to access your wallet
+                and health profile.
+              </p>
+              <button
+                onClick={() => setShowWalletWizard(true)}
+                className="w-full bg-[#006B4F] hover:bg-[#005A40] text-white rounded-lg px-4 py-2 font-medium transition-colors"
+              >
+                Start Wallet Setup
+              </button>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-4 space-y-6">
               <WalletSummaryWidget />
-              <div className="p-4 rounded-lg bg-white dark:bg-[#111F1A] border border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)]">
+              <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-4">
                 <CryptoWallet />
               </div>
             </div>
 
             <div className="lg:col-span-8 space-y-6">
-              <div className="p-4 rounded-lg bg-white dark:bg-[#111F1A] border border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)]">
+              <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-4">
                 <HealthProfileManager />
               </div>
 

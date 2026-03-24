@@ -21,7 +21,7 @@ export const ChartContainer: React.FC<ChartContainerProps> = ({
         <button
           onClick={onZoomOut}
           disabled={!canZoomOut}
-          className="p-1 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+          className="p-1 rounded bg-transparent dark:bg-[#0B140F] border border-[rgba(0,107,79,0.25)] dark:border-[rgba(74,222,128,0.2)] text-[#006B4F] dark:text-[#4ade80] hover:bg-[rgba(0,107,79,0.07)] transition-colors disabled:opacity-50"
         >
           Zoom Out
         </button>

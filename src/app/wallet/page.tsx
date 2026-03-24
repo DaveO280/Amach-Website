@@ -21,6 +21,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { ThemeToggle } from "../../components/ThemeToggle";
 
 export default function WalletPage(): JSX.Element {
   const {
@@ -247,7 +248,8 @@ export default function WalletPage(): JSX.Element {
                 <Brain className="h-4 w-4" />
                 <span>AI Companion</span>
               </button>
-              <div className="ml-auto">
+              <div className="ml-auto flex items-center gap-2">
+                <ThemeToggle />
                 <button
                   onClick={handleDisconnect}
                   className="flex items-center gap-2 px-3 py-2 rounded-lg text-red-600 dark:text-[#F87171] border border-red-200 dark:border-[rgba(248,113,113,0.3)] hover:bg-red-50 dark:hover:bg-[rgba(248,113,113,0.08)] font-medium text-sm transition-colors"
@@ -263,15 +265,18 @@ export default function WalletPage(): JSX.Element {
               Wallet
             </h1>
 
-            {/* Disconnect Button - Mobile */}
+            {/* Disconnect Button + Theme Toggle - Mobile */}
             {!isMobileMenuOpen && (
-              <button
-                onClick={handleDisconnect}
-                className="md:hidden flex items-center gap-1 px-3 py-1.5 rounded-lg text-red-600 dark:text-[#F87171] border border-red-200 dark:border-[rgba(248,113,113,0.3)] hover:bg-red-50 dark:hover:bg-[rgba(248,113,113,0.08)] font-medium text-sm transition-colors"
-              >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">Disconnect</span>
-              </button>
+              <div className="md:hidden flex items-center gap-2">
+                <ThemeToggle />
+                <button
+                  onClick={handleDisconnect}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-red-600 dark:text-[#F87171] border border-red-200 dark:border-[rgba(248,113,113,0.3)] hover:bg-red-50 dark:hover:bg-[rgba(248,113,113,0.08)] font-medium text-sm transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className="hidden sm:inline">Disconnect</span>
+                </button>
+              </div>
             )}
           </div>
 

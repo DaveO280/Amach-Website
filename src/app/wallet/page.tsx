@@ -354,20 +354,22 @@ export default function WalletPage(): JSX.Element {
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-              <p className="text-amber-900">Checking wallet status...</p>
+              <p className="text-amber-900 dark:text-amber-400">
+                Checking wallet status...
+              </p>
             </div>
           </div>
         ) : !hasCompletedSetup ? (
           <div className="max-w-2xl mx-auto">
-            <Card className="bg-white border-emerald-200">
+            <Card className="dashboard-content-card">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-emerald-900">
+                <CardTitle className="flex items-center gap-2 text-emerald-900 dark:text-emerald-400">
                   <Wallet className="h-5 w-5" />
                   Wallet Setup Required
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-amber-800">
+                <p className="text-amber-800 dark:text-amber-400">
                   Please complete the wallet setup process to access your wallet
                   and health profile.
                 </p>
@@ -384,13 +386,13 @@ export default function WalletPage(): JSX.Element {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-4 space-y-6">
               <WalletSummaryWidget />
-              <div className="p-4 border border-gray-200 rounded-lg bg-white">
+              <div className="p-4 rounded-lg bg-white dark:bg-[#111F1A] border border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)]">
                 <CryptoWallet />
               </div>
             </div>
 
             <div className="lg:col-span-8 space-y-6">
-              <div className="p-4 border border-gray-200 rounded-lg bg-white">
+              <div className="p-4 rounded-lg bg-white dark:bg-[#111F1A] border border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)]">
                 <HealthProfileManager />
               </div>
 

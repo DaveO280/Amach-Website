@@ -184,7 +184,7 @@ export const HealthDashboard: () => JSX.Element = () => {
     return (
       <div className="min-h-screen">
         <div className="container mx-auto px-4 py-12">
-          <Card className="w-full border-none shadow-lg bg-transparent backdrop-blur-sm">
+          <Card className="w-full dashboard-content-card">
             <CardHeader className="dashboard-card">
               <CardTitle
                 className="dashboard-title font-bold"
@@ -196,7 +196,7 @@ export const HealthDashboard: () => JSX.Element = () => {
                 Please wait while we load your health data...
               </CardDescription>
             </CardHeader>
-            <CardContent className="py-8 backdrop-blur-sm">
+            <CardContent className="py-8">
               <div className="flex justify-center">
                 <div className="animate-pulse-slow rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-600"></div>
               </div>
@@ -212,7 +212,7 @@ export const HealthDashboard: () => JSX.Element = () => {
     return (
       <div className="min-h-screen">
         <div className="container mx-auto px-4 py-12">
-          <Card className="w-full border-none shadow-lg bg-transparent backdrop-blur-sm">
+          <Card className="w-full dashboard-content-card">
             <CardHeader className="dashboard-card">
               <CardTitle
                 className="dashboard-title font-bold"
@@ -224,7 +224,7 @@ export const HealthDashboard: () => JSX.Element = () => {
                 &quot;Driven by Data, Guided by Nature&quot;
               </CardDescription>
             </CardHeader>
-            <CardContent className="py-6 backdrop-blur-sm">
+            <CardContent className="py-6">
               <Alert className="bg-amber-50/30 border-amber-100 text-amber-900 mt-4">
                 <p>To view your health data visualizations, please:</p>
                 <ol className="list-decimal ml-5 mt-2 space-y-1">
@@ -242,10 +242,10 @@ export const HealthDashboard: () => JSX.Element = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(to_bottom_right,var(--warm-bg)_0%,white_50%,var(--primary-light)_100%)]">
+    <div className="min-h-screen">
       <div className="container mx-auto px-4 py-12">
-        {/* Main card with transparent background */}
-        <Card className="w-full mb-6 border-none shadow-lg bg-transparent backdrop-blur-sm">
+        {/* Main card */}
+        <Card className="w-full mb-6 dashboard-content-card">
           <CardHeader className="flex flex-row items-center justify-between border-b border-amber-50/20">
             <div>
               <CardTitle
@@ -293,7 +293,7 @@ export const HealthDashboard: () => JSX.Element = () => {
         >
           <div className="mb-6 grid grid-cols-4 gap-4">
             {/* Heart Tab */}
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm p-0 overflow-hidden">
+            <Card className="dashboard-content-card p-0 overflow-hidden">
               <TabsList className="w-full p-0 bg-transparent">
                 <TabsTrigger
                   value="heart"
@@ -305,7 +305,7 @@ export const HealthDashboard: () => JSX.Element = () => {
             </Card>
 
             {/* Activity Tab */}
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm p-0 overflow-hidden">
+            <Card className="dashboard-content-card p-0 overflow-hidden">
               <TabsList className="w-full p-0 bg-transparent">
                 <TabsTrigger
                   value="activity"
@@ -317,7 +317,7 @@ export const HealthDashboard: () => JSX.Element = () => {
             </Card>
 
             {/* Sleep Tab */}
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm p-0 overflow-hidden">
+            <Card className="dashboard-content-card p-0 overflow-hidden">
               <TabsList className="w-full p-0 bg-transparent">
                 <TabsTrigger
                   value="sleep"
@@ -329,7 +329,7 @@ export const HealthDashboard: () => JSX.Element = () => {
             </Card>
 
             {/* Overview Tab */}
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm p-0 overflow-hidden">
+            <Card className="dashboard-content-card p-0 overflow-hidden">
               <TabsList className="w-full p-0 bg-transparent">
                 <TabsTrigger
                   value="overview"
@@ -342,7 +342,7 @@ export const HealthDashboard: () => JSX.Element = () => {
           </div>
 
           <TabsContent value="heart" className="space-y-6">
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
+            <Card className="dashboard-content-card">
               <CardHeader className="dashboard-card">
                 <CardTitle className="dashboard-title text-xl font-bold">
                   Heart Rate Over Time
@@ -351,13 +351,13 @@ export const HealthDashboard: () => JSX.Element = () => {
                   Daily average, minimum, and maximum heart rate
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6 backdrop-blur-sm">
+              <CardContent className="pt-6">
                 <HeartRateChart data={heartRateForCharts} height={400} />
               </CardContent>
             </Card>
 
             {heartRateForCharts.length > 0 && (
-              <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
+              <Card className="dashboard-content-card">
                 <CardHeader className="dashboard-card">
                   <CardTitle className="dashboard-title text-xl font-bold">
                     Heart Rate Distribution
@@ -367,14 +367,14 @@ export const HealthDashboard: () => JSX.Element = () => {
                     intensity zones
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 backdrop-blur-sm">
+                <CardContent className="pt-6">
                   <HRDistributionChart data={heartRateForCharts} height={400} />
                 </CardContent>
               </Card>
             )}
 
             {hrvForCharts.length > 0 && (
-              <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
+              <Card className="dashboard-content-card">
                 <CardHeader className="dashboard-card">
                   <CardTitle className="dashboard-title text-xl font-bold">
                     Heart Rate Variability
@@ -383,7 +383,7 @@ export const HealthDashboard: () => JSX.Element = () => {
                     Daily average heart rate variability (HRV)
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 backdrop-blur-sm">
+                <CardContent className="pt-6">
                   <HRVChart data={hrvForCharts} height={400} />
                 </CardContent>
               </Card>
@@ -391,7 +391,7 @@ export const HealthDashboard: () => JSX.Element = () => {
           </TabsContent>
 
           <TabsContent value="activity" className="space-y-6">
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
+            <Card className="dashboard-content-card">
               <CardHeader className="dashboard-card">
                 <CardTitle className="dashboard-title text-xl font-bold">
                   Step Count
@@ -400,13 +400,13 @@ export const HealthDashboard: () => JSX.Element = () => {
                   Daily step count and trends
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6 backdrop-blur-sm">
+              <CardContent className="pt-6">
                 <StepCountChart data={stepCountForCharts} height={400} />
               </CardContent>
             </Card>
 
             {distanceForCharts.length > 0 && (
-              <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
+              <Card className="dashboard-content-card">
                 <CardHeader className="dashboard-card">
                   <CardTitle className="dashboard-title text-xl font-bold">
                     Distance Walking/Running
@@ -415,14 +415,14 @@ export const HealthDashboard: () => JSX.Element = () => {
                     Daily distance covered
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 backdrop-blur-sm">
+                <CardContent className="pt-6">
                   <DistanceChart data={distanceForCharts} height={400} />
                 </CardContent>
               </Card>
             )}
 
             {activeEnergyForCharts.length > 0 && (
-              <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
+              <Card className="dashboard-content-card">
                 <CardHeader className="dashboard-card">
                   <CardTitle className="dashboard-title text-xl font-bold">
                     Active Energy Burned
@@ -431,7 +431,7 @@ export const HealthDashboard: () => JSX.Element = () => {
                     Daily active calories burned
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 backdrop-blur-sm">
+                <CardContent className="pt-6">
                   <ActiveEnergyChart
                     data={activeEnergyForCharts}
                     height={400}
@@ -441,7 +441,7 @@ export const HealthDashboard: () => JSX.Element = () => {
             )}
 
             {exerciseTimeForCharts.length > 0 && (
-              <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
+              <Card className="dashboard-content-card">
                 <CardHeader className="dashboard-card">
                   <CardTitle className="dashboard-title text-xl font-bold">
                     Exercise Time
@@ -450,7 +450,7 @@ export const HealthDashboard: () => JSX.Element = () => {
                     Daily exercise duration
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 backdrop-blur-sm">
+                <CardContent className="pt-6">
                   <ExerciseTimeChart
                     data={exerciseTimeForCharts}
                     height={400}
@@ -463,7 +463,7 @@ export const HealthDashboard: () => JSX.Element = () => {
           <TabsContent value="sleep" className="space-y-6">
             {(sleepDailyProcessed.length > 0 ||
               sleepRawFallback.length > 0) && (
-              <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
+              <Card className="dashboard-content-card">
                 <CardHeader className="dashboard-card">
                   <CardTitle className="dashboard-title text-xl font-bold">
                     Sleep Analysis
@@ -472,7 +472,7 @@ export const HealthDashboard: () => JSX.Element = () => {
                     Sleep duration, efficiency, and stage breakdown
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 backdrop-blur-sm">
+                <CardContent className="pt-6">
                   <SleepAnalysisChart
                     data={sleepRawFallback}
                     processedData={
@@ -489,7 +489,7 @@ export const HealthDashboard: () => JSX.Element = () => {
 
           <TabsContent value="overview" className="space-y-6">
             {/* Health Score Cards */}
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
+            <Card className="dashboard-content-card">
               <CardHeader className="dashboard-card">
                 <CardTitle className="dashboard-title text-xl font-bold">
                   Health Score Overview
@@ -498,13 +498,13 @@ export const HealthDashboard: () => JSX.Element = () => {
                   Your health scores across different categories
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6 backdrop-blur-sm">
+              <CardContent className="pt-6">
                 <HealthScoreCards />
               </CardContent>
             </Card>
 
             {/* Health Score Trends */}
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
+            <Card className="dashboard-content-card">
               <CardHeader className="dashboard-card">
                 <CardTitle className="dashboard-title text-xl font-bold">
                   Health Score Trends
@@ -513,13 +513,13 @@ export const HealthDashboard: () => JSX.Element = () => {
                   Historical trends for your health scores
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6 backdrop-blur-sm">
+              <CardContent className="pt-6">
                 <HealthScoreTrends />
               </CardContent>
             </Card>
 
             {/* Health Metrics Summary */}
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
+            <Card className="dashboard-content-card">
               <CardHeader className="dashboard-card">
                 <CardTitle className="dashboard-title text-xl font-bold">
                   Health Metrics Summary
@@ -528,7 +528,7 @@ export const HealthDashboard: () => JSX.Element = () => {
                   Overview of your selected health metrics
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6 backdrop-blur-sm">
+              <CardContent className="pt-6">
                 <MetricSummary metricData={metrics ? metrics : undefined} />
               </CardContent>
             </Card>

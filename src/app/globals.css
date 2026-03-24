@@ -1468,6 +1468,73 @@
   -webkit-text-fill-color: #6b7280 !important;
 }
 
+/* ── ISSUE 1: Stat card (shadcn Card) overrides for luma-light ─ */
+/* When global data-theme="dark" is active, dark: Tailwind classes fire
+   everywhere — including inside the luma-light modal. These overrides
+   restore light-mode card styling inside the luma-light context. */
+.luma-light .dark\:bg-slate-950 {
+  background-color: rgba(255, 255, 255, 0.7) !important;
+}
+.luma-light .dark\:border-slate-800 {
+  border-color: rgba(0, 107, 79, 0.12) !important;
+}
+.luma-light .dark\:text-slate-50 {
+  color: #0a1a0f !important;
+  -webkit-text-fill-color: #0a1a0f !important;
+}
+
+/* ── ISSUE 1: Stat card overrides for luma-dark ─────────────── */
+/* When global data-theme="light" but luma modal is dark, Tailwind
+   dark: classes do NOT fire — so we need explicit overrides here. */
+.luma-dark .bg-white\/60 {
+  background-color: #111f1a !important;
+}
+.luma-dark .border-amber-100 {
+  border-color: rgba(0, 107, 79, 0.15) !important;
+}
+
+/* ── ISSUE 2: Health Analysis container ─────────────────────── */
+/* Used in HealthReport.tsx — needs dark mode awareness */
+.health-analysis-container {
+  background: linear-gradient(
+    to bottom right,
+    #fffbeb,
+    #ffffff,
+    #ecfdf5
+  ) !important;
+  border-color: rgba(245, 158, 11, 0.5) !important;
+}
+[data-theme="dark"] .health-analysis-container {
+  background: #111f1a !important;
+  border-color: rgba(0, 107, 79, 0.12) !important;
+}
+.luma-light .health-analysis-container {
+  background: linear-gradient(
+    to bottom right,
+    #fffbeb,
+    #ffffff,
+    #ecfdf5
+  ) !important;
+  border-color: rgba(245, 158, 11, 0.5) !important;
+}
+.luma-dark .health-analysis-container {
+  background: #111f1a !important;
+  border-color: rgba(0, 107, 79, 0.12) !important;
+}
+
+/* ── ISSUE 3 & 4: Dashboard / Wallet content card ───────────── */
+/* Applied to shadcn Card elements in HealthDashboard and Wallet page */
+.dashboard-content-card {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 107, 79, 0.12) !important;
+  box-shadow: 0 2px 8px rgba(0, 107, 79, 0.08) !important;
+}
+[data-theme="dark"] .dashboard-content-card {
+  background: #111f1a !important;
+  border-color: rgba(0, 107, 79, 0.15) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
 /* Amber text for no-data state */
 .luma-dark .text-amber-600 {
   color: #d97706 !important;

@@ -331,9 +331,7 @@ export default function WalletPage(): JSX.Element {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-4 space-y-6">
               <WalletSummaryWidget />
-              <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-4">
-                <CryptoWallet />
-              </div>
+              <CryptoWallet />
             </div>
 
             <div className="lg:col-span-8 space-y-6">

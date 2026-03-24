@@ -9,7 +9,6 @@ import type {
 import type { HealthMetricProofType } from "@/types/healthMetricProof";
 import { getGenerator } from "@/services/proofGenerators";
 import { computeProofHashFromParts } from "@/services/proofs/hash";
-import { createAttestation } from "@/services/attestations";
 import { signProofHash } from "@/services/signing";
 import crypto from "crypto";
 
@@ -110,17 +109,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       },
     });
 
-    const attestation = await createAttestation({
-      walletAddress: body.walletAddress,
-      contentHash: proofHash,
-      dataType: claim.type,
-      metadata: {
-        platform,
-        metricKey: claim.metricKey ?? "",
-        proofType: claim.type,
-      },
-    });
-
+    // On-chain attestation is handled client-side (iOS/web submits the tx
+    // directly from the user's Privy wallet). The backend only generates the
+    // proof document and computes the hash — the client anchors it on-chain
+    // after receiving this response.
     const signature = await signProofHash({
       walletAddress: body.walletAddress,
       proofHash,
@@ -129,17 +121,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const evidence: HealthMetricEvidence = {
       ...provisionalEvidence,
       proofHash,
-      attestationTxHash: attestation.txHash ?? null,
+      attestationTxHash: null,
     };
 
     const proof: HealthMetricProofDocument = {
       proofId,
       claim,
-      prover: {
-        ...prover,
-        attestationUid: attestation.attestationUID ?? null,
-        attestationTxHash: attestation.txHash ?? null,
-      },
+      prover,
       evidence,
       metadata,
       signature,

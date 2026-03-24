@@ -198,10 +198,7 @@ export default function WalletPage(): JSX.Element {
   return (
     <div className="min-h-screen bg-white dark:bg-[#050A07]">
       {/* Navigation Bar */}
-      <nav
-        className="sticky top-0 z-50 border-b border-[rgba(0,107,79,0.12)] backdrop-blur-md"
-        style={{ background: "var(--color-bg-nav)" }}
-      >
+      <nav className="sticky top-0 z-50 border-b border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] backdrop-blur-md bg-white/[.93] dark:bg-[rgba(5,10,7,0.93)]">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             {/* Mobile Menu Button */}
@@ -219,6 +216,16 @@ export default function WalletPage(): JSX.Element {
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-1 w-full">
+              {/* Amach Health wordmark */}
+              <div className="amach-wordmark-wrap leading-[1.1] gap-[1px] mr-3">
+                <span className="amach-wordmark-line text-[11px] tracking-[0.28em]">
+                  Amach
+                </span>
+                <span className="amach-wordmark-line text-[11px] tracking-[0.28em]">
+                  Health
+                </span>
+              </div>
+
               <button
                 onClick={handleNavigateHome}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-[#006B4F] hover:bg-[rgba(0,107,79,0.08)] font-medium text-sm transition-colors"
@@ -243,7 +250,7 @@ export default function WalletPage(): JSX.Element {
               <div className="ml-auto">
                 <button
                   onClick={handleDisconnect}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-red-600 border border-red-200 hover:bg-red-50 font-medium text-sm transition-colors"
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-red-600 dark:text-[#F87171] border border-red-200 dark:border-[rgba(248,113,113,0.3)] hover:bg-red-50 dark:hover:bg-[rgba(248,113,113,0.08)] font-medium text-sm transition-colors"
                 >
                   <LogOut className="h-4 w-4" />
                   <span>Disconnect</span>
@@ -260,7 +267,7 @@ export default function WalletPage(): JSX.Element {
             {!isMobileMenuOpen && (
               <button
                 onClick={handleDisconnect}
-                className="md:hidden flex items-center gap-1 px-3 py-1.5 rounded-lg text-red-600 border border-red-200 hover:bg-red-50 font-medium text-sm transition-colors"
+                className="md:hidden flex items-center gap-1 px-3 py-1.5 rounded-lg text-red-600 dark:text-[#F87171] border border-red-200 dark:border-[rgba(248,113,113,0.3)] hover:bg-red-50 dark:hover:bg-[rgba(248,113,113,0.08)] font-medium text-sm transition-colors"
               >
                 <LogOut className="h-4 w-4" />
                 <span className="hidden sm:inline">Disconnect</span>
@@ -328,35 +335,39 @@ export default function WalletPage(): JSX.Element {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-4 space-y-6">
-              <WalletSummaryWidget />
-              <CryptoWallet />
-            </div>
-
-            <div className="lg:col-span-8 space-y-6">
-              <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-4">
-                <HealthProfileManager />
+          <>
+            <h1 className="flex items-center gap-[10px] text-[22px] font-bold text-[#0A1A0F] dark:text-[#F0F7F3] mb-7">
+              <Wallet className="h-[22px] w-[22px] text-[#006B4F]" />
+              Wallet
+            </h1>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-4 space-y-6">
+                <WalletSummaryWidget />
+                <CryptoWallet />
               </div>
 
-              {/* Storage Management */}
-              {address && signMessage && (
-                <StorageManagementSection
-                  userAddress={address}
-                  signMessage={signMessage}
-                  getWalletClient={getWalletClient}
-                />
-              )}
+              <div className="lg:col-span-8 space-y-6">
+                <HealthProfileManager />
 
-              {/* Quarterly Aggregate Generator */}
-              {address && signMessage && (
-                <QuarterlyAggregateGenerator
-                  userAddress={address}
-                  signMessage={signMessage}
-                />
-              )}
+                {/* Storage Management */}
+                {address && signMessage && (
+                  <StorageManagementSection
+                    userAddress={address}
+                    signMessage={signMessage}
+                    getWalletClient={getWalletClient}
+                  />
+                )}
+
+                {/* Quarterly Aggregate Generator */}
+                {address && signMessage && (
+                  <QuarterlyAggregateGenerator
+                    userAddress={address}
+                    signMessage={signMessage}
+                  />
+                )}
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
 

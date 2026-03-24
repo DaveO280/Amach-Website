@@ -108,7 +108,7 @@ export const WalletSummaryWidget: React.FC = () => {
         {/* Address */}
         <div>
           <div className="text-xs text-[#6B8C7A] mb-1">Address</div>
-          <div className="font-mono text-sm text-[#0A1A0F] dark:text-[#F0F7F3] break-all">
+          <div className="font-mono text-sm font-medium text-[#0A1A0F] dark:text-[#F0F7F3] break-all">
             {shortAddress(address || "")}
           </div>
         </div>
@@ -120,14 +120,14 @@ export const WalletSummaryWidget: React.FC = () => {
             <span className="text-sm text-[#6B8C7A]">ETH</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-mono font-semibold text-[#0A1A0F] dark:text-[#F0F7F3]">
+            <span className="font-mono font-medium text-sm text-[#0A1A0F] dark:text-[#F0F7F3]">
               {balance ? parseFloat(balance).toFixed(4) : "—"}
             </span>
             <button
               onClick={() => {
                 void getBalance();
               }}
-              className="border border-[rgba(0,107,79,0.35)] text-[#006B4F] dark:text-[#4ade80] hover:bg-[rgba(0,107,79,0.08)] rounded-lg p-1.5 bg-transparent transition-colors"
+              className="p-1.5 rounded-lg border border-[rgba(0,107,79,0.30)] dark:border-[rgba(74,222,128,0.25)] text-[#006B4F] dark:text-[#4ade80] hover:bg-[rgba(0,107,79,0.07)] bg-transparent transition-colors"
               aria-label="Refresh balance"
             >
               <RefreshCw className="h-3.5 w-3.5" />

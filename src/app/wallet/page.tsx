@@ -214,9 +214,19 @@ export default function WalletPage(): JSX.Element {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-emerald-50">
+    <div
+      className="min-h-screen"
+      style={{ background: "var(--color-bg-primary)" }}
+    >
       {/* Navigation Bar - Mobile Optimized */}
-      <nav className="sticky top-0 z-50 bg-white border-b border-amber-100 shadow-sm">
+      <nav
+        className="sticky top-0 z-50"
+        style={{
+          background: "var(--color-bg-nav)",
+          borderBottom: "1px solid rgba(0,107,79,0.12)",
+          backdropFilter: "blur(12px)",
+        }}
+      >
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             {/* Mobile Menu Button */}
@@ -239,7 +249,8 @@ export default function WalletPage(): JSX.Element {
                 variant="ghost"
                 size="sm"
                 onClick={handleNavigateHome}
-                className="flex items-center gap-2 text-emerald-700 hover:bg-emerald-50"
+                className="flex items-center gap-2"
+                style={{ color: "#006B4F" }}
               >
                 <Home className="h-4 w-4" />
                 <span>Home</span>
@@ -248,7 +259,8 @@ export default function WalletPage(): JSX.Element {
                 variant="ghost"
                 size="sm"
                 onClick={handleNavigateDashboard}
-                className="flex items-center gap-2 text-emerald-700 hover:bg-emerald-50"
+                className="flex items-center gap-2"
+                style={{ color: "#006B4F" }}
               >
                 <LayoutDashboard className="h-4 w-4" />
                 <span>Dashboard</span>
@@ -257,7 +269,8 @@ export default function WalletPage(): JSX.Element {
                 variant="ghost"
                 size="sm"
                 onClick={handleNavigateAICompanion}
-                className="flex items-center gap-2 text-emerald-700 hover:bg-emerald-50"
+                className="flex items-center gap-2"
+                style={{ color: "#006B4F" }}
               >
                 <Brain className="h-4 w-4" />
                 <span>AI Companion</span>
@@ -276,7 +289,10 @@ export default function WalletPage(): JSX.Element {
             </div>
 
             {/* Page Title - Mobile */}
-            <h1 className="text-lg font-bold text-emerald-900 md:hidden">
+            <h1
+              className="text-lg font-bold md:hidden"
+              style={{ color: "var(--color-text-primary)" }}
+            >
               Wallet
             </h1>
 
@@ -301,7 +317,8 @@ export default function WalletPage(): JSX.Element {
                 variant="ghost"
                 size="sm"
                 onClick={handleNavigateHome}
-                className="w-full justify-start flex items-center gap-3 text-emerald-700 hover:bg-emerald-50"
+                className="w-full justify-start flex items-center gap-3"
+                style={{ color: "#006B4F" }}
               >
                 <Home className="h-5 w-5" />
                 <span>Home</span>
@@ -310,7 +327,8 @@ export default function WalletPage(): JSX.Element {
                 variant="ghost"
                 size="sm"
                 onClick={handleNavigateDashboard}
-                className="w-full justify-start flex items-center gap-3 text-emerald-700 hover:bg-emerald-50"
+                className="w-full justify-start flex items-center gap-3"
+                style={{ color: "#006B4F" }}
               >
                 <LayoutDashboard className="h-5 w-5" />
                 <span>Dashboard</span>
@@ -319,7 +337,8 @@ export default function WalletPage(): JSX.Element {
                 variant="ghost"
                 size="sm"
                 onClick={handleNavigateAICompanion}
-                className="w-full justify-start flex items-center gap-3 text-emerald-700 hover:bg-emerald-50"
+                className="w-full justify-start flex items-center gap-3"
+                style={{ color: "#006B4F" }}
               >
                 <Brain className="h-5 w-5" />
                 <span>AI Companion</span>

@@ -12,13 +12,6 @@
 
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
@@ -1314,14 +1307,14 @@ export function StorageManagementSection({
   // Loading state
   if (isLoadingKey) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
+      <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Database className="h-5 w-5" />
+          <h3 className="font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] text-base">
             Storage Management
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+          </h3>
+        </div>
+        <div>
           <div className="flex items-center justify-center py-8">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-3"></div>
@@ -1333,22 +1326,22 @@ export function StorageManagementSection({
               </p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   // Error state
   if (keyError) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
+      <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Database className="h-5 w-5" />
+          <h3 className="font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] text-base">
             Storage Management
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+          </h3>
+        </div>
+        <div>
           <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
             <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
             <div>
@@ -1387,23 +1380,20 @@ export function StorageManagementSection({
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Database className="h-5 w-5" />
+    <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Database className="h-5 w-5" />
+        <h3 className="font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] text-base">
           Storage Management
-        </CardTitle>
-        <CardDescription>
-          Manage your encrypted Storj storage and remove old/duplicate data
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </h3>
+      </div>
+      <div className="space-y-4">
         {/* Pruning Controls */}
         <Tabs value={selectedDataType} onValueChange={setSelectedDataType}>
           <TabsList className="grid w-full grid-cols-4">
@@ -2275,7 +2265,7 @@ export function StorageManagementSection({
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

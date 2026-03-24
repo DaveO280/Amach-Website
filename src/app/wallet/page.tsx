@@ -221,7 +221,7 @@ export default function WalletPage(): JSX.Element {
                 <span className="amach-wordmark-line text-[11px] tracking-[0.28em]">
                   Amach
                 </span>
-                <span className="amach-wordmark-line text-[11px] tracking-[0.28em]">
+                <span className="amach-wordmark-line-sub text-[11px] tracking-[0.28em]">
                   Health
                 </span>
               </div>

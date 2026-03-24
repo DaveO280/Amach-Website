@@ -5,7 +5,6 @@ import React, { useEffect, useState } from "react";
 import { useWalletService } from "../hooks/useWalletService";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 
@@ -73,9 +72,8 @@ export const HealthProfileManager: React.FC = () => {
       if (healthProfile && isConnected) {
         // Try to decrypt directly from blockchain-encrypted profile (no localStorage, no signature)
         try {
-          const { decryptHealthData } = await import(
-            "@/utils/secureHealthEncryption"
-          );
+          const { decryptHealthData } =
+            await import("@/utils/secureHealthEncryption");
 
           // Check if nonce is available (required for decryption)
           if (!healthProfile.nonce) {
@@ -133,9 +131,8 @@ export const HealthProfileManager: React.FC = () => {
           // This handles the case where weight was encrypted with a different nonce
           console.log("🔄 Attempting to decrypt fields individually...");
           try {
-            const { decryptHealthData } = await import(
-              "@/utils/secureHealthEncryption"
-            );
+            const { decryptHealthData } =
+              await import("@/utils/secureHealthEncryption");
 
             if (!address) {
               throw new Error("Wallet address not available");
@@ -342,44 +339,41 @@ export const HealthProfileManager: React.FC = () => {
 
   if (!isConnected) {
     return (
-      <Card className="bg-white border-emerald-100">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-amber-900">
-            <Shield className="h-5 w-5 text-emerald-600" />
+      <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-[22px]">
+        <div className="flex items-center gap-2 mb-[18px]">
+          <Shield className="h-4 w-4 text-[#006B4F] flex-shrink-0" />
+          <h3 className="font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] text-base flex items-center gap-2">
             Health Profile Manager
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8">
-            <AlertCircle className="h-12 w-12 text-[#9CA3AF] mx-auto mb-4" />
-            <p className="text-[#6B7280]">
-              Please connect your ZKsync SSO wallet to manage your health
-              profile
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+          </h3>
+        </div>
+        <div className="text-center py-8">
+          <AlertCircle className="h-12 w-12 text-[#9CA3AF] mx-auto mb-4" />
+          <p className="text-[#6B7280]">
+            Please connect your ZKsync SSO wallet to manage your health profile
+          </p>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className="bg-white border-emerald-100">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-amber-900">
-          <Shield className="h-5 w-5 text-emerald-600" />
+    <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-[22px]">
+      <div className="flex items-center gap-2 mb-[18px]">
+        <Shield className="h-4 w-4 text-[#006B4F] flex-shrink-0" />
+        <h3 className="font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] text-base flex items-center gap-2">
           Health Profile Manager
           {healthProfile && (
             <Badge
               variant="default"
-              className="bg-emerald-100 text-emerald-700"
+              className="bg-[rgba(0,107,79,0.10)] dark:bg-[rgba(0,107,79,0.15)] text-[#006B4F] dark:text-[#4ade80]"
             >
               <CheckCircle className="h-3 w-3 mr-1" />
               On-Chain
             </Badge>
           )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+        </h3>
+      </div>
+      <div>
         {healthProfile ? (
           // Display existing profile with populated data
           <div className="space-y-4">
@@ -482,7 +476,7 @@ export const HealthProfileManager: React.FC = () => {
                           sex: e.target.value,
                         }))
                       }
-                      className="w-full px-3 py-2 border border-[#E5E7EB] rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                      className="w-full px-3 py-2 border border-[#E5E7EB] dark:border-[rgba(0,107,79,0.25)] rounded-md bg-white dark:bg-[#0C120E] text-[#0A1A0F] dark:text-[#F0F7F3] focus:outline-none focus:ring-2 focus:ring-emerald-600"
                       required
                     >
                       <option value="">Select...</option>
@@ -632,7 +626,7 @@ export const HealthProfileManager: React.FC = () => {
                           sex: e.target.value,
                         }))
                       }
-                      className="w-full px-3 py-2 border border-[#E5E7EB] rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                      className="w-full px-3 py-2 border border-[#E5E7EB] dark:border-[rgba(0,107,79,0.25)] rounded-md bg-white dark:bg-[#0C120E] text-[#0A1A0F] dark:text-[#F0F7F3] focus:outline-none focus:ring-2 focus:ring-emerald-600"
                       required
                     >
                       <option value="">Select...</option>
@@ -752,7 +746,7 @@ export const HealthProfileManager: React.FC = () => {
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 };

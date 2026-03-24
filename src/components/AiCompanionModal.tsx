@@ -75,12 +75,19 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
     }
   }, []);
 
-  // Load luma theme preference from localStorage
+  // Sync luma theme with global data-theme attribute
   useEffect(() => {
-    const stored = localStorage.getItem("luma-theme");
-    if (stored === "dark" || stored === "light") {
-      setLumaTheme(stored);
-    }
+    const checkTheme = (): void => {
+      const globalTheme = document.documentElement.getAttribute("data-theme");
+      setLumaTheme(globalTheme === "dark" ? "dark" : "light");
+    };
+    checkTheme();
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    return () => observer.disconnect();
   }, []);
 
   const toggleLumaTheme = (): void => {

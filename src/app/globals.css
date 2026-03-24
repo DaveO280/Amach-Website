@@ -1493,6 +1493,23 @@
   border-color: rgba(0, 107, 79, 0.15) !important;
 }
 
+/* shadcn Card components (rounded-lg border) inside luma-dark context */
+.luma-dark .rounded-lg.border {
+  background: #111f1a !important;
+  border-color: rgba(0, 107, 79, 0.2) !important;
+  color: #f9fafb !important;
+}
+.luma-dark .rounded-lg.border .text-slate-950,
+.luma-dark .rounded-lg.border [class*="text-slate-9"] {
+  color: #f9fafb !important;
+  -webkit-text-fill-color: #f9fafb !important;
+}
+.luma-dark .rounded-lg.border [class*="text-slate-5"],
+.luma-dark .rounded-lg.border [class*="text-muted"] {
+  color: #9ca3af !important;
+  -webkit-text-fill-color: #9ca3af !important;
+}
+
 /* ── ISSUE 2: Health Analysis container ─────────────────────── */
 /* Used in HealthReport.tsx — needs dark mode awareness */
 .health-analysis-container {
@@ -1539,4 +1556,11 @@
 .luma-dark .text-amber-600 {
   color: #d97706 !important;
   -webkit-text-fill-color: #d97706 !important;
+}
+
+/* Health analysis body text — amber-900/90 is for light mode only */
+.luma-dark .health-analysis-container .text-amber-900\/90,
+.luma-dark .health-analysis-container [class*="text-amber-9"] {
+  color: #e5e7eb !important;
+  -webkit-text-fill-color: #e5e7eb !important;
 }

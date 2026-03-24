@@ -1223,8 +1223,8 @@
   -webkit-text-fill-color: #10b981 !important;
 }
 .luma-dark .text-emerald-900 {
-  color: #f9fafb !important;
-  -webkit-text-fill-color: #f9fafb !important;
+  color: #10b981 !important;
+  -webkit-text-fill-color: #10b981 !important;
 }
 
 /* Details expand link */
@@ -1258,8 +1258,8 @@
   -webkit-text-fill-color: #6b7280 !important;
 }
 .luma-dark .text-lg.font-bold.text-emerald-900 {
-  color: #9ca3af !important;
-  -webkit-text-fill-color: #9ca3af !important;
+  color: #10b981 !important;
+  -webkit-text-fill-color: #10b981 !important;
   font-size: 1.125rem !important;
   font-weight: 700 !important;
   letter-spacing: normal !important;
@@ -1448,8 +1448,8 @@
   border-color: rgba(0, 107, 79, 0.15) !important;
 }
 .luma-dark .text-lg.text-emerald-900 {
-  color: #f9fafb !important;
-  -webkit-text-fill-color: #f9fafb !important;
+  color: #10b981 !important;
+  -webkit-text-fill-color: #10b981 !important;
 }
 
 /* Timeline start marker */

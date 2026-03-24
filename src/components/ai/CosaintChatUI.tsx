@@ -29,7 +29,7 @@ import {
   getCachedWalletEncryptionKey,
   getWalletDerivedEncryptionKey,
 } from "@/utils/walletEncryption";
-import { FileText, Minimize2, Send } from "lucide-react";
+import { FileText, Minus, Send } from "lucide-react";
 import Papa from "papaparse";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { healthDataStore } from "../../data/store/healthDataStore";
@@ -1638,534 +1638,540 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             onClick={() => setIsExpanded(false)}
             aria-label="Minimize"
           >
-            <Minimize2 className="h-4 w-4" />
+            <Minus className="h-4 w-4" />
           </button>
         </div>
       )}
       {!isExpanded && (
-      <div className="flex flex-col gap-3">
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide companion-mode-text">
-              Chat mode
-            </span>
+        <div className="flex flex-col gap-3">
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col gap-1">
-              <div className="inline-flex w-fit rounded-full border companion-mode-pill shadow-sm relative group overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setUseMultiAgent(false)}
-                  className={`whitespace-nowrap px-4 py-1.5 text-xs font-semibold transition-colors ${
-                    !useMultiAgent
-                      ? "companion-btn-active shadow-sm"
-                      : "companion-btn-inactive"
-                  }`}
-                >
-                  Quick
-                </button>
-                <button
-                  type="button"
-                  onClick={() => isConnected && setUseMultiAgent(true)}
-                  disabled={!isConnected}
-                  className={`whitespace-nowrap px-4 py-1.5 text-xs font-semibold transition-colors relative ${
-                    useMultiAgent
-                      ? "companion-btn-active shadow-sm"
-                      : "companion-btn-inactive"
-                  } ${!isConnected ? "opacity-50 cursor-not-allowed" : ""}`}
-                >
-                  Deep
-                </button>
-                {!isConnected && (
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-emerald-900/95 text-white text-xs rounded-md invisible group-hover:visible pointer-events-none whitespace-nowrap z-50">
-                    🔒 Create a wallet to unlock Deep mode
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 -mb-0.5 border-4 border-transparent border-b-emerald-900/95"></div>
-                  </div>
+              <span className="text-xs font-semibold uppercase tracking-wide companion-mode-text">
+                Chat mode
+              </span>
+              <div className="flex flex-col gap-1">
+                <div className="inline-flex w-fit rounded-full border companion-mode-pill shadow-sm relative group overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setUseMultiAgent(false)}
+                    className={`whitespace-nowrap px-4 py-1.5 text-xs font-semibold transition-colors ${
+                      !useMultiAgent
+                        ? "companion-btn-active shadow-sm"
+                        : "companion-btn-inactive"
+                    }`}
+                  >
+                    Quick
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => isConnected && setUseMultiAgent(true)}
+                    disabled={!isConnected}
+                    className={`whitespace-nowrap px-4 py-1.5 text-xs font-semibold transition-colors relative ${
+                      useMultiAgent
+                        ? "companion-btn-active shadow-sm"
+                        : "companion-btn-inactive"
+                    } ${!isConnected ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    Deep
+                  </button>
+                  {!isConnected && (
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-emerald-900/95 text-white text-xs rounded-md invisible group-hover:visible pointer-events-none whitespace-nowrap z-50">
+                      🔒 Create a wallet to unlock Deep mode
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 -mb-0.5 border-4 border-transparent border-b-emerald-900/95"></div>
+                    </div>
+                  )}
+                </div>
+                {!useMultiAgent ? (
+                  <span className="text-[11px] companion-hint-text">
+                    Quick mode uses chat history only (no health data/reports).
+                    Switch to Deep for personalized, data-informed answers.
+                  </span>
+                ) : (
+                  <span className="text-[11px] companion-hint-text">
+                    Deep mode uses your connected health data/reports and runs
+                    specialists before Luma replies (slower).
+                  </span>
                 )}
-              </div>
-              {!useMultiAgent ? (
-                <span className="text-[11px] companion-hint-text">
-                  Quick mode uses chat history only (no health data/reports).
-                  Switch to Deep for personalized, data-informed answers.
-                </span>
-              ) : (
-                <span className="text-[11px] companion-hint-text">
-                  Deep mode uses your connected health data/reports and runs
-                  specialists before Luma replies (slower).
-                </span>
-              )}
 
-              {isDev && (
-                <div className="mt-2 rounded border border-emerald-200 bg-white/70 p-2 text-[11px] text-slate-700">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-semibold text-emerald-800">
-                      Dev tools
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
-                        onClick={() => {
-                          const next = !showDevTools;
-                          setShowDevTools(next);
-                          try {
-                            window.localStorage.setItem(
-                              "cosaint_show_dev_tools",
-                              String(next),
-                            );
-                          } catch {
-                            // ignore
-                          }
-                        }}
-                      >
-                        {showDevTools ? "hide" : "show"}
-                      </button>
-                      {showDevTools && (
+                {isDev && (
+                  <div className="mt-2 rounded border border-emerald-200 bg-white/70 p-2 text-[11px] text-slate-700">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold text-emerald-800">
+                        Dev tools
+                      </span>
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
                           className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
                           onClick={() => {
-                            closeDevMemorySync();
-                            closeDevStorjViewer();
-                            closeDevVeniceSessionTest();
+                            const next = !showDevTools;
+                            setShowDevTools(next);
+                            try {
+                              window.localStorage.setItem(
+                                "cosaint_show_dev_tools",
+                                String(next),
+                              );
+                            } catch {
+                              // ignore
+                            }
                           }}
-                          title="Clear/close all dev panels"
                         >
-                          close all
+                          {showDevTools ? "hide" : "show"}
                         </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {showDevTools && (
-                    <div className="mt-2 flex flex-col gap-3">
-                      {!useMultiAgent && (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">
-                            Quick debug max_tokens:
-                          </span>
-                          {[
-                            { label: "1500", value: "1500" },
-                            { label: "4000", value: "4000" },
-                            { label: "8000", value: "8000" },
-                          ].map((opt) => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              className={`rounded border px-2 py-0.5 ${
-                                (quickMaxTokensUi || "1500") === opt.value
-                                  ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                                  : "border-slate-200 bg-white hover:bg-slate-50"
-                              }`}
-                              onClick={() => {
-                                try {
-                                  window.localStorage.setItem(
-                                    "cosaint_quick_max_tokens",
-                                    opt.value,
-                                  );
-                                  setQuickMaxTokensUi(opt.value);
-                                } catch {
-                                  // ignore
-                                }
-                              }}
-                              title="Sets localStorage.cosaint_quick_max_tokens"
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
+                        {showDevTools && (
                           <button
                             type="button"
                             className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
                             onClick={() => {
-                              try {
-                                window.localStorage.removeItem(
-                                  "cosaint_quick_max_tokens",
-                                );
-                                setQuickMaxTokensUi("");
-                              } catch {
-                                // ignore
-                              }
+                              closeDevMemorySync();
+                              closeDevStorjViewer();
+                              closeDevVeniceSessionTest();
                             }}
-                            title="Clears localStorage.cosaint_quick_max_tokens"
+                            title="Clear/close all dev panels"
                           >
-                            reset
+                            close all
                           </button>
-                        </div>
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">Dev: memory sync</span>
-                        <button
-                          type="button"
-                          className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
-                          disabled={devMemorySyncLoading}
-                          onClick={() =>
-                            void devSyncConversationMemoryToStorj()
-                          }
-                        >
-                          {devMemorySyncLoading
-                            ? "syncing..."
-                            : "sync to Storj"}
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
-                          disabled={devMemorySyncLoading}
-                          onClick={() =>
-                            void devSyncConversationMemoryToStorj({
-                              force: true,
-                            })
-                          }
-                        >
-                          force
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
-                          disabled={devMemorySyncLoading}
-                          onClick={() =>
-                            void devSyncConversationMemoryToStorj({
-                              seedIfMissing: true,
-                            })
-                          }
-                        >
-                          seed + sync
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
-                          onClick={closeDevMemorySync}
-                          title="Clear memory sync status"
-                        >
-                          close
-                        </button>
-                        {!isConnected && (
-                          <span className="text-slate-500">connect wallet</span>
                         )}
-                        {devMemorySyncError && (
-                          <span className="text-rose-700">
-                            {devMemorySyncError}
-                          </span>
-                        )}
-                        {devMemorySyncResult?.storjUri && (
-                          <span className="text-emerald-700">
-                            saved: {devMemorySyncResult.storjUri}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex flex-col gap-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">
-                            Dev: Storj chat history
-                          </span>
-                          <button
-                            type="button"
-                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
-                            disabled={devStorjHistoryLoading}
-                            onClick={() =>
-                              void devListStorjConversationHistory()
-                            }
-                          >
-                            {devStorjHistoryLoading ? "loading..." : "list"}
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
-                            disabled={devStorjRestoreLoading}
-                            onClick={() =>
-                              void devRestoreConversationMemoryFromStorj()
-                            }
-                          >
-                            {devStorjRestoreLoading
-                              ? "restoring..."
-                              : "restore latest"}
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
-                            onClick={closeDevStorjViewer}
-                            title="Clear Storj viewer results"
-                          >
-                            close
-                          </button>
-                          <span className="text-slate-500">
-                            {devStorjHistoryItems.length
-                              ? `${devStorjHistoryItems.length} snapshots`
-                              : "no list loaded"}
-                          </span>
-                          {devStorjHistoryError && (
-                            <span className="text-rose-700">
-                              {devStorjHistoryError}
-                            </span>
-                          )}
-                          {devStorjRestoreError && (
-                            <span className="text-rose-700">
-                              {devStorjRestoreError}
-                            </span>
-                          )}
-                          {devStorjRestoreOk && (
-                            <span className="text-emerald-700">
-                              {devStorjRestoreOk}
-                            </span>
-                          )}
-                        </div>
-
-                        {devStorjHistoryItems.length > 0 && (
-                          <div className="max-h-40 overflow-auto rounded border border-slate-200 bg-white p-2">
-                            <div className="flex flex-col gap-1">
-                              {devStorjHistoryItems.slice(0, 10).map((it) => (
-                                <div
-                                  key={it.uri}
-                                  className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-1 last:border-b-0 last:pb-0"
-                                >
-                                  <span className="text-slate-600">
-                                    {new Date(it.uploadedAt).toLocaleString()} ·{" "}
-                                    {(it.size / 1024).toFixed(1)} KB
-                                  </span>
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <button
-                                      type="button"
-                                      className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
-                                      onClick={() =>
-                                        void devViewStorjConversationHistory({
-                                          uri: it.uri,
-                                          contentHash: it.contentHash,
-                                        })
-                                      }
-                                    >
-                                      view
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
-                                      onClick={() =>
-                                        void devRestoreConversationMemoryFromStorj(
-                                          it.uri,
-                                        )
-                                      }
-                                    >
-                                      restore
-                                    </button>
-                                    <span className="text-slate-500 truncate max-w-[320px]">
-                                      {it.uri}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {devStorjHistorySelected && (
-                          <div className="rounded border border-slate-200 bg-white p-2">
-                            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                              <span className="text-slate-600 truncate max-w-[520px]">
-                                {devStorjHistorySelected.uri}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
-                                  onClick={() => {
-                                    try {
-                                      void navigator.clipboard.writeText(
-                                        devStorjHistorySelected.json,
-                                      );
-                                    } catch {
-                                      // ignore
-                                    }
-                                  }}
-                                >
-                                  copy JSON
-                                </button>
-                                <button
-                                  type="button"
-                                  className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
-                                  onClick={() =>
-                                    setDevStorjHistorySelected(null)
-                                  }
-                                >
-                                  close
-                                </button>
-                              </div>
-                            </div>
-                            <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words text-[10px] text-slate-800">
-                              {devStorjHistorySelected.json}
-                            </pre>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex flex-col gap-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">
-                            Dev: Venice &quot;session memory&quot; test
-                          </span>
-                          <button
-                            type="button"
-                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
-                            disabled={devVeniceSessionTestLoading}
-                            onClick={() => void devTestVeniceApiSessionMemory()}
-                          >
-                            {devVeniceSessionTestLoading
-                              ? "testing..."
-                              : "run test"}
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
-                            onClick={closeDevVeniceSessionTest}
-                            title="Clear Venice session test output"
-                          >
-                            close
-                          </button>
-                          {devVeniceSessionTestError && (
-                            <span className="text-rose-700">
-                              {devVeniceSessionTestError}
-                            </span>
-                          )}
-                          {devVeniceSessionTestResult && (
-                            <span
-                              className={
-                                devVeniceSessionTestResult.passed
-                                  ? "text-emerald-700"
-                                  : "text-amber-700"
-                              }
-                            >
-                              {devVeniceSessionTestResult.passed
-                                ? "PASS (stateful)"
-                                : "FAIL (stateless)"}
-                            </span>
-                          )}
-                        </div>
-
-                        {devVeniceSessionTestResult && (
-                          <div className="rounded border border-slate-200 bg-white p-2">
-                            <div className="text-slate-600">
-                              Secret:{" "}
-                              <span className="font-mono">
-                                {devVeniceSessionTestResult.secret}
-                              </span>
-                            </div>
-                            <div className="mt-1 text-slate-600">
-                              Call #1:{" "}
-                              <span className="font-mono">
-                                {devVeniceSessionTestResult.firstResponse ||
-                                  "(empty)"}
-                              </span>
-                            </div>
-                            <div className="mt-1 text-slate-600">
-                              Call #2:{" "}
-                              <span className="font-mono">
-                                {devVeniceSessionTestResult.secondResponse ||
-                                  "(empty)"}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">Dev: Clear caches</span>
-                        <button
-                          type="button"
-                          className="rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-700 hover:bg-rose-100"
-                          onClick={() => {
-                            clearCoordinatorAnalysisCache();
-                            clearAgentResultCache();
-                            clearCoordinatorSummaryCache();
-                            clearToolResultCache();
-                            clearVeniceResponseCache();
-                            console.log("✅ All caches cleared");
-                            alert(
-                              "All caches cleared! Next Deep chat will run fresh.",
-                            );
-                          }}
-                          title="Clear all analysis caches (coordinator, agents, summary, tools, Venice responses)"
-                        >
-                          clear all
-                        </button>
-                      </div>
-
-                      {/* Memory Inspector */}
-                      <div className="mt-2">
-                        <MemoryInspector userId={address || "local-anon"} />
                       </div>
                     </div>
-                  )}
-                </div>
-              )}
+
+                    {showDevTools && (
+                      <div className="mt-2 flex flex-col gap-3">
+                        {!useMultiAgent && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">
+                              Quick debug max_tokens:
+                            </span>
+                            {[
+                              { label: "1500", value: "1500" },
+                              { label: "4000", value: "4000" },
+                              { label: "8000", value: "8000" },
+                            ].map((opt) => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                className={`rounded border px-2 py-0.5 ${
+                                  (quickMaxTokensUi || "1500") === opt.value
+                                    ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                                    : "border-slate-200 bg-white hover:bg-slate-50"
+                                }`}
+                                onClick={() => {
+                                  try {
+                                    window.localStorage.setItem(
+                                      "cosaint_quick_max_tokens",
+                                      opt.value,
+                                    );
+                                    setQuickMaxTokensUi(opt.value);
+                                  } catch {
+                                    // ignore
+                                  }
+                                }}
+                                title="Sets localStorage.cosaint_quick_max_tokens"
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                              onClick={() => {
+                                try {
+                                  window.localStorage.removeItem(
+                                    "cosaint_quick_max_tokens",
+                                  );
+                                  setQuickMaxTokensUi("");
+                                } catch {
+                                  // ignore
+                                }
+                              }}
+                              title="Clears localStorage.cosaint_quick_max_tokens"
+                            >
+                              reset
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">Dev: memory sync</span>
+                          <button
+                            type="button"
+                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
+                            disabled={devMemorySyncLoading}
+                            onClick={() =>
+                              void devSyncConversationMemoryToStorj()
+                            }
+                          >
+                            {devMemorySyncLoading
+                              ? "syncing..."
+                              : "sync to Storj"}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
+                            disabled={devMemorySyncLoading}
+                            onClick={() =>
+                              void devSyncConversationMemoryToStorj({
+                                force: true,
+                              })
+                            }
+                          >
+                            force
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
+                            disabled={devMemorySyncLoading}
+                            onClick={() =>
+                              void devSyncConversationMemoryToStorj({
+                                seedIfMissing: true,
+                              })
+                            }
+                          >
+                            seed + sync
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                            onClick={closeDevMemorySync}
+                            title="Clear memory sync status"
+                          >
+                            close
+                          </button>
+                          {!isConnected && (
+                            <span className="text-slate-500">
+                              connect wallet
+                            </span>
+                          )}
+                          {devMemorySyncError && (
+                            <span className="text-rose-700">
+                              {devMemorySyncError}
+                            </span>
+                          )}
+                          {devMemorySyncResult?.storjUri && (
+                            <span className="text-emerald-700">
+                              saved: {devMemorySyncResult.storjUri}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">
+                              Dev: Storj chat history
+                            </span>
+                            <button
+                              type="button"
+                              className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
+                              disabled={devStorjHistoryLoading}
+                              onClick={() =>
+                                void devListStorjConversationHistory()
+                              }
+                            >
+                              {devStorjHistoryLoading ? "loading..." : "list"}
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
+                              disabled={devStorjRestoreLoading}
+                              onClick={() =>
+                                void devRestoreConversationMemoryFromStorj()
+                              }
+                            >
+                              {devStorjRestoreLoading
+                                ? "restoring..."
+                                : "restore latest"}
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                              onClick={closeDevStorjViewer}
+                              title="Clear Storj viewer results"
+                            >
+                              close
+                            </button>
+                            <span className="text-slate-500">
+                              {devStorjHistoryItems.length
+                                ? `${devStorjHistoryItems.length} snapshots`
+                                : "no list loaded"}
+                            </span>
+                            {devStorjHistoryError && (
+                              <span className="text-rose-700">
+                                {devStorjHistoryError}
+                              </span>
+                            )}
+                            {devStorjRestoreError && (
+                              <span className="text-rose-700">
+                                {devStorjRestoreError}
+                              </span>
+                            )}
+                            {devStorjRestoreOk && (
+                              <span className="text-emerald-700">
+                                {devStorjRestoreOk}
+                              </span>
+                            )}
+                          </div>
+
+                          {devStorjHistoryItems.length > 0 && (
+                            <div className="max-h-40 overflow-auto rounded border border-slate-200 bg-white p-2">
+                              <div className="flex flex-col gap-1">
+                                {devStorjHistoryItems.slice(0, 10).map((it) => (
+                                  <div
+                                    key={it.uri}
+                                    className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-1 last:border-b-0 last:pb-0"
+                                  >
+                                    <span className="text-slate-600">
+                                      {new Date(it.uploadedAt).toLocaleString()}{" "}
+                                      · {(it.size / 1024).toFixed(1)} KB
+                                    </span>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <button
+                                        type="button"
+                                        className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                                        onClick={() =>
+                                          void devViewStorjConversationHistory({
+                                            uri: it.uri,
+                                            contentHash: it.contentHash,
+                                          })
+                                        }
+                                      >
+                                        view
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                                        onClick={() =>
+                                          void devRestoreConversationMemoryFromStorj(
+                                            it.uri,
+                                          )
+                                        }
+                                      >
+                                        restore
+                                      </button>
+                                      <span className="text-slate-500 truncate max-w-[320px]">
+                                        {it.uri}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {devStorjHistorySelected && (
+                            <div className="rounded border border-slate-200 bg-white p-2">
+                              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-slate-600 truncate max-w-[520px]">
+                                  {devStorjHistorySelected.uri}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                                    onClick={() => {
+                                      try {
+                                        void navigator.clipboard.writeText(
+                                          devStorjHistorySelected.json,
+                                        );
+                                      } catch {
+                                        // ignore
+                                      }
+                                    }}
+                                  >
+                                    copy JSON
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                                    onClick={() =>
+                                      setDevStorjHistorySelected(null)
+                                    }
+                                  >
+                                    close
+                                  </button>
+                                </div>
+                              </div>
+                              <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words text-[10px] text-slate-800">
+                                {devStorjHistorySelected.json}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">
+                              Dev: Venice &quot;session memory&quot; test
+                            </span>
+                            <button
+                              type="button"
+                              className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50 disabled:opacity-50"
+                              disabled={devVeniceSessionTestLoading}
+                              onClick={() =>
+                                void devTestVeniceApiSessionMemory()
+                              }
+                            >
+                              {devVeniceSessionTestLoading
+                                ? "testing..."
+                                : "run test"}
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded border border-slate-200 bg-white px-2 py-0.5 hover:bg-slate-50"
+                              onClick={closeDevVeniceSessionTest}
+                              title="Clear Venice session test output"
+                            >
+                              close
+                            </button>
+                            {devVeniceSessionTestError && (
+                              <span className="text-rose-700">
+                                {devVeniceSessionTestError}
+                              </span>
+                            )}
+                            {devVeniceSessionTestResult && (
+                              <span
+                                className={
+                                  devVeniceSessionTestResult.passed
+                                    ? "text-emerald-700"
+                                    : "text-amber-700"
+                                }
+                              >
+                                {devVeniceSessionTestResult.passed
+                                  ? "PASS (stateful)"
+                                  : "FAIL (stateless)"}
+                              </span>
+                            )}
+                          </div>
+
+                          {devVeniceSessionTestResult && (
+                            <div className="rounded border border-slate-200 bg-white p-2">
+                              <div className="text-slate-600">
+                                Secret:{" "}
+                                <span className="font-mono">
+                                  {devVeniceSessionTestResult.secret}
+                                </span>
+                              </div>
+                              <div className="mt-1 text-slate-600">
+                                Call #1:{" "}
+                                <span className="font-mono">
+                                  {devVeniceSessionTestResult.firstResponse ||
+                                    "(empty)"}
+                                </span>
+                              </div>
+                              <div className="mt-1 text-slate-600">
+                                Call #2:{" "}
+                                <span className="font-mono">
+                                  {devVeniceSessionTestResult.secondResponse ||
+                                    "(empty)"}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">Dev: Clear caches</span>
+                          <button
+                            type="button"
+                            className="rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-700 hover:bg-rose-100"
+                            onClick={() => {
+                              clearCoordinatorAnalysisCache();
+                              clearAgentResultCache();
+                              clearCoordinatorSummaryCache();
+                              clearToolResultCache();
+                              clearVeniceResponseCache();
+                              console.log("✅ All caches cleared");
+                              alert(
+                                "All caches cleared! Next Deep chat will run fresh.",
+                              );
+                            }}
+                            title="Clear all analysis caches (coordinator, agents, summary, tools, Venice responses)"
+                          >
+                            clear all
+                          </button>
+                        </div>
+
+                        {/* Memory Inspector */}
+                        <div className="mt-2">
+                          <MemoryInspector userId={address || "local-anon"} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="flex flex-col gap-1"></div>
-          <div className="flex items-center gap-3 self-end sm:self-auto">
-            <label className="flex items-center gap-2 rounded-full companion-label px-3 py-1 text-xs font-medium shadow-sm">
-              <input
-                type="checkbox"
-                className="h-3.5 w-3.5 accent-emerald-600"
-                checked={autoExpandOnSend}
-                onChange={(event) => setAutoExpandOnSend(event.target.checked)}
-              />
-              Auto expand on send
-            </label>
-            <Button
-              size="sm"
-              variant="outline"
-              className="whitespace-nowrap rounded-full companion-outline-btn"
-              onClick={() => setIsExpanded((prev) => !prev)}
-            >
-              {isExpanded ? "Exit expanded view" : "Expand view"}
-            </Button>
-          </div>
-        </div>
-
-        {!isExpanded && (
-          <div className="flex flex-col items-start gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                ref={uploadFileButtonRef}
-                size="sm"
-                className="w-fit rounded-full companion-outline-btn"
-                onClick={() => {
-                  setShowFileManager(true);
-                  setFileManagerTab("upload");
-                  setUploadError("");
-                  setStorjImportError("");
-                  setStorjImportSuccess("");
-                  setSaveReportsError("");
-                }}
-              >
-                Upload File to Context
-              </Button>
-
+            <div className="flex flex-col gap-1"></div>
+            <div className="flex items-center gap-3 self-end sm:self-auto">
+              <label className="flex items-center gap-2 rounded-full companion-label px-3 py-1 text-xs font-medium shadow-sm">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 accent-emerald-600"
+                  checked={autoExpandOnSend}
+                  onChange={(event) =>
+                    setAutoExpandOnSend(event.target.checked)
+                  }
+                />
+                Auto expand on send
+              </label>
               <Button
                 size="sm"
                 variant="outline"
-                className="w-fit rounded-full companion-outline-btn"
-                onClick={() => {
-                  setShowFileManager(true);
-                  setFileManagerTab("attached");
-                  setUploadError("");
-                  setStorjImportError("");
-                  setStorjImportSuccess("");
-                  setSaveReportsError("");
-                }}
+                className="whitespace-nowrap rounded-full companion-outline-btn"
+                onClick={() => setIsExpanded((prev) => !prev)}
               >
-                Manage files
-                <span className="ml-2 rounded-full companion-badge px-2 py-0.5 text-[11px]">
-                  {uploadedFiles.length} attached
-                </span>
+                {isExpanded ? "Exit expanded view" : "Expand view"}
               </Button>
-
-              {reports.length > 0 && (
-                <span className="text-xs text-emerald-800">
-                  Parsed reports:{" "}
-                  <span className="font-semibold">{reports.length}</span>
-                </span>
-              )}
             </div>
           </div>
-        )}
-      </div>
+
+          {!isExpanded && (
+            <div className="flex flex-col items-start gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  ref={uploadFileButtonRef}
+                  size="sm"
+                  className="w-fit rounded-full companion-outline-btn"
+                  onClick={() => {
+                    setShowFileManager(true);
+                    setFileManagerTab("upload");
+                    setUploadError("");
+                    setStorjImportError("");
+                    setStorjImportSuccess("");
+                    setSaveReportsError("");
+                  }}
+                >
+                  Upload File to Context
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-fit rounded-full companion-outline-btn"
+                  onClick={() => {
+                    setShowFileManager(true);
+                    setFileManagerTab("attached");
+                    setUploadError("");
+                    setStorjImportError("");
+                    setStorjImportSuccess("");
+                    setSaveReportsError("");
+                  }}
+                >
+                  Manage files
+                  <span className="ml-2 rounded-full companion-badge px-2 py-0.5 text-[11px]">
+                    {uploadedFiles.length} attached
+                  </span>
+                </Button>
+
+                {reports.length > 0 && (
+                  <span className="text-xs text-emerald-800">
+                    Parsed reports:{" "}
+                    <span className="font-semibold">{reports.length}</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       <Dialog
@@ -2640,11 +2646,13 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         ) : messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center companion-welcome-text">
             <div className="mb-4">
-              <span style={{ fontSize: "28px", color: "#6366F1", lineHeight: 1 }}>✦</span>
+              <span
+                style={{ fontSize: "28px", color: "#6366F1", lineHeight: 1 }}
+              >
+                ✦
+              </span>
             </div>
-            <h3 className="mb-2 text-lg font-semibold">
-              This is Luma.
-            </h3>
+            <h3 className="mb-2 text-lg font-semibold">This is Luma.</h3>
             <p className="max-w-xs text-sm">
               She reads your health data and tells you what it means — your
               trends, your patterns, your specific numbers. Not general health
@@ -2719,14 +2727,14 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       </div>
 
       {!isExpanded && (
-      <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
-        <div>
-          {lastResponseMs !== null
-            ? `Last: ${formatDuration(lastResponseMs)}`
-            : ""}
+        <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
+          <div>
+            {lastResponseMs !== null
+              ? `Last: ${formatDuration(lastResponseMs)}`
+              : ""}
+          </div>
+          <div>{input.length}/500</div>
         </div>
-        <div>{input.length}/500</div>
-      </div>
       )}
 
       {/* Message Limit Popup */}

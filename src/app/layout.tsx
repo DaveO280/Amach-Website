@@ -4,15 +4,15 @@ import { PrivyErrorBoundary } from "@/components/PrivyErrorBoundary";
 import QueryProvider from "@/components/QueryProvider";
 import { SelectionProvider } from "@/store/selectionStore/provider";
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Libre_Baskerville } from "next/font/google";
+import { DM_Sans, JetBrains_Mono, Libre_Baskerville } from "next/font/google";
 import React, { Suspense } from "react";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
 import ErudaLoader from "@/components/ErudaLoader";
 
-const inter = Inter({
+const dmSans = DM_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "800"],
+  weight: ["400", "500", "700"],
   variable: "--font-sans",
 });
 
@@ -72,15 +72,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>): JSX.Element {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-    >
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* Theme init — must run before paint to avoid flash */}
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className={`${inter.variable} ${jetbrainsMono.variable} ${libreBaskerville.variable} ${inter.className}`}>
+      <body
+        className={`${dmSans.variable} ${jetbrainsMono.variable} ${libreBaskerville.variable} ${dmSans.className}`}
+      >
         <ErudaLoader />
         <PrivyErrorBoundary>
           <Suspense fallback={<div>Loading...</div>}>

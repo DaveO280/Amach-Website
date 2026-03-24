@@ -315,7 +315,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-sans, Inter, sans-serif);
+    font-family: var(--font-sans, "DM Sans", sans-serif);
   }
 }
 

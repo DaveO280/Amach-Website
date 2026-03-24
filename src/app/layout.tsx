@@ -4,7 +4,7 @@ import { PrivyErrorBoundary } from "@/components/PrivyErrorBoundary";
 import QueryProvider from "@/components/QueryProvider";
 import { SelectionProvider } from "@/store/selectionStore/provider";
 import type { Metadata } from "next";
-import { DM_Sans, JetBrains_Mono, Libre_Baskerville } from "next/font/google";
+import { DM_Mono, DM_Sans, Libre_Baskerville } from "next/font/google";
 import React, { Suspense } from "react";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
@@ -16,7 +16,7 @@ const dmSans = DM_Sans({
   variable: "--font-sans",
 });
 
-const jetbrainsMono = JetBrains_Mono({
+const dmMono = DM_Mono({
   subsets: ["latin"],
   weight: ["400", "500"],
   variable: "--font-mono",
@@ -78,7 +78,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body
-        className={`${dmSans.variable} ${jetbrainsMono.variable} ${libreBaskerville.variable} ${dmSans.className}`}
+        className={`${dmSans.variable} ${dmMono.variable} ${libreBaskerville.variable} ${dmSans.className}`}
       >
         <ErudaLoader />
         <PrivyErrorBoundary>

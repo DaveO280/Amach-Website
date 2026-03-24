@@ -1349,9 +1349,7 @@ export function StorageManagementSection({
                 Failed to initialize
               </p>
               <p className="text-xs text-red-700 mt-1">{keyError}</p>
-              <Button
-                size="sm"
-                variant="outline"
+              <button
                 onClick={async () => {
                   setKeyError("");
                   setEncryptionKey(null);
@@ -1374,10 +1372,10 @@ export function StorageManagementSection({
                     setIsLoadingKey(false);
                   }
                 }}
-                className="mt-2"
+                className="mt-3 px-4 py-1.5 text-sm rounded-lg border border-[rgba(0,107,79,0.35)] dark:border-[rgba(74,222,128,0.25)] text-[#006B4F] dark:text-[#4ade80] hover:bg-[rgba(0,107,79,0.07)] bg-transparent transition-colors"
               >
                 Retry
-              </Button>
+              </button>
             </div>
           </div>
         </div>

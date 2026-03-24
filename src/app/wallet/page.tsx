@@ -354,22 +354,20 @@ export default function WalletPage(): JSX.Element {
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-              <p className="text-amber-900 dark:text-amber-400">
-                Checking wallet status...
-              </p>
+              <p className="text-[#6b8c7a]">Checking wallet status...</p>
             </div>
           </div>
         ) : !hasCompletedSetup ? (
           <div className="max-w-2xl mx-auto">
             <Card className="dashboard-content-card">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-emerald-900 dark:text-emerald-400">
-                  <Wallet className="h-5 w-5" />
+                <CardTitle className="flex items-center gap-2 text-[#0a1a0f] dark:text-[#F0F7F3]">
+                  <Wallet className="h-5 w-5 text-emerald-600" />
                   Wallet Setup Required
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-amber-800 dark:text-amber-400">
+                <p className="text-[#6b8c7a]">
                   Please complete the wallet setup process to access your wallet
                   and health profile.
                 </p>

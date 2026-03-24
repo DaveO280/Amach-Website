@@ -138,10 +138,22 @@
   /* ── Dark Mode ── */
   [data-theme="dark"] {
     --gradient-hero: none;
-    --color-bg-primary: #111a15;
-    --color-bg-surface: #1a2620;
-    --color-bg-card: rgba(17, 31, 22, 0.85);
-    --color-bg-nav: rgba(17, 26, 21, 0.95);
+    /* Deep-space near-black with only a whisper of emerald at the edges */
+    --color-bg-primary:
+      radial-gradient(
+        ellipse at 20% 20%,
+        rgba(0, 107, 79, 0.08) 0%,
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse at 80% 80%,
+        rgba(0, 107, 79, 0.05) 0%,
+        transparent 60%
+      ),
+      #050a07;
+    --color-bg-surface: #0d1810;
+    --color-bg-card: rgba(11, 20, 15, 0.85);
+    --color-bg-nav: rgba(5, 10, 7, 0.95);
 
     --color-text-primary: #f0f7f3;
     --color-text-secondary: #9db8a8;

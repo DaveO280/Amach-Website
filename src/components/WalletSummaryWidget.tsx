@@ -64,9 +64,9 @@ export const WalletSummaryWidget: React.FC = () => {
 
   if (!isConnected) {
     return (
-      <Card className="bg-white border-emerald-100">
+      <Card className="bg-white dark:bg-[#111F1A] border-emerald-100 dark:border-[rgba(0,107,79,0.15)]">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-amber-900">
+          <CardTitle className="flex items-center gap-2 text-[#0a1a0f] dark:text-[#F0F7F3]">
             <Wallet className="h-5 w-5 text-emerald-600" />
             Wallet
           </CardTitle>
@@ -97,15 +97,18 @@ export const WalletSummaryWidget: React.FC = () => {
   }
 
   return (
-    <Card className="bg-white border-emerald-100">
+    <Card className="bg-white dark:bg-[#111F1A] border-emerald-100 dark:border-[rgba(0,107,79,0.15)]">
       <CardHeader>
-        <CardTitle className="flex items-center justify-between text-amber-900">
+        <CardTitle className="flex items-center justify-between text-[#0a1a0f] dark:text-[#F0F7F3]">
           <span className="flex items-center gap-2">
             <Wallet className="h-5 w-5 text-emerald-600" />
             Wallet
           </span>
           {healthProfile && (
-            <Badge variant="default" className="bg-amber-100 text-amber-800">
+            <Badge
+              variant="default"
+              className="bg-emerald-100 dark:bg-[rgba(0,107,79,0.2)] text-emerald-800 dark:text-emerald-300"
+            >
               <Shield className="h-3 w-3 mr-1" />
               Profile On-Chain
             </Badge>
@@ -114,16 +117,16 @@ export const WalletSummaryWidget: React.FC = () => {
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          <div className="text-sm text-amber-800/80">Address</div>
-          <div className="font-mono text-sm text-amber-900 break-all">
+          <div className="text-sm text-[#6b8c7a]">Address</div>
+          <div className="font-mono text-sm text-[#0a1a0f] dark:text-[#F0F7F3] break-all">
             {shortAddress(address || "")}
           </div>
           <div className="flex items-center justify-between mt-2">
             <div className="flex items-center gap-2">
               <Coins className="h-5 w-5 text-emerald-600" />
-              <div className="text-sm text-amber-800/80">ETH</div>
+              <div className="text-sm text-[#6b8c7a]">ETH</div>
             </div>
-            <div className="text-base font-semibold text-amber-900">
+            <div className="text-base font-semibold text-[#0a1a0f] dark:text-[#F0F7F3] font-mono">
               {balance ? `${parseFloat(balance).toFixed(4)}` : "—"}
             </div>
             <Button
@@ -132,7 +135,7 @@ export const WalletSummaryWidget: React.FC = () => {
               onClick={() => {
                 void getBalance();
               }}
-              className="border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+              className="border-emerald-600 dark:border-[rgba(0,107,79,0.4)] text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-[rgba(0,107,79,0.1)]"
             >
               <RefreshCw className="h-4 w-4" />
             </Button>
@@ -140,13 +143,13 @@ export const WalletSummaryWidget: React.FC = () => {
 
           {/* Health Data Attestations */}
           {(hasAnyAttestations || attestationsLoading) && (
-            <div className="mt-4 pt-3 border-t border-emerald-100">
+            <div className="mt-4 pt-3 border-t border-emerald-100 dark:border-[rgba(0,107,79,0.15)]">
               <div className="flex items-center gap-2 mb-2">
                 <FileCheck className="h-4 w-4 text-emerald-600" />
-                <span className="text-sm text-amber-800/80">Verified Data</span>
+                <span className="text-sm text-[#6b8c7a]">Verified Data</span>
               </div>
               {attestationsLoading ? (
-                <div className="flex items-center gap-2 text-sm text-amber-600">
+                <div className="flex items-center gap-2 text-sm text-[#6b8c7a]">
                   <Loader2 className="h-3 w-3 animate-spin" />
                   Loading...
                 </div>

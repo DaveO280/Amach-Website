@@ -1,12 +1,15 @@
 import { Calendar, Hash, Loader2, RefreshCw, Shield } from "lucide-react";
 import { useOnChainProfile } from "../hooks/useOnChainProfile";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 interface OnChainProfileDisplayProps {
   userAddress?: string;
 }
+
+const cardClass =
+  "rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)]";
+
+const outlineButtonClass =
+  "px-3 py-1.5 rounded-lg border border-[rgba(0,107,79,0.35)] dark:border-[rgba(74,222,128,0.25)] text-[#006B4F] dark:text-[#4ade80] bg-transparent hover:bg-[rgba(0,107,79,0.07)] transition-colors text-sm flex items-center gap-1 disabled:opacity-50";
 
 export function OnChainProfileDisplay({
   userAddress,
@@ -31,40 +34,38 @@ export function OnChainProfileDisplay({
 
   if (!userAddress) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+      <div className={cardClass}>
+        <div className="p-5">
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] mb-4">
             <Shield className="h-5 w-5" />
             On-Chain Health Profile
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">
+          </h3>
+          <p className="text-[#6B8C7A]">
             Connect your wallet to view your on-chain health profile data.
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Shield className="h-5 w-5" />
-          On-Chain Health Profile
+    <div className={cardClass}>
+      <div className="p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Shield className="h-5 w-5 text-[#0A1A0F] dark:text-[#F0F7F3]" />
+          <h3 className="text-lg font-semibold text-[#0A1A0F] dark:text-[#F0F7F3]">
+            On-Chain Health Profile
+          </h3>
           <div className="flex gap-2 ml-auto">
-            <Button
-              variant="outline"
-              size="sm"
+            <button
+              className={outlineButtonClass}
               onClick={handleTestContract}
               disabled={loading}
             >
               Test Contract
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
+            </button>
+            <button
+              className={outlineButtonClass}
               onClick={refreshProfile}
               disabled={loading}
             >
@@ -73,110 +74,128 @@ export function OnChainProfileDisplay({
               ) : (
                 <RefreshCw className="h-4 w-4" />
               )}
-            </Button>
+            </button>
           </div>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+        </div>
+
         {loading && (
-          <div className="flex items-center gap-2 text-muted-foreground">
+          <div className="flex items-center gap-2 text-[#6B8C7A]">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading on-chain profile...
           </div>
         )}
 
         {error && (
-          <div className="text-red-600 bg-red-50 p-3 rounded-md">
+          <div className="text-red-600 bg-red-50 dark:bg-red-950/20 dark:text-red-400 p-3 rounded-md">
             <strong>Error:</strong> {error}
           </div>
         )}
 
         {!loading && !error && !hasProfile && (
           <div className="text-center py-8">
-            <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">
+            <Shield className="h-12 w-12 text-[#6B8C7A] mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2 text-[#0A1A0F] dark:text-[#F0F7F3]">
               No On-Chain Profile Found
             </h3>
-            <p className="text-muted-foreground mb-4">
+            <p className="text-[#6B8C7A] mb-4">
               This wallet address doesn&apos;t have a health profile stored on
               the blockchain yet.
             </p>
-            <p className="text-sm text-muted-foreground">
-              Address: {userAddress}
-            </p>
+            <p className="text-sm text-[#6B8C7A]">Address: {userAddress}</p>
           </div>
         )}
 
         {!loading && !error && hasProfile && profile && (
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Badge variant="default" className="bg-green-100 text-green-800">
-                <Shield className="h-3 w-3 mr-1" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                <Shield className="h-3 w-3" />
                 Profile Verified on Blockchain
-              </Badge>
-              {profile.isActive && <Badge variant="secondary">Active</Badge>}
-              <Badge variant="outline">V{profile.version}</Badge>
-              {/* V1: Weight moved to timeline events */}
+              </span>
+              {profile.isActive && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[rgba(0,107,79,0.1)] text-[#006B4F] dark:bg-[rgba(74,222,128,0.1)] dark:text-[#4ade80]">
+                  Active
+                </span>
+              )}
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-[rgba(0,107,79,0.25)] dark:border-[rgba(74,222,128,0.2)] text-[#0A1A0F] dark:text-[#F0F7F3]">
+                V{profile.version}
+              </span>
               {profile.encryptedEmail && (
-                <Badge variant="outline" className="bg-purple-50">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300">
                   Email
-                </Badge>
+                </span>
               )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">Stored On:</span>
+                  <Calendar className="h-4 w-4 text-[#6B8C7A]" />
+                  <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                    Stored On:
+                  </span>
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-[#6B8C7A]">
                   {new Date(profile.timestamp * 1000).toLocaleString()}
                 </p>
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <Hash className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">Data Hash:</span>
+                  <Hash className="h-4 w-4 text-[#6B8C7A]" />
+                  <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                    Data Hash:
+                  </span>
                 </div>
-                <p className="text-sm text-muted-foreground font-mono break-all">
+                <p className="text-sm text-[#6B8C7A] font-mono break-all">
                   {profile.dataHash}
                 </p>
               </div>
             </div>
 
-            <div className="border-t pt-4">
-              <h4 className="font-medium mb-2">Encrypted Profile Data</h4>
+            <div className="border-t border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] pt-4">
+              <h4 className="font-medium mb-2 text-[#0A1A0F] dark:text-[#F0F7F3]">
+                Encrypted Profile Data
+              </h4>
               <div className="space-y-2 text-sm">
                 <div>
-                  <span className="font-medium">Birth Date:</span>
-                  <p className="text-muted-foreground font-mono break-all">
+                  <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                    Birth Date:
+                  </span>
+                  <p className="text-[#6B8C7A] font-mono break-all">
                     {profile.encryptedBirthDate}
                   </p>
                 </div>
                 <div>
-                  <span className="font-medium">Sex:</span>
-                  <p className="text-muted-foreground font-mono break-all">
+                  <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                    Sex:
+                  </span>
+                  <p className="text-[#6B8C7A] font-mono break-all">
                     {profile.encryptedSex}
                   </p>
                 </div>
                 <div>
-                  <span className="font-medium">Height:</span>
-                  <p className="text-muted-foreground font-mono break-all">
+                  <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                    Height:
+                  </span>
+                  <p className="text-[#6B8C7A] font-mono break-all">
                     {profile.encryptedHeight}
                   </p>
                 </div>
                 <div>
-                  <span className="font-medium">Email:</span>
-                  <p className="text-muted-foreground font-mono break-all">
+                  <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                    Email:
+                  </span>
+                  <p className="text-[#6B8C7A] font-mono break-all">
                     {profile.encryptedEmail}
                   </p>
                 </div>
                 {profile.nonce && (
                   <div>
-                    <span className="font-medium">Weight:</span>
-                    <p className="text-muted-foreground font-mono break-all">
+                    <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                      Weight:
+                    </span>
+                    <p className="text-[#6B8C7A] font-mono break-all">
                       {profile.nonce}
                     </p>
                   </div>
@@ -184,11 +203,11 @@ export function OnChainProfileDisplay({
               </div>
             </div>
 
-            <div className="bg-blue-50 p-4 rounded-md">
-              <h4 className="font-medium text-blue-900 mb-2">
+            <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-md">
+              <h4 className="font-medium text-blue-900 dark:text-blue-300 mb-2">
                 🔐 Privacy Notice
               </h4>
-              <p className="text-sm text-blue-800">
+              <p className="text-sm text-blue-800 dark:text-blue-400">
                 Your health profile data is encrypted and stored on the
                 blockchain. The encrypted data above cannot be read without your
                 private key. This ensures your health information remains
@@ -197,7 +216,7 @@ export function OnChainProfileDisplay({
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

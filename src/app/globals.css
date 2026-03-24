@@ -467,6 +467,11 @@
     border-radius: inherit;
   }
 
+  /* ── Metric / data value typography ── */
+  .metric-value {
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+  }
+
   /* ── Page background helper ── */
   .page-bg {
     background: var(--color-bg-primary);

@@ -958,8 +958,9 @@
 
 /* Alert / notification banner */
 .luma-light .luma-alert {
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+  border: none;
+  border-left: 3px solid #f59e0b;
 }
 
 /* Input */
@@ -1077,8 +1078,9 @@
 
 /* Alert */
 .luma-dark .luma-alert {
-  background: rgba(26, 46, 38, 0.8);
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  background: rgba(245, 158, 11, 0.06);
+  border: none;
+  border-left: 3px solid rgba(245, 158, 11, 0.6);
 }
 
 /* Input */

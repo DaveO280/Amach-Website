@@ -90,8 +90,8 @@
     --color-dashboard-tab-inactive-bg: #ffffff;
     --color-dashboard-tab-inactive-text: #006b4f;
     --color-dashboard-tab-inactive-border: rgba(0, 107, 79, 0.3);
-    --color-dashboard-badge-connected-bg: rgba(209, 250, 229, 0.8);
-    --color-dashboard-badge-connected-text: #065f46;
+    --color-dashboard-badge-connected-bg: #006b4f;
+    --color-dashboard-badge-connected-text: #ffffff;
     --color-dashboard-badge-chain-bg: rgba(254, 243, 199, 0.8);
     --color-dashboard-badge-chain-text: #92400e;
     --color-dashboard-lock-bg: rgba(236, 253, 245, 0.3);
@@ -211,8 +211,8 @@
     --color-dashboard-tab-inactive-bg: rgba(0, 107, 79, 0.1);
     --color-dashboard-tab-inactive-text: #6ee7b7;
     --color-dashboard-tab-inactive-border: rgba(110, 231, 183, 0.2);
-    --color-dashboard-badge-connected-bg: rgba(0, 77, 56, 0.4);
-    --color-dashboard-badge-connected-text: #6b8c7a;
+    --color-dashboard-badge-connected-bg: #006b4f;
+    --color-dashboard-badge-connected-text: #ffffff;
     --color-dashboard-badge-chain-bg: rgba(80, 55, 0, 0.35);
     --color-dashboard-badge-chain-text: #d4a853;
     --color-dashboard-lock-bg: rgba(0, 107, 79, 0.1);
@@ -701,6 +701,14 @@
   }
   .dashboard-title {
     color: var(--color-dashboard-title) !important;
+    font-family: var(
+      --font-serif,
+      "Libre Baskerville",
+      Georgia,
+      serif
+    ) !important;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
   }
   .dashboard-description {
     color: var(--color-dashboard-description) !important;

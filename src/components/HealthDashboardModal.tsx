@@ -111,13 +111,16 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
   if (!props.isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-hidden bg-black/40 backdrop-blur-sm flex justify-center items-center p-2">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Health Dashboard"
+      className="fixed inset-0 z-[100] overflow-hidden bg-black/40 backdrop-blur-sm flex justify-center items-center p-2"
+    >
       <div
         ref={modalRef}
         className={`relative w-full rounded-lg shadow-xl overflow-hidden animate-in fade-in duration-300 dashboard-modal-bg ${
-          isMobile
-            ? "max-w-full max-h-[95vh]"
-            : "max-w-[95vw] max-h-[90vh]"
+          isMobile ? "max-w-full max-h-[95vh]" : "max-w-[95vw] max-h-[90vh]"
         }`}
         onClick={handleModalClick}
       >

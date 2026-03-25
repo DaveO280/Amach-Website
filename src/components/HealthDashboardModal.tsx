@@ -129,8 +129,13 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
           {/* Title row */}
           <div className="px-3 py-2 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h2 className="text-base sm:text-xl font-black dashboard-title">
-                Amach Health
+              <h2 className="amach-wordmark-wrap leading-[1.1] gap-[1px]">
+                <span className="amach-wordmark-line text-[13px] sm:text-[16px] tracking-[0.28em]">
+                  Amach
+                </span>
+                <span className="amach-wordmark-line-sub text-[13px] sm:text-[16px] tracking-[0.28em]">
+                  Health
+                </span>
               </h2>
               {isConnected && (
                 <Badge

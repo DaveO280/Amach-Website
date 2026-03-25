@@ -701,14 +701,6 @@
   }
   .dashboard-title {
     color: var(--color-dashboard-title) !important;
-    font-family: var(
-      --font-serif,
-      "Libre Baskerville",
-      Georgia,
-      serif
-    ) !important;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
   }
   .dashboard-description {
     color: var(--color-dashboard-description) !important;

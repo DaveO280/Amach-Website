@@ -294,7 +294,7 @@ export const CryptoWallet: React.FC = () => {
             Crypto Wallet
           </h3>
         </div>
-        <span className="inline-flex items-center gap-1 bg-[rgba(0,107,79,0.10)] dark:bg-[rgba(0,107,79,0.15)] text-[#006B4F] dark:text-[#4ade80] text-[11px] font-semibold px-[10px] py-[3px] rounded-full">
+        <span className="inline-flex items-center gap-1 bg-[rgba(0,107,79,0.10)] dark:bg-[rgba(0,107,79,0.15)] text-[#006B4F] dark:text-[#6B8C7A] text-[11px] font-semibold px-[10px] py-[3px] rounded-full">
           <CheckCircle className="h-[10px] w-[10px]" />
           Connected
         </span>

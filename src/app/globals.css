@@ -1576,3 +1576,8 @@
   color: #e5e7eb !important;
   -webkit-text-fill-color: #e5e7eb !important;
 }
+
+/* Ensure modal backdrops (Privy) cover the sticky nav */
+body:has([role="dialog"]) nav {
+  z-index: 0 !important;
+}

@@ -1577,11 +1577,12 @@
   -webkit-text-fill-color: #e5e7eb !important;
 }
 
-/* Overlay nav when modal is open */
+/* Drop nav behind modal overlay */
 body:has([role="dialog"]) nav {
   z-index: 0 !important;
 }
 
+/* Our own overlay covers the nav area */
 body:has([role="dialog"])::before {
   content: '';
   position: fixed;

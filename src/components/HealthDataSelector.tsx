@@ -84,6 +84,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
     error?: string;
     storjUri?: string;
   } | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const handleFileSelect = (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -871,75 +872,28 @@ const HealthDataSelector: () => React.ReactElement = () => {
             CSV file
           </p>
 
-          {/* Warning for XML files */}
-          <div className="mb-4 p-3 dashboard-upload-info rounded-lg">
-            <div className="flex items-start gap-2">
-              <svg
-                className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <div className="text-sm">
-                <p className="font-semibold text-amber-800 mb-1">
-                  File Type Guide:
-                </p>
-                <ul className="text-amber-700 space-y-1">
-                  <li>
-                    <strong>XML files:</strong> Must be processed on desktop.
-                    Large files may crash mobile browsers.
-                  </li>
-                  <li>
-                    <strong>CSV files:</strong> Fast and mobile-friendly. Upload
-                    CSVs exported from this app (includes start/end dates for
-                    sleep).
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
           <div className="space-y-4">
             <input
               type="file"
               accept=".xml,.csv"
               onChange={handleFileSelect}
               disabled={processingState.isProcessing}
-              className="file-input w-full p-2 border border-amber-100 rounded-lg"
+              className="file-input w-full p-2 border border-[rgba(0,107,79,0.22)] dark:border-[rgba(0,107,79,0.25)] rounded-lg"
               onClick={(e) => e.stopPropagation()}
             />
 
-            {/* Dynamic warning for XML files on mobile */}
+            {/* Dynamic warning for XML files */}
             {uploadedFile &&
               !uploadedFile.name.toLowerCase().endsWith(".csv") && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <svg
-                      className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0"
-                      fill="none"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                    <div className="text-sm text-red-700">
-                      <p className="font-semibold mb-1">⚠️ XML File Detected</p>
-                      <p>
-                        Processing large XML files is resource-intensive and may
-                        cause performance issues or crashes on mobile devices.
-                        For best results, process XML files on a desktop
-                        computer, then upload the exported CSV on mobile.
-                      </p>
-                    </div>
-                  </div>
+                <div className="p-3 rounded-lg border-l-4 border-amber-400 bg-[rgba(245,158,11,0.06)] dark:bg-[rgba(245,158,11,0.04)] text-sm">
+                  <p className="font-semibold text-amber-700 dark:text-amber-400 mb-1">
+                    ⚠️ Large file detected
+                  </p>
+                  <p className="text-[#6B8C7A]">
+                    XML files can be resource-intensive and may cause issues on
+                    mobile. For best results, process on desktop and upload the
+                    exported CSV.
+                  </p>
                 </div>
               )}
 
@@ -959,9 +913,9 @@ const HealthDataSelector: () => React.ReactElement = () => {
               </button>
 
               <button
-                onClick={handleClearData}
+                onClick={() => setShowClearConfirm(true)}
                 disabled={processingState.isProcessing || !hasData()}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 border border-[rgba(239,68,68,0.4)] text-red-500 dark:text-red-400 bg-transparent hover:bg-[rgba(239,68,68,0.07)] py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Clear All Data
               </button>
@@ -986,7 +940,10 @@ const HealthDataSelector: () => React.ReactElement = () => {
             )}
 
             {processingState.isProcessing && (
-              <div className="w-full rounded-full h-2" style={{ background: "var(--color-companion-surface-border)" }}>
+              <div
+                className="w-full rounded-full h-2"
+                style={{ background: "var(--color-companion-surface-border)" }}
+              >
                 <div
                   className="h-2 rounded-full transition-all duration-300 bg-emerald-600"
                   style={{
@@ -1063,7 +1020,12 @@ const HealthDataSelector: () => React.ReactElement = () => {
                     {/* Storj save progress */}
                     {storjSaveStatus?.saving && (
                       <div className="space-y-1">
-                        <div className="w-full rounded-full h-2" style={{ background: "var(--color-companion-surface-border)" }}>
+                        <div
+                          className="w-full rounded-full h-2"
+                          style={{
+                            background: "var(--color-companion-surface-border)",
+                          }}
+                        >
                           <div
                             className="h-2 rounded-full transition-all duration-300 bg-blue-600"
                             style={{ width: `${storjSaveStatus.progress}%` }}
@@ -1101,6 +1063,37 @@ const HealthDataSelector: () => React.ReactElement = () => {
           </div>
         </div>
       </div>
+
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white dark:bg-[#0B140F] border border-[rgba(0,107,79,0.15)] rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl">
+            <h3 className="text-[#0A1A0F] dark:text-[#F0F7F3] font-semibold text-base mb-2">
+              Clear all data?
+            </h3>
+            <p className="text-[#6B8C7A] text-sm mb-6">
+              This will permanently remove all processed health data from your
+              session. This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="flex-1 py-2 px-4 rounded-lg border border-[rgba(0,107,79,0.25)] text-[#6B8C7A] bg-transparent hover:bg-[rgba(0,107,79,0.07)] transition-colors text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handleClearData();
+                  setShowClearConfirm(false);
+                }}
+                className="flex-1 py-2 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors text-sm font-medium"
+              >
+                Accept
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

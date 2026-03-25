@@ -1342,7 +1342,7 @@ export function StorageManagementSection({
           </h3>
         </div>
         <div>
-          <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center gap-3 p-4 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
             <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
             <div>
               <p className="text-sm font-medium text-red-900">
@@ -1573,25 +1573,25 @@ export function StorageManagementSection({
               </div>
 
               {contextError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{contextError}</p>
                 </div>
               )}
               {contextDeleteError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{contextDeleteError}</p>
                 </div>
               )}
               {contextPreviewError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{contextPreviewError}</p>
                 </div>
               )}
               {chainError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{chainError}</p>
                 </div>
@@ -1790,7 +1790,7 @@ export function StorageManagementSection({
                 </Button>
               </div>
               {chatsError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{chatsError}</p>
                 </div>
@@ -1859,7 +1859,7 @@ export function StorageManagementSection({
                 </Button>
               </div>
               {healthDataError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{healthDataError}</p>
                 </div>
@@ -2077,20 +2077,20 @@ export function StorageManagementSection({
               )}
 
               {testsError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{testsError}</p>
                 </div>
               )}
 
               {deleteError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{deleteError}</p>
                 </div>
               )}
               {chainError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{chainError}</p>
                 </div>
@@ -2219,14 +2219,14 @@ export function StorageManagementSection({
                   </div>
                   {attestStatus && (
                     <div
-                      className={`p-2 text-xs ${attestStatus.startsWith("✅") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}
+                      className={`p-2 text-xs ${attestStatus.startsWith("✅") ? "bg-green-50 text-green-700" : "bg-[rgba(239,68,68,0.08)] text-red-700"}`}
                     >
                       {attestStatus}
                     </div>
                   )}
 
                   {previewError && (
-                    <div className="p-3 text-sm text-red-700 bg-red-50 border-b border-red-200">
+                    <div className="p-3 text-sm text-red-700 bg-[rgba(239,68,68,0.08)] border-b border-[rgba(239,68,68,0.25)]">
                       {previewError}
                     </div>
                   )}
@@ -2245,7 +2245,7 @@ export function StorageManagementSection({
 
         {/* Status Display */}
         {status.error && (
-          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
             <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
             <p className="text-sm text-red-900">{status.error}</p>
           </div>

@@ -1307,7 +1307,7 @@ export function StorageManagementSection({
   // Loading state
   if (isLoadingKey) {
     return (
-      <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-6">
+      <div className="storage-mgmt rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-6">
         <div className="flex items-center gap-2 mb-4">
           <Database className="h-5 w-5" />
           <h3 className="font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] text-base">
@@ -1334,7 +1334,7 @@ export function StorageManagementSection({
   // Error state
   if (keyError) {
     return (
-      <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-6">
+      <div className="storage-mgmt rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-6">
         <div className="flex items-center gap-2 mb-4">
           <Database className="h-5 w-5" />
           <h3 className="font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] text-base">
@@ -1384,7 +1384,7 @@ export function StorageManagementSection({
   }
 
   return (
-    <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-6">
+    <div className="storage-mgmt rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-6">
       <div className="flex items-center gap-2 mb-4">
         <Database className="h-5 w-5" />
         <h3 className="font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] text-base">

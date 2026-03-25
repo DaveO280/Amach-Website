@@ -212,7 +212,7 @@
     --color-dashboard-tab-inactive-text: #6ee7b7;
     --color-dashboard-tab-inactive-border: rgba(110, 231, 183, 0.2);
     --color-dashboard-badge-connected-bg: rgba(0, 77, 56, 0.4);
-    --color-dashboard-badge-connected-text: #6ee7b7;
+    --color-dashboard-badge-connected-text: #6b8c7a;
     --color-dashboard-badge-chain-bg: rgba(80, 55, 0, 0.35);
     --color-dashboard-badge-chain-text: #d4a853;
     --color-dashboard-lock-bg: rgba(0, 107, 79, 0.1);
@@ -1577,17 +1577,64 @@
   -webkit-text-fill-color: #e5e7eb !important;
 }
 
-/* Drop nav behind modal overlay */
-body:has([role="dialog"]) nav {
+/* Drop nav and header behind modal overlay */
+body:has([role="dialog"]) nav,
+body:has([role="dialog"]) header {
   z-index: 0 !important;
 }
 
-/* Our own overlay covers the nav area */
+/* Our own overlay covers the nav/header area */
 body:has([role="dialog"])::before {
-  content: '';
+  content: "";
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
   z-index: 1;
   pointer-events: none;
+}
+
+/* ── Storage Management section dark mode overrides ── */
+[data-theme="dark"] .storage-mgmt .bg-white,
+[data-theme="dark"] .storage-mgmt .bg-gray-50,
+[data-theme="dark"] .storage-mgmt .bg-gray-100 {
+  background-color: #0b140f !important;
+}
+[data-theme="dark"] .storage-mgmt .border-gray-200,
+[data-theme="dark"] .storage-mgmt .border-gray-300 {
+  border-color: rgba(0, 107, 79, 0.2) !important;
+}
+[data-theme="dark"] .storage-mgmt .text-gray-900,
+[data-theme="dark"] .storage-mgmt .text-gray-700 {
+  color: #f0f7f3 !important;
+}
+[data-theme="dark"] .storage-mgmt .text-gray-600 {
+  color: #9db8a8 !important;
+}
+[data-theme="dark"] .storage-mgmt .text-gray-500 {
+  color: #6b8c7a !important;
+}
+[data-theme="dark"] .storage-mgmt .hover\:bg-gray-50:hover {
+  background-color: rgba(0, 107, 79, 0.06) !important;
+}
+[data-theme="dark"] .storage-mgmt .bg-emerald-50 {
+  background-color: rgba(0, 107, 79, 0.12) !important;
+}
+[data-theme="dark"] .storage-mgmt .bg-slate-100 {
+  background-color: rgba(0, 107, 79, 0.1) !important;
+}
+[data-theme="dark"] .storage-mgmt .text-slate-700 {
+  color: #9db8a8 !important;
+}
+[data-theme="dark"] .storage-mgmt .border-slate-300 {
+  border-color: rgba(0, 107, 79, 0.2) !important;
+}
+[data-theme="dark"] .storage-mgmt select,
+[data-theme="dark"] .storage-mgmt input[type="text"],
+[data-theme="dark"] .storage-mgmt input[type="number"],
+[data-theme="dark"]
+  .storage-mgmt
+  input:not([type="checkbox"]):not([type="radio"]) {
+  background-color: #0b140f !important;
+  color: #f0f7f3 !important;
+  border-color: rgba(0, 107, 79, 0.25) !important;
 }

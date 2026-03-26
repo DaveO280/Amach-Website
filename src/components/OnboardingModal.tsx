@@ -163,7 +163,13 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto p-0 bg-white">
+      <DialogContent
+        className="max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto p-0"
+        style={{
+          background:
+            "linear-gradient(to right bottom, #fffbeb, #ffffff, #ecfdf5)",
+        }}
+      >
         <div className="p-4 sm:p-8">
           <DialogHeader className="mb-6 sm:mb-8">
             <DialogTitle className="text-2xl sm:text-3xl text-center font-bold text-amber-900 font-['Libre_Baskerville']">

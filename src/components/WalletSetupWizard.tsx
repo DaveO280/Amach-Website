@@ -1739,7 +1739,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         >
           ×
         </button>
-        <div className="p-6 sm:p-8" data-theme="light">
+        <div className="p-6 sm:p-8">
           {/* Pending Transaction Notification */}
           {pendingTx && (
             <Alert className="mb-6 border-amber-300 bg-amber-50">
@@ -1858,7 +1858,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
             {/* Right: Current Step Details */}
             <div className="lg:col-span-2">
-              <Card className="border-2 border-[rgba(0,107,79,0.18)] shadow-xl bg-white/90 backdrop-blur-sm">
+              <Card className="border-2 border-[rgba(0,107,79,0.18)] shadow-xl !bg-white !text-slate-950">
                 <CardHeader className="border-b-2 border-[rgba(0,107,79,0.1)] bg-[rgba(0,107,79,0.03)]">
                   <div className="flex items-center space-x-3 mb-2">
                     <div className="p-3 bg-[rgba(0,107,79,0.08)] rounded-lg">

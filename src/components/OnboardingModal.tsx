@@ -54,7 +54,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
         "Your health data tells a complete story. Today, that story is scattered — across clinics, apps, devices, and systems that don't talk to each other. Amach gives it one home. One vault. One key. Yours.",
       icon: (
         <Shield
-          className="h-12 w-12 sm:h-16 sm:w-16"
+          className="h-10 w-10 sm:h-12 sm:w-12"
           style={{ color: "#006B4F" }}
         />
       ),
@@ -170,8 +170,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             "linear-gradient(to right bottom, #fffbeb, #ffffff, #ecfdf5)",
         }}
       >
-        <div className="p-4 sm:p-8">
-          <DialogHeader className="mb-6 sm:mb-8">
+        <div className="p-4 sm:p-6">
+          <DialogHeader className="mb-3 sm:mb-4">
             <DialogTitle className="text-2xl sm:text-3xl text-center font-bold text-amber-900 font-['Libre_Baskerville']">
               {currentStep.titleItalic ? (
                 <>
@@ -183,7 +183,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex flex-col items-center space-y-6 sm:space-y-8">
+          <div className="flex flex-col items-center space-y-4 sm:space-y-5">
             {/* Icon */}
             <div className="flex items-center justify-center">
               {currentStep.icon}
@@ -217,7 +217,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             {/* Details List */}
             {currentStep.details && (
               <div
-                className="w-full max-w-xl rounded-xl p-6 space-y-3 border"
+                className="w-full max-w-xl rounded-xl p-4 space-y-2 border"
                 style={{
                   background: "rgba(0,107,79,0.05)",
                   borderColor: "rgba(0,107,79,0.15)",
@@ -226,7 +226,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 {currentStep.details.map((detail, index) => (
                   <div
                     key={index}
-                    className="flex items-start space-x-3 bg-white/80 rounded-lg p-3"
+                    className="flex items-start space-x-3 bg-white/80 rounded-lg p-2"
                   >
                     <CheckCircle
                       className="h-5 w-5 flex-shrink-0 mt-0.5"
@@ -256,7 +256,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             )}
 
             {/* Progress dots */}
-            <div className="flex space-x-3 py-4">
+            <div className="flex space-x-3 py-1">
               {steps.map((step, index) => (
                 <button
                   key={step.id}
@@ -282,12 +282,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             </div>
 
             {/* Action buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-1 w-full sm:w-auto">
               {activeStep > 0 && (
                 <Button
                   variant="outline"
                   onClick={handleBack}
-                  className="px-6 py-6 sm:py-7 text-base sm:text-lg border-2 order-2 sm:order-1"
+                  className="px-6 py-3 sm:py-4 text-base sm:text-lg border-2 order-2 sm:order-1"
                 >
                   ← Back
                 </Button>
@@ -295,13 +295,13 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               <Button
                 variant="ghost"
                 onClick={handleSkip}
-                className="px-6 py-6 sm:py-7 text-base sm:text-lg text-gray-600 hover:text-gray-800 order-3 sm:order-2"
+                className="px-6 py-3 sm:py-4 text-base sm:text-lg text-gray-600 hover:text-gray-800 order-3 sm:order-2"
               >
                 {activeStep === 0 ? "Maybe Later" : "Skip Tour"}
               </Button>
               <Button
                 onClick={handleNext}
-                className="px-10 py-6 sm:py-7 text-base sm:text-lg font-bold text-white shadow-lg hover:opacity-90 transition-opacity order-1 sm:order-3"
+                className="px-10 py-3 sm:py-4 text-base sm:text-lg font-bold text-white shadow-lg hover:opacity-90 transition-opacity order-1 sm:order-3"
                 style={{ backgroundColor: "#006B4F" }}
               >
                 {currentStep.actionLabel || "Next"}

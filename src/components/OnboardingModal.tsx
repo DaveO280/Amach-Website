@@ -54,7 +54,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
         "Your health data tells a complete story. Today, that story is scattered — across clinics, apps, devices, and systems that don't talk to each other. Amach gives it one home. One vault. One key. Yours.",
       icon: (
         <Shield
-          className="h-10 w-10 sm:h-12 sm:w-12"
+          className="h-12 w-12 sm:h-14 sm:w-14"
           style={{ color: "#006B4F" }}
         />
       ),
@@ -170,8 +170,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             "linear-gradient(to right bottom, #fffbeb, #ffffff, #ecfdf5)",
         }}
       >
-        <div className="p-4 sm:p-6">
-          <DialogHeader className="mb-3 sm:mb-4">
+        <div className="p-4 sm:p-8">
+          <DialogHeader className="mb-5 sm:mb-6">
             <DialogTitle className="text-2xl sm:text-3xl text-center font-bold text-amber-900 font-['Libre_Baskerville']">
               {currentStep.titleItalic ? (
                 <>
@@ -183,7 +183,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex flex-col items-center space-y-4 sm:space-y-5">
+          <div className="flex flex-col items-center space-y-5 sm:space-y-6">
             {/* Icon */}
             <div className="flex items-center justify-center">
               {currentStep.icon}
@@ -217,7 +217,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             {/* Details List */}
             {currentStep.details && (
               <div
-                className="w-full max-w-xl rounded-xl p-4 space-y-2 border"
+                className="w-full max-w-xl rounded-xl p-5 space-y-3 border"
                 style={{
                   background: "rgba(0,107,79,0.05)",
                   borderColor: "rgba(0,107,79,0.15)",
@@ -226,7 +226,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 {currentStep.details.map((detail, index) => (
                   <div
                     key={index}
-                    className="flex items-start space-x-3 bg-white/80 rounded-lg p-2"
+                    className="flex items-start space-x-3 bg-white/80 rounded-lg p-3"
                   >
                     <CheckCircle
                       className="h-5 w-5 flex-shrink-0 mt-0.5"
@@ -256,7 +256,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             )}
 
             {/* Progress dots */}
-            <div className="flex space-x-3 py-1">
+            <div className="flex space-x-3 py-2">
               {steps.map((step, index) => (
                 <button
                   key={step.id}
@@ -282,7 +282,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             </div>
 
             {/* Action buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-1 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-3 w-full sm:w-auto">
               {activeStep > 0 && (
                 <Button
                   variant="outline"

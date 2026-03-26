@@ -15,7 +15,17 @@ import { useEffect, useState } from "react";
 // ── Icon components ──────────────────────────────────────────
 function IconLock(): JSX.Element {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
     </svg>
@@ -24,7 +34,17 @@ function IconLock(): JSX.Element {
 
 function IconSparkle(): JSX.Element {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
     </svg>
   );
@@ -32,7 +52,17 @@ function IconSparkle(): JSX.Element {
 
 function IconArrow(): JSX.Element {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <line x1="5" y1="12" x2="19" y2="12" />
       <polyline points="12 5 19 12 12 19" />
     </svg>
@@ -80,7 +110,11 @@ const MainPage: React.FC = (): JSX.Element => {
   const handleDashboardClick = (): void => {
     setShowBetaNotification(true);
     setIsMobileMenuOpen(false);
-    const clickEvent = new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window });
+    const clickEvent = new MouseEvent("mousedown", {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+    });
     document.body.dispatchEvent(clickEvent);
   };
 
@@ -116,7 +150,10 @@ const MainPage: React.FC = (): JSX.Element => {
   return (
     <div
       className="page-bg"
-      style={{ background: "var(--color-bg-primary)", color: "var(--color-text-primary)" }}
+      style={{
+        background: "var(--color-bg-primary)",
+        color: "var(--color-text-primary)",
+      }}
     >
       {/* ── Modals — keep wired, just preserved ── */}
       <OnboardingModal
@@ -172,26 +209,58 @@ const MainPage: React.FC = (): JSX.Element => {
         >
           {/* Left cluster: wordmark + Venice side by side */}
           <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            <div className="amach-wordmark-wrap" style={{ fontSize: "1rem", letterSpacing: "0.28em" }}>
+            <div
+              className="amach-wordmark-wrap"
+              style={{ fontSize: "1rem", letterSpacing: "0.28em" }}
+            >
               <span className="amach-wordmark-line">Amach</span>
               <span className="amach-wordmark-line-sub">Health</span>
             </div>
             {/* Divider */}
-            <span style={{ width: 1, height: 28, background: "var(--color-border)", flexShrink: 0 }} aria-hidden="true" />
+            <span
+              style={{
+                width: 1,
+                height: 28,
+                background: "var(--color-border)",
+                flexShrink: 0,
+              }}
+              aria-hidden="true"
+            />
             {/* Venice — sits right beside the wordmark */}
             <a
               href="https://venice.ai/"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Visit Venice AI"
-              style={{ display: "flex", alignItems: "center", gap: 5, opacity: 0.55, textDecoration: "none" }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                opacity: 0.55,
+                textDecoration: "none",
+              }}
               onClick={(e) => {
                 e.preventDefault();
-                try { window.open("https://venice.ai/", "_blank", "noopener,noreferrer"); }
-                catch { window.location.href = "https://venice.ai/"; }
+                try {
+                  window.open(
+                    "https://venice.ai/",
+                    "_blank",
+                    "noopener,noreferrer",
+                  );
+                } catch {
+                  window.location.href = "https://venice.ai/";
+                }
               }}
             >
-              <span style={{ fontSize: "0.68rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Powered by</span>
+              <span
+                style={{
+                  fontSize: "0.68rem",
+                  color: "var(--color-text-muted)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Powered by
+              </span>
               <Image
                 src="/venice-logo/Venice Lockup SVG/venice-logo-lockup-black.svg"
                 alt="Venice AI"
@@ -217,8 +286,12 @@ const MainPage: React.FC = (): JSX.Element => {
                   textDecoration: "none",
                   transition: "color 0.15s ease",
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-emerald)")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--color-text-secondary)")}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.color = "var(--color-emerald)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.color = "var(--color-text-secondary)")
+                }
               >
                 {item.label}
               </a>
@@ -231,7 +304,10 @@ const MainPage: React.FC = (): JSX.Element => {
           </nav>
 
           {/* Mobile: theme toggle + hamburger */}
-          <div className="flex md:hidden" style={{ alignItems: "center", gap: 12 }}>
+          <div
+            className="flex md:hidden"
+            style={{ alignItems: "center", gap: 12 }}
+          >
             <ThemeToggle />
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -283,8 +359,14 @@ const MainPage: React.FC = (): JSX.Element => {
             ))}
             <div style={{ paddingTop: 16 }}>
               <WalletConnectButton
-                onDashboardClick={() => { handleDashboardClick(); setIsMobileMenuOpen(false); }}
-                onAiCompanionClick={() => { setIsAiCompanionOpen(true); setIsMobileMenuOpen(false); }}
+                onDashboardClick={() => {
+                  handleDashboardClick();
+                  setIsMobileMenuOpen(false);
+                }}
+                onAiCompanionClick={() => {
+                  setIsAiCompanionOpen(true);
+                  setIsMobileMenuOpen(false);
+                }}
               />
             </div>
           </div>
@@ -370,13 +452,20 @@ const MainPage: React.FC = (): JSX.Element => {
           </p>
 
           {/* CTAs */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 16,
+            }}
+          >
             <button
               className="btn-emerald"
               style={{ fontSize: "1.05rem", padding: "16px 40px" }}
-              onClick={() => window.location.href = "mailto:amachhealth@gmail.com?subject=Early Protocol Access"}
+              onClick={() => setShowOnboarding(true)}
             >
-              Request Early Access →
+              New User? Start here →
             </button>
             <a href="/how-it-works" className="link-muted">
               Learn how it works
@@ -388,7 +477,9 @@ const MainPage: React.FC = (): JSX.Element => {
       {/* ══════════════════════════════════════════
           TWO FUTURES
       ══════════════════════════════════════════ */}
-      <section style={{ padding: "80px 24px", maxWidth: 1100, margin: "0 auto" }}>
+      <section
+        style={{ padding: "80px 24px", maxWidth: 1100, margin: "0 auto" }}
+      >
         <div
           style={{
             display: "grid",
@@ -423,10 +514,14 @@ const MainPage: React.FC = (): JSX.Element => {
                 color: "var(--color-text-secondary)",
               }}
             >
-              Your data leaves your device.<br />
-              It passes through servers you don&apos;t control,<br />
-              anonymised and sold upstream.<br />
-              Your doctor gets 7 minutes.<br />
+              Your data leaves your device.
+              <br />
+              It passes through servers you don&apos;t control,
+              <br />
+              anonymised and sold upstream.
+              <br />
+              Your doctor gets 7 minutes.
+              <br />
               You get a bill.
             </p>
           </div>
@@ -458,10 +553,14 @@ const MainPage: React.FC = (): JSX.Element => {
                 color: "var(--color-text-primary)",
               }}
             >
-              Your data stays encrypted.<br />
-              It lives on-chain. Verifiable, yours.<br />
-              Luma reads a year of your biology<br />
-              and tells you what it actually means.<br />
+              Your data stays encrypted.
+              <br />
+              It lives on-chain. Verifiable, yours.
+              <br />
+              Luma reads a year of your biology
+              <br />
+              and tells you what it actually means.
+              <br />
               You walk into that appointment prepared.
             </p>
           </div>
@@ -516,7 +615,14 @@ const MainPage: React.FC = (): JSX.Element => {
               >
                 Own it
               </h3>
-              <p style={{ fontSize: "0.95rem", lineHeight: 1.7, color: "var(--color-text-secondary)", margin: 0 }}>
+              <p
+                style={{
+                  fontSize: "0.95rem",
+                  lineHeight: 1.7,
+                  color: "var(--color-text-secondary)",
+                  margin: 0,
+                }}
+              >
                 Your data is encrypted before it leaves your device. Stored on
                 Storj. Verified on-chain. Not a policy. The architecture.
               </p>
@@ -537,7 +643,14 @@ const MainPage: React.FC = (): JSX.Element => {
               >
                 Read it
               </h3>
-              <p style={{ fontSize: "0.95rem", lineHeight: 1.7, color: "var(--color-text-secondary)", margin: 0 }}>
+              <p
+                style={{
+                  fontSize: "0.95rem",
+                  lineHeight: 1.7,
+                  color: "var(--color-text-secondary)",
+                  margin: 0,
+                }}
+              >
                 Luma reads your HRV, glucose, sleep, and bloodwork as a system —
                 not a dashboard. Patterns, not prescriptions.
               </p>
@@ -558,9 +671,16 @@ const MainPage: React.FC = (): JSX.Element => {
               >
                 Keep the value
               </h3>
-              <p style={{ fontSize: "0.95rem", lineHeight: 1.7, color: "var(--color-text-secondary)", margin: 0 }}>
-                The value your data creates flows back to you. Verified on-chain.
-                Not a promise. A protocol.
+              <p
+                style={{
+                  fontSize: "0.95rem",
+                  lineHeight: 1.7,
+                  color: "var(--color-text-secondary)",
+                  margin: 0,
+                }}
+              >
+                The value your data creates flows back to you. Verified
+                on-chain. Not a promise. A protocol.
               </p>
             </div>
           </div>
@@ -672,7 +792,13 @@ const MainPage: React.FC = (): JSX.Element => {
             >
               Every health signal you generate, brought together and kept yours.
             </h2>
-            <p style={{ fontSize: "1rem", lineHeight: 1.75, color: "var(--color-text-secondary)" }}>
+            <p
+              style={{
+                fontSize: "1rem",
+                lineHeight: 1.75,
+                color: "var(--color-text-secondary)",
+              }}
+            >
               Most platforms take your data and keep it. Amach inverts that —
               your data is encrypted before it leaves your device, stored on
               infrastructure you control, and readable only by you and the AI
@@ -693,19 +819,58 @@ const MainPage: React.FC = (): JSX.Element => {
             {/* Apple Health / Wearables */}
             <div
               className="amach-card-surface"
-              style={{ padding: "28px 24px", display: "flex", flexDirection: "column", gap: 14 }}
+              style={{
+                padding: "28px 24px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 14,
+              }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
                 <span style={{ fontSize: "22px" }}>⌚</span>
-                <span className="status-pill" style={{ background: "rgba(0,107,79,0.10)", color: "var(--color-emerald)" }}>
-                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--color-emerald)", flexShrink: 0 }} />
+                <span
+                  className="status-pill"
+                  style={{
+                    background: "rgba(0,107,79,0.10)",
+                    color: "var(--color-emerald)",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 5,
+                      height: 5,
+                      borderRadius: "50%",
+                      background: "var(--color-emerald)",
+                      flexShrink: 0,
+                    }}
+                  />
                   Live sync
                 </span>
               </div>
-              <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
+              <h3
+                style={{
+                  fontSize: "1rem",
+                  fontWeight: 700,
+                  color: "var(--color-text-primary)",
+                  margin: 0,
+                }}
+              >
                 Wearables &amp; Apple Health
               </h3>
-              <p style={{ fontSize: "0.875rem", lineHeight: 1.65, color: "var(--color-text-secondary)", margin: 0 }}>
+              <p
+                style={{
+                  fontSize: "0.875rem",
+                  lineHeight: 1.65,
+                  color: "var(--color-text-secondary)",
+                  margin: 0,
+                }}
+              >
                 Steps, VO₂ max, resting heart rate, HRV, active energy, sleep
                 stages, and respiratory rate. Streamed continuously and stored
                 encrypted. Luma reads months of this data at once to surface
@@ -716,66 +881,160 @@ const MainPage: React.FC = (): JSX.Element => {
             {/* Bloodwork */}
             <div
               className="amach-card-surface"
-              style={{ padding: "28px 24px", display: "flex", flexDirection: "column", gap: 14 }}
+              style={{
+                padding: "28px 24px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 14,
+              }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
                 <span style={{ fontSize: "22px" }}>🩸</span>
-                <span className="status-pill" style={{ background: "var(--color-amber-muted)", color: "var(--color-amber)" }}>
+                <span
+                  className="status-pill"
+                  style={{
+                    background: "var(--color-amber-muted)",
+                    color: "var(--color-amber)",
+                  }}
+                >
                   Upload PDF
                 </span>
               </div>
-              <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
+              <h3
+                style={{
+                  fontSize: "1rem",
+                  fontWeight: 700,
+                  color: "var(--color-text-primary)",
+                  margin: 0,
+                }}
+              >
                 Bloodwork &amp; Labs
               </h3>
-              <p style={{ fontSize: "0.875rem", lineHeight: 1.65, color: "var(--color-text-secondary)", margin: 0 }}>
+              <p
+                style={{
+                  fontSize: "0.875rem",
+                  lineHeight: 1.65,
+                  color: "var(--color-text-secondary)",
+                  margin: 0,
+                }}
+              >
                 Upload your lab reports directly. Amach parses CBC, metabolic
-                panel, lipids, thyroid, hormones, and inflammation markers.
-                Luma cross-references your results with your wearable data to
-                find the connections your GP doesn&apos;t have time to draw.
+                panel, lipids, thyroid, hormones, and inflammation markers. Luma
+                cross-references your results with your wearable data to find
+                the connections your GP doesn&apos;t have time to draw.
               </p>
             </div>
 
             {/* DEXA */}
             <div
               className="amach-card-surface"
-              style={{ padding: "28px 24px", display: "flex", flexDirection: "column", gap: 14 }}
+              style={{
+                padding: "28px 24px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 14,
+              }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
                 <span style={{ fontSize: "22px" }}>🦴</span>
-                <span className="status-pill" style={{ background: "var(--color-amber-muted)", color: "var(--color-amber)" }}>
+                <span
+                  className="status-pill"
+                  style={{
+                    background: "var(--color-amber-muted)",
+                    color: "var(--color-amber)",
+                  }}
+                >
                   Upload PDF
                 </span>
               </div>
-              <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
+              <h3
+                style={{
+                  fontSize: "1rem",
+                  fontWeight: 700,
+                  color: "var(--color-text-primary)",
+                  margin: 0,
+                }}
+              >
                 DEXA Scan
               </h3>
-              <p style={{ fontSize: "0.875rem", lineHeight: 1.65, color: "var(--color-text-secondary)", margin: 0 }}>
-                Body composition at the segment level: lean mass, fat mass,
-                and bone density by region. Luma tracks your scans over time
-                and contextualises changes against your training load, diet
-                signals, and bloodwork for a complete recomposition picture.
+              <p
+                style={{
+                  fontSize: "0.875rem",
+                  lineHeight: 1.65,
+                  color: "var(--color-text-secondary)",
+                  margin: 0,
+                }}
+              >
+                Body composition at the segment level: lean mass, fat mass, and
+                bone density by region. Luma tracks your scans over time and
+                contextualises changes against your training load, diet signals,
+                and bloodwork for a complete recomposition picture.
               </p>
             </div>
 
             {/* CGM */}
             <div
               className="amach-card-surface"
-              style={{ padding: "28px 24px", display: "flex", flexDirection: "column", gap: 14, opacity: 0.7 }}
+              style={{
+                padding: "28px 24px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 14,
+                opacity: 0.7,
+              }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
                 <span style={{ fontSize: "22px" }}>📈</span>
-                <span className="status-pill" style={{ background: "rgba(100,100,100,0.07)", color: "var(--color-text-muted)" }}>
+                <span
+                  className="status-pill"
+                  style={{
+                    background: "rgba(100,100,100,0.07)",
+                    color: "var(--color-text-muted)",
+                  }}
+                >
                   Coming soon
                 </span>
               </div>
-              <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
+              <h3
+                style={{
+                  fontSize: "1rem",
+                  fontWeight: 700,
+                  color: "var(--color-text-primary)",
+                  margin: 0,
+                }}
+              >
                 Continuous Glucose
               </h3>
-              <p style={{ fontSize: "0.875rem", lineHeight: 1.65, color: "var(--color-text-secondary)", margin: 0 }}>
+              <p
+                style={{
+                  fontSize: "0.875rem",
+                  lineHeight: 1.65,
+                  color: "var(--color-text-secondary)",
+                  margin: 0,
+                }}
+              >
                 CGM integration (Dexcom, Libre) to bring real-time glucose
                 variability into the picture. Luma will correlate your glucose
-                curves with sleep quality, exercise timing, and meal patterns
-                to give you personalised metabolic feedback.
+                curves with sleep quality, exercise timing, and meal patterns to
+                give you personalised metabolic feedback.
               </p>
             </div>
           </div>
@@ -791,18 +1050,57 @@ const MainPage: React.FC = (): JSX.Element => {
             }}
           >
             {[
-              { icon: "🔐", label: "AES-256 encrypted", detail: "Before it leaves your device" },
-              { icon: "⛓", label: "On-chain verification", detail: "ZKsync Era, tamper-evident" },
-              { icon: "🗄️", label: "Decentralised storage", detail: "Storj, no single point of control" },
-              { icon: "🔑", label: "Your keys only", detail: "Wallet-derived, no Amach access" },
+              {
+                icon: "🔐",
+                label: "AES-256 encrypted",
+                detail: "Before it leaves your device",
+              },
+              {
+                icon: "⛓",
+                label: "On-chain verification",
+                detail: "ZKsync Era, tamper-evident",
+              },
+              {
+                icon: "🗄️",
+                label: "Decentralised storage",
+                detail: "Storj, no single point of control",
+              },
+              {
+                icon: "🔑",
+                label: "Your keys only",
+                detail: "Wallet-derived, no Amach access",
+              },
             ].map((item) => (
-              <div key={item.label} style={{ display: "flex", alignItems: "flex-start", gap: 12, flex: "1 1 180px" }}>
-                <span style={{ fontSize: "18px", marginTop: 1 }}>{item.icon}</span>
+              <div
+                key={item.label}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 12,
+                  flex: "1 1 180px",
+                }}
+              >
+                <span style={{ fontSize: "18px", marginTop: 1 }}>
+                  {item.icon}
+                </span>
                 <div>
-                  <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", margin: "0 0 2px" }}>
+                  <p
+                    style={{
+                      fontSize: "0.875rem",
+                      fontWeight: 600,
+                      color: "var(--color-text-primary)",
+                      margin: "0 0 2px",
+                    }}
+                  >
                     {item.label}
                   </p>
-                  <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", margin: 0 }}>
+                  <p
+                    style={{
+                      fontSize: "0.8rem",
+                      color: "var(--color-text-muted)",
+                      margin: 0,
+                    }}
+                  >
                     {item.detail}
                   </p>
                 </div>
@@ -823,7 +1121,14 @@ const MainPage: React.FC = (): JSX.Element => {
           textAlign: "center",
         }}
       >
-        <div style={{ maxWidth: 560, margin: "0 auto", position: "relative", zIndex: 1 }}>
+        <div
+          style={{
+            maxWidth: 560,
+            margin: "0 auto",
+            position: "relative",
+            zIndex: 1,
+          }}
+        >
           <h2
             style={{
               fontSize: "clamp(1.75rem, 4vw, 2.75rem)",
@@ -834,15 +1139,24 @@ const MainPage: React.FC = (): JSX.Element => {
               letterSpacing: "-0.02em",
             }}
           >
-            Own your data.<br />
-            Keep the value.<br />
+            Own your data.
+            <br />
+            Keep the value.
+            <br />
             Read the signals.
           </h2>
 
           <button
             className="btn-emerald"
-            style={{ fontSize: "1.05rem", padding: "16px 40px", marginBottom: 20 }}
-            onClick={() => window.location.href = "mailto:amachhealth@gmail.com?subject=Early Protocol Access"}
+            style={{
+              fontSize: "1.05rem",
+              padding: "16px 40px",
+              marginBottom: 20,
+            }}
+            onClick={() =>
+              (window.location.href =
+                "mailto:amachhealth@gmail.com?subject=Early Protocol Access")
+            }
           >
             Request Early Access
           </button>
@@ -868,7 +1182,13 @@ const MainPage: React.FC = (): JSX.Element => {
           background: "var(--color-bg-surface)",
         }}
       >
-        <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", margin: 0 }}>
+        <p
+          style={{
+            fontSize: "0.8rem",
+            color: "var(--color-text-muted)",
+            margin: 0,
+          }}
+        >
           © 2025 Amach Health · Own your data. Keep the value. Read the signals.
         </p>
       </footer>

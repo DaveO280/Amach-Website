@@ -185,15 +185,15 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
   const [steps, setSteps] = useState<WizardStep[]>([
     {
       id: "email-verification",
-      title: "Verify email",
-      description: "Check if your email is approved",
+      title: "Verify Your Email",
+      description: "Check if your email is whitelisted",
       status: "active",
       icon: <Mail className="h-5 w-5" />,
-      helpText: "Your email must be approved to participate in the beta.",
+      helpText: "Your email must be whitelisted to participate in the beta.",
     },
     {
       id: "create-wallet",
-      title: "Connect wallet",
+      title: "Create Your Health Wallet",
       description: "Sign in with Google, Apple, or Email",
       status: "pending",
       icon: <Wallet className="h-5 w-5" />,
@@ -201,16 +201,17 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     },
     {
       id: "deployer-funding",
-      title: "Register vault",
-      description: "Registering your vault on ZKsync Era",
+      title: "Deploying Wallet & Adding Funds",
+      description:
+        "Deploying your wallet to blockchain and adding starter funds",
       status: "pending",
       icon: <Coins className="h-5 w-5" />,
       helpText:
-        "This is free! We're registering your vault on ZKsync Era — one-time only, takes under a minute.",
+        "This is free! We're deploying your wallet to the blockchain and adding starter funds (~10 seconds).",
     },
     {
       id: "create-profile",
-      title: "Build your profile",
+      title: "Create Your Health Profile",
       description: "Enter your health information",
       status: "pending",
       icon: <User className="h-5 w-5" />,
@@ -219,7 +220,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     },
     {
       id: "verify-profile",
-      title: "Verify on-chain",
+      title: "Verify Your Profile",
       description: "Confirm your profile on the blockchain",
       status: "pending",
       icon: <Shield className="h-5 w-5" />,
@@ -227,12 +228,13 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     },
     {
       id: "claim-tokens",
-      title: "Claim access",
-      description: "Unlock founding member access to the platform",
+      title: "Claim Your Beta Testing Tokens",
+      description:
+        "Receive 1,000 testnet AHP tokens to explore the platform (testing purposes only)",
       status: "pending",
       icon: <Gift className="h-5 w-5" />,
       helpText:
-        "You're among the founding members who get early access to the full platform.",
+        "These test tokens let you explore all platform features during the beta phase.",
     },
   ]);
 
@@ -665,7 +667,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
       if (!canProceed) {
         throw new Error(
-          "Email is not approved. Please contact an administrator.",
+          "Email is not whitelisted. Please contact an administrator.",
         );
       }
 
@@ -1305,7 +1307,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         return (
           <Button
             onClick={() => onComplete()}
-            className="w-full py-6 bg-[#006B4F] hover:bg-[#005440] text-white shadow-lg"
+            className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
           >
             <CheckCircle className="h-5 w-5 mr-2" />
             Complete Setup
@@ -1314,7 +1316,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
       }
       // For other steps, show completion indicator
       return (
-        <div className="flex items-center justify-center text-[#006B4F] py-4">
+        <div className="flex items-center justify-center text-emerald-600 py-4">
           <CheckCircle className="h-6 w-6 mr-2" />
           <span className="font-semibold">Complete!</span>
         </div>
@@ -1323,7 +1325,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
     if (step.status === "loading") {
       return (
-        <Button disabled className="w-full py-6 bg-[#006B4F]">
+        <Button disabled className="w-full py-6 bg-emerald-600">
           <Loader2 className="h-5 w-5 mr-2 animate-spin" />
           {pendingTx
             ? "Waiting for blockchain confirmation..."
@@ -1374,7 +1376,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
             <div>
               <Label
                 htmlFor="email"
-                className="text-sm font-semibold text-[#003d2d]"
+                className="text-sm font-semibold text-emerald-900"
               >
                 Email Address
               </Label>
@@ -1383,14 +1385,14 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your approved email"
+                placeholder="Enter your whitelisted email"
                 className="mt-2"
               />
             </div>
             <Button
               onClick={() => void handleEmailVerification()}
               disabled={!email}
-              className="w-full py-6 bg-[#006B4F] hover:bg-[#005440] text-white shadow-lg disabled:opacity-50"
+              className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg disabled:opacity-50"
             >
               <Mail className="h-5 w-5 mr-2" />
               Verify Email
@@ -1402,7 +1404,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         return (
           <Button
             onClick={() => void handleCreateWallet()}
-            className="w-full py-6 bg-[#006B4F] hover:bg-[#005440] text-white shadow-lg"
+            className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
           >
             <Wallet className="h-5 w-5 mr-2" />
             Create Wallet
@@ -1416,7 +1418,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
               <div>
                 <Label
                   htmlFor="birthDate"
-                  className="text-sm font-semibold text-[#003d2d]"
+                  className="text-sm font-semibold text-emerald-900"
                 >
                   Birth Date
                 </Label>
@@ -1436,7 +1438,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
               <div>
                 <Label
                   htmlFor="sex"
-                  className="text-sm font-semibold text-[#003d2d]"
+                  className="text-sm font-semibold text-emerald-900"
                 >
                   Sex
                 </Label>
@@ -1446,7 +1448,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                   onChange={(e) =>
                     setProfileData((prev) => ({ ...prev, sex: e.target.value }))
                   }
-                  className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#006B4F]"
+                  className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
                   <option value="">Select...</option>
                   <option value="male">Male</option>
@@ -1456,7 +1458,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
               </div>
             </div>
             <div>
-              <Label className="text-sm font-semibold text-[#003d2d] mb-2 block">
+              <Label className="text-sm font-semibold text-emerald-900 mb-2 block">
                 Height
               </Label>
               <div className="grid grid-cols-2 gap-4">
@@ -1487,7 +1489,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
             <div>
               <Label
                 htmlFor="weight"
-                className="text-sm font-semibold text-[#003d2d]"
+                className="text-sm font-semibold text-emerald-900"
               >
                 Weight (lbs)
               </Label>
@@ -1511,7 +1513,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                 !heightInches ||
                 !weightLbs
               }
-              className="w-full py-6 bg-[#006B4F] hover:bg-[#005440] text-white shadow-lg disabled:opacity-50"
+              className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg disabled:opacity-50"
             >
               <User className="h-5 w-5 mr-2" />
               Create Health Profile
@@ -1524,17 +1526,11 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         if (allocationInfo?.hasAllocation) {
           return (
             <div className="space-y-4">
-              <div
-                className="p-4 rounded-lg border"
-                style={{
-                  background: "rgba(0,107,79,0.05)",
-                  borderColor: "rgba(0,107,79,0.15)",
-                }}
-              >
-                <p className="font-medium" style={{ color: "#006B4F" }}>
+              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                <p className="text-emerald-800 font-medium">
                   ✅ Your profile is already verified!
                 </p>
-                <p className="text-[#006B4F] text-sm mt-2">
+                <p className="text-emerald-700 text-sm mt-2">
                   You can proceed to claim your tokens.
                 </p>
               </div>
@@ -1548,7 +1544,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                     setCurrentStepIndex(claimStepIndex);
                   }
                 }}
-                className="w-full py-6 bg-[#006B4F] hover:bg-[#005440] text-white shadow-lg"
+                className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
               >
                 Continue to Token Claim
               </Button>
@@ -1559,21 +1555,14 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         // Not verified yet - show verification button
         return (
           <div className="space-y-4">
-            <div
-              className="p-4 rounded-lg border"
-              style={{
-                background: "rgba(0,107,79,0.07)",
-                borderColor: "rgba(0,107,79,0.18)",
-              }}
-            >
-              <p style={{ color: "#5a7a68" }}>
-                Verify your profile on-chain to unlock your founding member
-                access.
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-blue-800">
+                Verify your profile on the blockchain to claim your tokens.
               </p>
             </div>
             <Button
               onClick={() => void handleVerifyProfile()}
-              className="w-full py-6 bg-[#006B4F] hover:bg-[#005440] text-white shadow-lg"
+              className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
             >
               <Shield className="h-5 w-5 mr-2" />
               Verify Profile
@@ -1586,20 +1575,15 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         if (allocationInfo?.hasClaimed) {
           return (
             <div className="space-y-4">
-              <div
-                className="p-4 rounded-lg border"
-                style={{
-                  background: "rgba(0,107,79,0.05)",
-                  borderColor: "rgba(0,107,79,0.15)",
-                }}
-              >
-                <p className="font-medium" style={{ color: "#006B4F" }}>
-                  ✅ You have already claimed your founding member access!
+              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                <p className="text-emerald-800 font-medium">
+                  ✅ You have already claimed your {allocationInfo.amount}{" "}
+                  testnet AHP tokens!
                 </p>
               </div>
               <Button
                 onClick={() => onComplete()}
-                className="w-full py-6 bg-[#006B4F] hover:bg-[#005440] text-white shadow-lg"
+                className="w-full py-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg"
               >
                 Complete Setup
               </Button>
@@ -1611,17 +1595,11 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         if (allocationInfo && !allocationInfo.hasAllocation) {
           return (
             <div className="space-y-4">
-              <div
-                className="p-4 rounded-lg border"
-                style={{
-                  background: "rgba(0,107,79,0.05)",
-                  borderColor: "rgba(0,107,79,0.15)",
-                }}
-              >
-                <p className="font-medium mb-2" style={{ color: "#006B4F" }}>
+              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                <p className="text-emerald-800 font-medium mb-2">
                   ✅ Profile verification complete!
                 </p>
-                <p className="text-[#006B4F] text-sm">
+                <p className="text-emerald-700 text-sm">
                   Your health profile has been successfully verified on the
                   blockchain.
                 </p>
@@ -1634,7 +1612,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
               </div>
               <Button
                 onClick={() => onComplete()}
-                className="w-full mt-4 py-4 bg-[#006B4F] hover:bg-[#005440] text-white"
+                className="w-full mt-4 py-4 bg-emerald-600 hover:bg-emerald-700 text-white"
               >
                 Complete Setup
               </Button>
@@ -1644,42 +1622,30 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
         return (
           <div className="space-y-4">
-            <div
-              className="p-4 rounded-lg border"
-              style={{
-                background: "rgba(0,107,79,0.05)",
-                borderColor: "rgba(0,107,79,0.15)",
-              }}
-            >
-              <p className="font-medium mb-2" style={{ color: "#006B4F" }}>
+            <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+              <p className="text-emerald-800 font-medium mb-2">
                 ✅ Profile verification complete!
               </p>
-              <p className="text-[#006B4F] text-sm">
+              <p className="text-emerald-700 text-sm">
                 Your health profile has been successfully verified on the
                 blockchain.
               </p>
             </div>
             {allocationInfo && (
-              <div
-                className="p-4 rounded-lg border"
-                style={{
-                  background: "rgba(0,107,79,0.07)",
-                  borderColor: "rgba(0,107,79,0.18)",
-                }}
-              >
-                <p style={{ color: "#5a7a68" }}>
-                  ◈ You qualify for founding member access —{" "}
-                  {allocationInfo.amount} AHP included.
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-blue-800">
+                  🎉 You are eligible for{" "}
+                  <strong>{allocationInfo.amount} testnet AHP tokens</strong>!
                 </p>
               </div>
             )}
             <Button
               onClick={() => void handleClaimTokens()}
               disabled={!allocationInfo}
-              className="w-full py-6 bg-[#006B4F] hover:opacity-90 text-white shadow-lg disabled:opacity-50"
+              className="w-full py-6 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white shadow-lg disabled:opacity-50"
             >
               <Gift className="h-5 w-5 mr-2" />
-              Claim founding member access
+              Claim {allocationInfo?.amount || "1,000"} Testnet AHP Tokens
             </Button>
           </div>
         );
@@ -1725,7 +1691,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
         preventOutsideClose
-        className="max-w-6xl max-h-[90vh] overflow-y-auto p-0 bg-white"
+        className="max-w-6xl max-h-[90vh] overflow-y-auto p-0 bg-gradient-to-br from-amber-50 via-white to-emerald-50"
       >
         <div className="p-6 sm:p-8">
           {/* Pending Transaction Notification */}
@@ -1737,23 +1703,18 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                   Transaction Processing...
                 </div>
                 <div className="text-sm">
-                  Your profile is being anchored on ZKsync Era. This usually
-                  takes under a minute.
+                  Blockchain transactions can take a while. Your transaction is
+                  processing. Please wait...
                 </div>
-                <details className="mt-2">
-                  <summary className="text-xs cursor-pointer text-amber-700 hover:text-amber-900">
-                    View transaction details ↗
-                  </summary>
-                  <div className="text-xs mt-1 font-mono break-all text-amber-700">
-                    {pendingTx.txHash}
-                  </div>
-                </details>
+                <div className="text-xs mt-2 font-mono break-all">
+                  TX: {pendingTx.txHash}
+                </div>
               </AlertDescription>
             </Alert>
           )}
 
           <DialogHeader className="mb-8">
-            <DialogTitle className="text-3xl font-bold text-center text-[#003d2d] font-['Libre_Baskerville']">
+            <DialogTitle className="text-3xl font-bold text-center text-emerald-900">
               Setting Up Your Health Wallet
             </DialogTitle>
             <p className="text-center text-amber-800/80 mt-2 text-lg">
@@ -1766,7 +1727,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
             {/* Left: Progress Steps */}
             <div className="lg:col-span-1 space-y-3">
               <div className="mb-4">
-                <h3 className="text-sm font-semibold text-[#006B4F] uppercase tracking-wide font-['DM_Mono']">
+                <h3 className="text-sm font-semibold text-emerald-900 uppercase tracking-wide">
                   Your Progress
                 </h3>
                 <p className="text-xs text-amber-800/60 mt-1">
@@ -1786,9 +1747,9 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                     onClick={() => isClickable && navigateToStep(index)}
                     className={`flex items-start space-x-3 p-4 rounded-xl transition-all ${
                       step.status === "complete"
-                        ? "bg-[rgba(0,107,79,0.05)] border-2 border-[rgba(0,107,79,0.18)] cursor-pointer hover:bg-[rgba(0,107,79,0.08)] hover:border-[rgba(0,107,79,0.25)]"
+                        ? "bg-emerald-50 border-2 border-emerald-200 cursor-pointer hover:bg-emerald-100 hover:border-emerald-300"
                         : step.status === "active"
-                          ? "bg-white border-2 border-[#006B4F] shadow-md cursor-pointer"
+                          ? "bg-white border-2 border-emerald-400 shadow-md cursor-pointer"
                           : step.status === "loading"
                             ? "bg-amber-50 border-2 border-amber-200 cursor-not-allowed"
                             : step.status === "error"
@@ -1799,9 +1760,9 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                     <div
                       className={`flex-shrink-0 mt-1 p-2 rounded-lg ${
                         step.status === "complete"
-                          ? "bg-[rgba(0,107,79,0.08)]"
+                          ? "bg-emerald-100"
                           : step.status === "active"
-                            ? "bg-[rgba(0,107,79,0.08)]"
+                            ? "bg-emerald-100"
                             : step.status === "loading"
                               ? "bg-amber-100"
                               : step.status === "error"
@@ -1810,13 +1771,13 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                       }`}
                     >
                       {step.status === "complete" ? (
-                        <CheckCircle className="h-5 w-5 text-[#006B4F]" />
+                        <CheckCircle className="h-5 w-5 text-emerald-600" />
                       ) : step.status === "loading" ? (
                         <Loader2 className="h-5 w-5 text-amber-600 animate-spin" />
                       ) : step.status === "error" ? (
                         <AlertCircle className="h-5 w-5 text-red-600" />
                       ) : step.status === "active" ? (
-                        <div className="text-[#006B4F]">{step.icon}</div>
+                        <div className="text-emerald-600">{step.icon}</div>
                       ) : (
                         <div className="text-gray-400">{step.icon}</div>
                       )}
@@ -1825,9 +1786,9 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                       <p
                         className={`text-sm font-semibold ${
                           step.status === "active"
-                            ? "text-[#003d2d]"
+                            ? "text-emerald-900"
                             : step.status === "complete"
-                              ? "text-[#005440]"
+                              ? "text-emerald-800"
                               : step.status === "error"
                                 ? "text-red-900"
                                 : "text-gray-600"
@@ -1846,20 +1807,22 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
             {/* Right: Current Step Details */}
             <div className="lg:col-span-2">
-              <Card className="border-2 border-[rgba(0,107,79,0.18)] shadow-xl bg-white/90 backdrop-blur-sm">
-                <CardHeader className="border-b-2 border-[rgba(0,107,79,0.1)] bg-[rgba(0,107,79,0.03)]">
+              <Card className="border-2 border-emerald-200 shadow-xl bg-white/90 backdrop-blur-sm">
+                <CardHeader className="bg-gradient-to-br from-emerald-50 to-amber-50/30 border-b-2 border-emerald-100">
                   <div className="flex items-center space-x-3 mb-2">
-                    <div className="p-3 bg-[rgba(0,107,79,0.08)] rounded-lg">
+                    <div className="p-3 bg-emerald-100 rounded-lg">
                       {currentStep.status === "loading" ? (
-                        <Loader2 className="h-6 w-6 text-[#006B4F] animate-spin" />
+                        <Loader2 className="h-6 w-6 text-emerald-600 animate-spin" />
                       ) : currentStep.status === "complete" ? (
-                        <CheckCircle className="h-6 w-6 text-[#006B4F]" />
+                        <CheckCircle className="h-6 w-6 text-emerald-600" />
                       ) : (
-                        <div className="text-[#006B4F]">{currentStep.icon}</div>
+                        <div className="text-emerald-600">
+                          {currentStep.icon}
+                        </div>
                       )}
                     </div>
                     <div>
-                      <CardTitle className="text-2xl text-[#003d2d] font-['Libre_Baskerville']">
+                      <CardTitle className="text-2xl text-emerald-900">
                         Step {currentStepIndex + 1} of {steps.length}
                       </CardTitle>
                       <p className="text-sm text-amber-800/80 mt-1">
@@ -1874,9 +1837,9 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                 <CardContent className="pt-6 space-y-6">
                   {/* Help Text */}
                   {currentStep.helpText && (
-                    <Alert className="bg-[rgba(0,107,79,0.05)] border-[rgba(0,107,79,0.15)]">
-                      <AlertCircle className="h-4 w-4 text-[#006B4F]" />
-                      <AlertDescription className="text-sm text-[#003d2d]">
+                    <Alert className="bg-emerald-50 border-emerald-200">
+                      <AlertCircle className="h-4 w-4 text-emerald-600" />
+                      <AlertDescription className="text-sm text-emerald-900">
                         <span className="font-semibold">💡 Tip:</span>{" "}
                         {currentStep.helpText}
                       </AlertDescription>
@@ -1895,11 +1858,11 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
                   {/* Wallet Address Display */}
                   {(walletAddress || address) && (
-                    <div className="bg-[rgba(0,107,79,0.05)] border-2 border-[rgba(0,107,79,0.18)] p-4 rounded-xl">
-                      <p className="text-xs font-semibold text-[#006B4F] mb-2 uppercase tracking-wide">
+                    <div className="bg-emerald-50 border-2 border-emerald-200 p-4 rounded-xl">
+                      <p className="text-xs font-semibold text-emerald-900 mb-2 uppercase tracking-wide">
                         Your Wallet Address
                       </p>
-                      <code className="text-sm font-mono text-[#006B4F] break-all">
+                      <code className="text-sm font-mono text-emerald-700 break-all">
                         {(walletAddress || address || "").slice(0, 20)}...
                         {(walletAddress || address || "").slice(-10)}
                       </code>
@@ -1908,15 +1871,15 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
 
                   {currentStep.id === "deployer-funding" &&
                     deployerFundingTx && (
-                      <div className="bg-[rgba(0,107,79,0.05)] border-2 border-[rgba(0,107,79,0.18)] p-4 rounded-xl">
-                        <p className="text-xs font-semibold text-[#006B4F] mb-2 uppercase tracking-wide">
+                      <div className="bg-emerald-50 border-2 border-emerald-200 p-4 rounded-xl">
+                        <p className="text-xs font-semibold text-emerald-900 mb-2 uppercase tracking-wide">
                           ✓ Funding Transaction
                         </p>
                         <a
                           href={`https://sepolia.explorer.zksync.io/tx/${deployerFundingTx}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm text-[#006B4F] hover:text-[#005440] flex items-center"
+                          className="text-sm text-emerald-600 hover:text-emerald-700 flex items-center"
                         >
                           View on Explorer
                           <ExternalLink className="h-3 w-3 ml-1" />
@@ -1927,33 +1890,24 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                   {currentStep.id === "claim-tokens" &&
                     currentStep.status === "complete" && (
                       <div className="text-center space-y-4 py-6">
-                        <div className="inline-flex items-center justify-center w-20 h-20 bg-[rgba(0,107,79,0.1)] rounded-full shadow-lg">
-                          <Gift className="h-10 w-10 text-[#006B4F]" />
+                        <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-emerald-100 to-emerald-200 rounded-full shadow-lg">
+                          <Gift className="h-10 w-10 text-emerald-600" />
                         </div>
-                        <h3
-                          className="text-2xl font-bold font-['Libre_Baskerville']"
-                          style={{ color: "#006B4F" }}
-                        >
-                          <span style={{ color: "#006B4F" }}>◈</span> Your vault
-                          is ready.
+                        <h3 className="text-2xl font-bold text-emerald-900">
+                          Congratulations! 🎉
                         </h3>
                         <p className="text-amber-800/90 text-lg">
-                          You&apos;re now a founding member.
+                          You&apos;ve claimed your 1,000 testnet AHP tokens!
                         </p>
-                        <div
-                          className="border-2 p-6 rounded-xl"
-                          style={{
-                            background: "rgba(0,107,79,0.05)",
-                            borderColor: "rgba(0,107,79,0.18)",
-                          }}
-                        >
-                          <p
-                            className="text-sm leading-relaxed"
-                            style={{ color: "#006B4F" }}
-                          >
-                            You now have a private, encrypted space for your
-                            health data — anchored on-chain, owned by you,
-                            readable only with your key.
+                        <div className="bg-gradient-to-br from-emerald-50 to-amber-50 border-2 border-emerald-200 p-6 rounded-xl">
+                          <p className="text-sm text-emerald-900 leading-relaxed">
+                            <span className="font-bold">
+                              You&apos;re all set!
+                            </span>{" "}
+                            Your health wallet is ready, your profile is
+                            encrypted and stored, and you&apos;re now a beta
+                            tester for Amach Health. You&apos;ll be recognized
+                            as a founding member when we launch on mainnet!
                           </p>
                         </div>
                       </div>
@@ -1975,9 +1929,9 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                         %
                       </span>
                     </div>
-                    <div className="w-full bg-[rgba(0,107,79,0.1)] rounded-full h-3 overflow-hidden border-2 border-[rgba(0,107,79,0.18)]">
+                    <div className="w-full bg-emerald-100 rounded-full h-3 overflow-hidden border-2 border-emerald-200">
                       <div
-                        className="bg-[#006B4F] h-full rounded-full transition-all duration-500 shadow-inner"
+                        className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-full rounded-full transition-all duration-500 shadow-inner"
                         style={{
                           width: `${(steps.filter((s) => s.status === "complete").length / steps.length) * 100}%`,
                         }}

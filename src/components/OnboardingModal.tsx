@@ -284,13 +284,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             {/* Action buttons */}
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-3 w-full sm:w-auto">
               {activeStep > 0 && (
-                <Button
-                  variant="outline"
+                <button
                   onClick={handleBack}
-                  className="px-6 py-3 sm:py-4 text-base sm:text-lg border-2 order-2 sm:order-1"
+                  className="px-4 py-2 border-2 bg-transparent text-[#006B4F] border-[#006B4F] hover:bg-[rgba(0,107,79,0.06)] rounded-md font-medium transition-colors text-sm order-2 sm:order-1"
                 >
                   ← Back
-                </Button>
+                </button>
               )}
               <Button
                 variant="ghost"

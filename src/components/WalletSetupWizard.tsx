@@ -1972,22 +1972,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                     )}
 
                   {/* Action Button */}
-                  <div className="pt-4 space-y-3">
-                    {renderStepAction()}
-                    {currentStepIndex > 0 && (
-                      <button
-                        onClick={() => {
-                          const prevIndex = currentStepIndex - 1;
-                          setCurrentStepIndex(prevIndex);
-                          updateStepStatus(steps[prevIndex].id, "active");
-                          setError(null);
-                        }}
-                        className="w-full py-4 border-2 bg-transparent text-[#006B4F] border-[#006B4F] hover:bg-[rgba(0,107,79,0.06)] rounded-md font-medium transition-colors"
-                      >
-                        ← Back
-                      </button>
-                    )}
-                  </div>
+                  <div className="pt-4 space-y-3">{renderStepAction()}</div>
 
                   {/* Progress Bar */}
                   <div className="pt-6">

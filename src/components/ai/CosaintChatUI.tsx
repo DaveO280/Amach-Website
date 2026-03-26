@@ -2113,24 +2113,33 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                 />
                 Auto expand on send
               </label>
-              <Button
-                size="sm"
-                variant="outline"
-                className="whitespace-nowrap rounded-full companion-outline-btn"
+              <button
+                type="button"
+                className="whitespace-nowrap rounded-full px-3 h-8 text-xs font-medium"
+                style={{
+                  background: "transparent",
+                  border: "1px solid rgba(0,107,79,0.35)",
+                  color: "#005a42",
+                }}
                 onClick={() => setIsExpanded((prev) => !prev)}
               >
                 {isExpanded ? "Exit expanded view" : "Expand view"}
-              </Button>
+              </button>
             </div>
           </div>
 
           {!isExpanded && (
             <div className="flex flex-col items-start gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <Button
+                <button
                   ref={uploadFileButtonRef}
-                  size="sm"
-                  className="w-fit rounded-full companion-outline-btn"
+                  type="button"
+                  className="w-fit rounded-full px-3 h-8 text-xs font-medium"
+                  style={{
+                    background: "transparent",
+                    border: "1px solid rgba(0,107,79,0.35)",
+                    color: "#005a42",
+                  }}
                   onClick={() => {
                     setShowFileManager(true);
                     setFileManagerTab("upload");
@@ -2141,7 +2150,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                   }}
                 >
                   Upload File to Context
-                </Button>
+                </button>
 
                 <Button
                   size="sm"

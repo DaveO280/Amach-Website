@@ -1725,8 +1725,20 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
         preventOutsideClose
-        className="max-w-6xl max-h-[90vh] overflow-y-auto p-0 bg-white"
+        className="max-w-6xl max-h-[90vh] overflow-y-auto p-0"
+        style={{
+          background:
+            "linear-gradient(to right bottom, #fffbeb, #ffffff, #ecfdf5)",
+        }}
       >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-white/80 border border-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-white shadow-sm transition-colors"
+        >
+          ×
+        </button>
         <div className="p-6 sm:p-8">
           {/* Pending Transaction Notification */}
           {pendingTx && (
@@ -1960,7 +1972,23 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                     )}
 
                   {/* Action Button */}
-                  <div className="pt-4">{renderStepAction()}</div>
+                  <div className="pt-4 space-y-3">
+                    {renderStepAction()}
+                    {currentStepIndex > 0 && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          const prevIndex = currentStepIndex - 1;
+                          setCurrentStepIndex(prevIndex);
+                          updateStepStatus(steps[prevIndex].id, "active");
+                          setError(null);
+                        }}
+                        className="w-full py-4 border-2 bg-transparent text-[#006B4F] border-[#006B4F] hover:bg-[rgba(0,107,79,0.06)]"
+                      >
+                        ← Back
+                      </Button>
+                    )}
+                  </div>
 
                   {/* Progress Bar */}
                   <div className="pt-6">

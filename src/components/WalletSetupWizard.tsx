@@ -1739,7 +1739,7 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
         >
           ×
         </button>
-        <div className="p-6 sm:p-8">
+        <div className="p-6 sm:p-8" data-theme="light">
           {/* Pending Transaction Notification */}
           {pendingTx && (
             <Alert className="mb-6 border-amber-300 bg-amber-50">
@@ -1975,18 +1975,17 @@ export const WalletSetupWizard: React.FC<WalletSetupWizardProps> = ({
                   <div className="pt-4 space-y-3">
                     {renderStepAction()}
                     {currentStepIndex > 0 && (
-                      <Button
-                        variant="outline"
+                      <button
                         onClick={() => {
                           const prevIndex = currentStepIndex - 1;
                           setCurrentStepIndex(prevIndex);
                           updateStepStatus(steps[prevIndex].id, "active");
                           setError(null);
                         }}
-                        className="w-full py-4 border-2 bg-transparent text-[#006B4F] border-[#006B4F] hover:bg-[rgba(0,107,79,0.06)]"
+                        className="w-full py-4 border-2 bg-transparent text-[#006B4F] border-[#006B4F] hover:bg-[rgba(0,107,79,0.06)] rounded-md font-medium transition-colors"
                       >
                         ← Back
-                      </Button>
+                      </button>
                     )}
                   </div>
 

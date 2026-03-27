@@ -32,6 +32,7 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
     "chat",
   );
   const [showWalletBanner, setShowWalletBanner] = useState(true);
+  const [lumaTheme, setLumaTheme] = useState<"light" | "dark">("light");
 
   // Popup state management
   const [showHealthDashboardPopup, setShowHealthDashboardPopup] =
@@ -73,6 +74,27 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
       setShowWalletBanner(false);
     }
   }, []);
+
+  // Sync luma theme with global data-theme attribute
+  useEffect(() => {
+    const checkTheme = (): void => {
+      const globalTheme = document.documentElement.getAttribute("data-theme");
+      setLumaTheme(globalTheme === "dark" ? "dark" : "light");
+    };
+    checkTheme();
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  const toggleLumaTheme = (): void => {
+    const next = lumaTheme === "light" ? "dark" : "light";
+    setLumaTheme(next);
+    localStorage.setItem("luma-theme", next);
+  };
 
   // Check if popups should be shown when modal opens
   useEffect(() => {
@@ -361,207 +383,372 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
 
   if (!props.isOpen) return null;
 
+  // ── Tab definitions ────────────────────────────────────────
+  const tabs: Array<{ id: "chat" | "goals" | "timeline"; label: string }> = [
+    { id: "chat", label: "Chat" },
+    { id: "goals", label: "Goals" },
+    { id: "timeline", label: "Timeline" },
+  ];
+
   return (
-    <div className="fixed inset-0 z-[100] overflow-hidden bg-black/40 backdrop-blur-sm flex justify-center items-center p-2">
+    <div
+      className={`fixed inset-0 z-[200] overflow-hidden flex ${lumaTheme === "dark" ? "luma-dark" : "luma-light"}`}
+      style={{
+        background: "rgba(0,0,0,0.45)",
+        backdropFilter: "blur(6px)",
+        ...(isMobile
+          ? { alignItems: "flex-end" }
+          : { alignItems: "center", justifyContent: "center", padding: 8 }),
+      }}
+    >
+      {/* Gradient border wrapper — only visible in dark mode */}
       <div
-        ref={modalRef}
-        className={`relative w-full rounded-lg shadow-xl overflow-hidden animate-in fade-in duration-300 ${
-          isMobile
-            ? "max-w-full max-h-[95vh]" // Full width on mobile with slight padding
-            : "max-w-[95vw] max-h-[90vh]" // 95% width on desktop
-        }`}
+        className="luma-gradient-border relative w-full"
         style={{
-          background:
-            "linear-gradient(to bottom right, #FFE3B4, #ffffff, #CAF2DD)",
+          ...(isMobile
+            ? {
+                maxWidth: "100%",
+                height: "96dvh",
+                maxHeight: "96dvh",
+                borderRadius: "16px 16px 0 0",
+              }
+            : {
+                maxWidth: "95vw",
+                maxHeight: "90vh",
+                borderRadius: 20,
+              }),
         }}
-        onClick={handleModalClick}
       >
-        {/* Adaptive header structure for both mobile and desktop */}
-        <header className="sticky top-0 z-10 w-full bg-white/90 border-b border-amber-100 backdrop-blur-sm">
-          {/* Title row */}
-          <div className="px-3 py-2 flex items-center justify-between">
-            <h2 className="text-base sm:text-xl font-black text-emerald-900">
-              Amach Health
-            </h2>
-            <div className="flex items-center space-x-2">
+        <div
+          ref={modalRef}
+          className="luma-modal-panel relative w-full h-full overflow-hidden animate-in fade-in duration-300"
+          style={{
+            ...(isMobile
+              ? { borderRadius: "15px 15px 0 0" }
+              : {
+                  borderRadius: 19,
+                  boxShadow: "0 24px 80px rgba(0,0,0,0.18)",
+                }),
+          }}
+          onClick={handleModalClick}
+        >
+          {/* ── Header ──────────────────────────────────────── */}
+          <header className="luma-header">
+            {/* Wordmark — isolation prevents shimmer text-fill leaking */}
+            <div
+              style={{
+                isolation: "isolate",
+                transform: "translateZ(0)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "1px",
+              }}
+            >
+              <span
+                className="amach-wordmark-line"
+                style={{
+                  fontFamily:
+                    "var(--font-serif, 'Libre Baskerville', Georgia, serif)",
+                  fontWeight: 700,
+                  fontSize: "0.95rem",
+                  letterSpacing: "0.18em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Luma
+              </span>
+              <span
+                className="luma-text-muted"
+                style={{
+                  fontSize: "0.65rem",
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                }}
+              >
+                by Amach Health
+              </span>
+            </div>
+
+            {/* Right cluster: theme toggle + close */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {/* Theme toggle */}
+              <button
+                onClick={toggleLumaTheme}
+                aria-label={
+                  lumaTheme === "dark"
+                    ? "Switch to light mode"
+                    : "Switch to dark mode"
+                }
+                className="luma-btn"
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  lineHeight: 1,
+                }}
+              >
+                {lumaTheme === "dark" ? "☀" : "☾"}
+              </button>
+
+              {/* Close */}
               <button
                 onClick={props.onClose}
-                className="rounded-full p-2 text-amber-900 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
-                aria-label="Close dashboard"
+                aria-label="Close"
+                className="luma-btn"
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                }}
               >
-                <X className="h-5 w-5" />
+                <X style={{ width: 16, height: 16 }} />
               </button>
             </div>
-          </div>
-        </header>
+          </header>
 
-        <div
-          className="p-2 sm:p-4 md:p-6 overflow-auto relative"
-          style={{ maxHeight: "calc(90vh - 60px)" }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* File Folder Tab Navigation - Always visible, locked tabs when no wallet */}
-          <div className="flex mb-4 gap-0 w-full border-b border-emerald-200 relative z-10">
-            <button
-              className={`flex-1 px-4 py-2 text-sm sm:text-base font-semibold transition-colors focus:outline-none
-                ${
-                  activeTab === "chat"
-                    ? "bg-white border-x border-t border-emerald-300 rounded-t-lg shadow-sm text-emerald-800 z-20"
-                    : "bg-emerald-50 text-emerald-500 border-b border-r border-emerald-200 z-0"
-                }
-              `}
-              onClick={() => setActiveTab("chat")}
+          {/* ── Body ────────────────────────────────────────── */}
+          <div
+            className="overflow-auto relative"
+            style={{
+              maxHeight: isMobile ? "calc(96dvh - 56px)" : "calc(90vh - 56px)",
+              padding: isMobile ? "12px 10px" : "24px",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* ── Tab Navigation ──────────────────────────── */}
+            <div
+              className="luma-tab-bar"
+              style={{ marginBottom: isMobile ? 14 : 24 }}
             >
-              Chat
-            </button>
-            <div className="flex-1 relative group">
-              <button
-                className={`w-full px-4 py-2 text-sm sm:text-base font-semibold transition-colors focus:outline-none
-                  ${
-                    activeTab === "goals"
-                      ? "bg-white border-x border-t border-emerald-300 rounded-t-lg shadow-sm text-emerald-800 z-20"
-                      : "bg-emerald-50 text-emerald-500 border-b border-r border-emerald-200 z-0"
-                  }
-                  ${!isConnected ? "opacity-50 cursor-not-allowed" : ""}
-                `}
-                onClick={() => isConnected && setActiveTab("goals")}
-                disabled={!isConnected}
-              >
-                Goals
-              </button>
-              {!isConnected && (
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-emerald-900/95 text-white text-xs rounded-md invisible group-hover:visible pointer-events-none whitespace-nowrap z-50">
-                  🔒 Create a wallet to unlock Goals
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 -mb-0.5 border-4 border-transparent border-b-emerald-900/95"></div>
-                </div>
-              )}
-            </div>
-            <div className="flex-1 relative group">
-              <button
-                className={`w-full px-4 py-2 text-sm sm:text-base font-semibold transition-colors focus:outline-none
-                  ${
-                    activeTab === "timeline"
-                      ? "bg-white border-x border-t border-emerald-300 rounded-t-lg shadow-sm text-emerald-800 z-20"
-                      : "bg-emerald-50 text-emerald-500 border-b border-emerald-200 z-0"
-                  }
-                  ${!isConnected ? "opacity-50 cursor-not-allowed" : ""}
-                `}
-                onClick={() => isConnected && setActiveTab("timeline")}
-                disabled={!isConnected}
-              >
-                Timeline
-              </button>
-              {!isConnected && (
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-emerald-900/95 text-white text-xs rounded-md invisible group-hover:visible pointer-events-none whitespace-nowrap z-50">
-                  🔒 Create a wallet to unlock Timeline
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 -mb-0.5 border-4 border-transparent border-b-emerald-900/95"></div>
-                </div>
-              )}
-            </div>
-          </div>
-          {/* Tab Content */}
-          <div className="flex-1 min-h-0 flex flex-col">
-            {activeTab === "chat" ? (
-              <>
-                {/* Wallet Benefits Banner - Only show if not connected and not dismissed */}
-                {!isConnected && showWalletBanner && (
-                  <div className="mb-4 p-4 bg-gradient-to-r from-emerald-50 to-amber-50 rounded-lg border border-emerald-200 shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-emerald-800 mb-2">
-                          💡 Unlock Context-Powered AI
-                        </h4>
-                        <p className="text-sm text-emerald-700 mb-2">
-                          Create a wallet to enable 100% private health data
-                          storage. Your AI insights become more powerful with
-                          your complete health context.
-                        </p>
-                        <a
-                          href="/wallet-benefits"
-                          className="text-sm text-emerald-600 hover:text-emerald-700 underline font-medium"
-                        >
-                          Learn more about wallet benefits →
-                        </a>
-                      </div>
-                      <button
-                        onClick={handleDismissBanner}
-                        className="text-emerald-600 hover:text-emerald-800 transition-colors"
-                        aria-label="Dismiss banner"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Health Stats Section with Toggle */}
-                {hasHealthData && (
-                  <div className="mb-4">
-                    <div
-                      className="flex items-center justify-between cursor-pointer bg-white/60 p-3 rounded-lg shadow-sm mb-2"
-                      onClick={() => setShowStats(!showStats)}
+              {tabs.map(({ id, label }) => {
+                const isActive = activeTab === id;
+                const isLocked = !isConnected && id !== "chat";
+                return (
+                  <div key={id} className="relative group" style={{ flex: 1 }}>
+                    <button
+                      onClick={() => !isLocked && setActiveTab(id)}
+                      disabled={isLocked}
+                      className={
+                        isActive ? "luma-tab-active" : "luma-tab-inactive"
+                      }
+                      style={{
+                        width: "100%",
+                        padding: "10px 20px",
+                        fontFamily: "var(--font-sans)",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        background: "none",
+                        border: "none",
+                        borderBottom: isActive
+                          ? undefined
+                          : "2px solid transparent",
+                        marginBottom: -1,
+                        cursor: isLocked ? "not-allowed" : "pointer",
+                        opacity: isLocked ? 0.45 : 1,
+                        transition: "color 0.15s, border-color 0.15s",
+                      }}
                     >
-                      <h3 className="font-semibold text-emerald-800">
-                        Your Health Overview
-                      </h3>
-                      <button className="text-emerald-600 hover:text-emerald-700">
-                        {showStats ? (
-                          <ChevronUp className="h-5 w-5" />
-                        ) : (
-                          <ChevronDown className="h-5 w-5" />
-                        )}
-                      </button>
-                    </div>
-
-                    {showStats && (
-                      <div className="mb-4 space-y-4">
-                        {/* Health Stats */}
-                        <HealthStatCards />
-
-                        {/* Health Scores and Generate Health Analysis Button */}
-                        <HealthReport />
+                      {label}
+                    </button>
+                    {isLocked && (
+                      <div
+                        className="absolute top-full left-1/2 -translate-x-1/2 mt-2 invisible group-hover:visible pointer-events-none"
+                        style={{
+                          background: "#111827",
+                          color: "#fff",
+                          WebkitTextFillColor: "#fff",
+                          fontSize: "0.75rem",
+                          padding: "6px 12px",
+                          borderRadius: 8,
+                          whiteSpace: "nowrap",
+                          zIndex: 50,
+                        }}
+                      >
+                        Connect a wallet to unlock {label}
                       </div>
                     )}
                   </div>
-                )}
+                );
+              })}
+            </div>
 
-                {/* Health Data Availability Message */}
-                {!hasHealthData && (
-                  <div className="mb-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                    <p className="text-amber-800">
-                      No health data available yet. Process your data in the{" "}
+            {/* ── Tab Content ─────────────────────────────── */}
+            <div className="flex-1 min-h-0 flex flex-col">
+              {activeTab === "chat" ? (
+                <>
+                  {/* Wallet banner */}
+                  {!isConnected && showWalletBanner && (
+                    <div
+                      className="luma-alert"
+                      style={{
+                        marginBottom: isMobile ? 12 : 20,
+                        padding: isMobile ? "10px 14px" : "16px 20px",
+                        borderRadius: 10,
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <p
+                          className="luma-text-body"
+                          style={{
+                            fontWeight: 700,
+                            fontSize: isMobile ? "0.82rem" : "0.9rem",
+                            marginBottom: isMobile ? 2 : 6,
+                          }}
+                        >
+                          Unlock your permanent health vault
+                        </p>
+                        {!isMobile && (
+                          <p
+                            className="luma-text-secondary"
+                            style={{ fontSize: "0.85rem", lineHeight: 1.6 }}
+                          >
+                            Connect a wallet to encrypt and store your data on
+                            Storj, anchor your profile on ZKsync, and access
+                            everything from any device.
+                          </p>
+                        )}
+                        {isMobile && (
+                          <p
+                            className="luma-text-secondary"
+                            style={{ fontSize: "0.78rem", lineHeight: 1.5 }}
+                          >
+                            Storj storage + ZKsync identity + cross-device
+                            access.
+                          </p>
+                        )}
+                      </div>
                       <button
-                        ref={healthDashboardRef}
-                        onClick={() => {
-                          props.onClose();
-                          // Open dashboard modal directly
-                          setTimeout(() => {
-                            setIsDashboardOpen(true);
-                          }, 100);
+                        onClick={handleDismissBanner}
+                        aria-label="Dismiss"
+                        className="luma-text-muted"
+                        style={{
+                          flexShrink: 0,
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: 2,
                         }}
-                        className="text-emerald-600 hover:text-emerald-700 underline font-medium cursor-pointer"
                       >
-                        Health Dashboard
-                      </button>{" "}
-                      for personalized insights.
-                    </p>
-                  </div>
-                )}
-                <AiProvider>
-                  <div className="flex-1 min-h-0 flex flex-col">
-                    <CosaintChatUI uploadFileButtonRef={uploadFileRef} />
-                  </div>
-                </AiProvider>
-              </>
-            ) : activeTab === "goals" ? (
-              <div className="flex-1 min-h-0 flex flex-col">
-                <GoalsTab />
-              </div>
-            ) : (
-              <div className="flex-1 min-h-0 flex flex-col">
-                <HealthTimelineTab />
-              </div>
-            )}
+                        <X style={{ width: 14, height: 14 }} />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Health stats */}
+                  {hasHealthData && (
+                    <div style={{ marginBottom: isMobile ? 10 : 16 }}>
+                      <button
+                        onClick={() => setShowStats(!showStats)}
+                        className="luma-btn"
+                        style={{
+                          width: "100%",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: isMobile ? "8px 12px" : "10px 14px",
+                          borderRadius: 10,
+                          marginBottom: showStats ? (isMobile ? 8 : 12) : 0,
+                          cursor: "pointer",
+                          fontWeight: 600,
+                          fontSize: isMobile ? "0.8rem" : "0.88rem",
+                        }}
+                      >
+                        <span>Your Health Overview</span>
+                        {showStats ? (
+                          <ChevronUp style={{ width: 16, height: 16 }} />
+                        ) : (
+                          <ChevronDown style={{ width: 16, height: 16 }} />
+                        )}
+                      </button>
+
+                      {showStats && (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 12,
+                          }}
+                        >
+                          <HealthStatCards />
+                          <HealthReport />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* No health data nudge */}
+                  {!hasHealthData && (
+                    <div
+                      className="luma-alert"
+                      style={{
+                        marginBottom: isMobile ? 8 : 12,
+                        padding: isMobile ? "5px 10px" : "6px 12px",
+                        borderRadius: "0 6px 6px 0",
+                      }}
+                    >
+                      <p
+                        className="luma-text-secondary"
+                        style={{
+                          fontSize: isMobile ? "0.82rem" : "0.88rem",
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        No health data yet. Open the{" "}
+                        <button
+                          ref={healthDashboardRef}
+                          onClick={() => {
+                            props.onClose();
+                            setTimeout(() => {
+                              setIsDashboardOpen(true);
+                            }, 100);
+                          }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            color: "var(--color-emerald)",
+                            fontWeight: 600,
+                            fontSize: "inherit",
+                            cursor: "pointer",
+                            textDecoration: "underline",
+                          }}
+                        >
+                          Health Dashboard
+                        </button>{" "}
+                        to import your Apple Health export or upload lab
+                        results.
+                      </p>
+                    </div>
+                  )}
+
+                  <AiProvider>
+                    <div className="flex-1 min-h-0 flex flex-col">
+                      <CosaintChatUI uploadFileButtonRef={uploadFileRef} />
+                    </div>
+                  </AiProvider>
+                </>
+              ) : activeTab === "goals" ? (
+                <div className="flex-1 min-h-0 flex flex-col">
+                  <GoalsTab />
+                </div>
+              ) : (
+                <div className="flex-1 min-h-0 flex flex-col">
+                  <HealthTimelineTab />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -597,21 +784,18 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
         onClose={handleHealthDashboardPopupClose}
         onDontShowAgain={handleHealthDashboardDontShowAgain}
         targetElementRef={healthDashboardRef}
-        title="📊 Add Your Health Data"
+        title="Import your health data"
         position="bottom"
         content={
           <div>
-            <p className="mb-2">
-              Add your Apple Health data in the{" "}
-              <strong>Health Dashboard</strong> to get personalized AI insights.
+            <p style={{ marginBottom: 8, lineHeight: 1.6 }}>
+              Export your Apple Health archive and upload it in the{" "}
+              <strong>Health Dashboard</strong> to get personalised insights
+              from Luma.
             </p>
-            <p className="mb-2">
-              <strong>🔒 Your data is completely private</strong> - it&apos;s
-              stored locally in your browser and never leaves your device.
-            </p>
-            <p className="text-xs text-amber-700 font-medium">
-              ⚠️ Please don&apos;t use this feature on a public or shared
-              computer.
+            <p style={{ lineHeight: 1.6 }}>
+              Your data is encrypted before it leaves your device and stored
+              permanently on Storj. Only your wallet can decrypt it.
             </p>
           </div>
         }
@@ -623,16 +807,14 @@ const AiCompanionModal: React.FC<AiCompanionModalProps> = (props) => {
         onClose={() => setShowUploadFilePopup(false)}
         onDontShowAgain={handleUploadFileDontShowAgain}
         targetElementRef={uploadFileRef}
-        title="📁 Upload Files for Context"
+        title="Add documents for context"
         position="bottom"
         content={
           <div>
-            <p>
-              You can also upload health reports, lab results, or other health
-              documents using the{" "}
-              <strong>&quot;Upload File to Context&quot;</strong> button. This
-              helps the AI provide more personalized insights based on your
-              complete health history.
+            <p style={{ lineHeight: 1.6 }}>
+              Upload PDFs such as lab results, DEXA scans, or doctor notes. Luma
+              reads them alongside your Apple Health data to give you a complete
+              picture.
             </p>
           </div>
         }

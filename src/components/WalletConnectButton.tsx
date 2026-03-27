@@ -65,7 +65,10 @@ const WalletConnectButton: React.FC<WalletConnectButtonProps> = ({
     <div className="wallet-connect-container flex items-center gap-3">
       {/* Basic AI button - always visible */}
       <Button
-        className="bg-emerald-600 hover:bg-emerald-700 text-white transition-all duration-300 hover:scale-105 px-6 leading-tight whitespace-nowrap"
+        className="text-white transition-all duration-300 hover:scale-105 px-6 whitespace-nowrap rounded-full"
+        style={{ backgroundColor: "var(--color-emerald, #006B4F)" }}
+        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#004D38"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--color-emerald, #006B4F)"; }}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -74,17 +77,14 @@ const WalletConnectButton: React.FC<WalletConnectButtonProps> = ({
           }
         }}
       >
-        <span className="flex flex-col items-center">
-          <span className="whitespace-nowrap">Try Our</span>
-          <span>AI</span>
-        </span>
+        Chat with Luma
       </Button>
 
       {/* Wallet connection/dropdown */}
       {!isConnected ? (
         <Button
           variant="outline"
-          className="text-amber-900 hover:text-emerald-600 border-amber-300 hover:border-emerald-600"
+          className="text-amber-900 hover:text-emerald-600 border-amber-300 hover:border-emerald-600 rounded-full"
           onClick={handleConnect}
         >
           <Wallet className="h-4 w-4 mr-2" />
@@ -94,7 +94,7 @@ const WalletConnectButton: React.FC<WalletConnectButtonProps> = ({
         <div className="relative">
           <Button
             variant="outline"
-            className="text-amber-900 hover:text-emerald-600 border-amber-300 hover:border-emerald-600"
+            className="text-amber-900 hover:text-emerald-600 border-amber-300 hover:border-emerald-600 rounded-full"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
           >
             <Wallet className="h-4 w-4 mr-2" />

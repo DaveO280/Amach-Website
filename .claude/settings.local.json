@@ -31,7 +31,9 @@
       "Bash(curl:*)",
       "Bash(powershell -Command \"Start-Process npm -ArgumentList ''run'',''dev'' -WindowStyle Hidden\")",
       "Bash(npx tsx:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(pnpm install:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

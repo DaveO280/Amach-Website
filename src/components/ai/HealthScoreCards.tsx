@@ -1,7 +1,6 @@
 "use client";
 
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { HealthScore } from "@/types/HealthContext";
 import {
   getScoreTrends,
@@ -19,6 +18,9 @@ import {
   Zap,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+
+const cardClass =
+  "rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)]";
 
 export function HealthScoreCards(): JSX.Element {
   const { healthScores } = useHealthDataContext();
@@ -130,7 +132,7 @@ export function HealthScoreCards(): JSX.Element {
   }): JSX.Element | null => {
     if (!scoreTrends || loadingTrends) {
       return (
-        <div className="text-xs text-gray-400 mt-2">
+        <div className="text-xs text-[#6B8C7A] mt-2">
           {loadingTrends ? "Loading trends..." : "No trend data"}
         </div>
       );
@@ -148,7 +150,7 @@ export function HealthScoreCards(): JSX.Element {
         isNaN(trend) ||
         isNaN(overallScore)
       ) {
-        return <Minus className="h-3 w-3 text-gray-400" />;
+        return <Minus className="h-3 w-3 text-[#6B8C7A]" />;
       }
       const roundedTrend = Math.round(trend);
       const roundedOverall = Math.round(overallScore);
@@ -158,45 +160,45 @@ export function HealthScoreCards(): JSX.Element {
       if (roundedTrend < roundedOverall) {
         return <TrendingDown className="h-3 w-3 text-red-500" />;
       }
-      return <Minus className="h-3 w-3 text-gray-400" />;
+      return <Minus className="h-3 w-3 text-[#6B8C7A]" />;
     };
 
     return (
       <div className="mt-2 sm:mt-3 space-y-1">
-        <div className="text-xs text-gray-600 font-medium mb-1">Trends:</div>
+        <div className="text-xs text-[#6B8C7A] font-medium mb-1">Trends:</div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 text-xs">
-          <div className="flex items-center justify-between bg-gray-50 px-1.5 sm:px-2 py-1.5 sm:py-1 rounded">
-            <span className="text-gray-600 text-[10px] sm:text-xs">7d</span>
+          <div className="flex items-center justify-between bg-[rgba(0,107,79,0.05)] dark:bg-[rgba(0,107,79,0.08)] px-1.5 sm:px-2 py-1.5 sm:py-1 rounded">
+            <span className="text-[#6B8C7A] text-[10px] sm:text-xs">7d</span>
             <div className="flex items-center gap-0.5 sm:gap-1">
               {getTrendIcon(trends.last7Days)}
-              <span className="font-medium text-[10px] sm:text-xs">
+              <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3] text-[10px] sm:text-xs">
                 {trends.last7Days}
               </span>
             </div>
           </div>
-          <div className="flex items-center justify-between bg-gray-50 px-1.5 sm:px-2 py-1.5 sm:py-1 rounded">
-            <span className="text-gray-600 text-[10px] sm:text-xs">30d</span>
+          <div className="flex items-center justify-between bg-[rgba(0,107,79,0.05)] dark:bg-[rgba(0,107,79,0.08)] px-1.5 sm:px-2 py-1.5 sm:py-1 rounded">
+            <span className="text-[#6B8C7A] text-[10px] sm:text-xs">30d</span>
             <div className="flex items-center gap-0.5 sm:gap-1">
               {getTrendIcon(trends.last30Days)}
-              <span className="font-medium text-[10px] sm:text-xs">
+              <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3] text-[10px] sm:text-xs">
                 {trends.last30Days}
               </span>
             </div>
           </div>
-          <div className="flex items-center justify-between bg-gray-50 px-1.5 sm:px-2 py-1.5 sm:py-1 rounded">
-            <span className="text-gray-600 text-[10px] sm:text-xs">3m</span>
+          <div className="flex items-center justify-between bg-[rgba(0,107,79,0.05)] dark:bg-[rgba(0,107,79,0.08)] px-1.5 sm:px-2 py-1.5 sm:py-1 rounded">
+            <span className="text-[#6B8C7A] text-[10px] sm:text-xs">3m</span>
             <div className="flex items-center gap-0.5 sm:gap-1">
               {getTrendIcon(trends.last3Months)}
-              <span className="font-medium text-[10px] sm:text-xs">
+              <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3] text-[10px] sm:text-xs">
                 {trends.last3Months}
               </span>
             </div>
           </div>
-          <div className="flex items-center justify-between bg-gray-50 px-1.5 sm:px-2 py-1.5 sm:py-1 rounded">
-            <span className="text-gray-600 text-[10px] sm:text-xs">6m</span>
+          <div className="flex items-center justify-between bg-[rgba(0,107,79,0.05)] dark:bg-[rgba(0,107,79,0.08)] px-1.5 sm:px-2 py-1.5 sm:py-1 rounded">
+            <span className="text-[#6B8C7A] text-[10px] sm:text-xs">6m</span>
             <div className="flex items-center gap-0.5 sm:gap-1">
               {getTrendIcon(trends.last6Months)}
-              <span className="font-medium text-[10px] sm:text-xs">
+              <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3] text-[10px] sm:text-xs">
                 {trends.last6Months}
               </span>
             </div>
@@ -210,27 +212,27 @@ export function HealthScoreCards(): JSX.Element {
     <div className="flex flex-col md:flex-row gap-4">
       {/* Overall Score Card */}
       <div className="relative flex-1 min-w-0">
-        <Card
-          className="hover:shadow-lg transition-shadow"
+        <div
+          className={`${cardClass} hover:shadow-lg transition-shadow p-5`}
           onMouseEnter={() => handleMetricHover("overall")}
           onMouseLeave={handleMetricLeave}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base sm:text-lg font-medium text-emerald-800">
+          <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <h3 className="text-base sm:text-lg font-medium text-emerald-800 dark:text-[#4ade80]">
               Overall Health Score
-            </CardTitle>
-            <Scale className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-800" />
-          </CardHeader>
-          <CardContent className="flex flex-col items-center justify-center h-full">
-            <div className="text-5xl sm:text-6xl md:text-7xl font-bold text-emerald-800">
+            </h3>
+            <Scale className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-800 dark:text-[#4ade80]" />
+          </div>
+          <div className="flex flex-col items-center justify-center h-full">
+            <div className="text-5xl sm:text-6xl md:text-7xl font-bold text-emerald-800 dark:text-[#4ade80]">
               {overall}
             </div>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-2">
+            <p className="text-xs sm:text-sm text-[#6B8C7A] mt-2">
               {getScoreLabel(overall)}
             </p>
             <TrendDisplay scoreType="overall" />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
         {showTooltip && selectedMetric === "overall" && (
           <div
             ref={tooltipRef}
@@ -238,11 +240,11 @@ export function HealthScoreCards(): JSX.Element {
             onMouseEnter={() => handleMetricHover("overall")}
             onMouseLeave={handleMetricLeave}
           >
-            <div className="bg-white p-4 rounded-lg shadow-lg max-w-md transform transition-all duration-200 ease-in-out">
-              <h3 className="text-lg font-medium text-emerald-800 capitalize mb-2">
+            <div className="bg-white dark:bg-[#0B140F] p-4 rounded-lg shadow-lg max-w-md transform transition-all duration-200 ease-in-out border border-[rgba(0,107,79,0.15)]">
+              <h3 className="text-lg font-medium text-emerald-800 dark:text-[#4ade80] capitalize mb-2">
                 {selectedMetric} Score Formula
               </h3>
-              <p className="text-sm whitespace-pre-line">
+              <p className="text-sm text-[#0A1A0F] dark:text-[#F0F7F3] whitespace-pre-line">
                 {getMetricFormula(selectedMetric)}
               </p>
             </div>
@@ -254,27 +256,27 @@ export function HealthScoreCards(): JSX.Element {
       <div className="grid grid-cols-2 gap-4 w-full md:w-1/2">
         {Object.entries(componentScores).map(([key, value]) => (
           <div key={key} className="relative">
-            <Card
-              className="hover:shadow-lg transition-shadow"
+            <div
+              className={`${cardClass} hover:shadow-lg transition-shadow p-5`}
               onMouseEnter={() => handleMetricHover(key)}
               onMouseLeave={handleMetricLeave}
             >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-xs sm:text-sm font-medium capitalize text-emerald-800">
+              <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <h3 className="text-xs sm:text-sm font-medium capitalize text-emerald-800 dark:text-[#4ade80]">
                   {key}
-                </CardTitle>
+                </h3>
                 {getScoreIcon(key)}
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl sm:text-3xl font-bold text-center text-emerald-800">
+              </div>
+              <div>
+                <div className="text-2xl sm:text-3xl font-bold text-center text-emerald-800 dark:text-[#4ade80]">
                   {typeof value === "number" ? value : 0}
                 </div>
-                <p className="text-xs text-muted-foreground text-center mt-1 sm:mt-2">
+                <p className="text-xs text-[#6B8C7A] text-center mt-1 sm:mt-2">
                   {getScoreLabel(Number(value))}
                 </p>
                 <TrendDisplay scoreType={key} />
-              </CardContent>
-            </Card>
+              </div>
+            </div>
             {showTooltip && selectedMetric === key && (
               <div
                 ref={tooltipRef}
@@ -282,11 +284,11 @@ export function HealthScoreCards(): JSX.Element {
                 onMouseEnter={() => handleMetricHover(key)}
                 onMouseLeave={handleMetricLeave}
               >
-                <div className="bg-white p-4 rounded-lg shadow-lg max-w-md transform transition-all duration-200 ease-in-out">
-                  <h3 className="text-lg font-medium text-emerald-800 capitalize mb-2">
+                <div className="bg-white dark:bg-[#0B140F] p-4 rounded-lg shadow-lg max-w-md transform transition-all duration-200 ease-in-out border border-[rgba(0,107,79,0.15)]">
+                  <h3 className="text-lg font-medium text-emerald-800 dark:text-[#4ade80] capitalize mb-2">
                     {selectedMetric} Score Formula
                   </h3>
-                  <p className="text-sm whitespace-pre-line">
+                  <p className="text-sm text-[#0A1A0F] dark:text-[#F0F7F3] whitespace-pre-line">
                     {getMetricFormula(selectedMetric)}
                   </p>
                 </div>

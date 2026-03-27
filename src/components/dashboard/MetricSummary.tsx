@@ -11,7 +11,9 @@ import {
   SleepMetricWithRange,
 } from "@/types/HealthContext";
 import React from "react";
-import { Card, CardContent } from "../ui/card";
+
+const cardClass =
+  "rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] overflow-hidden";
 
 // Update the interface to accept HealthContextMetrics
 interface MetricSummaryProps {
@@ -42,70 +44,70 @@ export const MetricSummary: React.FC<MetricSummaryProps> = React.memo(
           if (key === "sleep") {
             const sleepMetric = m as SleepMetricWithRange;
             return (
-              <Card key={key} className="overflow-hidden">
-                <CardContent className="p-4">
-                  <h3 className="text-lg font-medium mb-2">
+              <div key={key} className={cardClass}>
+                <div className="p-4">
+                  <h3 className="text-lg font-medium mb-2 text-[#0A1A0F] dark:text-[#F0F7F3]">
                     {getMetricLabel(key)}
                   </h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Average:</span>
-                      <span className="font-medium">
+                      <span className="text-[#6B8C7A]">Average:</span>
+                      <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
                         {formatMetricValue("sleep", sleepMetric.average)}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">High:</span>
-                      <span className="font-medium">
+                      <span className="text-[#6B8C7A]">High:</span>
+                      <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
                         {formatMetricValue("sleep", sleepMetric.high)}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Low:</span>
-                      <span className="font-medium">
+                      <span className="text-[#6B8C7A]">Low:</span>
+                      <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
                         {formatMetricValue("sleep", sleepMetric.low)}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Efficiency:</span>
-                      <span className="font-medium">
+                      <span className="text-[#6B8C7A]">Efficiency:</span>
+                      <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
                         {sleepMetric.efficiency}%
                       </span>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             );
           } else {
             const metric = m as HealthMetricWithRange;
             return (
-              <Card key={key} className="overflow-hidden">
-                <CardContent className="p-4">
-                  <h3 className="text-lg font-medium mb-2">
+              <div key={key} className={cardClass}>
+                <div className="p-4">
+                  <h3 className="text-lg font-medium mb-2 text-[#0A1A0F] dark:text-[#F0F7F3]">
                     {getMetricLabel(key)}
                   </h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Average:</span>
-                      <span className="font-medium">
+                      <span className="text-[#6B8C7A]">Average:</span>
+                      <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
                         {metric.average} {getMetricUnit(key)}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">High:</span>
-                      <span className="font-medium">
+                      <span className="text-[#6B8C7A]">High:</span>
+                      <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
                         {metric.high} {getMetricUnit(key)}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Low:</span>
-                      <span className="font-medium">
+                      <span className="text-[#6B8C7A]">Low:</span>
+                      <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
                         {metric.low} {getMetricUnit(key)}
                       </span>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             );
           }
         })}

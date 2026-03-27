@@ -44,7 +44,9 @@ const StatCard: React.FC<StatCardProps> = ({
       <CardContent>
         {title === getMetricLabel("sleep") ? (
           <>
-            <div className="text-2xl font-bold text-emerald-900">{unit}</div>
+            <div className="text-2xl font-bold text-emerald-900 font-mono">
+              {unit}
+            </div>
             {efficiency !== undefined && (
               <p className="text-xs text-emerald-600">
                 Efficiency: {efficiency.toFixed(1)}%
@@ -67,7 +69,7 @@ const StatCard: React.FC<StatCardProps> = ({
           </>
         ) : (
           <>
-            <div className="text-2xl font-bold text-emerald-900">
+            <div className="text-2xl font-bold text-emerald-900 font-mono">
               {formatMetricValue(keyName, average)}
               <span className="text-sm text-emerald-600 ml-1">{unit}</span>
             </div>

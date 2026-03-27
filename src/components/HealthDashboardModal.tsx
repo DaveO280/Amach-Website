@@ -111,32 +111,36 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
   if (!props.isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-hidden bg-black/40 backdrop-blur-sm flex justify-center items-center p-2">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Health Dashboard"
+      className="fixed inset-0 z-[100] overflow-hidden bg-black/40 backdrop-blur-sm flex justify-center items-center p-2"
+    >
       <div
         ref={modalRef}
-        className={`relative w-full rounded-lg shadow-xl overflow-hidden animate-in fade-in duration-300 ${
-          isMobile
-            ? "max-w-full max-h-[95vh]" // Full width on mobile with slight padding
-            : "max-w-[95vw] max-h-[90vh]" // 95% width on desktop
+        className={`relative w-full rounded-lg shadow-xl overflow-hidden animate-in fade-in duration-300 dashboard-modal-bg ${
+          isMobile ? "max-w-full max-h-[95vh]" : "max-w-[95vw] max-h-[90vh]"
         }`}
-        style={{
-          background:
-            "linear-gradient(to bottom right, #FFE3B4, #ffffff, #CAF2DD)",
-        }}
         onClick={handleModalClick}
       >
         {/* Adaptive header structure for both mobile and desktop */}
-        <header className="sticky top-0 z-10 w-full bg-white/90 border-b border-amber-100 backdrop-blur-sm">
+        <header className="sticky top-0 z-10 w-full dashboard-header">
           {/* Title row */}
           <div className="px-3 py-2 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h2 className="text-base sm:text-xl font-black text-emerald-900">
-                Amach Health
+              <h2 className="amach-wordmark-wrap leading-[1.1] gap-[1px]">
+                <span className="amach-wordmark-line text-[13px] sm:text-[16px] tracking-[0.28em]">
+                  Amach
+                </span>
+                <span className="amach-wordmark-line-sub text-[13px] sm:text-[16px] tracking-[0.28em]">
+                  Health
+                </span>
               </h2>
               {isConnected && (
                 <Badge
                   variant="default"
-                  className="bg-emerald-100 text-emerald-700"
+                  className="dashboard-badge-connected border-0"
                 >
                   <Wallet className="h-3 w-3 mr-1" />
                   Connected
@@ -145,7 +149,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
               {healthProfile && (
                 <Badge
                   variant="default"
-                  className="bg-amber-100 text-amber-800"
+                  className="dashboard-badge-chain border-0"
                 >
                   <Shield className="h-3 w-3 mr-1" />
                   Profile On-Chain
@@ -154,7 +158,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
             </div>
             <button
               onClick={props.onClose}
-              className="rounded-full p-2 text-amber-900 hover:text-emerald-600 hover:bg-emerald-50 transition-colors sm:hidden"
+              className="rounded-full p-2 dashboard-close-btn transition-colors sm:hidden"
               aria-label="Close dashboard"
             >
               <X className="h-5 w-5" />
@@ -170,8 +174,8 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
                 onClick={() => handleTabChange("selector")}
                 className={`flex-1 px-3 py-1.5 text-xs sm:text-sm rounded-lg transition-colors ${
                   activeTab === "selector"
-                    ? "bg-[#006B4F] text-white border-b border-[#005540]"
-                    : "bg-white text-[#006B4F] hover:bg-[#E8F5F0] border border-[#006B4F]/30"
+                    ? "bg-[#006B4F] text-white"
+                    : "dashboard-tab-inactive"
                 }`}
               >
                 Data Selector
@@ -180,8 +184,8 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
                 onClick={() => handleTabChange("dashboard")}
                 className={`flex-1 px-3 py-1.5 text-xs sm:text-sm rounded-lg transition-colors ${
                   activeTab === "dashboard"
-                    ? "bg-[#006B4F] text-white border-b border-[#005540]"
-                    : "bg-white text-[#006B4F] hover:bg-[#E8F5F0] border border-[#006B4F]/30"
+                    ? "bg-[#006B4F] text-white"
+                    : "dashboard-tab-inactive"
                 }`}
               >
                 Visualizations
@@ -189,7 +193,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
             </div>
             <button
               onClick={props.onClose}
-              className="absolute right-3 top-2 rounded-full p-2 text-amber-900 hover:text-emerald-600 hover:bg-emerald-50 transition-colors hidden sm:block"
+              className="absolute right-3 top-2 rounded-full p-2 dashboard-close-btn transition-colors hidden sm:block"
               aria-label="Close dashboard"
             >
               <X className="h-5 w-5" />

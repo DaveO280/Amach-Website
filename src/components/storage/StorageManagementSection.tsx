@@ -12,13 +12,6 @@
 
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
@@ -1314,14 +1307,14 @@ export function StorageManagementSection({
   // Loading state
   if (isLoadingKey) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
+      <div className="storage-mgmt rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Database className="h-5 w-5" />
+          <h3 className="font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] text-base">
             Storage Management
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+          </h3>
+        </div>
+        <div>
           <div className="flex items-center justify-center py-8">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto mb-3"></div>
@@ -1333,32 +1326,30 @@ export function StorageManagementSection({
               </p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   // Error state
   if (keyError) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
+      <div className="storage-mgmt rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Database className="h-5 w-5" />
+          <h3 className="font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] text-base">
             Storage Management
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+          </h3>
+        </div>
+        <div>
+          <div className="flex items-center gap-3 p-4 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
             <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
             <div>
               <p className="text-sm font-medium text-red-900">
                 Failed to initialize
               </p>
               <p className="text-xs text-red-700 mt-1">{keyError}</p>
-              <Button
-                size="sm"
-                variant="outline"
+              <button
                 onClick={async () => {
                   setKeyError("");
                   setEncryptionKey(null);
@@ -1381,29 +1372,26 @@ export function StorageManagementSection({
                     setIsLoadingKey(false);
                   }
                 }}
-                className="mt-2"
+                className="mt-3 px-4 py-1.5 text-sm rounded-lg border border-[rgba(0,107,79,0.35)] dark:border-[rgba(74,222,128,0.25)] text-[#006B4F] dark:text-[#4ade80] hover:bg-[rgba(0,107,79,0.07)] bg-transparent transition-colors"
               >
                 Retry
-              </Button>
+              </button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Database className="h-5 w-5" />
+    <div className="storage-mgmt rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Database className="h-5 w-5" />
+        <h3 className="font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] text-base">
           Storage Management
-        </CardTitle>
-        <CardDescription>
-          Manage your encrypted Storj storage and remove old/duplicate data
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </h3>
+      </div>
+      <div className="space-y-4">
         {/* Pruning Controls */}
         <Tabs value={selectedDataType} onValueChange={setSelectedDataType}>
           <TabsList className="grid w-full grid-cols-4">
@@ -1585,25 +1573,25 @@ export function StorageManagementSection({
               </div>
 
               {contextError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{contextError}</p>
                 </div>
               )}
               {contextDeleteError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{contextDeleteError}</p>
                 </div>
               )}
               {contextPreviewError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{contextPreviewError}</p>
                 </div>
               )}
               {chainError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{chainError}</p>
                 </div>
@@ -1802,7 +1790,7 @@ export function StorageManagementSection({
                 </Button>
               </div>
               {chatsError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{chatsError}</p>
                 </div>
@@ -1871,7 +1859,7 @@ export function StorageManagementSection({
                 </Button>
               </div>
               {healthDataError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{healthDataError}</p>
                 </div>
@@ -2089,20 +2077,20 @@ export function StorageManagementSection({
               )}
 
               {testsError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{testsError}</p>
                 </div>
               )}
 
               {deleteError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{deleteError}</p>
                 </div>
               )}
               {chainError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-900">{chainError}</p>
                 </div>
@@ -2231,14 +2219,14 @@ export function StorageManagementSection({
                   </div>
                   {attestStatus && (
                     <div
-                      className={`p-2 text-xs ${attestStatus.startsWith("✅") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}
+                      className={`p-2 text-xs ${attestStatus.startsWith("✅") ? "bg-green-50 text-green-700" : "bg-[rgba(239,68,68,0.08)] text-red-700"}`}
                     >
                       {attestStatus}
                     </div>
                   )}
 
                   {previewError && (
-                    <div className="p-3 text-sm text-red-700 bg-red-50 border-b border-red-200">
+                    <div className="p-3 text-sm text-red-700 bg-[rgba(239,68,68,0.08)] border-b border-[rgba(239,68,68,0.25)]">
                       {previewError}
                     </div>
                   )}
@@ -2257,7 +2245,7 @@ export function StorageManagementSection({
 
         {/* Status Display */}
         {status.error && (
-          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
             <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
             <p className="text-sm text-red-900">{status.error}</p>
           </div>
@@ -2275,7 +2263,7 @@ export function StorageManagementSection({
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

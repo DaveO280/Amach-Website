@@ -3,7 +3,6 @@
 import type { MetricSample } from "@/agents/types";
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { Alert } from "@/components/ui/alert";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { healthDataProcessor } from "@/data/processors/HealthDataProcessor";
 import type { HealthData, HealthDataPoint } from "@/types/healthData";
 import type { DailyProcessedSleepData } from "@/utils/sleepDataProcessor";
@@ -11,14 +10,6 @@ import { Activity, Download, Heart, Lock, Moon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { HealthScoreCards } from "../ai/HealthScoreCards";
 import { HealthScoreTrends } from "../ai/HealthScoreTrends";
-import { Button } from "../ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../ui/card";
 import { MetricSummary } from "./MetricSummary";
 import ActiveEnergyChart from "./charts/ActiveEnergyChart";
 import DistanceChart from "./charts/DistanceChart";
@@ -28,6 +19,9 @@ import HRVChart from "./charts/HRVChart";
 import HeartRateChart from "./charts/HeartRateChart";
 import SleepAnalysisChart from "./charts/SleepAnalysisChart";
 import StepCountChart from "./charts/StepCountChart";
+
+const cardClass =
+  "rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-5";
 
 export const HealthDashboard: () => JSX.Element = () => {
   const [activeTab, setActiveTab] = useState("heart");
@@ -180,51 +174,43 @@ export const HealthDashboard: () => JSX.Element = () => {
   const handleTabChange = useCallback((tab: string) => setActiveTab(tab), []);
 
   if (isLoading || processingState.isProcessing) {
-    // Loading state display...
     return (
-      <div className="min-h-screen bg-[linear-gradient(to_bottom_right,var(--warm-bg)_0%,white_50%,var(--primary-light)_100%)]">
+      <div className="min-h-screen">
         <div className="container mx-auto px-4 py-12">
-          <Card className="w-full border-none shadow-lg bg-transparent backdrop-blur-sm">
-            <CardHeader className="border-b border-amber-50/20">
-              <CardTitle
-                className="text-emerald-900 font-bold"
-                style={{ color: "#006B4F" }}
-              >
+          <div className={`w-full ${cardClass}`}>
+            <div className="mb-4">
+              <h2 className="text-2xl font-bold" style={{ color: "#006B4F" }}>
                 Loading Health Dashboard
-              </CardTitle>
-              <CardDescription className="text-emerald-800">
+              </h2>
+              <p className="text-[#6B8C7A] text-sm mt-1">
                 Please wait while we load your health data...
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="py-8 bg-white/10 backdrop-blur-sm">
+              </p>
+            </div>
+            <div className="py-8">
               <div className="flex justify-center">
                 <div className="animate-pulse-slow rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-600"></div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   if (!metrics) {
-    // No data display...
     return (
-      <div className="min-h-screen bg-[linear-gradient(to_bottom_right,var(--warm-bg)_0%,white_50%,var(--primary-light)_100%)]">
+      <div className="min-h-screen">
         <div className="container mx-auto px-4 py-12">
-          <Card className="w-full border-none shadow-lg bg-transparent backdrop-blur-sm">
-            <CardHeader className="border-b border-amber-50/20">
-              <CardTitle
-                className="text-emerald-900 font-bold"
-                style={{ color: "#006B4F" }}
-              >
+          <div className={`w-full ${cardClass}`}>
+            <div className="mb-4">
+              <h2 className="text-2xl font-bold" style={{ color: "#006B4F" }}>
                 Health Dashboard
-              </CardTitle>
-              <CardDescription className="text-emerald-800 italic">
+              </h2>
+              <p className="text-[#6B8C7A] text-sm mt-1 italic">
                 &quot;Driven by Data, Guided by Nature&quot;
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="py-6 bg-white/10 backdrop-blur-sm">
+              </p>
+            </div>
+            <div className="py-6">
               <Alert className="bg-amber-50/30 border-amber-100 text-amber-900 mt-4">
                 <p>To view your health data visualizations, please:</p>
                 <ol className="list-decimal ml-5 mt-2 space-y-1">
@@ -234,40 +220,48 @@ export const HealthDashboard: () => JSX.Element = () => {
                   <li>Click &quot;Process Data&quot;</li>
                 </ol>
               </Alert>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
+  const tabs: { value: string; label: string; icon: JSX.Element | null }[] = [
+    { value: "heart", label: "Heart", icon: <Heart className="w-4 h-4" /> },
+    {
+      value: "activity",
+      label: "Activity",
+      icon: <Activity className="w-4 h-4" />,
+    },
+    { value: "sleep", label: "Sleep", icon: <Moon className="w-4 h-4" /> },
+    { value: "overview", label: "Overview", icon: null },
+  ];
+
   return (
-    <div className="min-h-screen bg-[linear-gradient(to_bottom_right,var(--warm-bg)_0%,white_50%,var(--primary-light)_100%)]">
+    <div className="min-h-screen">
       <div className="container mx-auto px-4 py-12">
-        {/* Main card with transparent background */}
-        <Card className="w-full mb-6 border-none shadow-lg bg-transparent backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between border-b border-amber-50/20">
+        {/* Main header card */}
+        <div className={`w-full mb-6 ${cardClass}`}>
+          <div className="flex flex-row items-center justify-between border-b border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] pb-4">
             <div>
-              <CardTitle
-                className="text-2xl text-emerald-900 font-bold"
-                style={{ color: "#006B4F" }}
-              >
+              <h2 className="text-2xl font-bold" style={{ color: "#006B4F" }}>
                 Health Dashboard
-              </CardTitle>
-              <CardDescription className="text-emerald-800 italic">
+              </h2>
+              <p className="text-[#6B8C7A] text-sm mt-1 italic">
                 &quot;Driven by Data, Guided by Nature&quot; Health Overview
-              </CardDescription>
+              </p>
             </div>
             <div className="flex items-center space-x-3">
-              <div className="flex items-center text-emerald-800 text-xs px-3 py-1 rounded-full bg-emerald-50/30 border border-emerald-100/30">
+              <div className="flex items-center text-xs px-3 py-1 rounded-full dashboard-lock-badge">
                 <Lock className="w-3 h-3 mr-1" />
                 <span>Data Secured</span>
               </div>
-              <Button
+              <button
                 onClick={() => {
                   // Implement download logic here
                 }}
-                className="bg-emerald-50/30 text-emerald-800 hover:bg-emerald-100/40 border border-emerald-200/30"
+                className="px-4 py-2 rounded-lg border border-[rgba(0,107,79,0.35)] dark:border-[rgba(74,222,128,0.25)] text-[#006B4F] dark:text-[#4ade80] bg-transparent hover:bg-[rgba(0,107,79,0.07)] transition-colors text-sm flex items-center"
                 disabled={isDownloading}
               >
                 {isDownloading ? (
@@ -281,198 +275,169 @@ export const HealthDashboard: () => JSX.Element = () => {
                     Download Summary
                   </>
                 )}
-              </Button>
+              </button>
             </div>
-          </CardHeader>
-        </Card>
-
-        <Tabs
-          defaultValue={activeTab}
-          onValueChange={handleTabChange}
-          className="w-full"
-        >
-          <div className="mb-6 grid grid-cols-4 gap-4">
-            {/* Heart Tab */}
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm p-0 overflow-hidden">
-              <TabsList className="w-full p-0 bg-transparent">
-                <TabsTrigger
-                  value="heart"
-                  className="w-full data-[state=active]:bg-white/20 data-[state=active]:text-emerald-800 data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 py-3"
-                >
-                  <Heart className="w-4 h-4 mr-2" /> Heart
-                </TabsTrigger>
-              </TabsList>
-            </Card>
-
-            {/* Activity Tab */}
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm p-0 overflow-hidden">
-              <TabsList className="w-full p-0 bg-transparent">
-                <TabsTrigger
-                  value="activity"
-                  className="w-full data-[state=active]:bg-white/20 data-[state=active]:text-emerald-800 data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 py-3"
-                >
-                  <Activity className="w-4 h-4 mr-2" /> Activity
-                </TabsTrigger>
-              </TabsList>
-            </Card>
-
-            {/* Sleep Tab */}
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm p-0 overflow-hidden">
-              <TabsList className="w-full p-0 bg-transparent">
-                <TabsTrigger
-                  value="sleep"
-                  className="w-full data-[state=active]:bg-white/20 data-[state=active]:text-emerald-800 data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 py-3"
-                >
-                  <Moon className="w-4 h-4 mr-2" /> Sleep
-                </TabsTrigger>
-              </TabsList>
-            </Card>
-
-            {/* Overview Tab */}
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm p-0 overflow-hidden">
-              <TabsList className="w-full p-0 bg-transparent">
-                <TabsTrigger
-                  value="overview"
-                  className="w-full data-[state=active]:bg-white/20 data-[state=active]:text-emerald-800 data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 py-3"
-                >
-                  Overview
-                </TabsTrigger>
-              </TabsList>
-            </Card>
           </div>
+        </div>
 
-          <TabsContent value="heart" className="space-y-6">
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-              <CardHeader className="border-b border-amber-50/20">
-                <CardTitle className="text-emerald-900 text-xl font-bold">
+        {/* Tab navigation */}
+        <div className="mb-6 grid grid-cols-4 gap-4">
+          {tabs.map(({ value, label, icon }) => (
+            <button
+              key={value}
+              onClick={() => handleTabChange(value)}
+              className={`w-full py-3 rounded-xl border flex items-center justify-center gap-2 text-sm font-medium transition-colors ${
+                activeTab === value
+                  ? "bg-[#006B4F] text-white border-[#004d38]"
+                  : "bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] text-[#6B8C7A] hover:text-[#006B4F]"
+              }`}
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Heart tab content */}
+        {activeTab === "heart" && (
+          <div className="space-y-6">
+            <div className={cardClass}>
+              <div className="mb-4">
+                <h3 className="text-xl font-bold text-[#0A1A0F] dark:text-[#F0F7F3]">
                   Heart Rate Over Time
-                </CardTitle>
-                <CardDescription className="text-emerald-800">
+                </h3>
+                <p className="text-[#6B8C7A] text-sm mt-1">
                   Daily average, minimum, and maximum heart rate
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                </p>
+              </div>
+              <div className="pt-2">
                 <HeartRateChart data={heartRateForCharts} height={400} />
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {heartRateForCharts.length > 0 && (
-              <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-                <CardHeader className="border-b border-amber-50/20">
-                  <CardTitle className="text-emerald-900 text-xl font-bold">
+              <div className={cardClass}>
+                <div className="mb-4">
+                  <h3 className="text-xl font-bold text-[#0A1A0F] dark:text-[#F0F7F3]">
                     Heart Rate Distribution
-                  </CardTitle>
-                  <CardDescription className="text-emerald-800">
+                  </h3>
+                  <p className="text-[#6B8C7A] text-sm mt-1">
                     Distribution of heart rate readings across different
                     intensity zones
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                  </p>
+                </div>
+                <div className="pt-2">
                   <HRDistributionChart data={heartRateForCharts} height={400} />
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
 
             {hrvForCharts.length > 0 && (
-              <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-                <CardHeader className="border-b border-amber-50/20">
-                  <CardTitle className="text-emerald-900 text-xl font-bold">
+              <div className={cardClass}>
+                <div className="mb-4">
+                  <h3 className="text-xl font-bold text-[#0A1A0F] dark:text-[#F0F7F3]">
                     Heart Rate Variability
-                  </CardTitle>
-                  <CardDescription className="text-emerald-800">
+                  </h3>
+                  <p className="text-[#6B8C7A] text-sm mt-1">
                     Daily average heart rate variability (HRV)
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                  </p>
+                </div>
+                <div className="pt-2">
                   <HRVChart data={hrvForCharts} height={400} />
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="activity" className="space-y-6">
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-              <CardHeader className="border-b border-amber-50/20">
-                <CardTitle className="text-emerald-900 text-xl font-bold">
+        {/* Activity tab content */}
+        {activeTab === "activity" && (
+          <div className="space-y-6">
+            <div className={cardClass}>
+              <div className="mb-4">
+                <h3 className="text-xl font-bold text-[#0A1A0F] dark:text-[#F0F7F3]">
                   Step Count
-                </CardTitle>
-                <CardDescription className="text-emerald-800">
+                </h3>
+                <p className="text-[#6B8C7A] text-sm mt-1">
                   Daily step count and trends
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                </p>
+              </div>
+              <div className="pt-2">
                 <StepCountChart data={stepCountForCharts} height={400} />
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {distanceForCharts.length > 0 && (
-              <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-                <CardHeader className="border-b border-amber-50/20">
-                  <CardTitle className="text-emerald-900 text-xl font-bold">
+              <div className={cardClass}>
+                <div className="mb-4">
+                  <h3 className="text-xl font-bold text-[#0A1A0F] dark:text-[#F0F7F3]">
                     Distance Walking/Running
-                  </CardTitle>
-                  <CardDescription className="text-emerald-800">
+                  </h3>
+                  <p className="text-[#6B8C7A] text-sm mt-1">
                     Daily distance covered
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                  </p>
+                </div>
+                <div className="pt-2">
                   <DistanceChart data={distanceForCharts} height={400} />
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
 
             {activeEnergyForCharts.length > 0 && (
-              <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-                <CardHeader className="border-b border-amber-50/20">
-                  <CardTitle className="text-emerald-900 text-xl font-bold">
+              <div className={cardClass}>
+                <div className="mb-4">
+                  <h3 className="text-xl font-bold text-[#0A1A0F] dark:text-[#F0F7F3]">
                     Active Energy Burned
-                  </CardTitle>
-                  <CardDescription className="text-emerald-800">
+                  </h3>
+                  <p className="text-[#6B8C7A] text-sm mt-1">
                     Daily active calories burned
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                  </p>
+                </div>
+                <div className="pt-2">
                   <ActiveEnergyChart
                     data={activeEnergyForCharts}
                     height={400}
                   />
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
 
             {exerciseTimeForCharts.length > 0 && (
-              <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-                <CardHeader className="border-b border-amber-50/20">
-                  <CardTitle className="text-emerald-900 text-xl font-bold">
+              <div className={cardClass}>
+                <div className="mb-4">
+                  <h3 className="text-xl font-bold text-[#0A1A0F] dark:text-[#F0F7F3]">
                     Exercise Time
-                  </CardTitle>
-                  <CardDescription className="text-emerald-800">
+                  </h3>
+                  <p className="text-[#6B8C7A] text-sm mt-1">
                     Daily exercise duration
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                  </p>
+                </div>
+                <div className="pt-2">
                   <ExerciseTimeChart
                     data={exerciseTimeForCharts}
                     height={400}
                   />
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="sleep" className="space-y-6">
+        {/* Sleep tab content */}
+        {activeTab === "sleep" && (
+          <div className="space-y-6">
             {(sleepDailyProcessed.length > 0 ||
               sleepRawFallback.length > 0) && (
-              <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-                <CardHeader className="border-b border-amber-50/20">
-                  <CardTitle className="text-emerald-900 text-xl font-bold">
+              <div className={cardClass}>
+                <div className="mb-4">
+                  <h3 className="text-xl font-bold text-[#0A1A0F] dark:text-[#F0F7F3]">
                     Sleep Analysis
-                  </CardTitle>
-                  <CardDescription className="text-emerald-800">
+                  </h3>
+                  <p className="text-[#6B8C7A] text-sm mt-1">
                     Sleep duration, efficiency, and stage breakdown
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                  </p>
+                </div>
+                <div className="pt-2">
                   <SleepAnalysisChart
                     data={sleepRawFallback}
                     processedData={
@@ -482,58 +447,58 @@ export const HealthDashboard: () => JSX.Element = () => {
                     }
                     height={400}
                   />
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="overview" className="space-y-6">
-            {/* Health Score Cards */}
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-              <CardHeader className="border-b border-amber-50/20">
-                <CardTitle className="text-emerald-900 text-xl font-bold">
+        {/* Overview tab content */}
+        {activeTab === "overview" && (
+          <div className="space-y-6">
+            <div className={cardClass}>
+              <div className="mb-4">
+                <h3 className="text-xl font-bold text-[#0A1A0F] dark:text-[#F0F7F3]">
                   Health Score Overview
-                </CardTitle>
-                <CardDescription className="text-emerald-800">
+                </h3>
+                <p className="text-[#6B8C7A] text-sm mt-1">
                   Your health scores across different categories
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                </p>
+              </div>
+              <div className="pt-2">
                 <HealthScoreCards />
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            {/* Health Score Trends */}
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-              <CardHeader className="border-b border-amber-50/20">
-                <CardTitle className="text-emerald-900 text-xl font-bold">
+            <div className={cardClass}>
+              <div className="mb-4">
+                <h3 className="text-xl font-bold text-[#0A1A0F] dark:text-[#F0F7F3]">
                   Health Score Trends
-                </CardTitle>
-                <CardDescription className="text-emerald-800">
+                </h3>
+                <p className="text-[#6B8C7A] text-sm mt-1">
                   Historical trends for your health scores
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                </p>
+              </div>
+              <div className="pt-2">
                 <HealthScoreTrends />
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            {/* Health Metrics Summary */}
-            <Card className="border-none shadow-lg bg-transparent backdrop-blur-sm">
-              <CardHeader className="border-b border-amber-50/20">
-                <CardTitle className="text-emerald-900 text-xl font-bold">
+            <div className={cardClass}>
+              <div className="mb-4">
+                <h3 className="text-xl font-bold text-[#0A1A0F] dark:text-[#F0F7F3]">
                   Health Metrics Summary
-                </CardTitle>
-                <CardDescription className="text-emerald-800">
+                </h3>
+                <p className="text-[#6B8C7A] text-sm mt-1">
                   Overview of your selected health metrics
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6 bg-white/10 backdrop-blur-sm">
+                </p>
+              </div>
+              <div className="pt-2">
                 <MetricSummary metricData={metrics ? metrics : undefined} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

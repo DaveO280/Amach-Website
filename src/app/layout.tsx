@@ -4,18 +4,34 @@ import { PrivyErrorBoundary } from "@/components/PrivyErrorBoundary";
 import QueryProvider from "@/components/QueryProvider";
 import { SelectionProvider } from "@/store/selectionStore/provider";
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { DM_Mono, DM_Sans, Libre_Baskerville } from "next/font/google";
 import React, { Suspense } from "react";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
 import ErudaLoader from "@/components/ErudaLoader";
 
-const inter = Inter({ subsets: ["latin"] });
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  variable: "--font-sans",
+});
+
+const dmMono = DM_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-mono",
+});
+
+const libreBaskerville = Libre_Baskerville({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-serif",
+});
 
 export const metadata: Metadata = {
   title: "Amach Health",
-  description: "Driven by Data, Guided by Nature",
-  keywords: ["healthcare", "AI", "blockchain", "analytics", "medicine"],
+  description: "Own your data. Keep the value. Read the signals.",
+  keywords: ["health data", "AI", "privacy", "encrypted", "on-chain"],
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },
@@ -34,6 +50,22 @@ export const metadata: Metadata = {
   },
 };
 
+// Inline script to apply theme before first paint — prevents flash
+const themeScript = `
+(function() {
+  try {
+    var stored = localStorage.getItem('amach-theme');
+    if (stored === 'dark' || stored === 'light') {
+      document.documentElement.setAttribute('data-theme', stored);
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  } catch(e) {}
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -41,7 +73,13 @@ export default function RootLayout({
 }>): JSX.Element {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <head>
+        {/* Theme init — must run before paint to avoid flash */}
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
+      <body
+        className={`${dmSans.variable} ${dmMono.variable} ${libreBaskerville.variable} ${dmSans.className}`}
+      >
         <ErudaLoader />
         <PrivyErrorBoundary>
           <Suspense fallback={<div>Loading...</div>}>

@@ -3,11 +3,6 @@
 import { AlertCircle, CheckCircle, Loader2, Shield, User } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useWalletService } from "../hooks/useWalletService";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
 
 // Health Profile Data Interface
 interface HealthProfileData {
@@ -30,6 +25,15 @@ interface HealthProfileData {
 //   isActive: boolean;
 //   version: number;
 // }
+
+// Shared class strings for design token consistency
+const inputClass =
+  "w-full px-3 py-2 rounded-lg border border-[rgba(0,107,79,0.20)] dark:border-[rgba(0,107,79,0.25)] bg-[#F9FAFB] dark:bg-[#0C120E] text-[#0A1A0F] dark:text-[#F0F7F3] text-[13px] outline-none transition-colors focus:border-[rgba(0,107,79,0.50)] dark:focus:border-[rgba(74,222,128,0.45)]";
+const labelClass = "block text-xs font-medium text-[#6B8C7A] mb-[5px]";
+const selectClass =
+  "w-full px-3 py-2 border border-[rgba(0,107,79,0.22)] dark:border-[rgba(0,107,79,0.25)] rounded-md bg-[#F9FAFB] dark:bg-[#0C120E] text-[#0A1A0F] dark:text-[#F0F7F3] focus:outline-none focus:ring-2 focus:ring-[#006B4F]";
+const submitBtnClass =
+  "w-full bg-[#006B4F] hover:bg-[#005A40] text-white rounded-lg px-4 py-2 font-medium text-[13px] transition-colors flex items-center justify-center gap-2 disabled:opacity-60";
 
 export const HealthProfileManager: React.FC = () => {
   const {
@@ -73,9 +77,8 @@ export const HealthProfileManager: React.FC = () => {
       if (healthProfile && isConnected) {
         // Try to decrypt directly from blockchain-encrypted profile (no localStorage, no signature)
         try {
-          const { decryptHealthData } = await import(
-            "@/utils/secureHealthEncryption"
-          );
+          const { decryptHealthData } =
+            await import("@/utils/secureHealthEncryption");
 
           // Check if nonce is available (required for decryption)
           if (!healthProfile.nonce) {
@@ -133,9 +136,8 @@ export const HealthProfileManager: React.FC = () => {
           // This handles the case where weight was encrypted with a different nonce
           console.log("🔄 Attempting to decrypt fields individually...");
           try {
-            const { decryptHealthData } = await import(
-              "@/utils/secureHealthEncryption"
-            );
+            const { decryptHealthData } =
+              await import("@/utils/secureHealthEncryption");
 
             if (!address) {
               throw new Error("Wallet address not available");
@@ -340,124 +342,137 @@ export const HealthProfileManager: React.FC = () => {
     }
   }, [successMessage]);
 
+  const isSuccessMsg = (msg: string): boolean =>
+    msg.includes("successfully") || msg.includes("✅");
+
   if (!isConnected) {
     return (
-      <Card className="bg-white border-emerald-100">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-amber-900">
-            <Shield className="h-5 w-5 text-emerald-600" />
+      <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-[22px]">
+        <div className="flex items-center gap-2 mb-[18px]">
+          <Shield className="h-4 w-4 text-[#006B4F] flex-shrink-0" />
+          <h3 className="font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] text-base">
             Health Profile Manager
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8">
-            <AlertCircle className="h-12 w-12 text-[#9CA3AF] mx-auto mb-4" />
-            <p className="text-[#6B7280]">
-              Please connect your ZKsync SSO wallet to manage your health
-              profile
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+          </h3>
+        </div>
+        <div className="text-center py-8">
+          <AlertCircle className="h-12 w-12 text-[#6B8C7A] mx-auto mb-4" />
+          <p className="text-[#6B8C7A]">
+            Please connect your ZKsync SSO wallet to manage your health profile
+          </p>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className="bg-white border-emerald-100">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-amber-900">
-          <Shield className="h-5 w-5 text-emerald-600" />
-          Health Profile Manager
-          {healthProfile && (
-            <Badge
-              variant="default"
-              className="bg-emerald-100 text-emerald-700"
-            >
-              <CheckCircle className="h-3 w-3 mr-1" />
-              On-Chain
-            </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-[22px]">
+      {/* Card header */}
+      <div className="flex items-center justify-between mb-[18px]">
+        <div className="flex items-center gap-2">
+          <Shield className="h-4 w-4 text-[#006B4F] flex-shrink-0" />
+          <h3 className="font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] text-base">
+            Health Profile Manager
+          </h3>
+        </div>
+        {healthProfile && (
+          <span className="inline-flex items-center gap-1 bg-[rgba(0,107,79,0.10)] dark:bg-[rgba(0,107,79,0.15)] text-[#006B4F] dark:text-[#4ade80] text-[11px] font-semibold px-[10px] py-[3px] rounded-full">
+            <CheckCircle className="h-[10px] w-[10px]" />
+            On-Chain
+          </span>
+        )}
+      </div>
+
+      <div>
         {healthProfile ? (
-          // Display existing profile with populated data
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-[#6B7280]">
-                  Profile Status
-                </Label>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant={healthProfile.isActive ? "default" : "secondary"}
-                  >
-                    {healthProfile.isActive ? "Active" : "Inactive"}
-                  </Badge>
-                  <span className="text-sm text-[#6B7280]">
-                    Version {healthProfile.version}
-                  </span>
+          <div>
+            {/* Profile meta header */}
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <div className="text-[14px] font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] mb-1">
+                  Encrypted Health Data
+                </div>
+                <div className="text-xs text-[#6B8C7A]">
+                  Version {healthProfile.version} · Last updated{" "}
+                  {new Date(
+                    healthProfile.timestamp * 1000,
+                  ).toLocaleDateString()}{" "}
+                  · Stored on-chain
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-[#6B7280]">
-                  Last Updated
-                </Label>
-                <p className="text-sm">
-                  {new Date(healthProfile.timestamp * 1000).toLocaleString()}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-[#6B7280]">
-                  Birth Date
-                </Label>
-                <p className="text-sm">
-                  {formatDateForDisplay(profileData.birthDate)}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-[#6B7280]">
-                  Sex
-                </Label>
-                <p className="text-sm">{profileData.sex}</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-[#6B7280]">
-                  Height
-                </Label>
-                <p className="text-sm">
-                  {profileData.height} inches (
-                  {Math.floor(profileData.height / 12)}&apos;{" "}
-                  {profileData.height % 12}&quot;)
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-[#6B7280]">
-                  Weight
-                </Label>
-                <p className="text-sm">{profileData.weight} lbs</p>
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <Label className="text-sm font-medium text-[#6B7280]">
-                  Email
-                </Label>
-                <p className="text-sm">{profileData.email}</p>
+              <div className="flex-shrink-0 flex items-center gap-2">
+                <span
+                  className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                    healthProfile.isActive
+                      ? "bg-[rgba(0,107,79,0.10)] dark:bg-[rgba(0,107,79,0.15)] text-[#006B4F] dark:text-[#4ade80]"
+                      : "bg-[rgba(0,107,79,0.06)] text-[#6B8C7A] border border-[rgba(0,107,79,0.15)]"
+                  }`}
+                >
+                  {healthProfile.isActive ? "Active" : "Inactive"}
+                </span>
+                <span className="text-[11px] text-[#6B8C7A]">
+                  v{healthProfile.version}
+                </span>
               </div>
             </div>
 
-            <div className="pt-4 border-t">
-              <h4 className="font-medium mb-3">Update Profile</h4>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="birthDate">Birth Date</Label>
-                    <Input
+            {/* Data grid */}
+            <div className="grid grid-cols-2 gap-[14px] mb-[18px]">
+              <div>
+                <div className="text-[11px] font-medium text-[#6B8C7A] mb-[3px]">
+                  Birth Date
+                </div>
+                <div className="text-[13px] font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                  {formatDateForDisplay(profileData.birthDate)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] font-medium text-[#6B8C7A] mb-[3px]">
+                  Sex
+                </div>
+                <div className="text-[13px] font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                  {profileData.sex}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] font-medium text-[#6B8C7A] mb-[3px]">
+                  Height
+                </div>
+                <div className="text-[13px] font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                  {profileData.height} inches (
+                  {Math.floor(profileData.height / 12)}&apos;{" "}
+                  {profileData.height % 12}&quot;)
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] font-medium text-[#6B8C7A] mb-[3px]">
+                  Weight
+                </div>
+                <div className="text-[13px] font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                  {profileData.weight} lbs
+                </div>
+              </div>
+              <div className="col-span-2">
+                <div className="text-[11px] font-medium text-[#6B8C7A] mb-[3px]">
+                  Email
+                </div>
+                <div className="text-[13px] font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                  {profileData.email}
+                </div>
+              </div>
+            </div>
+
+            {/* Update form */}
+            <div className="pt-4 border-t border-[rgba(0,107,79,0.08)]">
+              <div className="text-[11px] font-semibold text-[#6B8C7A] uppercase tracking-[0.08em] mb-[12px]">
+                Update Profile
+              </div>
+              <form onSubmit={handleSubmit}>
+                <div className="grid grid-cols-2 gap-[14px] mb-4">
+                  <div>
+                    <label htmlFor="birthDate" className={labelClass}>
+                      Birth Date
+                    </label>
+                    <input
                       id="birthDate"
                       type="date"
                       value={profileData.birthDate}
@@ -468,11 +483,13 @@ export const HealthProfileManager: React.FC = () => {
                         }))
                       }
                       required
+                      className={inputClass}
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="sex">Sex</Label>
+                  <div>
+                    <label htmlFor="sex" className={labelClass}>
+                      Sex
+                    </label>
                     <select
                       id="sex"
                       value={profileData.sex}
@@ -482,8 +499,8 @@ export const HealthProfileManager: React.FC = () => {
                           sex: e.target.value,
                         }))
                       }
-                      className="w-full px-3 py-2 border border-[#E5E7EB] rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-600"
                       required
+                      className={selectClass}
                     >
                       <option value="">Select...</option>
                       <option value="M">Male</option>
@@ -491,10 +508,11 @@ export const HealthProfileManager: React.FC = () => {
                       <option value="Other">Other</option>
                     </select>
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="height">Height (inches)</Label>
-                    <Input
+                  <div>
+                    <label htmlFor="height" className={labelClass}>
+                      Height (inches)
+                    </label>
+                    <input
                       id="height"
                       type="number"
                       value={profileData.height || ""}
@@ -506,12 +524,14 @@ export const HealthProfileManager: React.FC = () => {
                       }
                       placeholder="e.g., 72 (6 feet)"
                       required
+                      className={inputClass}
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="weight">Weight (pounds)</Label>
-                    <Input
+                  <div>
+                    <label htmlFor="weight" className={labelClass}>
+                      Weight (pounds)
+                    </label>
+                    <input
                       id="weight"
                       type="number"
                       value={profileData.weight || ""}
@@ -523,12 +543,14 @@ export const HealthProfileManager: React.FC = () => {
                       }
                       placeholder="e.g., 180"
                       required
+                      className={inputClass}
                     />
                   </div>
-
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
+                  <div className="col-span-2">
+                    <label htmlFor="email" className={labelClass}>
+                      Email
+                    </label>
+                    <input
                       id="email"
                       type="email"
                       value={profileData.email}
@@ -540,27 +562,27 @@ export const HealthProfileManager: React.FC = () => {
                       }
                       placeholder="your@email.com"
                       required
+                      className={inputClass}
                     />
                   </div>
                 </div>
-
-                <Button
+                <button
                   type="submit"
                   disabled={isUpdating || isProfileLoading}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className={submitBtnClass}
                 >
                   {isUpdating ? (
                     <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                       Updating Profile...
                     </>
                   ) : (
                     <>
-                      <Shield className="h-4 w-4 mr-2" />
+                      <Shield className="h-4 w-4" />
                       Update Profile
                     </>
                   )}
-                </Button>
+                </button>
               </form>
             </div>
           </div>
@@ -568,18 +590,19 @@ export const HealthProfileManager: React.FC = () => {
           // No profile loaded - show load/create options
           <div className="space-y-4">
             <div className="text-center py-4">
-              <User className="h-12 w-12 text-[#9CA3AF] mx-auto mb-4" />
-              <h3 className="text-lg font-medium mb-2">Health Profile</h3>
-              <p className="text-[#6B7280] text-sm mb-4">
+              <User className="h-12 w-12 text-[#6B8C7A] mx-auto mb-4" />
+              <h3 className="text-[14px] font-semibold mb-2 text-[#0A1A0F] dark:text-[#F0F7F3]">
+                Health Profile
+              </h3>
+              <p className="text-[#6B8C7A] text-sm mb-4">
                 Load your existing profile or create a new one
               </p>
 
               <div className="flex gap-3 justify-center">
-                <Button
+                <button
                   onClick={handleLoadProfile}
                   disabled={isLoading}
-                  variant="outline"
-                  className="flex items-center gap-2 border-[#4F46E5] text-[#4F46E5] hover:bg-[#EEF2FF]"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[rgba(0,107,79,0.35)] text-[#006B4F] dark:text-[#4ade80] hover:bg-[rgba(0,107,79,0.06)] font-medium text-[13px] transition-colors disabled:opacity-60"
                 >
                   {isLoading ? (
                     <>
@@ -592,22 +615,26 @@ export const HealthProfileManager: React.FC = () => {
                       Load Existing Profile
                     </>
                   )}
-                </Button>
+                </button>
               </div>
             </div>
 
-            <div className="border-t pt-4">
-              <h4 className="text-lg font-medium mb-2">Create New Profile</h4>
-              <p className="text-[#6B7280] text-sm mb-4">
+            <div className="border-t border-[rgba(0,107,79,0.08)] pt-4">
+              <div className="text-[14px] font-semibold mb-1 text-[#0A1A0F] dark:text-[#F0F7F3]">
+                Create New Profile
+              </div>
+              <p className="text-[#6B8C7A] text-xs mb-4">
                 Your health data will be encrypted and stored securely on the
                 blockchain
               </p>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="birthDate">Birth Date</Label>
-                    <Input
+              <form onSubmit={handleSubmit}>
+                <div className="grid grid-cols-2 gap-[14px] mb-4">
+                  <div>
+                    <label htmlFor="birthDate" className={labelClass}>
+                      Birth Date
+                    </label>
+                    <input
                       id="birthDate"
                       type="date"
                       value={profileData.birthDate}
@@ -618,11 +645,14 @@ export const HealthProfileManager: React.FC = () => {
                         }))
                       }
                       required
+                      className={inputClass}
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="sex">Sex</Label>
+                  <div>
+                    <label htmlFor="sex" className={labelClass}>
+                      Sex
+                    </label>
                     <select
                       id="sex"
                       value={profileData.sex}
@@ -632,8 +662,8 @@ export const HealthProfileManager: React.FC = () => {
                           sex: e.target.value,
                         }))
                       }
-                      className="w-full px-3 py-2 border border-[#E5E7EB] rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-600"
                       required
+                      className={selectClass}
                     >
                       <option value="">Select...</option>
                       <option value="M">Male</option>
@@ -642,9 +672,11 @@ export const HealthProfileManager: React.FC = () => {
                     </select>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="height">Height (inches)</Label>
-                    <Input
+                  <div>
+                    <label htmlFor="height" className={labelClass}>
+                      Height (inches)
+                    </label>
+                    <input
                       id="height"
                       type="number"
                       value={profileData.height || ""}
@@ -656,12 +688,15 @@ export const HealthProfileManager: React.FC = () => {
                       }
                       placeholder="e.g., 72 (6 feet)"
                       required
+                      className={inputClass}
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="weight">Weight (pounds)</Label>
-                    <Input
+                  <div>
+                    <label htmlFor="weight" className={labelClass}>
+                      Weight (pounds)
+                    </label>
+                    <input
                       id="weight"
                       type="number"
                       value={profileData.weight || ""}
@@ -673,12 +708,15 @@ export const HealthProfileManager: React.FC = () => {
                       }
                       placeholder="e.g., 180"
                       required
+                      className={inputClass}
                     />
                   </div>
 
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
+                  <div className="col-span-2">
+                    <label htmlFor="email" className={labelClass}>
+                      Email
+                    </label>
+                    <input
                       id="email"
                       type="email"
                       value={profileData.email}
@@ -690,27 +728,28 @@ export const HealthProfileManager: React.FC = () => {
                       }
                       placeholder="your@email.com"
                       required
+                      className={inputClass}
                     />
                   </div>
                 </div>
 
-                <Button
+                <button
                   type="submit"
                   disabled={isCreating || isProfileLoading}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className={submitBtnClass}
                 >
                   {isCreating ? (
                     <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                       Creating Profile...
                     </>
                   ) : (
                     <>
-                      <Shield className="h-4 w-4 mr-2" />
+                      <Shield className="h-4 w-4" />
                       Create Health Profile
                     </>
                   )}
-                </Button>
+                </button>
               </form>
             </div>
           </div>
@@ -719,17 +758,17 @@ export const HealthProfileManager: React.FC = () => {
         {/* Success/Error Messages */}
         {successMessage && (
           <div
-            className={`mt-4 p-3 rounded-md ${
-              successMessage.includes("successfully")
-                ? "bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]"
-                : "bg-red-50 text-red-800 border border-red-200"
+            className={`mt-4 p-3 rounded-lg text-sm ${
+              isSuccessMsg(successMessage)
+                ? "bg-[#ECFDF5] dark:bg-[rgba(0,107,79,0.12)] text-[#065F46] dark:text-[#4ade80] border border-[#A7F3D0] dark:border-[rgba(0,107,79,0.3)]"
+                : "bg-[#FEF2F2] dark:bg-[rgba(248,113,113,0.08)] text-[#DC2626] dark:text-[#F87171] border border-[#FECACA] dark:border-[rgba(248,113,113,0.3)]"
             }`}
           >
             <div className="flex items-center gap-2">
-              {successMessage.includes("successfully") ? (
-                <CheckCircle className="h-4 w-4" />
+              {isSuccessMsg(successMessage) ? (
+                <CheckCircle className="h-4 w-4 flex-shrink-0" />
               ) : (
-                <AlertCircle className="h-4 w-4" />
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
               )}
               {successMessage}
             </div>
@@ -737,22 +776,22 @@ export const HealthProfileManager: React.FC = () => {
         )}
 
         {error && (
-          <div className="mt-4 p-3 bg-red-50 text-red-800 border border-red-200 rounded-md">
+          <div className="mt-4 p-3 rounded-lg text-sm bg-[#FEF2F2] dark:bg-[rgba(248,113,113,0.08)] text-[#DC2626] dark:text-[#F87171] border border-[#FECACA] dark:border-[rgba(248,113,113,0.3)]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <AlertCircle className="h-4 w-4" />
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
                 {error}
               </div>
               <button
                 onClick={clearError}
-                className="text-red-600 hover:text-red-800"
+                className="text-[#DC2626] dark:text-[#F87171] hover:opacity-70 ml-2"
               >
                 ×
               </button>
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 };

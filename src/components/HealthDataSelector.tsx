@@ -84,6 +84,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
     error?: string;
     storjUri?: string;
   } | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const handleFileSelect = (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -797,13 +798,13 @@ const HealthDataSelector: () => React.ReactElement = () => {
     <div className="max-w-4xl mx-auto p-6">
       <div className="border-none shadow-lg bg-transparent p-6">
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-emerald-900">
+          <h2 className="text-2xl font-bold dashboard-selector-title">
             Health Data Selector
           </h2>
         </div>
 
         <div className="mb-8">
-          <h3 className="text-xl font-semibold mb-4 text-emerald-700">
+          <h3 className="text-xl font-semibold mb-4 dashboard-selector-subtitle">
             Select Time Frame
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -817,7 +818,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
                 className={`p-3 rounded-lg text-sm font-medium transition-colors ${
                   timeFrame === option.value
                     ? "bg-[#006B4F] text-white border-b-2 border-[#005540]"
-                    : "bg-white/80 text-[#006B4F] hover:bg-[#E8F5F0]/30 border border-[#006B4F]/30"
+                    : "dashboard-metric-inactive"
                 }`}
               >
                 {option.label}
@@ -828,10 +829,10 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-semibold text-emerald-700">
+            <h3 className="text-xl font-semibold dashboard-selector-subtitle">
               Health Metrics
             </h3>
-            <span className="text-sm text-amber-800/80">
+            <span className="text-sm dashboard-selector-hint">
               (
               {
                 selectedMetrics.filter((id) =>
@@ -853,7 +854,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
                 className={`p-3 rounded-lg text-sm transition-colors ${
                   selectedMetrics.includes(metric.id)
                     ? "bg-[#006B4F] text-white border-b-2 border-[#005540]"
-                    : "bg-white/80 text-[#006B4F] hover:bg-[#E8F5F0]/30 border border-[#006B4F]/30"
+                    : "dashboard-metric-inactive"
                 }`}
               >
                 {metric.name}
@@ -863,46 +864,13 @@ const HealthDataSelector: () => React.ReactElement = () => {
         </div>
 
         <div className="border-t border-amber-50/20 pt-6">
-          <h3 className="text-xl font-semibold mb-4 text-emerald-700">
+          <h3 className="text-xl font-semibold mb-4 dashboard-selector-subtitle">
             Upload Health Export
           </h3>
-          <p className="text-sm text-gray-600 mb-3">
+          <p className="text-sm dashboard-description mb-3">
             Upload your Apple Health export.xml file or a previously exported
             CSV file
           </p>
-
-          {/* Warning for XML files */}
-          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <svg
-                className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <div className="text-sm">
-                <p className="font-semibold text-amber-800 mb-1">
-                  File Type Guide:
-                </p>
-                <ul className="text-amber-700 space-y-1">
-                  <li>
-                    <strong>XML files:</strong> Must be processed on desktop.
-                    Large files may crash mobile browsers.
-                  </li>
-                  <li>
-                    <strong>CSV files:</strong> Fast and mobile-friendly. Upload
-                    CSVs exported from this app (includes start/end dates for
-                    sleep).
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
 
           <div className="space-y-4">
             <input
@@ -910,36 +878,22 @@ const HealthDataSelector: () => React.ReactElement = () => {
               accept=".xml,.csv"
               onChange={handleFileSelect}
               disabled={processingState.isProcessing}
-              className="file-input w-full p-2 border border-amber-100 rounded-lg"
+              className="file-input w-full p-2 border border-[rgba(0,107,79,0.22)] dark:border-[rgba(0,107,79,0.25)] rounded-lg"
               onClick={(e) => e.stopPropagation()}
             />
 
-            {/* Dynamic warning for XML files on mobile */}
+            {/* Dynamic warning for XML files */}
             {uploadedFile &&
               !uploadedFile.name.toLowerCase().endsWith(".csv") && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <svg
-                      className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0"
-                      fill="none"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                    <div className="text-sm text-red-700">
-                      <p className="font-semibold mb-1">⚠️ XML File Detected</p>
-                      <p>
-                        Processing large XML files is resource-intensive and may
-                        cause performance issues or crashes on mobile devices.
-                        For best results, process XML files on a desktop
-                        computer, then upload the exported CSV on mobile.
-                      </p>
-                    </div>
-                  </div>
+                <div className="p-3 rounded-lg border-l-4 border-amber-400 bg-[rgba(245,158,11,0.06)] dark:bg-[rgba(245,158,11,0.04)] text-sm">
+                  <p className="font-semibold text-amber-700 dark:text-amber-400 mb-1">
+                    ⚠️ Large file detected
+                  </p>
+                  <p className="text-[#6B8C7A]">
+                    XML files can be resource-intensive and may cause issues on
+                    mobile. For best results, process on desktop and upload the
+                    exported CSV.
+                  </p>
                 </div>
               )}
 
@@ -951,7 +905,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
                   !uploadedFile ||
                   selectedMetrics.length === 0
                 }
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 companion-send-btn text-white py-3 px-4 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {processingState.isProcessing
                   ? "Processing..."
@@ -959,15 +913,15 @@ const HealthDataSelector: () => React.ReactElement = () => {
               </button>
 
               <button
-                onClick={handleClearData}
+                onClick={() => setShowClearConfirm(true)}
                 disabled={processingState.isProcessing || !hasData()}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 border border-[rgba(239,68,68,0.4)] text-red-500 dark:text-red-400 bg-transparent hover:bg-[rgba(239,68,68,0.07)] py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Clear All Data
               </button>
             </div>
 
-            <div className="mt-2 text-center text-sm text-gray-600">
+            <div className="mt-2 text-center text-sm dashboard-description">
               {selectedMetrics.length === 0 ? (
                 <span className="text-red-500">
                   Please select at least one metric to process
@@ -980,13 +934,16 @@ const HealthDataSelector: () => React.ReactElement = () => {
             </div>
 
             {processingState.status && (
-              <div className="p-3 rounded-lg text-sm bg-emerald-50 text-emerald-800">
+              <div className="p-3 rounded-lg text-sm dashboard-status">
                 {processingState.status}
               </div>
             )}
 
             {processingState.isProcessing && (
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="w-full rounded-full h-2"
+                style={{ background: "var(--color-companion-surface-border)" }}
+              >
                 <div
                   className="h-2 rounded-full transition-all duration-300 bg-emerald-600"
                   style={{
@@ -1030,7 +987,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
                 </p>
 
                 {!isConnected ? (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+                  <div className="p-3 dashboard-upload-info rounded text-sm">
                     Connect your wallet to enable Storj save functionality.
                   </div>
                 ) : (
@@ -1063,7 +1020,12 @@ const HealthDataSelector: () => React.ReactElement = () => {
                     {/* Storj save progress */}
                     {storjSaveStatus?.saving && (
                       <div className="space-y-1">
-                        <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="w-full rounded-full h-2"
+                          style={{
+                            background: "var(--color-companion-surface-border)",
+                          }}
+                        >
                           <div
                             className="h-2 rounded-full transition-all duration-300 bg-blue-600"
                             style={{ width: `${storjSaveStatus.progress}%` }}
@@ -1101,6 +1063,37 @@ const HealthDataSelector: () => React.ReactElement = () => {
           </div>
         </div>
       </div>
+
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white dark:bg-[#0B140F] border border-[rgba(0,107,79,0.15)] rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl">
+            <h3 className="text-[#0A1A0F] dark:text-[#F0F7F3] font-semibold text-base mb-2">
+              Clear all data?
+            </h3>
+            <p className="text-[#6B8C7A] text-sm mb-6">
+              This will permanently remove all processed health data from your
+              session. This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="flex-1 py-2 px-4 rounded-lg border border-[rgba(0,107,79,0.25)] text-[#6B8C7A] bg-transparent hover:bg-[rgba(0,107,79,0.07)] transition-colors text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handleClearData();
+                  setShowClearConfirm(false);
+                }}
+                className="flex-1 py-2 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors text-sm font-medium"
+              >
+                Accept
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

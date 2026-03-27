@@ -8,13 +8,6 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { QuarterlyAggregationService } from "@/services/QuarterlyAggregationService";
 import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
 import { healthDataStore } from "@/data/store/healthDataStore";
@@ -119,23 +112,19 @@ export function QuarterlyAggregateGenerator({
   const lastYear = currentQuarter.year - 1;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Calendar className="h-5 w-5" />
+    <div className="rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Calendar className="h-5 w-5" />
+        <h3 className="font-semibold text-[#0A1A0F] dark:text-[#F0F7F3] text-base">
           Quarterly Health Aggregates
-        </CardTitle>
-        <CardDescription>
-          Generate comprehensive quarterly summaries with min/max/avg for all
-          metrics
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
-          <p className="font-medium text-blue-900 mb-1">
+        </h3>
+      </div>
+      <div className="space-y-4">
+        <div className="bg-[rgba(0,107,79,0.06)] dark:bg-[rgba(0,107,79,0.08)] border border-[rgba(0,107,79,0.15)] rounded-lg p-4 mb-4 text-sm">
+          <p className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3] mb-1">
             Why quarterly aggregates?
           </p>
-          <ul className="list-disc list-inside text-blue-800 space-y-1">
+          <ul className="list-disc list-inside text-[#6B8C7A] space-y-1">
             <li>Compare seasonal patterns (Winter vs Summer activity)</li>
             <li>Year-over-year trends (Q1 2024 vs Q1 2025)</li>
             <li>Long-term health trajectory</li>
@@ -158,7 +147,7 @@ export function QuarterlyAggregateGenerator({
         )}
 
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-gray-900">
+          <h3 className="text-[#6B8C7A] text-xs uppercase tracking-wider font-medium">
             Generate for {currentQuarter.year}:
           </h3>
           <div className="grid grid-cols-2 gap-2">
@@ -168,7 +157,7 @@ export function QuarterlyAggregateGenerator({
                 variant="outline"
                 onClick={() => handleGenerate(q, currentQuarter.year)}
                 disabled={isGenerating}
-                className="flex items-center justify-center gap-2"
+                className="flex items-center justify-center gap-2 dark:bg-[#0C120E] dark:text-[#F0F7F3] dark:border-[rgba(0,107,79,0.25)] dark:hover:bg-[rgba(0,107,79,0.1)]"
               >
                 {isGenerating ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -180,7 +169,7 @@ export function QuarterlyAggregateGenerator({
             ))}
           </div>
 
-          <h3 className="text-sm font-semibold text-gray-900 pt-2">
+          <h3 className="text-[#6B8C7A] text-xs uppercase tracking-wider font-medium pt-2">
             Generate for {lastYear}:
           </h3>
           <div className="grid grid-cols-2 gap-2">
@@ -190,7 +179,7 @@ export function QuarterlyAggregateGenerator({
                 variant="outline"
                 onClick={() => handleGenerate(q, lastYear)}
                 disabled={isGenerating}
-                className="flex items-center justify-center gap-2"
+                className="flex items-center justify-center gap-2 dark:bg-[#0C120E] dark:text-[#F0F7F3] dark:border-[rgba(0,107,79,0.25)] dark:hover:bg-[rgba(0,107,79,0.1)]"
               >
                 {isGenerating ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -203,16 +192,16 @@ export function QuarterlyAggregateGenerator({
           </div>
         </div>
 
-        <div className="text-xs text-gray-600 mt-4 p-3 bg-amber-50 border border-amber-200 rounded">
-          <p className="font-medium text-amber-900">
+        <div className="text-xs mt-4 border-l-4 border-amber-400 bg-[rgba(245,158,11,0.06)] dark:bg-[rgba(245,158,11,0.04)] pl-3 py-2 rounded-r">
+          <p className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
             <strong>Current quarter:</strong> Q{currentQuarter.quarter}{" "}
             {currentQuarter.year}
           </p>
-          <p className="mt-1 text-amber-800">
+          <p className="mt-1 text-[#6B8C7A]">
             Aggregates are stored in Storj and never deleted by pruning.
           </p>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

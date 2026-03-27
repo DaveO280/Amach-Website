@@ -243,7 +243,7 @@ const HealthReport: React.FC = () => {
           >
             {isGeneratingAll ? "Generating..." : "Generate Health Analysis"}
           </Button>
-          <div className="mt-4 p-6 bg-gradient-to-br from-amber-50 via-white to-emerald-50 rounded-lg border border-amber-200/50 shadow-sm">
+          <div className="health-analysis-container mt-4 p-6 rounded-lg border shadow-sm">
             {sectionQueries.map((query) => {
               const { section, data, isPending, error } = query;
               const hasEmptyContent =

@@ -1,6 +1,5 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   getScoreTrends,
   type ScoreTrends,
@@ -11,6 +10,9 @@ import { useEffect, useState } from "react";
 interface HealthScoreTrendsProps {
   className?: string;
 }
+
+const cardClass =
+  "rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)]";
 
 export function HealthScoreTrends({
   className = "",
@@ -35,12 +37,12 @@ export function HealthScoreTrends({
   }, []);
 
   const getTrendIcon = (current: number, trend: number): JSX.Element => {
-    if (trend === 0) return <Minus className="h-3 w-3 text-gray-400" />;
+    if (trend === 0) return <Minus className="h-3 w-3 text-[#6B8C7A]" />;
     if (current > trend)
       return <TrendingUp className="h-3 w-3 text-green-500" />;
     if (current < trend)
       return <TrendingDown className="h-3 w-3 text-red-500" />;
-    return <Minus className="h-3 w-3 text-gray-400" />;
+    return <Minus className="h-3 w-3 text-[#6B8C7A]" />;
   };
 
   const getScoreLabel = (score: number): string => {
@@ -51,96 +53,98 @@ export function HealthScoreTrends({
 
   if (loadingTrends) {
     return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="text-lg font-medium text-emerald-800">
-            Health Score Trends
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center text-gray-500">Loading trends...</div>
-        </CardContent>
-      </Card>
+      <div className={`${cardClass} ${className} p-5`}>
+        <h3 className="text-lg font-medium text-emerald-800 dark:text-[#4ade80] mb-4">
+          Health Score Trends
+        </h3>
+        <div className="text-center text-[#6B8C7A]">Loading trends...</div>
+      </div>
     );
   }
 
   if (!scoreTrends) {
     return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="text-lg font-medium text-emerald-800">
-            Health Score Trends
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center text-gray-500">
-            No trend data available
-          </div>
-        </CardContent>
-      </Card>
+      <div className={`${cardClass} ${className} p-5`}>
+        <h3 className="text-lg font-medium text-emerald-800 dark:text-[#4ade80] mb-4">
+          Health Score Trends
+        </h3>
+        <div className="text-center text-[#6B8C7A]">
+          No trend data available
+        </div>
+      </div>
     );
   }
 
   const scoreTypes = [
-    { key: "overall", label: "Overall", color: "text-emerald-800" },
-    { key: "activity", label: "Activity", color: "text-emerald-600" },
+    {
+      key: "overall",
+      label: "Overall",
+      color: "text-emerald-800 dark:text-[#4ade80]",
+    },
+    {
+      key: "activity",
+      label: "Activity",
+      color: "text-emerald-600 dark:text-emerald-400",
+    },
     { key: "sleep", label: "Sleep", color: "text-amber-500" },
     { key: "heart", label: "Heart", color: "text-red-500" },
     { key: "energy", label: "Energy", color: "text-yellow-500" },
   ] as const;
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle className="text-lg font-medium text-emerald-800">
-          Health Score Trends
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {scoreTypes.map(({ key, label, color }) => {
-            const trends = scoreTrends[key];
-            if (!trends) return null;
+    <div className={`${cardClass} ${className} p-5`}>
+      <h3 className="text-lg font-medium text-emerald-800 dark:text-[#4ade80] mb-4">
+        Health Score Trends
+      </h3>
+      <div className="space-y-4">
+        {scoreTypes.map(({ key, label, color }) => {
+          const trends = scoreTrends[key];
+          if (!trends) return null;
 
-            return (
-              <div
-                key={key}
-                className="border-b border-gray-100 pb-3 last:border-b-0"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className={`font-medium ${color}`}>{label}</h4>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600">7 days:</span>
-                    <div className="flex items-center gap-1">
-                      {getTrendIcon(trends.last7Days, trends.last30Days)}
-                      <span className="font-medium">{trends.last7Days}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600">30 days:</span>
-                    <div className="flex items-center gap-1">
-                      {getTrendIcon(trends.last30Days, trends.last3Months)}
-                      <span className="font-medium">{trends.last30Days}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600">3 months:</span>
-                    <div className="flex items-center gap-1">
-                      <Minus className="h-3 w-3 text-gray-400" />
-                      <span className="font-medium">{trends.last3Months}</span>
-                    </div>
+          return (
+            <div
+              key={key}
+              className="border-b border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] pb-3 last:border-b-0"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <h4 className={`font-medium ${color}`}>{label}</h4>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#6B8C7A]">7 days:</span>
+                  <div className="flex items-center gap-1">
+                    {getTrendIcon(trends.last7Days, trends.last30Days)}
+                    <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                      {trends.last7Days}
+                    </span>
                   </div>
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {getScoreLabel(trends.last7Days)}
+                <div className="flex items-center justify-between">
+                  <span className="text-[#6B8C7A]">30 days:</span>
+                  <div className="flex items-center gap-1">
+                    {getTrendIcon(trends.last30Days, trends.last3Months)}
+                    <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                      {trends.last30Days}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[#6B8C7A]">3 months:</span>
+                  <div className="flex items-center gap-1">
+                    <Minus className="h-3 w-3 text-[#6B8C7A]" />
+                    <span className="font-medium text-[#0A1A0F] dark:text-[#F0F7F3]">
+                      {trends.last3Months}
+                    </span>
+                  </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
+              <div className="text-xs text-[#6B8C7A] mt-1">
+                {getScoreLabel(trends.last7Days)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

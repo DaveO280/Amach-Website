@@ -64,7 +64,44 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run unit tests (includes security hardening assertions)
-        run: pnpm exec jest --verbose --forceExit
+        run: pnpm exec jest --verbose --forceExit --json --outputFile=jest-results.json
+        continue-on-error: true
+
+      - name: Print failing tests
+        if: always()
+        run: |
+          if [ -f jest-results.json ]; then
+            node -e "
+              const r = require('./jest-results.json');
+              console.log('Tests:', r.numPassedTests, 'passed,', r.numFailedTests, 'failed');
+              r.testResults.filter(t => t.status === 'failed').forEach(t => {
+                console.log('\nFAILED SUITE:', t.testFilePath);
+                t.testResults.filter(r => r.status === 'failed').forEach(r => {
+                  console.log('  FAIL:', r.fullName);
+                  r.failureMessages.forEach(m => console.log('   ', m.split('\n').slice(0,8).join('\n    ')));
+                });
+              });
+            "
+          else
+            echo "No jest-results.json found"
+          fi
+
+      - name: Upload jest results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-results
+          path: jest-results.json
+          retention-days: 3
+
+      - name: Fail if tests failed
+        if: always()
+        run: |
+          if [ -f jest-results.json ]; then
+            node -e "process.exit(require('./jest-results.json').numFailedTests > 0 ? 1 : 0)"
+          else
+            exit 1
+          fi
 
   # ─────────────────────────────────────────────────────────────────────────────
   # 3. Dependency audit (catches known CVEs)

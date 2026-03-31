@@ -64,66 +64,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run unit tests (includes security hardening assertions)
-        run: pnpm exec jest --verbose --forceExit --json --outputFile=jest-results.json
-        continue-on-error: true
-
-      - name: Print failing tests
-        if: always()
-        run: |
-          if [ -f jest-results.json ]; then
-            node << 'NODEEOF'
-            try {
-              const fs = require('fs');
-              const raw = fs.readFileSync('./jest-results.json', 'utf8');
-              const r = JSON.parse(raw);
-              console.log('=== JEST RESULTS ===');
-              console.log('Passed:', r.numPassedTests, '| Failed:', r.numFailedTests, '| Suites:', r.numTotalTestSuites);
-              const suites = Array.isArray(r.testResults) ? r.testResults : [];
-              const failed = suites.filter(t => t.status === 'failed');
-              if (failed.length === 0) {
-                console.log('No failed suites found in testResults. numFailedTests =', r.numFailedTests);
-                // Dump first 3000 chars to see the structure
-                console.log('RAW (first 3000):', raw.slice(0, 3000));
-              } else {
-                failed.forEach(t => {
-                  const file = (t.testFilePath || '?').replace(process.cwd() + '/', '');
-                  console.log('\n--- FAILED SUITE:', file);
-                  if (t.failureMessage) {
-                    console.log('SUITE ERROR:', t.failureMessage.slice(0, 2000));
-                  }
-                  const tests = Array.isArray(t.testResults) ? t.testResults : [];
-                  tests.filter(x => x.status === 'failed').forEach(x => {
-                    console.log('  FAIL:', x.fullName);
-                    (x.failureMessages || []).forEach(m => console.log('    ERR:', m.slice(0, 1000)));
-                  });
-                });
-              }
-            } catch(e) {
-              console.log('Script error:', e.message);
-              console.log('Raw jest-results.json (first 2000):');
-              try { console.log(require('fs').readFileSync('./jest-results.json','utf8').slice(0,2000)); } catch(_) {}
-            }
-            NODEEOF
-          else
-            echo "::error::No jest-results.json found — jest may have crashed at startup"
-          fi
-
-      - name: Upload jest results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: jest-results
-          path: jest-results.json
-          retention-days: 3
-
-      - name: Fail if tests failed
-        if: always()
-        run: |
-          if [ -f jest-results.json ]; then
-            node -e "process.exit(require('./jest-results.json').numFailedTests > 0 ? 1 : 0)"
-          else
-            exit 1
-          fi
+        run: pnpm exec jest --verbose --forceExit
 
   # ─────────────────────────────────────────────────────────────────────────────
   # 3. Dependency audit (catches known CVEs)

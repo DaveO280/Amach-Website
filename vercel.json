@@ -1,6 +1,6 @@
 {
   "buildCommand": "next build --webpack",
-  "installCommand": "pnpm install --no-frozen-lockfile --shamefully-hoist",
+  "installCommand": "pnpm install --frozen-lockfile",
   "functions": {
     "src/app/api/venice/route.ts": {
       "maxDuration": 120

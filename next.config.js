@@ -268,14 +268,79 @@ const nextConfig = {
   },
   // Make sure Next.js knows to transpile my-health-app
   transpilePackages: ["my-health-app"],
-  // Add headers for CORS
+  // Security and CORS headers
   async headers() {
+    // Content-Security-Policy in report-only mode.
+    // Violations are logged to the browser console without blocking anything.
+    // Once violations are investigated and the allowlist is complete, switch the
+    // header name to "Content-Security-Policy" to enforce blocking.
+    const cspDirectives = [
+      "default-src 'self'",
+      // Privy auth iframes + zkSync RPC + Venice AI + Storj + analytics
+      [
+        "connect-src 'self'",
+        "https://api.venice.ai",
+        "https://*.era.zksync.dev",
+        "wss://*.era.zksync.dev",
+        "https://*.era.zksync.io",
+        "wss://*.era.zksync.io",
+        "https://rpc.ankr.com",
+        "https://zksync-era-sepolia.blockpi.network",
+        "https://gateway.storjshare.io",
+        "https://*.privy.io",
+        "wss://*.privy.io",
+        "https://auth.privy.io",
+        "https://*.vercel-insights.com",
+        "https://vitals.vercel-insights.com",
+        "https://va.vercel-scripts.com",
+      ].join(" "),
+      // Next.js requires unsafe-inline/unsafe-eval for its runtime bundle
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.privy.io",
+      "style-src 'self' 'unsafe-inline'",
+      // Permissive for images (wallets/NFTs/avatars use data URIs and external URLs)
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data:",
+      // Privy renders its auth UI inside an iframe from their domain
+      "frame-src 'self' https://*.privy.io",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+    ].join("; ");
+
     return [
+      // Security headers applied to all routes
+      {
+        source: "/:path*",
+        headers: [
+          // Report-only CSP: logs violations without blocking — monitor before enforcing
+          {
+            key: "Content-Security-Policy-Report-Only",
+            value: cspDirectives,
+          },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+        ],
+      },
+      // CORS for API routes.
+      // Access-Control-Allow-Credentials requires a specific origin (not wildcard).
+      // Set NEXT_PUBLIC_APP_URL to your production domain to enable credentialed
+      // cross-origin requests; omit it to serve same-origin requests only.
       {
         source: "/api/:path*",
         headers: [
+          {
+            key: "Access-Control-Allow-Origin",
+            value: process.env.NEXT_PUBLIC_APP_URL || "https://amach.health",
+          },
           { key: "Access-Control-Allow-Credentials", value: "true" },
-          { key: "Access-Control-Allow-Origin", value: "*" },
           {
             key: "Access-Control-Allow-Methods",
             value: "GET,OPTIONS,PATCH,DELETE,POST,PUT",

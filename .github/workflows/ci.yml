@@ -1,0 +1,194 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22.13.1"
+  PNPM_VERSION: "10.4.1"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 1. Lint + type-check (fast gate, no secrets needed)
+  # ─────────────────────────────────────────────────────────────────────────────
+  lint-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm type-check
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 2. Unit tests + security hardening assertions (no secrets needed)
+  # ─────────────────────────────────────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests (includes security hardening assertions)
+        run: pnpm test
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 3. Dependency audit (catches known CVEs)
+  # ─────────────────────────────────────────────────────────────────────────────
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit dependencies for known CVEs
+        run: pnpm audit:ci
+
+      - name: Verify lockfile was not modified during install
+        # A PR that tampers with the lockfile to point to a malicious package
+        # hash will be caught here — the lockfile must match what was committed.
+        run: |
+          if ! git diff --exit-code pnpm-lock.yaml; then
+            echo "::error::pnpm-lock.yaml was modified during install. This may indicate lockfile tampering."
+            exit 1
+          fi
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 4. Build (runs after lint + tests pass)
+  # ─────────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint-typecheck, unit-tests]
+    env:
+      # Minimal env vars to make next build succeed without real service keys.
+      # The build only needs NEXT_PUBLIC_ vars; server-side secrets are not
+      # needed at build time for App Router (they're resolved at request time).
+      NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
+      NEXT_PUBLIC_ZKSYNC_RPC_URL: "https://sepolia.era.zksync.dev"
+      NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm vercel-build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-build
+          path: .next/
+          retention-days: 1
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 5. E2E tests — security headers, CSP violations, API smoke tests
+  #    Runs after build succeeds. Starts the production Next.js server and
+  #    runs Playwright tests against it.
+  # ─────────────────────────────────────────────────────────────────────────────
+  e2e:
+    name: E2E Tests (Security + Smoke)
+    runs-on: ubuntu-latest
+    needs: [build]
+    env:
+      NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
+      NEXT_PUBLIC_ZKSYNC_RPC_URL: "https://sepolia.era.zksync.dev"
+      NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+      # Test-specific service credentials (use dedicated test accounts, not prod)
+      VENICE_API_KEY: ${{ secrets.VENICE_API_KEY }}
+      STORJ_ACCESS_KEY: ${{ secrets.STORJ_ACCESS_KEY_TEST }}
+      STORJ_SECRET_KEY: ${{ secrets.STORJ_SECRET_KEY_TEST }}
+      STORJ_BUCKET_PREFIX: ${{ secrets.STORJ_BUCKET_PREFIX_TEST }}
+      NEXT_PUBLIC_NETWORK: "testnet"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nextjs-build
+          path: .next/
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

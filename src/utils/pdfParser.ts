@@ -15,23 +15,20 @@ async function initializePDFJS(): Promise<typeof import("pdfjs-dist")> {
       pdfjsLib = await import("pdfjs-dist");
       getDocument = pdfjsLib.getDocument;
 
-      // Try to configure the worker, with fallback
+      // Configure the worker from the local public directory.
+      // CDN fallbacks are intentionally omitted — loading JS from unpkg at runtime
+      // is a supply chain risk (a compromised npm package is instantly available
+      // via unpkg CDN). If the local worker fails, fall back to main-thread parsing
+      // (slightly slower but safe).
       try {
-        // Use local worker from public directory to avoid CORS issues
         pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf-worker/pdf.worker.mjs";
         console.log("✅ Worker configured successfully");
       } catch (workerError) {
         console.warn(
-          "⚠️ Worker configuration failed, trying CDN fallback:",
+          "⚠️ Worker configuration failed, falling back to main-thread parsing:",
           workerError,
         );
-        // Fallback to CDN with https (in case local worker fails)
-        try {
-          pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
-        } catch {
-          // Last resort: disable worker and use main thread
-          pdfjsLib.GlobalWorkerOptions.workerSrc = "";
-        }
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "";
       }
       console.log(
         "✅ PDF.js initialized with worker:",

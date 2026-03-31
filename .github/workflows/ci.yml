@@ -71,34 +71,39 @@ jobs:
         if: always()
         run: |
           if [ -f jest-results.json ]; then
-            node -e "
-              const r = require('./jest-results.json');
-              console.log('Tests:', r.numPassedTests, 'passed,', r.numFailedTests, 'failed,', r.numTotalTestSuites, 'suites');
-              if (r.testResults) {
-                r.testResults.filter(t => t.status === 'failed').forEach(t => {
-                  const file = t.testFilePath.replace(process.cwd() + '/', '');
-                  // GitHub workflow annotation format
-                  if (t.failureMessage) {
-                    const msg = t.failureMessage.replace(/\n/g, '%0A').slice(0, 500);
-                    console.log('::error file=' + file + '::' + msg);
-                  }
-                  console.log('\nFAILED SUITE:', file);
-                  if (t.testResults) {
-                    t.testResults.filter(r => r.status === 'failed').forEach(r => {
-                      console.log('  FAIL:', r.fullName);
-                      if (r.failureMessages) {
-                        r.failureMessages.forEach(m => console.log('    ', m.split('\n').slice(0,10).join('\n     ')));
-                      }
-                    });
-                  } else if (t.failureMessage) {
-                    console.log('  Suite-level error:', t.failureMessage.split('\n').slice(0,15).join('\n  '));
-                  }
-                });
+            node << 'NODEEOF'
+            try {
+              const fs = require('fs');
+              const raw = fs.readFileSync('./jest-results.json', 'utf8');
+              const r = JSON.parse(raw);
+              console.log('=== JEST RESULTS ===');
+              console.log('Passed:', r.numPassedTests, '| Failed:', r.numFailedTests, '| Suites:', r.numTotalTestSuites);
+              const suites = Array.isArray(r.testResults) ? r.testResults : [];
+              const failed = suites.filter(t => t.status === 'failed');
+              if (failed.length === 0) {
+                console.log('No failed suites found in testResults. numFailedTests =', r.numFailedTests);
+                // Dump first 3000 chars to see the structure
+                console.log('RAW (first 3000):', raw.slice(0, 3000));
               } else {
-                console.log('Jest may have crashed before producing results. Raw output:');
-                console.log(JSON.stringify(r).slice(0, 2000));
+                failed.forEach(t => {
+                  const file = (t.testFilePath || '?').replace(process.cwd() + '/', '');
+                  console.log('\n--- FAILED SUITE:', file);
+                  if (t.failureMessage) {
+                    console.log('SUITE ERROR:', t.failureMessage.slice(0, 2000));
+                  }
+                  const tests = Array.isArray(t.testResults) ? t.testResults : [];
+                  tests.filter(x => x.status === 'failed').forEach(x => {
+                    console.log('  FAIL:', x.fullName);
+                    (x.failureMessages || []).forEach(m => console.log('    ERR:', m.slice(0, 1000)));
+                  });
+                });
               }
-            "
+            } catch(e) {
+              console.log('Script error:', e.message);
+              console.log('Raw jest-results.json (first 2000):');
+              try { console.log(require('fs').readFileSync('./jest-results.json','utf8').slice(0,2000)); } catch(_) {}
+            }
+            NODEEOF
           else
             echo "::error::No jest-results.json found — jest may have crashed at startup"
           fi

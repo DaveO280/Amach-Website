@@ -134,9 +134,10 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nextjs-build-${{ github.run_id }}
+          name: nextjs-build
           path: .next/
           retention-days: 1
+          overwrite: true
 
   # ─────────────────────────────────────────────────────────────────────────────
   # 5. E2E tests — security headers, CSP violations, API smoke tests
@@ -173,11 +174,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: nextjs-build-${{ github.run_id }}
-          path: .next/
+      - name: Build for E2E
+        run: pnpm vercel-build
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium

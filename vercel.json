@@ -1,6 +1,6 @@
 {
   "buildCommand": "next build --webpack",
-  "installCommand": "corepack enable && pnpm install --frozen-lockfile",
+  "installCommand": "npx -y pnpm@10.4.1 install --frozen-lockfile",
   "functions": {
     "src/app/api/venice/route.ts": {
       "maxDuration": 120

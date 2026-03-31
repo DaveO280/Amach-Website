@@ -73,17 +73,34 @@ jobs:
           if [ -f jest-results.json ]; then
             node -e "
               const r = require('./jest-results.json');
-              console.log('Tests:', r.numPassedTests, 'passed,', r.numFailedTests, 'failed');
-              r.testResults.filter(t => t.status === 'failed').forEach(t => {
-                console.log('\nFAILED SUITE:', t.testFilePath);
-                t.testResults.filter(r => r.status === 'failed').forEach(r => {
-                  console.log('  FAIL:', r.fullName);
-                  r.failureMessages.forEach(m => console.log('   ', m.split('\n').slice(0,8).join('\n    ')));
+              console.log('Tests:', r.numPassedTests, 'passed,', r.numFailedTests, 'failed,', r.numTotalTestSuites, 'suites');
+              if (r.testResults) {
+                r.testResults.filter(t => t.status === 'failed').forEach(t => {
+                  const file = t.testFilePath.replace(process.cwd() + '/', '');
+                  // GitHub workflow annotation format
+                  if (t.failureMessage) {
+                    const msg = t.failureMessage.replace(/\n/g, '%0A').slice(0, 500);
+                    console.log('::error file=' + file + '::' + msg);
+                  }
+                  console.log('\nFAILED SUITE:', file);
+                  if (t.testResults) {
+                    t.testResults.filter(r => r.status === 'failed').forEach(r => {
+                      console.log('  FAIL:', r.fullName);
+                      if (r.failureMessages) {
+                        r.failureMessages.forEach(m => console.log('    ', m.split('\n').slice(0,10).join('\n     ')));
+                      }
+                    });
+                  } else if (t.failureMessage) {
+                    console.log('  Suite-level error:', t.failureMessage.split('\n').slice(0,15).join('\n  '));
+                  }
                 });
-              });
+              } else {
+                console.log('Jest may have crashed before producing results. Raw output:');
+                console.log(JSON.stringify(r).slice(0, 2000));
+              }
             "
           else
-            echo "No jest-results.json found"
+            echo "::error::No jest-results.json found — jest may have crashed at startup"
           fi
 
       - name: Upload jest results

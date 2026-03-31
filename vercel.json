@@ -1,6 +1,9 @@
 {
   "buildCommand": "next build --webpack",
   "installCommand": "pnpm install --frozen-lockfile",
+  "env": {
+    "ENABLE_EXPERIMENTAL_COREPACK": "1"
+  },
   "functions": {
     "src/app/api/venice/route.ts": {
       "maxDuration": 120

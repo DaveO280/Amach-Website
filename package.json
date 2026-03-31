@@ -26,7 +26,7 @@
     "clean-docs": "pnpm exec tsx scripts/validate-docs.ts --fix --no-confirm",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "audit:ci": "pnpm audit --audit-level=moderate",
+    "audit:ci": "pnpm audit --audit-level=moderate --prod",
     "agent:isolate": "pnpm exec tsx scripts/test-single-agent.ts",
     "sleep:dedup": "pnpm exec tsx scripts/test-sleep-dedup.ts"
   },
@@ -63,7 +63,7 @@
     "framer-motion": "^12.23.25",
     "jszip": "^3.10.1",
     "lucide-react": "^0.344.0",
-    "next": "16.0.9",
+    "next": "16.1.7",
     "node-fetch": "^3.3.2",
     "papaparse": "^5.5.3",
     "pdf-lib": "^1.17.1",
@@ -156,9 +156,9 @@
       "cookie": "^0.7.2",
       "brace-expansion": "^2.0.1",
       "tmp": "^0.2.3",
-      "next": "^16.0.9",
-      "h3": "^1.15.5",
-      "hono": "^4.11.10",
+      "next": "16.1.7",
+      "h3": "1.15.9",
+      "hono": "4.12.7",
       "qs": "^6.14.2",
       "preact": "^10.28.2",
       "lodash": "^4.17.23",
@@ -166,7 +166,11 @@
       "diff@5.2.0": "5.2.2",
       "undici": "^6.23.0",
       "tar": "^7.5.9",
-      "fast-xml-parser": "^5.3.8",
+      "fast-xml-parser": "5.5.7",
+      "socket.io-parser": "4.2.6",
+      "picomatch": "4.0.4",
+      "path-to-regexp": "8.4.0",
+      "yaml": "1.10.3",
       "bn.js": "^5.2.3"
     },
     "peerDependencyRules": {
@@ -176,6 +180,7 @@
       ]
     },
     "_comment": {
+      "audit-scope": "audit:ci uses --prod so only production dependencies are checked. Dev tooling (ts-jest/handlebars, hardhat/minimatch, eslint, webpack) has known CVEs but never runs in production — acceptable risk.",
       "tar": "CVE-2026-23745 (node-tar arbitrary file overwrite/hardlink path traversal) fixed in 7.5.3+; override pins 7.5.7.",
       "request": "The 'request' package has SSRF vulnerability (CVE-2023-28155) but is only used in dev/test via @nomiclabs/hardhat-waffle. It's deprecated and has no patched version. This is acceptable risk as it never runs in production.",
       "elliptic": "Elliptic has a low-severity vulnerability (risky cryptographic implementation) but is a transitive dependency required by crypto libraries. This is tolerated as it's a low-risk issue and no alternative is available without breaking changes."

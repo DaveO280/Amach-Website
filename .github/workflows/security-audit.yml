@@ -1,0 +1,46 @@
+name: Daily Security Audit
+
+# Runs every day at 08:00 UTC and on any push that touches dependency files.
+# Catches newly-published CVEs against your current lockfile even between PRs.
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".npmrc"
+
+env:
+  NODE_VERSION: "22.13.1"
+  PNPM_VERSION: "10.4.1"
+
+jobs:
+  audit:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit for known CVEs (moderate+)
+        run: pnpm audit --audit-level=moderate
+
+      - name: Check for lockfile tampering
+        run: |
+          if ! git diff --exit-code pnpm-lock.yaml; then
+            echo "::error::pnpm-lock.yaml changed unexpectedly during install."
+            exit 1
+          fi

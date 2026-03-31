@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Europe/Dublin"
+    # Only open PRs when GitHub Advisory Database flags a vulnerability.
+    # Does NOT create PRs for every new version release — keeps noise low.
+    versioning-strategy: increase-if-necessary
+    open-pull-requests-limit: 5
+    groups:
+      security-updates:
+        patterns: ["*"]
+        update-types: ["security"]
+    labels:
+      - "security"
+      - "dependencies"
+    commit-message:
+      prefix: "security"

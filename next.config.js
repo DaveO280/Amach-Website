@@ -1,5 +1,4 @@
 const path = require("path");
-const webpack = require("webpack");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -25,6 +24,12 @@ const nextConfig = {
   turbopack: {},
   // Add webpack config to include my-health-app and fix ethers.js issues
   webpack: (config, { isServer }) => {
+    // Lazy-require webpack so that requiring next.config.js in tests (e.g.
+    // src/__tests__/security/hardening.test.ts) doesn't throw when webpack
+    // is not in the project's node_modules (it's provided by Next.js at
+    // build time, not available in plain Node.js/jest contexts).
+    const webpack = require("webpack");
+
     // Ignore test files and other unnecessary files from node_modules
     config.plugins = config.plugins || [];
 

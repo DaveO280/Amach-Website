@@ -5,8 +5,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 if ! command -v circom >/dev/null 2>&1; then
-  echo "Install Circom 2 first, e.g.: brew install circom"
-  echo "Or: https://docs.circom.io/getting-started/installation/"
+  echo "Circom 2 is not in PATH. Install it (Homebrew does not provide circom):"
+  echo "  1) Rust toolchain: https://rustup.rs/"
+  echo "  2) Then: git clone https://github.com/iden3/circom.git && cd circom && cargo install --path circom"
+  echo "     (puts circom in ~/.cargo/bin — add that to PATH if needed)"
+  echo "  Or binary: https://docs.circom.io/downloads/downloads/"
   exit 1
 fi
 

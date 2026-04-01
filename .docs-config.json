@@ -8,7 +8,7 @@
       "README.md",
       "CONTRIBUTING.md",
       "CODE_OF_CONDUCT.md",
-      "DEPLOYMENT.md"
+      "deployments/DEPLOYMENT.md"
     ]
   },
 
@@ -37,7 +37,7 @@
 
   "exceptions": {
     "description": "Files matching stale patterns but should be kept",
-    "files": ["OPTIMIZATION_SUMMARY.md", "AGENT_OPTIMIZATION_GUIDE.md"]
+    "files": []
   },
 
   "autoClean": {

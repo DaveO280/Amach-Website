@@ -76,6 +76,9 @@ scripts/admin-verify-user.js
 tracking-data.json
 *.zip
 
+# Local Circom + snarkjs playground (regeneratable; npm used only under zk-local/)
+zk-local/build/
+
 # Hardhat/Solidity build artifacts
 artifacts/
 cache/

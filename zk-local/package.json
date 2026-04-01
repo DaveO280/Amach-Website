@@ -1,0 +1,11 @@
+{
+  "name": "amach-zk-local",
+  "private": true,
+  "description": "Local Circom + snarkjs demo (Groth16). Not wired to the Next app yet; use npm in this folder only.",
+  "scripts": {
+    "prove": "bash scripts/full-prove.sh"
+  },
+  "devDependencies": {
+    "snarkjs": "^0.7.5"
+  }
+}

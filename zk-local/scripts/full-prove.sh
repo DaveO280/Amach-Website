@@ -46,7 +46,8 @@ if [[ ! -f "$PTAU" ]]; then
   "$SNARKJS" powersoftau new bn128 14 "$ROOT/build/pot14_0000.ptau" -v
   "$SNARKJS" powersoftau contribute "$ROOT/build/pot14_0000.ptau" "$ROOT/build/pot14_0001.ptau" \
     --name=amach-local-dev -v -e="$(date +%s)-local"
-  "$SNARKJS" powersoftau prepare_phase2 "$ROOT/build/pot14_0001.ptau" "$PTAU" -v
+  # snarkjs 0.7.x: subcommand is "prepare phase2", not "prepare_phase2"
+  "$SNARKJS" powersoftau prepare phase2 "$ROOT/build/pot14_0001.ptau" "$PTAU" -v
 fi
 
 echo "== Groth16 setup (phase 2) → zkey"
@@ -54,7 +55,7 @@ if [[ ! -f "$ZKEY" ]]; then
   "$SNARKJS" groth16 setup "$R1CS" "$PTAU" "$ROOT/build/sum_window_0000.zkey"
   "$SNARKJS" zkey contribute "$ROOT/build/sum_window_0000.zkey" "$ROOT/build/sum_window_0001.zkey" \
     --name=amach-circuit -v -e="$(date +%s)-circuit"
-  "$SNARKJS" zkey verify "$R1CS" "$PTAU" "$ROOT/build/sum_window_0001.zkey"
+  "$SNARKJS" zkey verify r1cs "$R1CS" "$PTAU" "$ROOT/build/sum_window_0001.zkey"
   cp "$ROOT/build/sum_window_0001.zkey" "$ZKEY"
   "$SNARKJS" zkey export verificationkey "$ZKEY" "$VK"
 fi

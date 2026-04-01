@@ -16,4 +16,5 @@ template SumWindow(N) {
 }
 
 // Demo: 8 days; change template arg and re-run ./scripts/full-prove.sh for other sizes.
-component main { public [sum] } = SumWindow(8);
+// `public […]` on main is only for public *inputs*; `sum` is an output → public by default.
+component main = SumWindow(8);

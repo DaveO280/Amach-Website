@@ -83,7 +83,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const requestBody: VeniceChatRequestBody = {
       messages: body.messages || [],
       // Use nullish coalescing so callers can intentionally pass 0 (e.g., temperature: 0)
-      max_tokens: (body.maxTokens ?? body.max_tokens ?? 4000) as number, // Increased default token limit
+      max_tokens: (body.maxTokens ?? body.max_tokens ?? 16000) as number,
       temperature: (body.temperature ?? 0.7) as number,
       model: modelName,
       stream: false,

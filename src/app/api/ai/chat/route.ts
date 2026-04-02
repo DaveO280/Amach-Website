@@ -49,7 +49,28 @@ interface HealthContext {
   profile?: {
     age?: number;
     sex?: string;
+    goals?: string[];
+    concerns?: string[];
   };
+  bloodwork?: Array<{
+    marker: string;
+    value: number | string;
+    unit?: string;
+    referenceRange?: string;
+    date?: string;
+  }>;
+  anomalies?: Array<{
+    metric: string;
+    description: string;
+    severity?: string;
+    date?: string;
+  }>;
+  timeline_events?: Array<{
+    type: string;
+    date: string;
+    description?: string;
+  }>;
+  today_partial?: Record<string, number | string>;
   dateRange?: {
     start: string;
     end: string;
@@ -123,59 +144,114 @@ When analyzing health data:
 - Priority actions get 2-3 sentences: what to do, why, and the cross-system benefit.`;
 
 function buildContextMessage(context: HealthContext): string {
-  if (!context.metrics) return "";
+  const hasData =
+    context.metrics ||
+    context.profile?.goals?.length ||
+    context.profile?.concerns?.length ||
+    context.bloodwork?.length ||
+    context.anomalies?.length ||
+    context.timeline_events?.length ||
+    context.today_partial;
+  if (!hasData) return "";
 
   const parts: string[] = ["Current health data summary:"];
 
-  if (context.metrics.steps) {
-    const s = context.metrics.steps;
-    parts.push(
-      `- Steps: ${s.latest?.toLocaleString() ?? "N/A"} today, avg ${s.average?.toLocaleString() ?? "N/A"}/day`,
-    );
+  if (context.metrics) {
+    const m = context.metrics;
+    if (m.steps) {
+      const s = m.steps;
+      parts.push(
+        `- Steps: ${s.latest?.toLocaleString() ?? "N/A"} today, avg ${s.average?.toLocaleString() ?? "N/A"}/day`,
+      );
+    }
+    if (m.heartRate) {
+      const hr = m.heartRate;
+      parts.push(
+        `- Heart Rate: ${hr.latest ?? "N/A"} bpm current, avg ${hr.average ?? "N/A"} bpm`,
+      );
+    }
+    if (m.hrv) {
+      const hrv = m.hrv;
+      parts.push(
+        `- HRV: ${hrv.latest ?? "N/A"} ms, avg ${hrv.average ?? "N/A"} ms`,
+      );
+    }
+    if (m.sleep) {
+      const sleep = m.sleep;
+      // iOS sends sleep in hours already
+      parts.push(
+        `- Sleep: ${sleep.latest?.toFixed(1) ?? "N/A"} hrs last night, avg ${sleep.average?.toFixed(1) ?? "N/A"} hrs/night (trend: ${sleep.trend ?? "N/A"})`,
+      );
+    }
+    if (m.exercise) {
+      const ex = m.exercise;
+      parts.push(`- Exercise: ${ex.latest ?? "N/A"} mins today`);
+    }
+    if (m.restingHeartRate) {
+      const rhr = m.restingHeartRate;
+      parts.push(`- Resting Heart Rate: ${rhr.latest ?? "N/A"} bpm`);
+    }
+    if (m.vo2Max) {
+      const vo2 = m.vo2Max;
+      parts.push(`- VO2 Max: ${vo2.latest?.toFixed(1) ?? "N/A"} mL/kg/min`);
+    }
+    if (m.respiratoryRate) {
+      const rr = m.respiratoryRate;
+      parts.push(
+        `- Respiratory Rate: ${rr.latest?.toFixed(1) ?? "N/A"} breaths/min`,
+      );
+    }
   }
 
-  if (context.metrics.heartRate) {
-    const hr = context.metrics.heartRate;
-    parts.push(
-      `- Heart Rate: ${hr.latest ?? "N/A"} bpm current, avg ${hr.average ?? "N/A"} bpm`,
-    );
+  if (context.profile) {
+    const p = context.profile;
+    if (p.age != null || p.sex) {
+      parts.push(
+        `- Profile: ${[p.age != null ? `age ${p.age}` : null, p.sex].filter(Boolean).join(", ")}`,
+      );
+    }
+    if (p.goals?.length) {
+      parts.push(`- Goals: ${p.goals.join("; ")}`);
+    }
+    if (p.concerns?.length) {
+      parts.push(`- Health concerns: ${p.concerns.join("; ")}`);
+    }
   }
 
-  if (context.metrics.hrv) {
-    const hrv = context.metrics.hrv;
-    parts.push(
-      `- HRV: ${hrv.latest ?? "N/A"} ms, avg ${hrv.average ?? "N/A"} ms`,
-    );
+  if (context.bloodwork?.length) {
+    parts.push("\nBloodwork:");
+    for (const bw of context.bloodwork) {
+      const ref = bw.referenceRange ? ` (ref: ${bw.referenceRange})` : "";
+      const unit = bw.unit ? ` ${bw.unit}` : "";
+      const date = bw.date ? ` [${bw.date}]` : "";
+      parts.push(`- ${bw.marker}: ${bw.value}${unit}${ref}${date}`);
+    }
   }
 
-  if (context.metrics.sleep) {
-    const sleep = context.metrics.sleep;
-    // iOS sends sleep in hours already
-    parts.push(
-      `- Sleep: ${sleep.latest?.toFixed(1) ?? "N/A"} hrs last night, avg ${sleep.average?.toFixed(1) ?? "N/A"} hrs/night (trend: ${sleep.trend ?? "N/A"})`,
-    );
+  if (context.anomalies?.length) {
+    parts.push("\nAnomalies / flags:");
+    for (const a of context.anomalies) {
+      const sev = a.severity ? ` [${a.severity}]` : "";
+      const date = a.date ? ` (${a.date})` : "";
+      parts.push(`- ${a.metric}${sev}: ${a.description}${date}`);
+    }
   }
 
-  if (context.metrics.exercise) {
-    const ex = context.metrics.exercise;
-    parts.push(`- Exercise: ${ex.latest ?? "N/A"} mins today`);
+  if (context.timeline_events?.length) {
+    parts.push("\nRecent timeline events:");
+    for (const ev of context.timeline_events) {
+      const desc = ev.description ? ` — ${ev.description}` : "";
+      parts.push(`- [${ev.date}] ${ev.type}${desc}`);
+    }
   }
 
-  if (context.metrics.restingHeartRate) {
-    const rhr = context.metrics.restingHeartRate;
-    parts.push(`- Resting Heart Rate: ${rhr.latest ?? "N/A"} bpm`);
-  }
-
-  if (context.metrics.vo2Max) {
-    const vo2 = context.metrics.vo2Max;
-    parts.push(`- VO2 Max: ${vo2.latest?.toFixed(1) ?? "N/A"} mL/kg/min`);
-  }
-
-  if (context.metrics.respiratoryRate) {
-    const rr = context.metrics.respiratoryRate;
-    parts.push(
-      `- Respiratory Rate: ${rr.latest?.toFixed(1) ?? "N/A"} breaths/min`,
-    );
+  if (context.today_partial) {
+    const entries = Object.entries(context.today_partial);
+    if (entries.length) {
+      parts.push(
+        `\nToday (partial): ${entries.map(([k, v]) => `${k}: ${v}`).join(", ")}`,
+      );
+    }
   }
 
   if (context.dateRange) {
@@ -199,6 +275,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // Accept healthContext as an alias for context (iOS may send either field name)
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const context: HealthContext | undefined =
+      body.context ?? (body as any).healthContext;
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+
     // Get API key
     const apiKey = process.env.VENICE_API_KEY;
     if (!apiKey) {
@@ -215,20 +297,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ];
 
     // Add health context if provided
-    if (body.context) {
+    if (context) {
       // Diagnostic: log what keys iOS is actually sending so we can verify contextBlocks arrive
-      const ctxKeys = Object.keys(body.context);
-      const hasBlocks = Array.isArray(body.context.contextBlocks);
-      const blockCount = hasBlocks ? body.context.contextBlocks!.length : 0;
+      const ctxKeys = Object.keys(context);
+      const hasBlocks = Array.isArray(context.contextBlocks);
+      const blockCount = hasBlocks ? context.contextBlocks!.length : 0;
       console.log(
         `[AI Chat] context keys: [${ctxKeys.join(", ")}], contextBlocks: ${hasBlocks} (${blockCount})`,
       );
 
-      if (body.context.contextBlocks?.length) {
+      if (context.contextBlocks?.length) {
         // iOS sends pre-formatted context blocks — inject each verbatim as a system message.
         // This is the preferred path: iOS owns all formatting, backend is a pass-through.
         // New data sources (CGM, Whoop, Oura) require no backend changes — just new blocks.
-        for (const block of body.context.contextBlocks) {
+        for (const block of context.contextBlocks) {
           console.log(
             `[AI Chat] injecting block type="${block.type}" (${block.content.length} chars)`,
           );
@@ -237,7 +319,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       } else {
         // Fallback: legacy typed-field formatting (web app or older iOS builds)
         console.log("[AI Chat] using legacy buildContextMessage fallback");
-        const contextMessage = buildContextMessage(body.context);
+        const contextMessage = buildContextMessage(context);
         if (contextMessage) {
           messages.push({ role: "system", content: contextMessage });
         }
@@ -248,8 +330,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // iOS may send labData at top-level OR nested inside context
     /* eslint-disable @typescript-eslint/no-explicit-any */
     const rawLabData =
-      body.labData ??
-      (body.context as Record<string, any> | undefined)?.labData;
+      body.labData ?? (context as Record<string, any> | undefined)?.labData;
 
     if (rawLabData) {
       // Diagnostic: dump the shape of what arrived so we can debug mismatches
@@ -330,8 +411,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     } else {
       console.log(
         `[AI Chat] no labData found. Top-level keys: [${Object.keys(body).join(", ")}]` +
-          (body.context
-            ? `, context keys: [${Object.keys(body.context).join(", ")}]`
+          (context
+            ? `, context keys: [${Object.keys(context).join(", ")}]`
             : ""),
       );
     }
@@ -347,14 +428,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Add user message
     messages.push({ role: "user", content: body.message });
 
-    // Configure based on mode — match web route defaults (4000 tokens, 0.7 temp)
+    // Configure based on mode
     const mode = body.options?.mode ?? "quick";
-    // GLM-4.7 burns thinking tokens before the visible response. With
-    // strip_thinking_response=true, the entire thinking budget is hidden.
-    // If max_tokens is too low the model spends everything on thinking and
-    // returns empty visible content. 4000 gives enough headroom for both.
-    const maxTokens =
-      body.options?.maxTokens ?? (mode === "deep" ? 8000 : 4000);
+    // Never cap tokens artificially — let Venice decide how much to generate.
+    // Use 16000 as a safe high ceiling when the caller hasn't specified a limit.
+    const maxTokens = body.options?.maxTokens ?? 16000;
     const temperature =
       body.options?.temperature ?? (mode === "deep" ? 0.7 : 0.7);
 

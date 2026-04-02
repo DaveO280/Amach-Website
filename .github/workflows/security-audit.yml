@@ -37,7 +37,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Audit for known CVEs (moderate+)
-        run: run: pnpm audit --audit-level=high --prod
+        run: pnpm audit --audit-level=high --prod
 
       - name: Check for lockfile tampering
         run: |

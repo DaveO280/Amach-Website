@@ -18,6 +18,32 @@ import {
   processSleepData,
 } from "../../../utils/sleepDataProcessor";
 
+// Design system tokens
+const DS = {
+  emerald: "#006B4F",
+  optimal: "#059669",
+  emeraldLight: "#4ade80",
+  amber: "#F59E0B",
+  errorRed: "rgba(239,68,68,0.7)",
+  errorRedSolid: "#EF4444",
+  grid: "rgba(0,107,79,0.1)",
+  axisText: "#6B8C7A",
+  tooltipBorder: "rgba(0,107,79,0.15)",
+  textPrimary: "#064E3B",
+  textMuted: "#6B8C7A",
+  surface: "#FFFFFF",
+  surfaceElev: "#FEF3C7",
+  border: "rgba(0,107,79,0.1)",
+};
+
+// Sleep stage palette — all within design system
+const SLEEP_COLORS = {
+  core: DS.optimal, // #059669 — success green
+  deep: DS.emerald, // #006B4F — emerald primary (darkest = deepest)
+  rem: DS.amber, // #F59E0B — amber (distinct, warm)
+  awake: DS.errorRed, // red, muted — wakeful disruption
+};
+
 interface SleepAnalysisChartProps {
   data: HealthDataPoint[];
   processedData?: DailyProcessedSleepData[];
@@ -35,25 +61,18 @@ export const SleepAnalysisChart = ({
       : processSleepData(data);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  // Helper function to format minutes as hours
   const formatMinutesToHours = (minutes: number): string => {
     const hours = Math.floor(minutes / 60);
     const mins = Math.round(minutes % 60);
     return `${hours}h ${mins}m`;
   };
 
-  // Calculate average statistics
   const calcAverageStats = (
     processedData: DailyProcessedSleepData[],
   ): {
     avgTimeInBed: number;
     avgSleepTime: number;
-    avgStages: {
-      core: number;
-      deep: number;
-      rem: number;
-      awake: number;
-    };
+    avgStages: { core: number; deep: number; rem: number; awake: number };
     stagePercentages: {
       core: number;
       deep: number;
@@ -64,7 +83,6 @@ export const SleepAnalysisChart = ({
     if (processedData.length === 0) return null;
 
     let totalTimeInBed = 0;
-    let totalSleepTime = 0;
     let totalCore = 0;
     let totalDeep = 0;
     let totalRem = 0;
@@ -78,7 +96,7 @@ export const SleepAnalysisChart = ({
       totalAwake += day.stageData.awake;
     });
 
-    totalSleepTime = totalCore + totalDeep + totalRem;
+    const totalSleepTime = totalCore + totalDeep + totalRem;
 
     return {
       avgTimeInBed: totalTimeInBed / processedData.length,
@@ -100,7 +118,6 @@ export const SleepAnalysisChart = ({
 
   const averageStats = calcAverageStats(processedData);
 
-  // Prepare data for chart
   const chartData = processedData.map((day) => ({
     date: day.date,
     timeInBed: day.totalDuration,
@@ -113,12 +130,10 @@ export const SleepAnalysisChart = ({
     },
   }));
 
-  // Get details for selected date
   const selectedDayData = selectedDate
     ? processedData.find((day) => day.date === selectedDate)
     : null;
 
-  // Calculate sleep efficiency (total sleep / time in bed)
   const calcSleepEfficiency = (day: (typeof chartData)[0]): number => {
     return day.timeInBed > 0 ? (day.totalSleep / day.timeInBed) * 100 : 0;
   };
@@ -138,19 +153,27 @@ export const SleepAnalysisChart = ({
             }
           }}
         >
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid strokeDasharray="3 3" stroke={DS.grid} />
           <XAxis
             dataKey="date"
+            tick={{ fill: DS.axisText, fontSize: 11 }}
+            axisLine={{ stroke: DS.grid }}
+            tickLine={false}
             tickFormatter={(date) => {
               const d = new Date(date);
               return `${d.getMonth() + 1}/${d.getDate()}`;
             }}
           />
           <YAxis
+            tick={{ fill: DS.axisText, fontSize: 11 }}
+            axisLine={{ stroke: DS.grid }}
+            tickLine={false}
             label={{
               value: "Minutes",
               angle: -90,
               position: "insideLeft",
+              fill: DS.axisText,
+              fontSize: 11,
             }}
           />
           <Tooltip
@@ -163,8 +186,24 @@ export const SleepAnalysisChart = ({
                 const dayData = chartData.find((d) => d.date === label);
                 if (!dayData) return null;
                 return (
-                  <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-lg">
-                    <p className="font-semibold mb-2">
+                  <div
+                    style={{
+                      background: DS.surface,
+                      border: `1px solid ${DS.tooltipBorder}`,
+                      borderRadius: 10,
+                      padding: "12px 16px",
+                      boxShadow: "0 4px 16px rgba(0,107,79,0.08)",
+                      fontSize: 12,
+                      color: DS.textMuted,
+                    }}
+                  >
+                    <p
+                      style={{
+                        fontWeight: 600,
+                        marginBottom: 8,
+                        color: DS.textPrimary,
+                      }}
+                    >
                       {new Date(label as string).toLocaleDateString()}
                     </p>
                     <p>
@@ -173,17 +212,26 @@ export const SleepAnalysisChart = ({
                     <p>
                       Total Sleep: {formatMinutesToHours(dayData.totalSleep)}
                     </p>
-                    <p>
-                      Core Sleep: {formatMinutesToHours(dayData.stages.core)}
+                    <p style={{ color: SLEEP_COLORS.core }}>
+                      Core: {formatMinutesToHours(dayData.stages.core)}
                     </p>
-                    <p>
-                      Deep Sleep: {formatMinutesToHours(dayData.stages.deep)}
+                    <p style={{ color: SLEEP_COLORS.deep }}>
+                      Deep: {formatMinutesToHours(dayData.stages.deep)}
                     </p>
-                    <p>REM Sleep: {formatMinutesToHours(dayData.stages.rem)}</p>
-                    <p>Awake: {formatMinutesToHours(dayData.stages.awake)}</p>
-                    <p className="mt-2">
-                      Sleep Efficiency:{" "}
-                      {calcSleepEfficiency(dayData).toFixed(1)}%
+                    <p style={{ color: DS.amber }}>
+                      REM: {formatMinutesToHours(dayData.stages.rem)}
+                    </p>
+                    <p style={{ color: DS.errorRedSolid }}>
+                      Awake: {formatMinutesToHours(dayData.stages.awake)}
+                    </p>
+                    <p
+                      style={{
+                        marginTop: 8,
+                        fontWeight: 600,
+                        color: DS.textPrimary,
+                      }}
+                    >
+                      Efficiency: {calcSleepEfficiency(dayData).toFixed(1)}%
                     </p>
                   </div>
                 );
@@ -191,91 +239,133 @@ export const SleepAnalysisChart = ({
               return null;
             }}
           />
-          <Legend />
-          {/* Stacked bars for sleep stages */}
+          <Legend wrapperStyle={{ fontSize: 12, color: DS.textMuted }} />
           <Bar
             dataKey="stages.core"
             name="Core Sleep"
             stackId="sleep"
-            fill="#4CAF50"
+            fill={SLEEP_COLORS.core}
           />
           <Bar
             dataKey="stages.deep"
             name="Deep Sleep"
             stackId="sleep"
-            fill="#2196F3"
+            fill={SLEEP_COLORS.deep}
           />
           <Bar
             dataKey="stages.rem"
             name="REM Sleep"
             stackId="sleep"
-            fill="#9C27B0"
+            fill={SLEEP_COLORS.rem}
           />
           <Bar
             dataKey="stages.awake"
             name="Awake"
             stackId="sleep"
-            fill="#FF9800"
+            fill={SLEEP_COLORS.awake}
+            radius={[2, 2, 0, 0]}
           />
         </ComposedChart>
       </ResponsiveContainer>
 
       {/* Sleep session details for selected date */}
       {selectedDayData && (
-        <div className="bg-gray-50 p-4 rounded-lg mt-4">
-          <h3 className="text-lg font-semibold mb-2">
-            Sleep Details for{" "}
+        <div
+          style={{
+            background: DS.surfaceElev,
+            border: `1px solid ${DS.border}`,
+            borderRadius: 12,
+            padding: 16,
+            marginTop: 8,
+          }}
+        >
+          <h3
+            style={{
+              fontSize: 15,
+              fontWeight: 600,
+              color: DS.textPrimary,
+              marginBottom: 12,
+            }}
+          >
+            Sleep Details —{" "}
             {new Date(selectedDayData.date).toLocaleDateString()}
           </h3>
 
           <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <p className="font-medium">
+            <div style={{ color: DS.textMuted, fontSize: 13 }}>
+              <p>
                 Time in Bed:{" "}
-                {formatMinutesToHours(selectedDayData.totalDuration)}
+                <span style={{ color: DS.textPrimary, fontWeight: 600 }}>
+                  {formatMinutesToHours(selectedDayData.totalDuration)}
+                </span>
               </p>
-              <p className="font-medium">
+              <p>
                 Total Sleep:{" "}
-                {formatMinutesToHours(
-                  selectedDayData.stageData.core +
-                    selectedDayData.stageData.deep +
-                    selectedDayData.stageData.rem,
-                )}
+                <span style={{ color: DS.textPrimary, fontWeight: 600 }}>
+                  {formatMinutesToHours(
+                    selectedDayData.stageData.core +
+                      selectedDayData.stageData.deep +
+                      selectedDayData.stageData.rem,
+                  )}
+                </span>
               </p>
             </div>
-            <div>
-              <p className="font-medium">
-                Sleep Efficiency:{" "}
-                {(
-                  ((selectedDayData.stageData.core +
-                    selectedDayData.stageData.deep +
-                    selectedDayData.stageData.rem) /
-                    selectedDayData.totalDuration) *
-                  100
-                ).toFixed(1)}
-                %
+            <div style={{ color: DS.textMuted, fontSize: 13 }}>
+              <p>
+                Efficiency:{" "}
+                <span style={{ color: DS.optimal, fontWeight: 600 }}>
+                  {(
+                    ((selectedDayData.stageData.core +
+                      selectedDayData.stageData.deep +
+                      selectedDayData.stageData.rem) /
+                      selectedDayData.totalDuration) *
+                    100
+                  ).toFixed(1)}
+                  %
+                </span>
               </p>
-              <p className="font-medium">
-                Sessions: {selectedDayData.sessions.length}
+              <p>
+                Sessions:{" "}
+                <span style={{ color: DS.textPrimary, fontWeight: 600 }}>
+                  {selectedDayData.sessions.length}
+                </span>
               </p>
             </div>
           </div>
 
           {selectedDayData.sessions.length > 1 && (
-            <div className="mt-4">
-              <h4 className="font-medium mb-2">Individual Sleep Sessions:</h4>
+            <div style={{ marginTop: 12 }}>
+              <h4
+                style={{
+                  fontWeight: 600,
+                  fontSize: 13,
+                  color: DS.textPrimary,
+                  marginBottom: 8,
+                }}
+              >
+                Individual Sessions
+              </h4>
               {selectedDayData.sessions.map((session, i) => (
-                <div key={i} className="bg-white p-3 rounded border mb-2">
-                  <p className="text-sm">
-                    {new Date(session.startTime).toLocaleTimeString()} to{" "}
+                <div
+                  key={i}
+                  style={{
+                    background: DS.surface,
+                    border: `1px solid ${DS.border}`,
+                    borderRadius: 8,
+                    padding: "8px 12px",
+                    marginBottom: 6,
+                    fontSize: 12,
+                    color: DS.textMuted,
+                  }}
+                >
+                  <p>
+                    {new Date(session.startTime).toLocaleTimeString()} →{" "}
                     {new Date(session.endTime).toLocaleTimeString()}
                   </p>
-                  <p className="text-sm">
-                    Duration: {formatMinutesToHours(session.timeInBed)}
-                  </p>
+                  <p>Duration: {formatMinutesToHours(session.timeInBed)}</p>
                   {session.timeToFallAsleep > 0 && (
-                    <p className="text-sm">
-                      Time to fall asleep:{" "}
+                    <p>
+                      Sleep onset:{" "}
                       {formatMinutesToHours(session.timeToFallAsleep)}
                     </p>
                   )}
@@ -286,43 +376,116 @@ export const SleepAnalysisChart = ({
         </div>
       )}
 
-      {/* Sleep Stage Percentages */}
+      {/* Sleep Stage Averages */}
       {averageStats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-          <div className="bg-emerald-50 p-4 rounded-lg">
-            <h3 className="text-emerald-800 font-semibold">Core Sleep</h3>
-            <p className="text-2xl font-bold text-emerald-600">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2">
+          {/* Core Sleep */}
+          <div
+            style={{
+              background: "rgba(5,150,105,0.08)",
+              border: `1px solid rgba(5,150,105,0.2)`,
+              borderRadius: 12,
+              padding: 16,
+            }}
+          >
+            <h3 style={{ color: DS.optimal, fontWeight: 600, fontSize: 13 }}>
+              Core Sleep
+            </h3>
+            <p
+              style={{
+                fontSize: 22,
+                fontWeight: 700,
+                color: DS.optimal,
+                margin: "4px 0",
+              }}
+            >
               {averageStats.stagePercentages.core.toFixed(1)}%
             </p>
-            <p className="text-sm text-emerald-700">
-              Average: {formatMinutesToHours(averageStats.avgStages.core)}
+            <p style={{ fontSize: 12, color: DS.textMuted }}>
+              Avg: {formatMinutesToHours(averageStats.avgStages.core)}
             </p>
           </div>
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <h3 className="text-blue-800 font-semibold">Deep Sleep</h3>
-            <p className="text-2xl font-bold text-blue-600">
+
+          {/* Deep Sleep */}
+          <div
+            style={{
+              background: "rgba(0,107,79,0.08)",
+              border: `1px solid rgba(0,107,79,0.2)`,
+              borderRadius: 12,
+              padding: 16,
+            }}
+          >
+            <h3 style={{ color: DS.emerald, fontWeight: 600, fontSize: 13 }}>
+              Deep Sleep
+            </h3>
+            <p
+              style={{
+                fontSize: 22,
+                fontWeight: 700,
+                color: DS.emerald,
+                margin: "4px 0",
+              }}
+            >
               {averageStats.stagePercentages.deep.toFixed(1)}%
             </p>
-            <p className="text-sm text-blue-700">
-              Average: {formatMinutesToHours(averageStats.avgStages.deep)}
+            <p style={{ fontSize: 12, color: DS.textMuted }}>
+              Avg: {formatMinutesToHours(averageStats.avgStages.deep)}
             </p>
           </div>
-          <div className="bg-purple-50 p-4 rounded-lg">
-            <h3 className="text-purple-800 font-semibold">REM Sleep</h3>
-            <p className="text-2xl font-bold text-purple-600">
+
+          {/* REM Sleep */}
+          <div
+            style={{
+              background: "rgba(245,158,11,0.08)",
+              border: `1px solid rgba(245,158,11,0.2)`,
+              borderRadius: 12,
+              padding: 16,
+            }}
+          >
+            <h3 style={{ color: DS.amber, fontWeight: 600, fontSize: 13 }}>
+              REM Sleep
+            </h3>
+            <p
+              style={{
+                fontSize: 22,
+                fontWeight: 700,
+                color: DS.amber,
+                margin: "4px 0",
+              }}
+            >
               {averageStats.stagePercentages.rem.toFixed(1)}%
             </p>
-            <p className="text-sm text-purple-700">
-              Average: {formatMinutesToHours(averageStats.avgStages.rem)}
+            <p style={{ fontSize: 12, color: DS.textMuted }}>
+              Avg: {formatMinutesToHours(averageStats.avgStages.rem)}
             </p>
           </div>
-          <div className="bg-amber-50 p-4 rounded-lg">
-            <h3 className="text-amber-800 font-semibold">Awake</h3>
-            <p className="text-2xl font-bold text-amber-600">
+
+          {/* Awake */}
+          <div
+            style={{
+              background: "rgba(239,68,68,0.06)",
+              border: `1px solid rgba(239,68,68,0.15)`,
+              borderRadius: 12,
+              padding: 16,
+            }}
+          >
+            <h3
+              style={{ color: DS.errorRedSolid, fontWeight: 600, fontSize: 13 }}
+            >
+              Awake
+            </h3>
+            <p
+              style={{
+                fontSize: 22,
+                fontWeight: 700,
+                color: DS.errorRedSolid,
+                margin: "4px 0",
+              }}
+            >
               {averageStats.stagePercentages.awake.toFixed(1)}%
             </p>
-            <p className="text-sm text-amber-700">
-              Average: {formatMinutesToHours(averageStats.avgStages.awake)}
+            <p style={{ fontSize: 12, color: DS.textMuted }}>
+              Avg: {formatMinutesToHours(averageStats.avgStages.awake)}
             </p>
           </div>
         </div>

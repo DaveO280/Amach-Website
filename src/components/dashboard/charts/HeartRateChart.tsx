@@ -19,6 +19,22 @@ import { processDailyHeartRateData } from "../../../utils/chartDataProcessor";
 import { ChartContainer } from "./ChartContainer";
 import { useChartZoom } from "./useChartZoom";
 
+// Design system tokens
+const DS = {
+  emerald: "#006B4F",
+  emeraldLight: "#4ade80",
+  emeraldSubtle: "rgba(0,107,79,0.18)",
+  grid: "rgba(0,107,79,0.1)",
+  axisText: "#6B8C7A",
+  tooltipBg: "#FFFFFF",
+  tooltipBgDark: "#111F1A",
+  tooltipBorder: "rgba(0,107,79,0.15)",
+  textPrimary: "#064E3B",
+  textMuted: "#6B8C7A",
+  errorRed: "#EF4444",
+  successGreen: "#059669",
+};
+
 interface HeartRateChartProps {
   data: HealthData[];
   height?: number;
@@ -41,10 +57,8 @@ const HeartRateChart: React.FC<HeartRateChartProps> = ({
     }));
   }, [data]);
 
-  // Use shared zoom logic
   const zoom = useChartZoom(chartData, "avg");
 
-  // Custom tooltip
   const CustomTooltip = ({
     active,
     payload,
@@ -58,24 +72,50 @@ const HeartRateChart: React.FC<HeartRateChartProps> = ({
         count: number;
       };
       return (
-        <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200 min-w-[160px]">
-          <div className="font-semibold mb-1">{label}</div>
-          <div className="text-xs">
+        <div
+          style={{
+            background: DS.tooltipBg,
+            border: `1px solid ${DS.tooltipBorder}`,
+            borderRadius: 10,
+            padding: "10px 14px",
+            minWidth: 160,
+            boxShadow: "0 4px 16px rgba(0,107,79,0.08)",
+          }}
+        >
+          <div
+            style={{
+              color: DS.textPrimary,
+              fontWeight: 600,
+              fontSize: 12,
+              marginBottom: 6,
+            }}
+          >
+            {label}
+          </div>
+          <div style={{ fontSize: 12, color: DS.textMuted }}>
             <div>
-              <span className="font-medium text-indigo-700">Average: </span>
-              <span className="font-semibold text-indigo-700">{d.avg} BPM</span>
+              <span style={{ color: DS.emerald, fontWeight: 600 }}>Avg: </span>
+              <span style={{ color: DS.emerald, fontWeight: 700 }}>
+                {d.avg} BPM
+              </span>
             </div>
             <div>
-              <span className="text-green-700">Min: </span>
-              <span className="font-semibold text-green-700">{d.min} BPM</span>
+              <span style={{ color: DS.successGreen }}>Min: </span>
+              <span style={{ color: DS.successGreen, fontWeight: 600 }}>
+                {d.min} BPM
+              </span>
             </div>
             <div>
-              <span className="text-red-700">Max: </span>
-              <span className="font-semibold text-red-700">{d.max} BPM</span>
+              <span style={{ color: DS.errorRed }}>Max: </span>
+              <span style={{ color: DS.errorRed, fontWeight: 600 }}>
+                {d.max} BPM
+              </span>
             </div>
-            <div>
-              <span className="text-gray-500">Readings: </span>
-              <span className="font-semibold text-gray-700">{d.count}</span>
+            <div style={{ marginTop: 4 }}>
+              <span>Readings: </span>
+              <span style={{ fontWeight: 600, color: DS.textPrimary }}>
+                {d.count}
+              </span>
             </div>
           </div>
         </div>
@@ -84,7 +124,6 @@ const HeartRateChart: React.FC<HeartRateChartProps> = ({
     return null;
   };
 
-  // Custom shape for the min-max bar: bar starts at min, height is max-min
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const BarRangeShape = (props: any): JSX.Element => {
     const { x, y, width, height } = props;
@@ -94,8 +133,8 @@ const HeartRateChart: React.FC<HeartRateChartProps> = ({
         y={y}
         width={width}
         height={height}
-        fill="#A7F3D0"
-        opacity={0.7}
+        fill={DS.emeraldLight}
+        opacity={0.35}
         rx={2}
       />
     );
@@ -116,9 +155,12 @@ const HeartRateChart: React.FC<HeartRateChartProps> = ({
           onMouseUp={zoom.handleMouseUp}
           margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
         >
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid strokeDasharray="3 3" stroke={DS.grid} />
           <XAxis
             dataKey="day"
+            tick={{ fill: DS.axisText, fontSize: 11 }}
+            axisLine={{ stroke: DS.grid }}
+            tickLine={false}
             domain={[zoom.left || "dataMin", zoom.right || "dataMax"]}
             type="category"
             tickFormatter={(value) => {
@@ -131,25 +173,32 @@ const HeartRateChart: React.FC<HeartRateChartProps> = ({
           />
           <YAxis
             domain={[0, zoom.top || "auto"]}
-            label={{ value: "BPM", angle: -90, position: "insideLeft" }}
+            tick={{ fill: DS.axisText, fontSize: 11 }}
+            axisLine={{ stroke: DS.grid }}
+            tickLine={false}
+            label={{
+              value: "BPM",
+              angle: -90,
+              position: "insideLeft",
+              fill: DS.axisText,
+              fontSize: 11,
+            }}
           />
           <Tooltip content={CustomTooltip} />
-          <Legend />
-          {/* Bar for min-max range */}
+          <Legend wrapperStyle={{ fontSize: 12, color: DS.textMuted }} />
           <Bar
             dataKey="range"
-            fill="#A7F3D0"
+            fill={DS.emeraldLight}
             name="Heart Rate Range"
             isAnimationActive={false}
             shape={BarRangeShape}
           />
-          {/* Line for average */}
           <Line
             type="monotone"
             dataKey="avg"
-            stroke="#6366F1"
+            stroke={DS.emerald}
             strokeWidth={2}
-            dot={{ r: 2, fill: "#6366F1" }}
+            dot={{ r: 2, fill: DS.emerald }}
             name="Average Heart Rate"
             isAnimationActive={false}
           />
@@ -158,7 +207,7 @@ const HeartRateChart: React.FC<HeartRateChartProps> = ({
               x1={zoom.refAreaLeft}
               x2={zoom.refAreaRight}
               strokeOpacity={0.3}
-              fill="#6366F1"
+              fill={DS.emerald}
               fillOpacity={0.1}
             />
           )}

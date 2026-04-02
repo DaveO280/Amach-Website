@@ -21,15 +21,29 @@ export const ChartContainer: React.FC<ChartContainerProps> = ({
         <button
           onClick={onZoomOut}
           disabled={!canZoomOut}
-          className="p-1 rounded bg-transparent dark:bg-[#0B140F] border border-[rgba(0,107,79,0.25)] dark:border-[rgba(74,222,128,0.2)] text-[#006B4F] dark:text-[#4ade80] hover:bg-[rgba(0,107,79,0.07)] transition-colors disabled:opacity-50"
+          className="px-3 py-1 rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
+          style={{
+            background: "transparent",
+            border: "1px solid rgba(0,107,79,0.25)",
+            color: "#006B4F",
+          }}
+          onMouseEnter={(e) => {
+            if (canZoomOut)
+              (e.currentTarget as HTMLButtonElement).style.background =
+                "rgba(0,107,79,0.07)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.background =
+              "transparent";
+          }}
         >
           Zoom Out
         </button>
       </div>
       <div style={{ width: "100%", height: "100%" }}>
         {chartData.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500">{fallbackMessage}</p>
+          <div className="flex items-center justify-center h-full py-12">
+            <p style={{ color: "#6B8C7A", fontSize: 13 }}>{fallbackMessage}</p>
           </div>
         ) : (
           children

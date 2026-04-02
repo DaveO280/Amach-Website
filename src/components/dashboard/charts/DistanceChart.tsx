@@ -14,6 +14,17 @@ import {
 } from "recharts";
 import { HealthData } from "../../../types/healthData";
 
+// Design system tokens
+const DS = {
+  emerald: "#006B4F",
+  emeraldSubtle: "rgba(0,107,79,0.65)",
+  grid: "rgba(0,107,79,0.1)",
+  axisText: "#6B8C7A",
+  tooltipBorder: "rgba(0,107,79,0.15)",
+  textPrimary: "#064E3B",
+  textMuted: "#6B8C7A",
+};
+
 interface DistanceChartProps {
   data: HealthData[];
   height?: number;
@@ -38,15 +49,12 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
     }>
   >([]);
 
-  // Convert the data to the format expected by recharts
   const chartData = useMemo(() => {
-    // Sort data by date
     const sortedData = [...data].sort(
       (a, b) =>
         new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
     );
 
-    // Group data by day
     const dailyData: Record<string, { values: number[]; total: number }> = {};
 
     sortedData.forEach((point) => {
@@ -57,12 +65,8 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
 
         if (!isNaN(value)) {
           if (!dailyData[dayKey]) {
-            dailyData[dayKey] = {
-              values: [],
-              total: 0,
-            };
+            dailyData[dayKey] = { values: [], total: 0 };
           }
-
           dailyData[dayKey].values.push(value);
           dailyData[dayKey].total += value;
         }
@@ -71,10 +75,8 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
       }
     });
 
-    // Format for chart
-    const result = Object.entries(dailyData)
+    return Object.entries(dailyData)
       .map(([day, data]) => {
-        // Convert to kilometers if the unit is meters
         const unit =
           (data.values.length > 0 && sortedData.find((d) => d.unit)?.unit) ||
           "";
@@ -91,8 +93,6 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
         };
       })
       .sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    return result;
   }, [data]);
 
   const handleZoomIn = (): void => {
@@ -102,10 +102,8 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
       return;
     }
 
-    // Save current view to history
     setZoomHistory([...zoomHistory, { left, right, top, bottom }]);
 
-    // Ensure left is always less than right
     let leftDay = refAreaLeft;
     let rightDay = refAreaRight;
 
@@ -113,7 +111,6 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
       [leftDay, rightDay] = [rightDay, leftDay];
     }
 
-    // Find min and max values in the selected range
     const rangeData = chartData.filter(
       (item) => item.day >= leftDay && item.day <= rightDay,
     );
@@ -121,8 +118,6 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
     if (rangeData.length > 0) {
       const minValue = Math.min(...rangeData.map((item) => item.distance));
       const maxValue = Math.max(...rangeData.map((item) => item.distance));
-
-      // Add some padding to the min/max
       const padding = (maxValue - minValue) * 0.1;
 
       setRefAreaLeft("");
@@ -136,7 +131,6 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
 
   const handleZoomOut = (): void => {
     if (zoomHistory.length === 0) {
-      // If no history, reset to full view
       setLeft(null);
       setRight(null);
       setTop("auto");
@@ -144,10 +138,8 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
       return;
     }
 
-    // Pop the last view from history
     const lastView = zoomHistory[zoomHistory.length - 1];
     setZoomHistory(zoomHistory.slice(0, -1));
-
     setLeft(lastView.left);
     setRight(lastView.right);
     setTop(lastView.top);
@@ -184,7 +176,6 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
     setRefAreaLeft("");
   };
 
-  // Get the unit from the data
   const unit =
     data.length > 0 && data[0].unit
       ? data[0].unit.toLowerCase().includes("m") &&
@@ -199,17 +190,30 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
         <button
           onClick={handleZoomOut}
           disabled={zoomHistory.length === 0 && !left}
-          className="p-1 rounded bg-transparent dark:bg-[#0B140F] border border-[rgba(0,107,79,0.25)] dark:border-[rgba(74,222,128,0.2)] text-[#006B4F] dark:text-[#4ade80] hover:bg-[rgba(0,107,79,0.07)] transition-colors disabled:opacity-50"
+          className="px-3 py-1 rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
+          style={{
+            background: "transparent",
+            border: "1px solid rgba(0,107,79,0.25)",
+            color: DS.emerald,
+          }}
+          onMouseEnter={(e) => {
+            if (zoomHistory.length > 0 || left)
+              (e.currentTarget as HTMLButtonElement).style.background =
+                "rgba(0,107,79,0.07)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.background =
+              "transparent";
+          }}
         >
           Zoom Out
         </button>
       </div>
 
       <div style={{ width: "100%", height }}>
-        {/* Add a fallback message if no data */}
         {chartData.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500">
+          <div className="flex items-center justify-center h-full py-12">
+            <p style={{ color: DS.textMuted, fontSize: 13 }}>
               No distance data available for the selected time period.
             </p>
           </div>
@@ -222,9 +226,12 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
               onMouseUp={handleMouseUp}
               margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
             >
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 3" stroke={DS.grid} />
               <XAxis
                 dataKey="day"
+                tick={{ fill: DS.axisText, fontSize: 11 }}
+                axisLine={{ stroke: DS.grid }}
+                tickLine={false}
                 domain={[left || "dataMin", right || "dataMax"]}
                 type="category"
                 tickFormatter={(value) => {
@@ -234,9 +241,27 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
               />
               <YAxis
                 domain={[bottom || 0, top || "auto"]}
-                label={{ value: unit, angle: -90, position: "insideLeft" }}
+                tick={{ fill: DS.axisText, fontSize: 11 }}
+                axisLine={{ stroke: DS.grid }}
+                tickLine={false}
+                label={{
+                  value: unit,
+                  angle: -90,
+                  position: "insideLeft",
+                  fill: DS.axisText,
+                  fontSize: 11,
+                }}
               />
               <Tooltip
+                contentStyle={{
+                  background: "#FFFFFF",
+                  border: `1px solid ${DS.tooltipBorder}`,
+                  borderRadius: 10,
+                  boxShadow: "0 4px 16px rgba(0,107,79,0.08)",
+                  fontSize: 12,
+                }}
+                labelStyle={{ color: DS.textPrimary, fontWeight: 600 }}
+                itemStyle={{ color: DS.textMuted }}
                 formatter={(value: number): [string, string] => [
                   `${value} ${unit}`,
                   "Distance",
@@ -246,20 +271,20 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
                   return date.toLocaleDateString();
                 }}
               />
-              <Legend />
+              <Legend wrapperStyle={{ fontSize: 12, color: DS.textMuted }} />
               <Bar
                 dataKey="distance"
-                fill="#8884d8"
+                fill={DS.emeraldSubtle}
                 name={`Daily Distance (${unit})`}
+                radius={[2, 2, 0, 0]}
               />
-
               {refAreaLeft && refAreaRight && (
                 <ReferenceArea
                   x1={refAreaLeft}
                   x2={refAreaRight}
                   strokeOpacity={0.3}
-                  fill="#8884d8"
-                  fillOpacity={0.3}
+                  fill={DS.emerald}
+                  fillOpacity={0.12}
                 />
               )}
             </BarChart>

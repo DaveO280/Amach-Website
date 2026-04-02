@@ -17,6 +17,17 @@ import { HealthData } from "../../../types/healthData";
 import { ChartContainer } from "./ChartContainer";
 import { useChartZoom } from "./useChartZoom";
 
+// Design system tokens
+const DS = {
+  amber: "#F59E0B",
+  amberSubtle: "rgba(245,158,11,0.7)",
+  grid: "rgba(0,107,79,0.1)",
+  axisText: "#6B8C7A",
+  tooltipBorder: "rgba(0,107,79,0.15)",
+  textPrimary: "#064E3B",
+  textMuted: "#6B8C7A",
+};
+
 interface ActiveEnergyChartProps {
   data: HealthData[];
   height?: number;
@@ -45,9 +56,12 @@ const ActiveEnergyChart: React.FC<ActiveEnergyChartProps> = ({
           onMouseUp={zoom.handleMouseUp}
           margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
         >
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid strokeDasharray="3 3" stroke={DS.grid} />
           <XAxis
             dataKey="day"
+            tick={{ fill: DS.axisText, fontSize: 11 }}
+            axisLine={{ stroke: DS.grid }}
+            tickLine={false}
             domain={[zoom.left || "dataMin", zoom.right || "dataMax"]}
             type="category"
             tickFormatter={(value) => {
@@ -60,9 +74,27 @@ const ActiveEnergyChart: React.FC<ActiveEnergyChartProps> = ({
           />
           <YAxis
             domain={[zoom.bottom || 0, zoom.top || "auto"]}
-            label={{ value: unit, angle: -90, position: "insideLeft" }}
+            tick={{ fill: DS.axisText, fontSize: 11 }}
+            axisLine={{ stroke: DS.grid }}
+            tickLine={false}
+            label={{
+              value: unit,
+              angle: -90,
+              position: "insideLeft",
+              fill: DS.axisText,
+              fontSize: 11,
+            }}
           />
           <Tooltip
+            contentStyle={{
+              background: "#FFFFFF",
+              border: `1px solid ${DS.tooltipBorder}`,
+              borderRadius: 10,
+              boxShadow: "0 4px 16px rgba(0,107,79,0.08)",
+              fontSize: 12,
+            }}
+            labelStyle={{ color: DS.textPrimary, fontWeight: 600 }}
+            itemStyle={{ color: DS.textMuted }}
             formatter={(value: number): [string, string] => [
               `${value} ${unit}`,
               "Active Energy",
@@ -75,19 +107,20 @@ const ActiveEnergyChart: React.FC<ActiveEnergyChartProps> = ({
               return label;
             }}
           />
-          <Legend />
+          <Legend wrapperStyle={{ fontSize: 12, color: DS.textMuted }} />
           <Bar
             dataKey="energy"
-            fill="#FF5733"
+            fill={DS.amberSubtle}
             name={`Daily Active Energy (${unit})`}
+            radius={[2, 2, 0, 0]}
           />
           {zoom.refAreaLeft && zoom.refAreaRight && (
             <ReferenceArea
               x1={zoom.refAreaLeft}
               x2={zoom.refAreaRight}
               strokeOpacity={0.3}
-              fill="#FF5733"
-              fillOpacity={0.3}
+              fill={DS.amber}
+              fillOpacity={0.15}
             />
           )}
         </BarChart>

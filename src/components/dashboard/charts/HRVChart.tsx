@@ -14,6 +14,17 @@ import {
 import { HealthData } from "../../../types/healthData";
 import { extractDatePart } from "../../../utils/dataDeduplicator";
 
+// Design system tokens
+const DS = {
+  amber: "#F59E0B",
+  amberDark: "#D97706",
+  grid: "rgba(0,107,79,0.1)",
+  axisText: "#6B8C7A",
+  tooltipBorder: "rgba(0,107,79,0.15)",
+  textPrimary: "#064E3B",
+  textMuted: "#6B8C7A",
+};
+
 interface HRVChartProps {
   data: HealthData[];
   height?: number;
@@ -21,7 +32,6 @@ interface HRVChartProps {
 
 const HRVChart: React.FC<HRVChartProps> = ({ data, height = 300 }) => {
   const chartData = useMemo(() => {
-    // Group data by day using extractDatePart to avoid timezone issues
     const dailyData: Record<
       string,
       { values: number[]; min: number; max: number }
@@ -50,7 +60,6 @@ const HRVChart: React.FC<HRVChartProps> = ({ data, height = 300 }) => {
       }
     });
 
-    // Calculate averages and format for chart
     const result = Object.entries(dailyData)
       .map(([day, data]) => {
         const avg =
@@ -58,7 +67,7 @@ const HRVChart: React.FC<HRVChartProps> = ({ data, height = 300 }) => {
 
         return {
           day,
-          date: new Date(day + "T12:00:00"), // Use noon time to avoid date shifting
+          date: new Date(day + "T12:00:00"),
           value: Math.round(avg),
           min: Math.round(data.min),
           max: Math.round(data.max),
@@ -67,7 +76,6 @@ const HRVChart: React.FC<HRVChartProps> = ({ data, height = 300 }) => {
       })
       .sort((a, b) => a.date.getTime() - b.date.getTime());
 
-    // Add debugging for chart data
     console.log("HRVChart - processed chart data:", result.length);
     if (result.length > 0) {
       console.log("HRVChart - first chart data point:", result[0]);
@@ -82,9 +90,12 @@ const HRVChart: React.FC<HRVChartProps> = ({ data, height = 300 }) => {
         data={chartData}
         margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
       >
-        <CartesianGrid strokeDasharray="3 3" />
+        <CartesianGrid strokeDasharray="3 3" stroke={DS.grid} />
         <XAxis
           dataKey="day"
+          tick={{ fill: DS.axisText, fontSize: 11 }}
+          axisLine={{ stroke: DS.grid }}
+          tickLine={false}
           tickFormatter={(value) => {
             const parts = value.split("-");
             if (parts.length === 3) {
@@ -93,8 +104,21 @@ const HRVChart: React.FC<HRVChartProps> = ({ data, height = 300 }) => {
             return value;
           }}
         />
-        <YAxis />
+        <YAxis
+          tick={{ fill: DS.axisText, fontSize: 11 }}
+          axisLine={{ stroke: DS.grid }}
+          tickLine={false}
+        />
         <Tooltip
+          contentStyle={{
+            background: "#FFFFFF",
+            border: `1px solid ${DS.tooltipBorder}`,
+            borderRadius: 10,
+            boxShadow: "0 4px 16px rgba(0,107,79,0.08)",
+            fontSize: 12,
+          }}
+          labelStyle={{ color: DS.textPrimary, fontWeight: 600 }}
+          itemStyle={{ color: DS.amberDark }}
           formatter={(value: number): [string, string] => [
             `${value} ms`,
             "HRV",
@@ -107,13 +131,14 @@ const HRVChart: React.FC<HRVChartProps> = ({ data, height = 300 }) => {
             return label;
           }}
         />
-        <Legend />
+        <Legend wrapperStyle={{ fontSize: 12, color: DS.textMuted }} />
         <Line
           type="monotone"
           dataKey="value"
-          stroke="#9C27B0"
-          name="HRV"
+          stroke={DS.amber}
+          strokeWidth={2}
           dot={false}
+          name="HRV"
         />
       </LineChart>
     </ResponsiveContainer>

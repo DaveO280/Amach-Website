@@ -3,6 +3,7 @@ name: Daily Security Audit
 # Runs every day at 08:00 UTC and on any push that touches dependency files.
 # Catches newly-published CVEs against your current lockfile even between PRs.
 on:
+  workflow_dispatch: {}
   schedule:
     - cron: "0 8 * * *"
   push:
@@ -36,7 +37,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Audit for known CVEs (moderate+)
+      - name: Audit production deps for known CVEs (high+)
         run: pnpm audit --audit-level=high --prod
 
       - name: Check for lockfile tampering

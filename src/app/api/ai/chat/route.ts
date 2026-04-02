@@ -147,7 +147,9 @@ When specific metrics, bloodwork values, or data points are present in the conte
 
 When the context includes flagged anomalies or unusual data windows, name them — even if the user's question is broader. Don't wait to be asked. If a 4.5-hour sleep window or an outlier glucose reading is sitting in the data and it's relevant to the topic, surface it.
 
-When the conversation has covered related topics earlier, weave those threads in naturally — but only when it genuinely adds context. Don't open with "as I mentioned" or force callbacks. If a prior data point or recommendation is directly relevant to the current question, reference it as if thinking out loud: "given what we saw with your HRV last week..." rather than a formal callback.`;
+When the conversation has covered related topics earlier, weave those threads in naturally — but only when it genuinely adds context. Don't open with "as I mentioned" or force callbacks. If a prior data point or recommendation is directly relevant to the current question, reference it as if thinking out loud: "given what we saw with your HRV last week..." rather than a formal callback.
+
+When the user's message is a direct follow-up to something you just said, start from your previous response — not from the raw data. Briefly anchor to what you established ("building on the lipid panel I just walked through...", "given the HRV crash I flagged...") before adding depth. Don't re-derive from scratch what you've already laid out.`;
 
 function buildContextMessage(context: HealthContext): string {
   const hasData =

@@ -161,7 +161,7 @@
       "hono": "4.12.7",
       "qs": "^6.14.2",
       "preact": "^10.28.2",
-      "lodash": "^4.17.23",
+      "lodash": "^4.17.21",
       "diff@4.0.2": "4.0.4",
       "diff@5.2.0": "5.2.2",
       "undici": "^6.23.0",
@@ -182,6 +182,7 @@
       "audit-scope": "audit:ci uses --prod so only production dependencies are checked. Dev tooling (ts-jest/handlebars, hardhat/minimatch, eslint, webpack) has known CVEs but never runs in production — acceptable risk.",
       "tar": "CVE-2026-23745 (node-tar arbitrary file overwrite/hardlink path traversal) fixed in 7.5.3+; override pins 7.5.7.",
       "request": "The 'request' package has SSRF vulnerability (CVE-2023-28155) but is only used in dev/test via @nomiclabs/hardhat-waffle. It's deprecated and has no patched version. This is acceptable risk as it never runs in production.",
+      "lodash": "CVE lodash _.template code injection (High): lodash 4.x is abandoned at 4.17.21, no patched version exists. Privy SDK pulls this in as a transitive dep. Attack requires caller to pass untrusted input to _.template() directly — Amach does not do this. Acceptable known risk until Privy removes the lodash dependency.",
       "elliptic": "Elliptic has a low-severity vulnerability (risky cryptographic implementation) but is a transitive dependency required by crypto libraries. This is tolerated as it's a low-risk issue and no alternative is available without breaking changes."
     },
     "patchedDependencies": {

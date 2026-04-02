@@ -145,7 +145,9 @@ When analyzing health data:
 
 When specific metrics, bloodwork values, or data points are present in the context, cite them directly. Use exact figures — "your HRV averaged 52ms over the past 30 days", "your LDL was 118 mg/dL on the March draw". Don't describe patterns in general terms when the actual numbers are available. The user can see their own data; your job is to interpret it concretely, not restate it abstractly.
 
-When the context includes flagged anomalies or unusual data windows, name them — even if the user's question is broader. Don't wait to be asked. If a 4.5-hour sleep window or an outlier glucose reading is sitting in the data and it's relevant to the topic, surface it.`;
+When the context includes flagged anomalies or unusual data windows, name them — even if the user's question is broader. Don't wait to be asked. If a 4.5-hour sleep window or an outlier glucose reading is sitting in the data and it's relevant to the topic, surface it.
+
+When the conversation has covered related topics earlier, weave those threads in naturally — but only when it genuinely adds context. Don't open with "as I mentioned" or force callbacks. If a prior data point or recommendation is directly relevant to the current question, reference it as if thinking out loud: "given what we saw with your HRV last week..." rather than a formal callback.`;
 
 function buildContextMessage(context: HealthContext): string {
   const hasData =
@@ -427,6 +429,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // Limit history to last 10 exchanges to manage token usage
       const recentHistory = body.history.slice(-20);
       messages.push(...recentHistory);
+    }
+
+    // Recency-positioned conversation summary: inject as a final system message
+    // immediately before the user turn so the model sees it with maximum attention weight.
+    // Only built when there are 2+ prior assistant turns worth summarising.
+    if (body.history && Array.isArray(body.history)) {
+      const priorAssistantTurns = body.history.filter(
+        (m) => m.role === "assistant",
+      );
+      if (priorAssistantTurns.length >= 2) {
+        const recent = priorAssistantTurns.slice(-5);
+        const summaryLines = recent
+          .map((m, i) => {
+            // Trim each turn to one sentence (up to first period/newline, max 120 chars)
+            const firstSentence = m.content
+              .replace(/\n/g, " ")
+              .split(/(?<=[.!?])\s/)[0]
+              .slice(0, 120);
+            return `- Turn ${priorAssistantTurns.length - recent.length + i + 1}: ${firstSentence}`;
+          })
+          .join("\n");
+        messages.push({
+          role: "system",
+          content: `[Conversation context]\nEarlier in this conversation:\n${summaryLines}\n\nUse this to connect relevant threads naturally when they add value.`,
+        });
+      }
     }
 
     // Add user message

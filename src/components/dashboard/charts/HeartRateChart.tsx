@@ -10,7 +10,7 @@ import {
   ReferenceArea,
   ResponsiveContainer,
   Tooltip,
-  TooltipProps,
+  TooltipContentProps,
   XAxis,
   YAxis,
 } from "recharts";
@@ -63,7 +63,7 @@ const HeartRateChart: React.FC<HeartRateChartProps> = ({
     active,
     payload,
     label,
-  }: TooltipProps<number, string>): JSX.Element | null => {
+  }: TooltipContentProps): JSX.Element | null => {
     if (active && payload && payload.length) {
       const d = (payload[0] && payload[0].payload) as {
         avg: number;

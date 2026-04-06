@@ -2,16 +2,14 @@ const path = require("path");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Skip global-error page during static generation (Next.js 16 issue)
-  experimental: {
-    missingSuspenseWithCSRBailout: false,
-  },
   // Use Node.js runtime for blockchain interactions
   // Also externalize packages that have test files that shouldn't be bundled
   serverExternalPackages: [
     "ethers",
     "zksync-sso",
     "@wagmi/core",
+    "snarkjs",
+    "poseidon-lite",
     // Note: viem removed from here - it needs to be bundled for client-side use
     // and webpack aliases need to apply to replace test file imports
     "pino",
@@ -153,6 +151,11 @@ const nextConfig = {
 
     config.resolve.alias = {
       ...config.resolve.alias,
+      // Privy 3.19+ references optional Farcaster mini-app packages; we don't use them.
+      "@farcaster/mini-app-solana": path.resolve(
+        __dirname,
+        "./webpack-farcaster-mini-app-solana-stub.js",
+      ),
       "health-app": path.resolve(__dirname, "./my-health-app/src"),
       // Use absolute paths for viem test files - this catches relative imports
       [path.join(viemPath, "_cjs", "clients", "createTestClient.js")]:

@@ -11,7 +11,7 @@ import {
   PieChart,
   ResponsiveContainer,
   Tooltip,
-  TooltipProps,
+  TooltipContentProps,
   XAxis,
   YAxis,
 } from "recharts";
@@ -192,7 +192,7 @@ const HRDistributionChart: React.FC<HRDistributionChartProps> = ({
   const CustomTooltip = ({
     active,
     payload,
-  }: TooltipProps<number, string>): JSX.Element | null => {
+  }: TooltipContentProps): JSX.Element | null => {
     if (active && payload && payload.length) {
       const d = payload[0].payload as {
         name: string;
@@ -253,7 +253,7 @@ const HRDistributionChart: React.FC<HRDistributionChartProps> = ({
                   labelLine={false}
                   outerRadius={80}
                   dataKey="percentage"
-                  label={({ name, percentage }) => `${name} ${percentage}%`}
+                  label={({ name, value }) => `${name} ${value}%`}
                 >
                   {zoneData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -319,7 +319,11 @@ const HRDistributionChart: React.FC<HRDistributionChartProps> = ({
                     fontSize: 12,
                   }}
                   labelStyle={{ color: DS.textPrimary, fontWeight: 600 }}
-                  formatter={(value: number) => [`${value} readings`, "Count"]}
+                  formatter={(value) => {
+                    const v =
+                      typeof value === "number" ? value : Number(value ?? 0);
+                    return [`${v} readings`, "Count"];
+                  }}
                 />
                 <Bar dataKey="count" radius={[2, 2, 0, 0]}>
                   {hrDistribution.map((entry, index) => (

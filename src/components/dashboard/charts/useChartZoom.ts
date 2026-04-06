@@ -1,4 +1,6 @@
+import type { ComponentProps } from "react";
 import { useState } from "react";
+import { BarChart } from "recharts";
 
 export interface ChartZoomState {
   left: string | null;
@@ -13,6 +15,15 @@ export interface ChartZoomState {
     top: number | "auto";
     bottom: number | "auto";
   }>;
+}
+
+type ChartPointerHandler = NonNullable<
+  ComponentProps<typeof BarChart>["onMouseDown"]
+>;
+
+function activeLabelToDayString(activeLabel: unknown): string | undefined {
+  if (activeLabel == null) return undefined;
+  return String(activeLabel);
 }
 
 export function useChartZoom<T extends { day: string }>(
@@ -30,9 +41,9 @@ export function useChartZoom<T extends { day: string }>(
   setRefAreaRight: (v: string) => void;
   handleZoomIn: () => void;
   handleZoomOut: () => void;
-  handleMouseDown: (e: { activeLabel?: string }) => void;
-  handleMouseMove: (e: { activeLabel?: string }) => void;
-  handleMouseUp: () => void;
+  handleMouseDown: ChartPointerHandler;
+  handleMouseMove: ChartPointerHandler;
+  handleMouseUp: ChartPointerHandler;
 } {
   const [left, setLeft] = useState<string | null>(null);
   const [right, setRight] = useState<string | null>(null);
@@ -92,17 +103,19 @@ export function useChartZoom<T extends { day: string }>(
     setBottom(lastView.bottom);
   };
 
-  const handleMouseDown = (e: { activeLabel?: string }): void => {
-    if (!e || !e.activeLabel) return;
-    setRefAreaLeft(e.activeLabel);
+  const handleMouseDown: ChartPointerHandler = (nextState) => {
+    const day = activeLabelToDayString(nextState.activeLabel);
+    if (!day) return;
+    setRefAreaLeft(day);
   };
 
-  const handleMouseMove = (e: { activeLabel?: string }): void => {
-    if (!e || !e.activeLabel || !refAreaLeft) return;
-    setRefAreaRight(e.activeLabel);
+  const handleMouseMove: ChartPointerHandler = (nextState) => {
+    const day = activeLabelToDayString(nextState.activeLabel);
+    if (!day || !refAreaLeft) return;
+    setRefAreaRight(day);
   };
 
-  const handleMouseUp = (): void => {
+  const handleMouseUp: ChartPointerHandler = () => {
     if (refAreaLeft && refAreaRight) {
       handleZoomIn();
     }

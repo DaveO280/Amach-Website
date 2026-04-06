@@ -262,12 +262,13 @@ const DistanceChart: React.FC<DistanceChartProps> = ({
                 }}
                 labelStyle={{ color: DS.textPrimary, fontWeight: 600 }}
                 itemStyle={{ color: DS.textMuted }}
-                formatter={(value: number): [string, string] => [
-                  `${value} ${unit}`,
-                  "Distance",
-                ]}
-                labelFormatter={(label: string): string => {
-                  const date = new Date(label);
+                formatter={(value) => {
+                  const v =
+                    typeof value === "number" ? value : Number(value ?? 0);
+                  return [`${v} ${unit}`, "Distance"];
+                }}
+                labelFormatter={(label) => {
+                  const date = new Date(String(label ?? ""));
                   return date.toLocaleDateString();
                 }}
               />

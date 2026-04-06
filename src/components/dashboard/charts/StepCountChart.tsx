@@ -93,16 +93,17 @@ const StepCountChart: React.FC<StepCountChartProps> = ({
           }}
           labelStyle={{ color: DS.textPrimary, fontWeight: 600 }}
           itemStyle={{ color: DS.textMuted }}
-          formatter={(value: number): [string, string] => [
-            `${value} steps`,
-            "Step Count",
-          ]}
-          labelFormatter={(label: string): string => {
-            const parts = label.split("-");
+          formatter={(value) => {
+            const v = typeof value === "number" ? value : Number(value ?? 0);
+            return [`${v} steps`, "Step Count"];
+          }}
+          labelFormatter={(label) => {
+            const s = String(label ?? "");
+            const parts = s.split("-");
             if (parts.length === 3) {
               return `${parseInt(parts[1])}/${parseInt(parts[2])}/${parts[0]}`;
             }
-            return label;
+            return s;
           }}
         />
         <Legend wrapperStyle={{ fontSize: 12, color: DS.textMuted }} />

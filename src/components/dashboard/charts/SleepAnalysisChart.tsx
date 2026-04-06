@@ -8,7 +8,7 @@ import {
   Legend,
   ResponsiveContainer,
   Tooltip,
-  TooltipProps,
+  TooltipContentProps,
   XAxis,
   YAxis,
 } from "recharts";
@@ -144,13 +144,13 @@ export const SleepAnalysisChart = ({
         <ComposedChart
           data={chartData}
           margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-          onClick={(data) => {
-            if (data && data.activePayload && data.activePayload[0]) {
-              const clickedDate = data.activePayload[0].payload.date;
-              setSelectedDate(
-                clickedDate === selectedDate ? null : clickedDate,
-              );
+          onClick={(nextState) => {
+            const idx = nextState.activeTooltipIndex;
+            if (typeof idx !== "number" || idx < 0 || idx >= chartData.length) {
+              return;
             }
+            const clickedDate = chartData[idx].date;
+            setSelectedDate(clickedDate === selectedDate ? null : clickedDate);
           }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke={DS.grid} />
@@ -177,13 +177,11 @@ export const SleepAnalysisChart = ({
             }}
           />
           <Tooltip
-            content={({
-              active,
-              payload,
-              label,
-            }: TooltipProps<number, string>) => {
+            content={({ active, payload, label }: TooltipContentProps) => {
               if (active && payload && payload.length) {
-                const dayData = chartData.find((d) => d.date === label);
+                const dayData = chartData.find(
+                  (d) => d.date === String(label ?? ""),
+                );
                 if (!dayData) return null;
                 return (
                   <div

@@ -1,77 +1,12 @@
 import fs from "fs";
 import path from "path";
-import { createRequire } from "module";
 import { createHash } from "crypto";
+import { poseidon2, poseidon3 } from "poseidon-lite";
+import * as snarkjs from "snarkjs";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 import { getStorageService } from "@/storage";
 
 const ZK_DIR = process.env.ZK_TOOLCHAIN_DIR || "/Users/dave/AmachHealth-iOS/zk";
-type ZkRuntime = {
-  poseidon2: (inputs: bigint[]) => bigint;
-  poseidon3: (inputs: bigint[]) => bigint;
-  snarkjs: {
-    groth16: {
-      fullProve: (
-        input: unknown,
-        wasmPath: string,
-        zkeyPath: string,
-      ) => Promise<{ proof: unknown; publicSignals: string[] }>;
-      verify: (
-        vkey: unknown,
-        publicSignals: string[],
-        proof: unknown,
-      ) => Promise<boolean>;
-    };
-  };
-};
-
-let cachedRuntime: ZkRuntime | null = null;
-
-function getZkRuntime(): ZkRuntime {
-  if (cachedRuntime) return cachedRuntime;
-  const packageJsonPath = path.join(ZK_DIR, "package.json");
-  if (!fs.existsSync(packageJsonPath)) {
-    throw new Error(
-      `ZK toolchain missing at ${ZK_DIR}. Set ZK_TOOLCHAIN_DIR or install local zk toolchain.`,
-    );
-  }
-  const requireFromZk = createRequire(packageJsonPath);
-  const { poseidon2, poseidon3 } = requireFromZk("poseidon-lite") as {
-    poseidon2: (inputs: bigint[]) => bigint;
-    poseidon3: (inputs: bigint[]) => bigint;
-  };
-  const snarkjs = requireFromZk("snarkjs") as {
-    groth16: {
-      fullProve: (
-        input: unknown,
-        wasmPath: string,
-        zkeyPath: string,
-      ) => Promise<{ proof: unknown; publicSignals: string[] }>;
-      verify: (
-        vkey: unknown,
-        publicSignals: string[],
-        proof: unknown,
-      ) => Promise<boolean>;
-    };
-  };
-  cachedRuntime = { poseidon2, poseidon3, snarkjs };
-  return cachedRuntime;
-}
-
-const snarkjsTypeGuard = {} as {
-  groth16: {
-    fullProve: (
-      input: unknown,
-      wasmPath: string,
-      zkeyPath: string,
-    ) => Promise<{ proof: unknown; publicSignals: string[] }>;
-    verify: (
-      vkey: unknown,
-      publicSignals: string[],
-      proof: unknown,
-    ) => Promise<boolean>;
-  };
-};
 
 const ZERO_LEAF = 0n;
 
@@ -152,7 +87,6 @@ function serializeLeaf(leaf: GenesisLeafInput, walletAddress: string): Buffer {
 }
 
 function hashLeaf(serialized: Buffer): bigint {
-  const { poseidon3 } = getZkRuntime();
   const chunk1 = BigInt(`0x${serialized.subarray(0, 31).toString("hex")}`);
   const chunk2 = BigInt(`0x${serialized.subarray(31, 62).toString("hex")}`);
   const chunk3Buf = Buffer.alloc(31, 0);
@@ -168,7 +102,6 @@ function nextPow2(n: number): number {
 }
 
 function buildTree(hashes: bigint[]): bigint[][] {
-  const { poseidon2 } = getZkRuntime();
   const size = nextPow2(Math.max(1, hashes.length));
   const level0 = [...hashes];
   while (level0.length < size) level0.push(ZERO_LEAF);
@@ -368,7 +301,6 @@ export async function generateCoverage(
     );
   }
 
-  const { snarkjs } = getZkRuntime();
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(
     witnessInput,
     wasm,
@@ -391,9 +323,6 @@ export async function verifyCoverage(
   proof: unknown,
   publicSignals: string[],
 ): Promise<boolean> {
-  // Keep type narrowing explicit for TS and avoid module-load failures.
-  void snarkjsTypeGuard;
-  const { snarkjs } = getZkRuntime();
   const vkey = artifactPath("verification_key.json");
   if (!fs.existsSync(vkey)) {
     throw new Error("Missing verification key artifact.");

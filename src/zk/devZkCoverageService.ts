@@ -6,9 +6,22 @@ import * as snarkjs from "snarkjs";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 import { getStorageService } from "@/storage";
 
-const ZK_DIR = process.env.ZK_TOOLCHAIN_DIR || "/Users/dave/AmachHealth-iOS/zk";
-
 const ZERO_LEAF = 0n;
+
+/** Root folder that contains `build/coverage/` (same layout as AmachHealth-iOS/zk). */
+function getZkToolchainRoot(): string {
+  if (process.env.ZK_TOOLCHAIN_DIR) {
+    return path.resolve(process.env.ZK_TOOLCHAIN_DIR);
+  }
+  const cwd = process.cwd();
+  const fromRepo = path.join(cwd, "zk-toolchain");
+  const legacyMac = "/Users/dave/AmachHealth-iOS/zk";
+  const hasArtifacts = (root: string): boolean =>
+    fs.existsSync(path.join(root, "build", "coverage", "coverage_final.zkey"));
+  if (hasArtifacts(fromRepo)) return fromRepo;
+  if (hasArtifacts(legacyMac)) return legacyMac;
+  return fromRepo;
+}
 
 export interface GenesisLeafInput {
   dayId: number;
@@ -135,7 +148,7 @@ function merklePath(
 }
 
 function artifactPath(...parts: string[]): string {
-  return path.join(ZK_DIR, "build", "coverage", ...parts);
+  return path.join(getZkToolchainRoot(), "build", "coverage", ...parts);
 }
 
 async function loadLatestGenesis(
@@ -296,8 +309,14 @@ export async function generateCoverage(
   const zkey = artifactPath("coverage_final.zkey");
   const vkey = artifactPath("verification_key.json");
   if (!fs.existsSync(wasm) || !fs.existsSync(zkey) || !fs.existsSync(vkey)) {
+    const root = getZkToolchainRoot();
     throw new Error(
-      "Missing zk artifacts. Ensure local tau/circuit build exists.",
+      [
+        "Missing ZK coverage artifacts (wasm, zkey, verification key).",
+        `Expected under: ${path.join(root, "build", "coverage")}`,
+        "Copy your local build/coverage from the iOS zk repo, set ZK_TOOLCHAIN_DIR to that repo root on the server, and redeploy.",
+        `Missing: wasm=${!fs.existsSync(wasm)} zkey=${!fs.existsSync(zkey)} vkey=${!fs.existsSync(vkey)}`,
+      ].join(" "),
     );
   }
 

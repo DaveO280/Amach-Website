@@ -1,17 +1,64 @@
 import fs from "fs";
-import os from "os";
 import path from "path";
 import { createRequire } from "module";
+import { createHash } from "crypto";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 import { getStorageService } from "@/storage";
 
 const ZK_DIR = process.env.ZK_TOOLCHAIN_DIR || "/Users/dave/AmachHealth-iOS/zk";
-const requireFromZk = createRequire(path.join(ZK_DIR, "package.json"));
-const { poseidon2, poseidon3 } = requireFromZk("poseidon-lite") as {
+type ZkRuntime = {
   poseidon2: (inputs: bigint[]) => bigint;
   poseidon3: (inputs: bigint[]) => bigint;
+  snarkjs: {
+    groth16: {
+      fullProve: (
+        input: unknown,
+        wasmPath: string,
+        zkeyPath: string,
+      ) => Promise<{ proof: unknown; publicSignals: string[] }>;
+      verify: (
+        vkey: unknown,
+        publicSignals: string[],
+        proof: unknown,
+      ) => Promise<boolean>;
+    };
+  };
 };
-const snarkjs = requireFromZk("snarkjs") as {
+
+let cachedRuntime: ZkRuntime | null = null;
+
+function getZkRuntime(): ZkRuntime {
+  if (cachedRuntime) return cachedRuntime;
+  const packageJsonPath = path.join(ZK_DIR, "package.json");
+  if (!fs.existsSync(packageJsonPath)) {
+    throw new Error(
+      `ZK toolchain missing at ${ZK_DIR}. Set ZK_TOOLCHAIN_DIR or install local zk toolchain.`,
+    );
+  }
+  const requireFromZk = createRequire(packageJsonPath);
+  const { poseidon2, poseidon3 } = requireFromZk("poseidon-lite") as {
+    poseidon2: (inputs: bigint[]) => bigint;
+    poseidon3: (inputs: bigint[]) => bigint;
+  };
+  const snarkjs = requireFromZk("snarkjs") as {
+    groth16: {
+      fullProve: (
+        input: unknown,
+        wasmPath: string,
+        zkeyPath: string,
+      ) => Promise<{ proof: unknown; publicSignals: string[] }>;
+      verify: (
+        vkey: unknown,
+        publicSignals: string[],
+        proof: unknown,
+      ) => Promise<boolean>;
+    };
+  };
+  cachedRuntime = { poseidon2, poseidon3, snarkjs };
+  return cachedRuntime;
+}
+
+const snarkjsTypeGuard = {} as {
   groth16: {
     fullProve: (
       input: unknown,
@@ -42,6 +89,8 @@ export interface GenesisLeafInput {
   hrvDayCount: number;
   restingHrDayCount: number;
   sleepDayCount: number;
+  workoutCount?: number;
+  sourceCount?: number;
   dataFlags: number;
   timezone: number;
   sourceHash: string;
@@ -68,12 +117,23 @@ function toHex32(v: bigint): string {
   return `0x${v.toString(16).padStart(64, "0")}`;
 }
 
-function serializeLeaf(leaf: GenesisLeafInput): Buffer {
+function walletAddressToBytes32(walletAddress: string): Buffer {
+  const hex = strip0x(walletAddress).toLowerCase();
+  if (!/^[0-9a-f]*$/.test(hex)) {
+    throw new Error(`Invalid walletAddress: ${walletAddress}`);
+  }
+  const raw = Buffer.from(hex.padStart(40, "0").slice(-40), "hex");
+  if (raw.length >= 32) return raw.subarray(raw.length - 32);
+  return Buffer.concat([Buffer.alloc(32 - raw.length, 0), raw]);
+}
+
+function serializeLeaf(leaf: GenesisLeafInput, walletAddress: string): Buffer {
   const sourceHashHex = strip0x(leaf.sourceHash).padEnd(64, "0").slice(0, 64);
   const sourceHash = Buffer.from(sourceHashHex, "hex");
+  const walletBytes32 = walletAddressToBytes32(walletAddress);
   const buf = Buffer.alloc(90, 0);
   buf.writeUInt32BE(leaf.dayId >>> 0, 0);
-  // bytes4..35 wallet kept zero for this dev backend path
+  walletBytes32.copy(buf, 4);
   buf.writeInt16BE(leaf.timezone, 36);
   buf.writeUInt32BE(leaf.steps >>> 0, 38);
   buf.writeUInt32BE(leaf.activeEnergy >>> 0, 42);
@@ -81,14 +141,18 @@ function serializeLeaf(leaf: GenesisLeafInput): Buffer {
   buf.writeUInt16BE(leaf.hrvAvg & 0xffff, 48);
   buf.writeUInt16BE(leaf.restingHR & 0xffff, 50);
   buf.writeUInt16BE(leaf.sleepMinutes & 0xffff, 52);
-  buf.writeUInt8(leaf.exerciseDayCount & 0xff, 54); // maps to workout_count
-  buf.writeUInt8(leaf.stepDayCount & 0xff, 55); // maps to source_count in this dev path
+  // Prefer canonical fields when provided; keep fallback for current dev callers.
+  const workoutCount = leaf.workoutCount ?? leaf.exerciseDayCount ?? 0;
+  const sourceCount = leaf.sourceCount ?? leaf.stepDayCount ?? 1;
+  buf.writeUInt8(workoutCount & 0xff, 54);
+  buf.writeUInt8(sourceCount & 0xff, 55);
   buf.writeUInt16BE(leaf.dataFlags & 0xffff, 56);
   sourceHash.copy(buf, 58);
   return buf;
 }
 
 function hashLeaf(serialized: Buffer): bigint {
+  const { poseidon3 } = getZkRuntime();
   const chunk1 = BigInt(`0x${serialized.subarray(0, 31).toString("hex")}`);
   const chunk2 = BigInt(`0x${serialized.subarray(31, 62).toString("hex")}`);
   const chunk3Buf = Buffer.alloc(31, 0);
@@ -104,6 +168,7 @@ function nextPow2(n: number): number {
 }
 
 function buildTree(hashes: bigint[]): bigint[][] {
+  const { poseidon2 } = getZkRuntime();
   const size = nextPow2(Math.max(1, hashes.length));
   const level0 = [...hashes];
   while (level0.length < size) level0.push(ZERO_LEAF);
@@ -193,7 +258,7 @@ export async function createGenesis(
 }> {
   if (!leaves.length) throw new Error("Leaves are required");
   const sorted = [...leaves].sort((a, b) => a.dayId - b.dayId);
-  const serialized = sorted.map(serializeLeaf);
+  const serialized = sorted.map((leaf) => serializeLeaf(leaf, walletAddress));
   const hashed = serialized.map(hashLeaf);
   const tree = buildTree(hashed);
   const rootPadded = toHex32(tree[tree.length - 1][0]);
@@ -303,12 +368,7 @@ export async function generateCoverage(
     );
   }
 
-  const tempWitnessPath = path.join(
-    os.tmpdir(),
-    `amach-zk-witness-${Date.now()}.json`,
-  );
-  fs.writeFileSync(tempWitnessPath, JSON.stringify(witnessInput, null, 2));
-
+  const { snarkjs } = getZkRuntime();
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(
     witnessInput,
     wasm,
@@ -320,7 +380,9 @@ export async function generateCoverage(
     publicSignals,
     proof,
   );
-  const proofHash = `0x${Buffer.from(JSON.stringify({ proof, publicSignals })).toString("hex").slice(0, 64).padEnd(64, "0")}`;
+  const proofHash = `0x${createHash("sha256")
+    .update(JSON.stringify({ proof, publicSignals }))
+    .digest("hex")}`;
 
   return { proof, publicSignals, proofHash, verified };
 }
@@ -329,6 +391,9 @@ export async function verifyCoverage(
   proof: unknown,
   publicSignals: string[],
 ): Promise<boolean> {
+  // Keep type narrowing explicit for TS and avoid module-load failures.
+  void snarkjsTypeGuard;
+  const { snarkjs } = getZkRuntime();
   const vkey = artifactPath("verification_key.json");
   if (!fs.existsSync(vkey)) {
     throw new Error("Missing verification key artifact.");

@@ -8,6 +8,10 @@ import { getStorageService } from "@/storage";
 
 const ZERO_LEAF = 0n;
 
+/** Must match `coverage.circom`: `component main = CoverageProof(20, MERKLE_DEPTH)`. */
+const MERKLE_DEPTH = 8;
+const MAX_LEAVES = 1 << MERKLE_DEPTH;
+
 /** Root folder that contains `build/coverage/` (same layout as AmachHealth-iOS/zk). */
 function getZkToolchainRoot(): string {
   if (process.env.ZK_TOOLCHAIN_DIR) {
@@ -115,7 +119,13 @@ function nextPow2(n: number): number {
 }
 
 function buildTree(hashes: bigint[]): bigint[][] {
-  const size = nextPow2(Math.max(1, hashes.length));
+  const pow2 = nextPow2(Math.max(1, hashes.length));
+  const size = Math.max(pow2, MAX_LEAVES);
+  if (size > MAX_LEAVES) {
+    throw new Error(
+      `Too many leaves (${hashes.length}) for coverage circuit depth ${MERKLE_DEPTH} (max ${MAX_LEAVES} leaves).`,
+    );
+  }
   const level0 = [...hashes];
   while (level0.length < size) level0.push(ZERO_LEAF);
   const tree: bigint[][] = [level0];
@@ -143,6 +153,11 @@ function merklePath(
     siblings.push((tree[level][sib] ?? ZERO_LEAF).toString(10));
     indices.push(right ? "1" : "0");
     cursor = Math.floor(cursor / 2);
+  }
+  if (siblings.length !== MERKLE_DEPTH) {
+    throw new Error(
+      `Internal: Merkle path length ${siblings.length} !== MERKLE_DEPTH ${MERKLE_DEPTH}`,
+    );
   }
   return { siblings, indices };
 }
@@ -285,6 +300,12 @@ export async function generateCoverage(
     walletAddress,
     encryptionKey,
   );
+  const storedPathDepth = tree.tree.length > 0 ? tree.tree.length - 1 : 0;
+  if (storedPathDepth !== MERKLE_DEPTH) {
+    throw new Error(
+      `Stored genesis tree depth ${storedPathDepth} does not match coverage circuit MERKLE_DEPTH ${MERKLE_DEPTH}. Regenerate Merkle genesis (root will change).`,
+    );
+  }
   const treeBig = tree.tree.map((level) => level.map((v) => BigInt(v)));
   const selected = leaves.leaves
     .map((leaf, idx) => ({ leaf, idx }))

@@ -16,6 +16,16 @@ type Body = {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    if (
+      process.env.NODE_ENV === "production" &&
+      process.env.ALLOW_DEV_ZK_ENDPOINTS !== "true"
+    ) {
+      return NextResponse.json(
+        { error: "Dev ZK endpoint disabled in production" },
+        { status: 403 },
+      );
+    }
+
     const body = (await request.json()) as Body;
     if (
       !body.walletAddress ||

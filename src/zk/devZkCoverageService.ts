@@ -162,6 +162,29 @@ function merklePath(
   return { siblings, indices };
 }
 
+interface SnarkjsProof {
+  pi_a: string[];
+  pi_b: string[][];
+  pi_c: string[];
+}
+
+export interface SolidityProof {
+  a: [string, string];
+  b: [[string, string], [string, string]];
+  c: [string, string];
+}
+
+function toSolidityProof(proof: SnarkjsProof): SolidityProof {
+  return {
+    a: [proof.pi_a[0], proof.pi_a[1]],
+    b: [
+      [proof.pi_b[0][1], proof.pi_b[0][0]],
+      [proof.pi_b[1][1], proof.pi_b[1][0]],
+    ],
+    c: [proof.pi_c[0], proof.pi_c[1]],
+  };
+}
+
 function artifactPath(...parts: string[]): string {
   return path.join(getZkToolchainRoot(), "build", "coverage", ...parts);
 }
@@ -288,14 +311,11 @@ export async function generateCoverage(
   endDayId: number,
   minDays: number,
 ): Promise<{
-  proof: unknown;
+  proof: SolidityProof;
   publicSignals: string[];
   proofHash: string;
   verified: boolean;
 }> {
-  if (minDays !== 20) {
-    throw new Error("Current dev circuit supports minDays=20 only.");
-  }
   const { tree, leaves } = await loadLatestGenesis(
     walletAddress,
     encryptionKey,
@@ -356,7 +376,12 @@ export async function generateCoverage(
     .update(JSON.stringify({ proof, publicSignals }))
     .digest("hex")}`;
 
-  return { proof, publicSignals, proofHash, verified };
+  return {
+    proof: toSolidityProof(proof as SnarkjsProof),
+    publicSignals,
+    proofHash,
+    verified,
+  };
 }
 
 export async function verifyCoverage(

@@ -15,20 +15,20 @@ type Body = {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    if (
-      process.env.NODE_ENV === "production" &&
-      process.env.ALLOW_DEV_ZK_ENDPOINTS !== "true"
-    ) {
-      return NextResponse.json(
-        { error: "Dev ZK endpoint disabled in production" },
-        { status: 403 },
-      );
-    }
-
     const body = (await request.json()) as Body;
     if (!body.walletAddress || !body.encryptionKey) {
       return NextResponse.json(
         { error: "walletAddress and encryptionKey are required" },
+        { status: 400 },
+      );
+    }
+    if (
+      typeof body.startDayId !== "number" ||
+      typeof body.endDayId !== "number" ||
+      typeof body.minDays !== "number"
+    ) {
+      return NextResponse.json(
+        { error: "startDayId, endDayId, and minDays must be numbers" },
         { status: 400 },
       );
     }

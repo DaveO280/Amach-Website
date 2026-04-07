@@ -185,6 +185,18 @@ function toSolidityProof(proof: SnarkjsProof): SolidityProof {
   };
 }
 
+function fromSolidityProof(proof: SolidityProof): SnarkjsProof {
+  return {
+    pi_a: [proof.a[0], proof.a[1], "1"],
+    pi_b: [
+      [proof.b[0][1], proof.b[0][0]],
+      [proof.b[1][1], proof.b[1][0]],
+      ["1", "0"],
+    ],
+    pi_c: [proof.c[0], proof.c[1], "1"],
+  };
+}
+
 function artifactPath(...parts: string[]): string {
   return path.join(getZkToolchainRoot(), "build", "coverage", ...parts);
 }
@@ -385,7 +397,7 @@ export async function generateCoverage(
 }
 
 export async function verifyCoverage(
-  proof: unknown,
+  proof: SolidityProof,
   publicSignals: string[],
 ): Promise<boolean> {
   const vkey = artifactPath("verification_key.json");
@@ -393,5 +405,9 @@ export async function verifyCoverage(
     throw new Error("Missing verification key artifact.");
   }
   const verificationKey = JSON.parse(fs.readFileSync(vkey, "utf8")) as unknown;
-  return snarkjs.groth16.verify(verificationKey, publicSignals, proof);
+  return snarkjs.groth16.verify(
+    verificationKey,
+    publicSignals,
+    fromSolidityProof(proof),
+  );
 }

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { SolidityProof } from "@/zk/devZkCoverageService";
 import { verifyCoverage } from "@/zk/devZkCoverageService";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 type Body = {
-  proof: unknown;
+  proof: SolidityProof;
   publicSignals: string[];
 };
 

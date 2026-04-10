@@ -4,6 +4,7 @@
  */
 
 import type { DexaReportData, DexaRegionMetrics } from "@/types/reportData";
+import { callVenice as callVeniceClient } from "./veniceClient";
 
 /**
  * Parse DEXA report using AI
@@ -24,9 +25,9 @@ export async function parseDexaReportWithAI(
       : rawText;
 
   // Structured prompt with explicit schema for consistent extraction
-  const systemPrompt = `Extract all metrics from this DEXA scan report and return as JSON with this exact structure:
+  const systemPrompt = `You are a medical data extractor. Extract all metrics from this DEXA scan report and return as JSON with this exact structure:
 {
-  "scan_date": "YYYY-MM-DD or MM/DD/YYYY as found",
+  "scan_date": "YYYY-MM-DD or MM/DD/YYYY — the date the scan was PERFORMED (NOT the patient's birth/DOB date)",
   "total_body_fat_percent": number,
   "total_lean_mass_lbs": number,
   "visceral_fat": {
@@ -49,6 +50,13 @@ export async function parseDexaReportWithAI(
     "total": { "fat_percent": number, "fat_lbs": number, "lean_lbs": number, "bmd": number, "t_score": number, "z_score": number }
   }
 }
+
+CRITICAL RULES:
+1. scan_date is the date the scan was PERFORMED — look for "Measured", "Date of Exam", "Exam Date", "Scan Date". NEVER use the patient's birth date / DOB / Date of Birth.
+2. total_body_fat_percent MUST be between 0 and 100. If you see a value > 100 for fat%, it is not a percentage — do not include it.
+3. GE Lunar scanners may report fat and lean mass in GRAMS (g) or KILOGRAMS (kg) instead of pounds (lbs). Convert to lbs before populating fat_lbs/lean_lbs (1 kg = 2.20462 lbs; divide grams by 453.592 to get lbs).
+4. Hologic scanners report in lbs — use values directly.
+5. If you cannot confidently identify the scan date (distinct from patient DOB), set scan_date to null.
 Include only fields that have values in the report. Use null for missing values.`;
 
   const userPrompt = textToParse;
@@ -65,36 +73,26 @@ Include only fields that have values in the report. Use null for missing values.
     }
     messages.push({ role: "user", content: userPrompt });
 
-    const response = await fetch("/api/venice", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const data = (await callVeniceClient({
+      messages,
+      max_tokens: 2000, // Reduced - JSON responses are compact
+      temperature: 0, // Use 0 for deterministic output (faster)
+      model: modelName,
+      stream: false,
+      response_format: { type: "json_object" }, // Force JSON mode for faster, structured output
+      venice_parameters: {
+        // Disable thinking to ensure JSON response is in content field
+        disable_thinking: true,
+        // Strip any thinking that might leak through
+        strip_thinking_response: true,
+        // Don't include Venice system prompts
+        include_venice_system_prompt: false,
       },
-      body: JSON.stringify({
-        messages,
-        max_tokens: 2000, // Reduced - JSON responses are compact
-        temperature: 0, // Use 0 for deterministic output (faster)
-        model: modelName,
-        stream: false,
-        response_format: { type: "json_object" }, // Force JSON mode for faster, structured output
-        venice_parameters: {
-          // Disable thinking to ensure JSON response is in content field
-          disable_thinking: true,
-          // Strip any thinking that might leak through
-          strip_thinking_response: true,
-          // Don't include Venice system prompts
-          include_venice_system_prompt: false,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(
-        `API request failed: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    const data = await response.json();
+    })) as {
+      choices?: Array<{
+        message?: { content?: string; reasoning_content?: string };
+      }>;
+    };
     const firstChoice = data?.choices?.[0];
     const message = firstChoice?.message;
 
@@ -344,7 +342,12 @@ Include only fields that have values in the report. Use null for missing values.
           if (leanLbs !== undefined) {
             metrics.leanMassKg = leanLbs * 0.453592;
           }
-          if (fatPercent !== undefined) {
+          // Validate fat percent: must be in [0, 100] — reject impossible AI hallucinations
+          if (
+            fatPercent !== undefined &&
+            fatPercent >= 0 &&
+            fatPercent <= 100
+          ) {
             metrics.bodyFatPercent = fatPercent;
           } else if (fatLbs !== undefined && leanLbs !== undefined) {
             const tissueLbs = fatLbs + leanLbs;
@@ -389,7 +392,11 @@ Include only fields that have values in the report. Use null for missing values.
       "total_fat_percent",
       "%fat",
     ]);
-    if (typeof totalFatPercent === "number") {
+    if (
+      typeof totalFatPercent === "number" &&
+      totalFatPercent >= 0 &&
+      totalFatPercent <= 100
+    ) {
       totalBodyFatPercent = totalFatPercent;
     } else if (segmental && typeof segmental === "object") {
       const totalData = (segmental as Record<string, unknown>).total;
@@ -687,11 +694,14 @@ function parseStructuredTextToDexaReport(
     let visceralFatMassLbs: number | undefined;
 
     // Extract scan date - be flexible with format
+    // Use patterns that explicitly target scan/exam date labels and EXCLUDE birth-date labels.
     const datePatterns = [
+      /(?:date\s+of\s+exam|exam\s+date)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
       /measured[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
       /scan\s+date[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
       /report\s+date[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
-      /date[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
+      // Generic "Date:" but only if NOT preceded by "birth", "dob", "born"
+      /(?<!(?:birth|dob|born)[:\s]{0,5})(?<!\w)date[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
     ];
     for (const pattern of datePatterns) {
       const match = fullText.match(pattern);

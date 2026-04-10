@@ -8,6 +8,7 @@ import type {
   BloodworkMetric,
   BloodworkFlag,
 } from "@/types/reportData";
+import { callVenice as callVeniceClient } from "./veniceClient";
 
 const JUNK_METRIC_NAMES = new Set([
   "name",
@@ -559,37 +560,29 @@ ${textToParse}`;
         ? [
             ...messages,
             {
-              role: "user",
+              role: "user" as const,
               content: `IMPORTANT: ${extraInstruction}`,
             },
           ]
         : messages;
 
-      const response = await fetch("/api/venice", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: attemptMessages,
-          max_tokens: 8000,
-          temperature: 0,
-          model: modelName,
-          stream: false,
-          response_format: { type: "json_object" },
-        }),
-      });
+      const data = (await callVeniceClient({
+        messages: attemptMessages,
+        max_tokens: 8000,
+        temperature: 0,
+        model: modelName,
+        stream: false,
+        response_format: { type: "json_object" },
+      })) as Record<string, unknown>;
 
-      if (!response.ok) {
-        throw new Error(
-          `API request failed: ${response.status} ${response.statusText}`,
-        );
-      }
-
-      const data = await response.json();
-      const message = data?.choices?.[0]?.message;
-      return (message?.content?.trim() ||
-        message?.reasoning_content?.trim() ||
+      const choices = data?.choices as
+        | Array<Record<string, unknown>>
+        | undefined;
+      const message = choices?.[0]?.message as
+        | Record<string, unknown>
+        | undefined;
+      return ((message?.content as string)?.trim() ||
+        (message?.reasoning_content as string)?.trim() ||
         "") as string;
     };
 

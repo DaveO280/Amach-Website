@@ -5,13 +5,17 @@ import {
 } from "./bloodworkParser";
 import { parseBloodworkReportWithAI } from "./aiBloodworkParser";
 import { parseDexaReportWithAI } from "./aiDexaParser";
+import {
+  parseMedicalRecordWithAI,
+  createFallbackMedicalRecord,
+} from "./aiMedicalRecordParser";
 import type {
   ParsedReportSummary,
   ParsedHealthReport,
 } from "@/types/reportData";
 
 export interface ReportParsingOptions {
-  inferredType?: "dexa" | "bloodwork";
+  inferredType?: "dexa" | "bloodwork" | "medical-record";
   sourceName?: string;
   // Legacy option used by some callers; currently ignored by the parser.
   useAI?: boolean;
@@ -287,6 +291,36 @@ export async function parseHealthReport(
     }
   }
 
+  // --- Medical record fallback ---
+  // If explicitly requested OR nothing matched above, parse as generic medical record.
+  if (reports.length === 0 || options.inferredType === "medical-record") {
+    console.log(
+      "[ReportParser] 📄 Falling through to generic medical record parser...",
+    );
+
+    let medRecord: ParsedHealthReport | null = null;
+    try {
+      medRecord = await parseMedicalRecordWithAI(rawText, options.sourceName);
+      if (medRecord) {
+        console.log(
+          `[ReportParser] ✅ AI medical record parser succeeded (type=${medRecord.documentType}, confidence=${medRecord.confidence})`,
+        );
+      }
+    } catch (err) {
+      console.error("[ReportParser] ❌ AI medical record parser error:", err);
+    }
+
+    // If AI fails entirely, still return a basic record with rawText
+    if (!medRecord) {
+      console.log(
+        "[ReportParser] ⚠️ AI medical record parser failed, creating fallback with rawText only.",
+      );
+      medRecord = createFallbackMedicalRecord(rawText, options.sourceName);
+    }
+
+    reports.push(medRecord);
+  }
+
   return reports.map((report) => ({
     report,
     extractedAt: new Date().toISOString(),
@@ -295,3 +329,4 @@ export async function parseHealthReport(
 
 export * from "./dexaParser";
 export * from "./bloodworkParser";
+export * from "./aiMedicalRecordParser";

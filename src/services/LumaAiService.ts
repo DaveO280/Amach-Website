@@ -960,6 +960,9 @@ Please provide a helpful response as Luma, keeping in mind the user's health dat
         if (r.report.type === "bloodwork") {
           return `- bloodwork${r.report.reportDate ? ` (${r.report.reportDate})` : ""}`;
         }
+        if (r.report.type === "medical-record") {
+          return `- medical-record${r.report.reportDate ? ` (${r.report.reportDate})` : ""}${r.report.title ? ` — ${r.report.title}` : ""}`;
+        }
         return `- dexa${r.report.scanDate ? ` (${r.report.scanDate})` : ""}`;
       });
       systemMessage += `\nLatest reports:\n${lines.join("\n")}`;

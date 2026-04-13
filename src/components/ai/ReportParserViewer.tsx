@@ -9,6 +9,7 @@ import {
 import type {
   BloodworkReportData,
   DexaReportData,
+  MedicalRecordData,
   ParsedReportSummary,
 } from "@/types/reportData";
 import { formatReportsForAI } from "@/utils/reportFormatters";
@@ -118,7 +119,7 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
   const recordReportUploadOnChain = async (params: {
     storjUri: string;
     contentHash: string;
-    reportType: "dexa" | "bloodwork";
+    reportType: "dexa" | "bloodwork" | "medical-record";
   }): Promise<{
     created: boolean;
     eventId: number | null;
@@ -204,7 +205,7 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
 
   const verifyDecryptFromStorj = async (params: {
     storjUri: string;
-    reportType: "dexa" | "bloodwork";
+    reportType: "dexa" | "bloodwork" | "medical-record";
     encryptionKey: unknown;
   }): Promise<boolean> => {
     if (!address) return false;
@@ -229,7 +230,7 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
    * Create on-chain attestation for a stored report
    */
   const createReportAttestation = async (params: {
-    report: DexaReportData | BloodworkReportData;
+    report: DexaReportData | BloodworkReportData | MedicalRecordData;
     contentHash: string;
   }): Promise<{ success: boolean; tier?: string; error?: string }> => {
     if (!address) return { success: false, error: "No wallet connected" };
@@ -265,11 +266,17 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
           params.report,
           params.contentHash,
         );
-      } else {
+      } else if (params.report.type === "bloodwork") {
         result = await attestationService.attestBloodworkReport(
           params.report,
           params.contentHash,
         );
+      } else {
+        // Medical records do not yet have attestation support
+        return {
+          success: false,
+          error: "Attestation not supported for medical records",
+        };
       }
 
       if (result.success) {
@@ -513,7 +520,11 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
           <div className="p-2">
             {reports.map((report, index) => {
               const reportType =
-                report.report.type === "dexa" ? "DEXA" : "Bloodwork";
+                report.report.type === "dexa"
+                  ? "DEXA"
+                  : report.report.type === "bloodwork"
+                    ? "Bloodwork"
+                    : "Medical Record";
               const reportDate =
                 report.report.type === "dexa"
                   ? report.report.scanDate
@@ -982,7 +993,7 @@ const StructuredView: React.FC<{ report: ParsedReportSummary }> = ({
         )}
       </div>
     );
-  } else {
+  } else if (report.report.type === "bloodwork") {
     const bloodwork = report.report;
     const flaggedMetrics = bloodwork.metrics.filter(
       (m) => m.flag && m.flag !== "normal",
@@ -1108,6 +1119,86 @@ const StructuredView: React.FC<{ report: ParsedReportSummary }> = ({
             <ul className="list-disc list-inside space-y-1 text-sm text-amber-800">
               {bloodwork.notes.map((note, idx) => (
                 <li key={idx}>{note}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  } else {
+    // Medical Record
+    const record = report.report;
+    return (
+      <div className="space-y-4">
+        <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+          <h4 className="font-semibold text-purple-900 mb-2">
+            {record.title || "Medical Record"}
+          </h4>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {record.documentType && (
+              <div>
+                <span className="font-medium text-gray-700">
+                  Document Type:
+                </span>{" "}
+                <span className="text-gray-900">{record.documentType}</span>
+              </div>
+            )}
+            {record.reportDate && (
+              <div>
+                <span className="font-medium text-gray-700">Date:</span>{" "}
+                <span className="text-gray-900">{record.reportDate}</span>
+              </div>
+            )}
+            {record.source && (
+              <div>
+                <span className="font-medium text-gray-700">Source:</span>{" "}
+                <span className="text-gray-900">{record.source}</span>
+              </div>
+            )}
+            <div>
+              <span className="font-medium text-gray-700">Confidence:</span>{" "}
+              <span className="text-gray-900">
+                {Math.round(record.confidence * 100)}%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {record.summary && (
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <h4 className="font-semibold text-gray-900 mb-2">Summary</h4>
+            <p className="text-sm text-gray-700">{record.summary}</p>
+          </div>
+        )}
+
+        {record.keyFindings && record.keyFindings.length > 0 && (
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <h4 className="font-semibold text-blue-900 mb-2">Key Findings</h4>
+            <ul className="list-disc list-inside space-y-1 text-sm text-blue-800">
+              {record.keyFindings.map((finding, idx) => (
+                <li key={idx}>{finding}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {record.diagnoses && record.diagnoses.length > 0 && (
+          <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+            <h4 className="font-semibold text-amber-900 mb-2">Diagnoses</h4>
+            <ul className="list-disc list-inside space-y-1 text-sm text-amber-800">
+              {record.diagnoses.map((diagnosis, idx) => (
+                <li key={idx}>{diagnosis}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {record.medications && record.medications.length > 0 && (
+          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+            <h4 className="font-semibold text-green-900 mb-2">Medications</h4>
+            <ul className="list-disc list-inside space-y-1 text-sm text-green-800">
+              {record.medications.map((med, idx) => (
+                <li key={idx}>{med}</li>
               ))}
             </ul>
           </div>

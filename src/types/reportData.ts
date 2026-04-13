@@ -1,4 +1,4 @@
-export type HealthReportType = "dexa" | "bloodwork";
+export type HealthReportType = "dexa" | "bloodwork" | "medical-record";
 
 export interface DexaRegionMetrics {
   region: string;
@@ -62,7 +62,24 @@ export interface BloodworkReportData {
   confidence: number;
 }
 
-export type ParsedHealthReport = DexaReportData | BloodworkReportData;
+export interface MedicalRecordData {
+  type: "medical-record";
+  source?: string;
+  reportDate?: string;
+  documentType?: string; // e.g. "imaging", "discharge-summary", "prescription", "lab-panel", "other"
+  title?: string;
+  summary?: string; // AI-generated summary of the document
+  keyFindings?: string[];
+  medications?: string[];
+  diagnoses?: string[];
+  rawText: string;
+  confidence: number;
+}
+
+export type ParsedHealthReport =
+  | DexaReportData
+  | BloodworkReportData
+  | MedicalRecordData;
 
 export interface ParsedReportSummary {
   report: ParsedHealthReport;

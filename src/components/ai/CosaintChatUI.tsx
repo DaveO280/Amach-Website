@@ -831,7 +831,9 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         const date =
           r.report.type === "bloodwork"
             ? r.report.reportDate
-            : r.report.scanDate;
+            : r.report.type === "medical-record"
+              ? r.report.reportDate
+              : r.report.scanDate;
         const source = r.report.source ? String(r.report.source) : "";
 
         addUploadedFile({
@@ -873,7 +875,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   const recordReportUploadOnChain = async (params: {
     storjUri: string;
     contentHash: string;
-    reportType: "dexa" | "bloodwork";
+    reportType: "dexa" | "bloodwork" | "medical-record";
   }): Promise<void> => {
     if (!address) throw new Error("Wallet not connected");
     const walletClient = await walletService.getWalletClient();

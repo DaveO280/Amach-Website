@@ -76,7 +76,7 @@
     "snarkjs": "^0.7.5",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
-    "uuid": "^9.0.1",
+    "uuid": "^14.0.0",
     "viem": "2.47.16"
   },
   "devDependencies": {

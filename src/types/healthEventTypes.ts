@@ -42,6 +42,9 @@ export enum HealthEventType {
 
   // Custom
   CUSTOM = "CUSTOM",
+
+  // Amach Breathe
+  BREATHING_SESSION = "BREATHING_SESSION",
 }
 
 export interface EventTypeDefinition {
@@ -570,6 +573,75 @@ export const EVENT_TYPE_DEFINITIONS: Record<
     icon: "➕",
     description: "Create a custom event with your own fields",
     suggestedFields: [],
+  },
+
+  // Amach Breathe
+  [HealthEventType.BREATHING_SESSION]: {
+    type: HealthEventType.BREATHING_SESSION,
+    label: "Breathing Session",
+    category: "general",
+    icon: "🌬️",
+    description: "Resonance breathing session with HRV biofeedback",
+    suggestedFields: [
+      {
+        key: "timestamp",
+        label: "Timestamp",
+        type: "date",
+        required: true,
+      },
+      {
+        key: "duration",
+        label: "Duration (seconds)",
+        type: "number",
+        placeholder: "e.g. 600",
+        required: true,
+      },
+      {
+        key: "bpm",
+        label: "Breath Rate (BPM)",
+        type: "number",
+        placeholder: "e.g. 5.5",
+        required: true,
+      },
+      {
+        key: "ratio",
+        label: "Breath Ratio",
+        type: "text",
+        placeholder: "e.g. 4:6 or 1:1",
+        required: true,
+      },
+      {
+        key: "baselineHRV",
+        label: "Baseline HRV (ms)",
+        type: "number",
+        placeholder: "RMSSD at session start",
+      },
+      {
+        key: "recoveryHRV",
+        label: "Recovery HRV (ms)",
+        type: "number",
+        placeholder: "RMSSD at session end",
+      },
+      {
+        key: "avgHRV",
+        label: "Average HRV (ms)",
+        type: "number",
+        placeholder: "Mean RMSSD across session",
+      },
+      {
+        key: "coherenceScore",
+        label: "Coherence Score",
+        type: "number",
+        placeholder: "0–1 (HRV oscillation at resonance frequency)",
+      },
+      {
+        key: "reflectionRating",
+        label: "Reflection Rating",
+        type: "select",
+        options: ["1", "2", "3", "4", "5"],
+        placeholder: "1 (worst) – 5 (best)",
+      },
+    ],
   },
 };
 

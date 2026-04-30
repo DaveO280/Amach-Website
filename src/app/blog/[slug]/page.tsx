@@ -131,6 +131,7 @@ export default async function BlogPostPage({ params }: PageProps): Promise<JSX.E
           {/* Back link */}
           <Link
             href="/blog"
+            className="blog-back-link"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -139,16 +140,7 @@ export default async function BlogPostPage({ params }: PageProps): Promise<JSX.E
               color: "var(--color-text-muted)",
               textDecoration: "none",
               marginBottom: 40,
-              transition: "color 0.15s ease",
             }}
-            onMouseEnter={(e) =>
-              ((e.currentTarget as HTMLElement).style.color =
-                "var(--color-emerald)")
-            }
-            onMouseLeave={(e) =>
-              ((e.currentTarget as HTMLElement).style.color =
-                "var(--color-text-muted)")
-            }
           >
             <svg
               width="16"
@@ -279,6 +271,7 @@ export default async function BlogPostPage({ params }: PageProps): Promise<JSX.E
             </Link>
             <Link
               href="/blog"
+              className="blog-more-link"
               style={{
                 display: "inline-block",
                 padding: "14px 32px",
@@ -287,7 +280,6 @@ export default async function BlogPostPage({ params }: PageProps): Promise<JSX.E
                 fontSize: "0.9rem",
                 color: "var(--color-text-secondary)",
                 textDecoration: "none",
-                transition: "border-color 0.15s ease, color 0.15s ease",
               }}
             >
               More Insights

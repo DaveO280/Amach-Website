@@ -167,26 +167,12 @@ export default async function BlogPage(): Promise<JSX.Element> {
                   style={{ textDecoration: "none", display: "block" }}
                 >
                   <article
-                    className="amach-card"
+                    className="amach-card blog-card"
                     style={{
                       height: "100%",
                       padding: 32,
                       cursor: "pointer",
-                      transition:
-                        "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease",
                       border: "1px solid var(--color-border)",
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.transform =
-                        "translateY(-3px)";
-                      (e.currentTarget as HTMLElement).style.borderColor =
-                        "var(--color-emerald)";
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.transform =
-                        "translateY(0)";
-                      (e.currentTarget as HTMLElement).style.borderColor =
-                        "var(--color-border)";
                     }}
                   >
                     {/* Tags */}

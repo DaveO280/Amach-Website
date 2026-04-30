@@ -1639,6 +1639,30 @@ body:has([role="dialog"])::before {
   border-color: rgba(0, 107, 79, 0.25) !important;
 }
 
+/* ── Blog interactive hover states (server component safe — no JS handlers) ── */
+.blog-card {
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.blog-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--color-emerald) !important;
+}
+
+.blog-back-link {
+  transition: color 0.15s ease;
+}
+.blog-back-link:hover {
+  color: var(--color-emerald) !important;
+}
+
+.blog-more-link {
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.blog-more-link:hover {
+  border-color: var(--color-emerald) !important;
+  color: var(--color-emerald) !important;
+}
+
 /* ── Blog prose styles ── */
 .amach-prose {
   font-size: 1.0625rem;

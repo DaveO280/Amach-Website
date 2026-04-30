@@ -104,6 +104,7 @@ const MainPage: React.FC = (): JSX.Element => {
   const navItems = [
     { label: "How it Works", href: "/how-it-works" },
     { label: "Mission", href: "/mission" },
+    { label: "Insights", href: "/blog" },
     { label: "Whitepaper", href: "/whitepaper" },
   ];
 

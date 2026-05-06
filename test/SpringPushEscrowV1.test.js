@@ -135,19 +135,34 @@ async function gasCost(receipt, tx) {
   return receipt.gasUsed.mul(price);
 }
 
-async function deployFixture(shouldAcceptProofs = true) {
+async function deployFixture(opts = {}) {
+  const {
+    shouldAcceptProofs = true,
+    contestDuration = CONTEST_DURATION,
+    claimWindow = CLAIM_WINDOW,
+    maxParticipants = MAX_PARTICIPANTS,
+    minParticipants = MIN_PARTICIPANTS,
+  } = opts;
+
   const signers = await ethers.getSigners();
-  const [deployer, multiSig] = signers;
+  const [deployer, admin] = signers;
 
   const MockVerifier = await ethers.getContractFactory("MockGroth16Verifier");
   const verifier = await MockVerifier.deploy(shouldAcceptProofs);
   await verifier.deployed();
 
   const Escrow = await ethers.getContractFactory("SpringPushEscrowV1");
-  const escrow = await Escrow.deploy(verifier.address, multiSig.address);
+  const escrow = await Escrow.deploy(
+    verifier.address,
+    admin.address,
+    contestDuration,
+    claimWindow,
+    maxParticipants,
+    minParticipants,
+  );
   await escrow.deployed();
 
-  return { escrow, verifier, deployer, multiSig, signers };
+  return { escrow, verifier, deployer, admin, signers };
 }
 
 // -------------------------------------------------------------
@@ -158,48 +173,118 @@ describe("SpringPushEscrowV1", function () {
   this.timeout(180000);
 
   describe("constructor + immutables", () => {
-    it("rejects zero verifier or multi-sig", async () => {
+    const validArgs = (overrides = {}) => ({
+      verifier: overrides.verifier,
+      admin: overrides.admin,
+      contestDuration: overrides.contestDuration ?? CONTEST_DURATION,
+      claimWindow: overrides.claimWindow ?? CLAIM_WINDOW,
+      maxParticipants: overrides.maxParticipants ?? MAX_PARTICIPANTS,
+      minParticipants: overrides.minParticipants ?? MIN_PARTICIPANTS,
+    });
+
+    async function tryDeploy(args) {
       const Escrow = await ethers.getContractFactory("SpringPushEscrowV1");
+      return {
+        Escrow,
+        promise: Escrow.deploy(
+          args.verifier,
+          args.admin,
+          args.contestDuration,
+          args.claimWindow,
+          args.maxParticipants,
+          args.minParticipants,
+        ),
+      };
+    }
+
+    it("rejects zero verifier or admin", async () => {
       const [d] = await ethers.getSigners();
-      await expectCustomError(
-        Escrow.deploy(ethers.constants.AddressZero, d.address),
-        Escrow,
-        "ZeroAddress",
+      let { Escrow, promise } = await tryDeploy(
+        validArgs({ verifier: ethers.constants.AddressZero, admin: d.address }),
       );
-      await expectCustomError(
-        Escrow.deploy(d.address, ethers.constants.AddressZero),
-        Escrow,
-        "ZeroAddress",
-      );
+      await expectCustomError(promise, Escrow, "ZeroAddress");
+
+      ({ Escrow, promise } = await tryDeploy(
+        validArgs({ verifier: d.address, admin: ethers.constants.AddressZero }),
+      ));
+      await expectCustomError(promise, Escrow, "ZeroAddress");
+    });
+
+    it("rejects param values below their floors", async () => {
+      const [d] = await ethers.getSigners();
+      const baseValid = { verifier: d.address, admin: d.address };
+
+      const cases = [
+        { contestDuration: 59 },
+        { claimWindow: 59 },
+        { maxParticipants: 1 },
+        { minParticipants: 0 },
+        { minParticipants: 11, maxParticipants: 10 }, // min > max
+      ];
+      for (const override of cases) {
+        const { Escrow, promise } = await tryDeploy(
+          validArgs({ ...baseValid, ...override }),
+        );
+        await expectCustomError(promise, Escrow, "InvalidParams");
+      }
+    });
+
+    it("accepts the floor values exactly", async () => {
+      const [d] = await ethers.getSigners();
+      const { promise } = await tryDeploy({
+        verifier: d.address,
+        admin: d.address,
+        contestDuration: 60,
+        claimWindow: 60,
+        maxParticipants: 2,
+        minParticipants: 1,
+      });
+      const escrow = await promise;
+      await escrow.deployed();
+      eq(await escrow.CONTEST_DURATION(), 60);
+      eq(await escrow.MAX_PARTICIPANTS(), 2);
     });
 
     it("locks immutable parameters at deploy time", async () => {
-      const { escrow, verifier, multiSig } = await deployFixture();
+      const { escrow, verifier, admin } = await deployFixture();
       eq(await escrow.CONTEST_DURATION(), CONTEST_DURATION);
       eq(await escrow.CLAIM_WINDOW(), CLAIM_WINDOW);
       eq(await escrow.MAX_PARTICIPANTS(), MAX_PARTICIPANTS);
       eq(await escrow.MIN_PARTICIPANTS(), MIN_PARTICIPANTS);
       eq(await escrow.FOUNDER_RECLAIM_DELAY(), FOUNDER_RECLAIM_DELAY);
       expect(await escrow.IMPROVEMENT_VERIFIER()).to.equal(verifier.address);
-      expect(await escrow.MULTI_SIG()).to.equal(multiSig.address);
+      expect(await escrow.ADMIN()).to.equal(admin.address);
       eq(await escrow.state(), State.UNINITIALIZED);
+    });
+
+    it("supports custom timing for speed-run-style deploys", async () => {
+      const { escrow } = await deployFixture({
+        contestDuration: 300,
+        claimWindow: 180,
+        maxParticipants: 5,
+        minParticipants: 2,
+      });
+      eq(await escrow.CONTEST_DURATION(), 300);
+      eq(await escrow.CLAIM_WINDOW(), 180);
+      eq(await escrow.MAX_PARTICIPANTS(), 5);
+      eq(await escrow.MIN_PARTICIPANTS(), 2);
     });
   });
 
   describe("registration lifecycle", () => {
     it("happy path: open → register MIN → close → ACTIVE", async () => {
-      const { escrow, deployer, multiSig } = await deployFixture();
+      const { escrow, deployer, admin } = await deployFixture();
 
       await expectCustomError(
         escrow
           .connect(deployer)
           .openRegistration(BASELINE, { value: PRIZE_POOL }),
         escrow,
-        "NotMultiSig",
+        "NotAdmin",
       );
 
       await escrow
-        .connect(multiSig)
+        .connect(admin)
         .openRegistration(BASELINE, { value: PRIZE_POOL });
 
       eq(await escrow.state(), State.REGISTRATION_OPEN);
@@ -213,34 +298,32 @@ describe("SpringPushEscrowV1", function () {
       eq(await escrow.participantCount(), MIN_PARTICIPANTS);
       eq(await escrow.entryFeesTotal(), ENTRY_FEE.mul(MIN_PARTICIPANTS));
 
-      await escrow.connect(multiSig).closeRegistration();
+      await escrow.connect(admin).closeRegistration();
       eq(await escrow.state(), State.ACTIVE);
     });
 
     it("rejects double-open", async () => {
-      const { escrow, multiSig } = await deployFixture();
+      const { escrow, admin } = await deployFixture();
       await escrow
-        .connect(multiSig)
+        .connect(admin)
         .openRegistration(BASELINE, { value: PRIZE_POOL });
       await expectCustomError(
-        escrow
-          .connect(multiSig)
-          .openRegistration(BASELINE, { value: PRIZE_POOL }),
+        escrow.connect(admin).openRegistration(BASELINE, { value: PRIZE_POOL }),
         escrow,
         "WrongState",
       );
     });
 
     it("rejects open with zero prize pool or zero baseline", async () => {
-      const { escrow, multiSig } = await deployFixture();
+      const { escrow, admin } = await deployFixture();
       await expectCustomError(
-        escrow.connect(multiSig).openRegistration(BASELINE, { value: 0 }),
+        escrow.connect(admin).openRegistration(BASELINE, { value: 0 }),
         escrow,
         "ZeroValue",
       );
       await expectCustomError(
         escrow
-          .connect(multiSig)
+          .connect(admin)
           .openRegistration(ethers.constants.HashZero, { value: PRIZE_POOL }),
         escrow,
         "ZeroValue",
@@ -248,9 +331,9 @@ describe("SpringPushEscrowV1", function () {
     });
 
     it("rejects duplicate registration from the same address", async () => {
-      const { escrow, multiSig } = await deployFixture();
+      const { escrow, admin } = await deployFixture();
       await escrow
-        .connect(multiSig)
+        .connect(admin)
         .openRegistration(BASELINE, { value: PRIZE_POOL });
       const [p] = await createFundedWallets(1, "1");
       await escrow.connect(p).register({ value: ENTRY_FEE });
@@ -272,9 +355,9 @@ describe("SpringPushEscrowV1", function () {
     });
 
     it("rejects zero-value registration", async () => {
-      const { escrow, multiSig } = await deployFixture();
+      const { escrow, admin } = await deployFixture();
       await escrow
-        .connect(multiSig)
+        .connect(admin)
         .openRegistration(BASELINE, { value: PRIZE_POOL });
       const [p] = await createFundedWallets(1, "1");
       await expectCustomError(
@@ -292,9 +375,9 @@ describe("SpringPushEscrowV1", function () {
     });
 
     it("enforces MAX_PARTICIPANTS cap", async () => {
-      const { escrow, multiSig } = await deployFixture();
+      const { escrow, admin } = await deployFixture();
       await escrow
-        .connect(multiSig)
+        .connect(admin)
         .openRegistration(BASELINE, { value: PRIZE_POOL });
 
       const players = await createFundedWallets(MAX_PARTICIPANTS, "1");
@@ -312,9 +395,9 @@ describe("SpringPushEscrowV1", function () {
     });
 
     it("transitions to FAILED when below MIN_PARTICIPANTS at close", async () => {
-      const { escrow, multiSig } = await deployFixture();
+      const { escrow, admin } = await deployFixture();
       await escrow
-        .connect(multiSig)
+        .connect(admin)
         .openRegistration(BASELINE, { value: PRIZE_POOL });
 
       const tooFew = await createFundedWallets(MIN_PARTICIPANTS - 1, "1");
@@ -322,7 +405,7 @@ describe("SpringPushEscrowV1", function () {
         await escrow.connect(p).register({ value: ENTRY_FEE });
       }
 
-      await escrow.connect(multiSig).closeRegistration();
+      await escrow.connect(admin).closeRegistration();
       eq(await escrow.state(), State.FAILED);
     });
   });
@@ -330,15 +413,15 @@ describe("SpringPushEscrowV1", function () {
   describe("submitProof + finalize", () => {
     async function setupActiveContest(numPlayers = MIN_PARTICIPANTS) {
       const fixture = await deployFixture();
-      const { escrow, multiSig } = fixture;
+      const { escrow, admin } = fixture;
       await escrow
-        .connect(multiSig)
+        .connect(admin)
         .openRegistration(BASELINE, { value: PRIZE_POOL });
       const players = await createFundedWallets(numPlayers, "1");
       for (const p of players) {
         await escrow.connect(p).register({ value: ENTRY_FEE });
       }
-      await escrow.connect(multiSig).closeRegistration();
+      await escrow.connect(admin).closeRegistration();
       return { ...fixture, players };
     }
 
@@ -391,7 +474,7 @@ describe("SpringPushEscrowV1", function () {
     });
 
     it("requires sorted, no-duplicate participant list at finalize", async () => {
-      const { escrow, multiSig, players } = await setupActiveContest();
+      const { escrow, admin, players } = await setupActiveContest();
 
       // player[i] gets improvement (100 + i*10) — strictly increasing.
       for (let i = 0; i < players.length; i++) {
@@ -404,7 +487,7 @@ describe("SpringPushEscrowV1", function () {
 
       // Ascending registration order = wrong (sort must be DESC).
       await expectCustomError(
-        escrow.connect(multiSig).finalize(players.map((s) => s.address)),
+        escrow.connect(admin).finalize(players.map((s) => s.address)),
         escrow,
         "NotSorted",
       );
@@ -417,22 +500,22 @@ describe("SpringPushEscrowV1", function () {
         ...sortedDesc.slice(1).map((s) => s.address),
       ];
       await expectCustomError(
-        escrow.connect(multiSig).finalize(withDupe),
+        escrow.connect(admin).finalize(withDupe),
         escrow,
         "DuplicateInRanking",
       );
 
-      await escrow.connect(multiSig).finalize(sortedDesc.map((s) => s.address));
+      await escrow.connect(admin).finalize(sortedDesc.map((s) => s.address));
       eq(await escrow.state(), State.FINISHED);
       eq(await escrow.qualifierCount(), players.length);
     });
 
     it("rejects finalize before claim window ends", async () => {
-      const { escrow, multiSig, players } = await setupActiveContest();
+      const { escrow, admin, players } = await setupActiveContest();
       await escrow.connect(players[0]).submitProof("0x", pubSignals(100));
       await increaseTime(CONTEST_DURATION + 1);
       await expectCustomError(
-        escrow.connect(multiSig).finalize([players[0].address]),
+        escrow.connect(admin).finalize([players[0].address]),
         escrow,
         "TooEarly",
       );
@@ -443,15 +526,15 @@ describe("SpringPushEscrowV1", function () {
     it("happy path: ranks 1-10 → tier 1, 11-30 → tier 2, 31+ → tier 3", async () => {
       const numPlayers = 35;
       const fixture = await deployFixture();
-      const { escrow, multiSig } = fixture;
+      const { escrow, admin } = fixture;
       await escrow
-        .connect(multiSig)
+        .connect(admin)
         .openRegistration(BASELINE, { value: PRIZE_POOL });
       const players = await createFundedWallets(numPlayers, "1");
       for (const p of players) {
         await escrow.connect(p).register({ value: ENTRY_FEE });
       }
-      await escrow.connect(multiSig).closeRegistration();
+      await escrow.connect(admin).closeRegistration();
 
       // player[0] gets the highest score → ends up rank 1.
       for (let i = 0; i < players.length; i++) {
@@ -460,7 +543,7 @@ describe("SpringPushEscrowV1", function () {
       }
 
       await increaseTime(CONTEST_DURATION + CLAIM_WINDOW + 1);
-      await escrow.connect(multiSig).finalize(players.map((p) => p.address));
+      await escrow.connect(admin).finalize(players.map((p) => p.address));
 
       eq(await escrow.qualifierCount(), numPlayers);
 
@@ -493,15 +576,15 @@ describe("SpringPushEscrowV1", function () {
     });
 
     it("rejects claim without proof (NotQualified)", async () => {
-      const { escrow, multiSig } = await deployFixture();
+      const { escrow, admin } = await deployFixture();
       await escrow
-        .connect(multiSig)
+        .connect(admin)
         .openRegistration(BASELINE, { value: PRIZE_POOL });
       const players = await createFundedWallets(MIN_PARTICIPANTS, "1");
       for (const p of players) {
         await escrow.connect(p).register({ value: ENTRY_FEE });
       }
-      await escrow.connect(multiSig).closeRegistration();
+      await escrow.connect(admin).closeRegistration();
 
       const submitters = players.slice(0, 10);
       const skipped = players[10];
@@ -512,7 +595,7 @@ describe("SpringPushEscrowV1", function () {
       }
 
       await increaseTime(CONTEST_DURATION + CLAIM_WINDOW + 1);
-      await escrow.connect(multiSig).finalize(submitters.map((s) => s.address));
+      await escrow.connect(admin).finalize(submitters.map((s) => s.address));
 
       await expectCustomError(
         escrow.connect(skipped).claimPrize(),
@@ -524,16 +607,16 @@ describe("SpringPushEscrowV1", function () {
 
   describe("claimRefund (failed contest)", () => {
     it("refunds entry fee to all registrants on FAILED", async () => {
-      const { escrow, multiSig } = await deployFixture();
+      const { escrow, admin } = await deployFixture();
       await escrow
-        .connect(multiSig)
+        .connect(admin)
         .openRegistration(BASELINE, { value: PRIZE_POOL });
 
       const players = await createFundedWallets(5, "1"); // < MIN
       for (const p of players) {
         await escrow.connect(p).register({ value: ENTRY_FEE });
       }
-      await escrow.connect(multiSig).closeRegistration();
+      await escrow.connect(admin).closeRegistration();
       eq(await escrow.state(), State.FAILED);
 
       for (const p of players) {
@@ -553,9 +636,9 @@ describe("SpringPushEscrowV1", function () {
     });
 
     it("refund only callable in FAILED state", async () => {
-      const { escrow, multiSig } = await deployFixture();
+      const { escrow, admin } = await deployFixture();
       await escrow
-        .connect(multiSig)
+        .connect(admin)
         .openRegistration(BASELINE, { value: PRIZE_POOL });
       const [p] = await createFundedWallets(1, "1");
       await escrow.connect(p).register({ value: ENTRY_FEE });
@@ -570,46 +653,46 @@ describe("SpringPushEscrowV1", function () {
   describe("founderReclaim", () => {
     async function setupFinalized() {
       const fixture = await deployFixture();
-      const { escrow, multiSig } = fixture;
+      const { escrow, admin } = fixture;
       await escrow
-        .connect(multiSig)
+        .connect(admin)
         .openRegistration(BASELINE, { value: PRIZE_POOL });
       const players = await createFundedWallets(MIN_PARTICIPANTS, "1");
       for (const p of players) {
         await escrow.connect(p).register({ value: ENTRY_FEE });
       }
-      await escrow.connect(multiSig).closeRegistration();
+      await escrow.connect(admin).closeRegistration();
       for (let i = 0; i < players.length; i++) {
         await escrow
           .connect(players[i])
           .submitProof("0x", pubSignals(2000 - i * 10));
       }
       await increaseTime(CONTEST_DURATION + CLAIM_WINDOW + 1);
-      await escrow.connect(multiSig).finalize(players.map((p) => p.address));
+      await escrow.connect(admin).finalize(players.map((p) => p.address));
       return { ...fixture, players };
     }
 
     it("reverts before contestCloseTime + 180 days", async () => {
-      const { escrow, multiSig, signers } = await setupFinalized();
+      const { escrow, admin, signers } = await setupFinalized();
       await expectCustomError(
-        escrow.connect(multiSig).founderReclaim(signers[0].address),
+        escrow.connect(admin).founderReclaim(signers[0].address),
         escrow,
         "TooEarly",
       );
     });
 
-    it("reverts when called by non-multisig", async () => {
+    it("reverts when called by non-admin", async () => {
       const { escrow, signers } = await setupFinalized();
       await increaseTime(FOUNDER_RECLAIM_DELAY + 1);
       await expectCustomError(
         escrow.connect(signers[0]).founderReclaim(signers[0].address),
         escrow,
-        "NotMultiSig",
+        "NotAdmin",
       );
     });
 
     it("sweeps residual ETH to target after 180d", async () => {
-      const { escrow, multiSig, signers, players } = await setupFinalized();
+      const { escrow, admin, signers, players } = await setupFinalized();
 
       // Have one player claim; the remaining 19 leave residual in escrow.
       await escrow.connect(players[0]).claimPrize();
@@ -620,7 +703,7 @@ describe("SpringPushEscrowV1", function () {
       const targetBefore = await ethers.provider.getBalance(target.address);
       const escrowBefore = await ethers.provider.getBalance(escrow.address);
 
-      await escrow.connect(multiSig).founderReclaim(target.address);
+      await escrow.connect(admin).founderReclaim(target.address);
 
       const targetAfter = await ethers.provider.getBalance(target.address);
       const escrowAfter = await ethers.provider.getBalance(escrow.address);
@@ -629,11 +712,11 @@ describe("SpringPushEscrowV1", function () {
     });
 
     it("reverts on zero balance after sweep", async () => {
-      const { escrow, multiSig, signers } = await setupFinalized();
+      const { escrow, admin, signers } = await setupFinalized();
       await increaseTime(FOUNDER_RECLAIM_DELAY + 1);
-      await escrow.connect(multiSig).founderReclaim(signers[5].address);
+      await escrow.connect(admin).founderReclaim(signers[5].address);
       await expectCustomError(
-        escrow.connect(multiSig).founderReclaim(signers[5].address),
+        escrow.connect(admin).founderReclaim(signers[5].address),
         escrow,
         "ZeroValue",
       );

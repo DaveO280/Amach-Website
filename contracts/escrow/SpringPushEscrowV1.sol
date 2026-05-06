@@ -45,7 +45,17 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     uint256 public immutable MIN_PARTICIPANTS;
     uint256 public immutable FOUNDER_RECLAIM_DELAY;
     address public immutable IMPROVEMENT_VERIFIER;
-    address public immutable MULTI_SIG;
+    /// @dev Single privileged caller. On testnet this is the deployer EOA;
+    ///      on mainnet it should be a Gnosis Safe. No on-chain timelock —
+    ///      that is deferred to a possible V2.
+    address public immutable ADMIN;
+
+    /// @dev Floors enforced by the constructor so a misconfigured deploy
+    ///      cannot produce a contest with absurd timing.
+    uint256 public constant MIN_CONTEST_DURATION = 60;
+    uint256 public constant MIN_CLAIM_WINDOW = 60;
+    uint256 public constant MIN_MAX_PARTICIPANTS = 2;
+    uint256 public constant MIN_MIN_PARTICIPANTS = 1;
 
     /// @dev Tier shares are basis points of the prize pool. 6000 + 2500 + 1500 = 10000.
     uint256 public constant TIER1_BPS = 6000;
@@ -65,7 +75,7 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     uint256 public contestCloseTime;
     uint256 public claimWindowEndTime;
 
-    /// @dev ETH seeded by the multi-sig at openRegistration().
+    /// @dev ETH seeded by the admin at openRegistration().
     uint256 public prizePool;
     /// @dev Cumulative entry fees paid by all registrants.
     uint256 public entryFeesTotal;
@@ -109,7 +119,8 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     // Errors
     // -------------------------------------------------------------
 
-    error NotMultiSig();
+    error NotAdmin();
+    error InvalidParams();
     error WrongState(ContestState expected, ContestState actual);
     error CapacityReached();
     error AlreadyRegistered();
@@ -131,8 +142,8 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     // Modifiers
     // -------------------------------------------------------------
 
-    modifier onlyMultiSig() {
-        if (msg.sender != MULTI_SIG) revert NotMultiSig();
+    modifier onlyAdmin() {
+        if (msg.sender != ADMIN) revert NotAdmin();
         _;
     }
 
@@ -145,14 +156,27 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     // Constructor
     // -------------------------------------------------------------
 
-    constructor(address verifier, address multiSig) {
-        if (verifier == address(0) || multiSig == address(0)) revert ZeroAddress();
+    constructor(
+        address verifier,
+        address admin,
+        uint256 contestDuration,
+        uint256 claimWindow,
+        uint256 maxParticipants,
+        uint256 minParticipants
+    ) {
+        if (verifier == address(0) || admin == address(0)) revert ZeroAddress();
+        if (contestDuration < MIN_CONTEST_DURATION) revert InvalidParams();
+        if (claimWindow < MIN_CLAIM_WINDOW) revert InvalidParams();
+        if (maxParticipants < MIN_MAX_PARTICIPANTS) revert InvalidParams();
+        if (minParticipants < MIN_MIN_PARTICIPANTS) revert InvalidParams();
+        if (minParticipants > maxParticipants) revert InvalidParams();
+
         IMPROVEMENT_VERIFIER = verifier;
-        MULTI_SIG = multiSig;
-        CONTEST_DURATION = 90 days;
-        CLAIM_WINDOW = 30 days;
-        MAX_PARTICIPANTS = 100;
-        MIN_PARTICIPANTS = 20;
+        ADMIN = admin;
+        CONTEST_DURATION = contestDuration;
+        CLAIM_WINDOW = claimWindow;
+        MAX_PARTICIPANTS = maxParticipants;
+        MIN_PARTICIPANTS = minParticipants;
         FOUNDER_RECLAIM_DELAY = 180 days;
         state = ContestState.UNINITIALIZED;
     }
@@ -166,7 +190,7 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     function openRegistration(bytes32 _baselineRoot)
         external
         payable
-        onlyMultiSig
+        onlyAdmin
         inState(ContestState.UNINITIALIZED)
     {
         if (msg.value == 0) revert ZeroValue();
@@ -183,7 +207,7 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     ///         entry fees become refundable; otherwise the active contest begins.
     function closeRegistration()
         external
-        onlyMultiSig
+        onlyAdmin
         inState(ContestState.REGISTRATION_OPEN)
     {
         uint256 count = participants.length;
@@ -255,13 +279,13 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     }
 
     /// @notice Locks in the final ranking once the claim window has elapsed.
-    /// @dev    Caller (multi-sig) supplies the participant list pre-sorted by
+    /// @dev    Caller (admin) supplies the participant list pre-sorted by
     ///         improvementBp descending. The contract verifies sort order,
     ///         uniqueness, and that every entry has a verified proof on file.
     ///         No on-chain sort — too gas-heavy and unbounded.
     function finalize(address[] calldata sortedParticipants)
         external
-        onlyMultiSig
+        onlyAdmin
     {
         _advanceFromActiveIfElapsed();
         if (state != ContestState.CLAIMING) {
@@ -360,7 +384,7 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     function founderReclaim(address payable to)
         external
         nonReentrant
-        onlyMultiSig
+        onlyAdmin
     {
         if (to == address(0)) revert ZeroAddress();
         if (contestCloseTime == 0) revert TooEarly();

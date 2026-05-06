@@ -186,13 +186,6 @@ const MainPage: React.FC = (): JSX.Element => {
       />
 
       {/* ══════════════════════════════════════════
-          SPRING PUSH ANNOUNCEMENT BAR
-          Edge-to-edge, sits above the sticky nav,
-          scrolls away on its own.
-      ══════════════════════════════════════════ */}
-      <SpringPushAnnouncementBar />
-
-      {/* ══════════════════════════════════════════
           NAV
       ══════════════════════════════════════════ */}
       <header
@@ -381,6 +374,13 @@ const MainPage: React.FC = (): JSX.Element => {
           </div>
         )}
       </header>
+
+      {/* ══════════════════════════════════════════
+          SPRING PUSH ANNOUNCEMENT BAR
+          Sits below the nav, above the hero. Not sticky —
+          scrolls away with the page.
+      ══════════════════════════════════════════ */}
+      <SpringPushAnnouncementBar />
 
       {/* ══════════════════════════════════════════
           HERO

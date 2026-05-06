@@ -98,53 +98,65 @@ export function SpringPushAnnouncementBar(): JSX.Element {
       aria-label={`${label}. ${count} of ${max} participants. ${PRIZE_DISPLAY} prize verified on-chain. ${ctaLabel}.`}
       className="spring-push-announcement-bar"
     >
-      {/* Left: identity */}
-      <div className="spa-left">
-        <span className="spa-trophy" aria-hidden="true">
-          🏆
-        </span>
-        <span className="spa-eyebrow">{label}</span>
-        {isActive && (
-          <span className="spa-live-pill">
-            <span className="spa-live-dot" aria-hidden="true" />
-            LIVE
+      <div
+        className="spa-inner"
+        style={{
+          width: "100%",
+          display: "flex",
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 24,
+        }}
+      >
+        {/* Left: identity */}
+        <div className="spa-left">
+          <span className="spa-trophy" aria-hidden="true">
+            🏆
           </span>
-        )}
-      </div>
+          <span className="spa-eyebrow">{label}</span>
+          {isActive && (
+            <span className="spa-live-pill">
+              <span className="spa-live-dot" aria-hidden="true" />
+              LIVE
+            </span>
+          )}
+        </div>
 
-      {/* Center: ticker */}
-      <div className="spa-center" aria-live="polite">
-        <span className="spa-progress-track" aria-hidden="true">
-          <span
-            className="spa-progress-fill"
-            style={{ width: `${fillRatio * 100}%` }}
-          />
-        </span>
-        <span className="spa-count-wrap">
-          <span key={tickKey} className="spa-count">
-            {count}
+        {/* Center: ticker */}
+        <div className="spa-center" aria-live="polite">
+          <span className="spa-progress-track" aria-hidden="true">
+            <span
+              className="spa-progress-fill"
+              style={{ width: `${fillRatio * 100}%` }}
+            />
           </span>
-          <span className="spa-count-divider">/</span>
-          <span className="spa-count-max">{max}</span>
-          <span className="spa-count-label">participants</span>
-        </span>
-      </div>
+          <span className="spa-count-wrap">
+            <span key={tickKey} className="spa-count">
+              {count}
+            </span>
+            <span className="spa-count-divider">/</span>
+            <span className="spa-count-max">{max}</span>
+            <span className="spa-count-label">participants</span>
+          </span>
+        </div>
 
-      {/* Right: prize + CTA */}
-      <div className="spa-right">
-        <span className="spa-prize">
-          <span className="spa-prize-amount">{PRIZE_DISPLAY} Prize</span>
-          <span className="spa-prize-divider" aria-hidden="true">
-            ·
+        {/* Right: prize + CTA */}
+        <div className="spa-right">
+          <span className="spa-prize">
+            <span className="spa-prize-amount">{PRIZE_DISPLAY} Prize</span>
+            <span className="spa-prize-divider" aria-hidden="true">
+              ·
+            </span>
+            <span className="spa-prize-verified">
+              <span aria-hidden="true">⛓</span> Verified on-chain
+            </span>
           </span>
-          <span className="spa-prize-verified">
-            <span aria-hidden="true">⛓</span> Verified on-chain
+          <span className="spa-cta">
+            {ctaLabel}
+            <span aria-hidden="true">→</span>
           </span>
-        </span>
-        <span className="spa-cta">
-          {ctaLabel}
-          <span aria-hidden="true">→</span>
-        </span>
+        </div>
       </div>
 
       <style jsx>{`

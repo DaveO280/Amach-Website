@@ -9,7 +9,6 @@ import { getActiveChain, getContractAddresses } from "@/lib/networkConfig";
 const ESCROW_ABI = [
   "function state() view returns (uint8)",
   "function prizePool() view returns (uint256)",
-  "function entryFeesTotal() view returns (uint256)",
   "function participantCount() view returns (uint256)",
   "function MAX_PARTICIPANTS() view returns (uint256)",
   "function MIN_PARTICIPANTS() view returns (uint256)",
@@ -20,13 +19,12 @@ const ESCROW_ABI = [
   "function claimWindowEndTime() view returns (uint256)",
   "function registered(address) view returns (bool)",
   "function improvementBp(address) view returns (uint256)",
-  "function entryPaid(address) view returns (uint256)",
   "function claimed(address) view returns (bool)",
   "function participantRank(address) view returns (uint256)",
   "function previewPrizeFor(address) view returns (uint256 amount, uint8 tier)",
-  "function register() payable",
+  "function register()",
   "function claimPrize()",
-  "event ParticipantRegistered(address indexed participant, uint256 entryFee)",
+  "event ParticipantRegistered(address indexed participant)",
   "event ProofSubmitted(address indexed participant, uint256 improvementBp)",
   "event PrizeClaimed(address indexed participant, uint256 amount, uint8 tier)",
 ];
@@ -43,7 +41,6 @@ enum ContestState {
 interface ContractSnapshot {
   state: ContestState;
   prizePool: bigint;
-  entryFeesTotal: bigint;
   participantCount: number;
   maxParticipants: number;
   minParticipants: number;
@@ -52,13 +49,11 @@ interface ContractSnapshot {
   contestStartTime: number;
   contestCloseTime: number;
   claimWindowEndTime: number;
-  defaultEntryFee: bigint;
 }
 
 interface UserSnapshot {
   registered: boolean;
   improvementBp: bigint;
-  entryPaid: bigint;
   claimed: boolean;
   rank: number;
   previewPrize: bigint;
@@ -72,7 +67,6 @@ interface LeaderboardEntry {
 
 const REFRESH_INTERVAL_MS = 30_000;
 const LEADERBOARD_BLOCK_LOOKBACK = 1000;
-const FALLBACK_ENTRY_FEE = ethers.utils.parseEther("0.0001");
 
 function truncateAddress(addr: string): string {
   if (!addr) return "";
@@ -208,7 +202,6 @@ export function SpringPushWidget(): JSX.Element {
       const [
         rawState,
         prizePool,
-        entryFeesTotal,
         rawParticipants,
         rawMaxParticipants,
         rawMinParticipants,
@@ -220,7 +213,6 @@ export function SpringPushWidget(): JSX.Element {
       ] = await Promise.all([
         contract.state(),
         contract.prizePool(),
-        contract.entryFeesTotal(),
         contract.participantCount(),
         contract.MAX_PARTICIPANTS(),
         contract.MIN_PARTICIPANTS(),
@@ -231,27 +223,9 @@ export function SpringPushWidget(): JSX.Element {
         contract.claimWindowEndTime(),
       ]);
 
-      // Default entry fee derived from the most recent registration event.
-      // Contract takes any msg.value; surface a sensible default for the UI.
-      let defaultEntryFee = FALLBACK_ENTRY_FEE.toBigInt();
-      try {
-        const blockNumber = await readProvider.getBlockNumber();
-        const fromBlock = Math.max(0, blockNumber - LEADERBOARD_BLOCK_LOOKBACK);
-        const filter = contract.filters.ParticipantRegistered();
-        const events = await contract.queryFilter(filter, fromBlock, "latest");
-        if (events.length > 0) {
-          const mostRecent = events[events.length - 1];
-          const fee = mostRecent.args?.entryFee as ethers.BigNumber | undefined;
-          if (fee) defaultEntryFee = fee.toBigInt();
-        }
-      } catch {
-        // non-fatal — fall back to default
-      }
-
       const contractSnapshot: ContractSnapshot = {
         state: Number(rawState) as ContestState,
         prizePool: (prizePool as ethers.BigNumber).toBigInt(),
-        entryFeesTotal: (entryFeesTotal as ethers.BigNumber).toBigInt(),
         participantCount: (rawParticipants as ethers.BigNumber).toNumber(),
         maxParticipants: (rawMaxParticipants as ethers.BigNumber).toNumber(),
         minParticipants: (rawMinParticipants as ethers.BigNumber).toNumber(),
@@ -260,7 +234,6 @@ export function SpringPushWidget(): JSX.Element {
         contestStartTime: (rawStartTime as ethers.BigNumber).toNumber(),
         contestCloseTime: (rawCloseTime as ethers.BigNumber).toNumber(),
         claimWindowEndTime: (rawClaimEndTime as ethers.BigNumber).toNumber(),
-        defaultEntryFee,
       };
       setSnapshot(contractSnapshot);
 
@@ -304,26 +277,18 @@ export function SpringPushWidget(): JSX.Element {
 
       // User-specific data
       if (userAddress) {
-        const [
-          isRegistered,
-          rawImprovementBp,
-          rawEntryPaid,
-          isClaimed,
-          rawRank,
-          rawPreview,
-        ] = await Promise.all([
-          contract.registered(userAddress),
-          contract.improvementBp(userAddress),
-          contract.entryPaid(userAddress),
-          contract.claimed(userAddress),
-          contract.participantRank(userAddress),
-          contract.previewPrizeFor(userAddress),
-        ]);
+        const [isRegistered, rawImprovementBp, isClaimed, rawRank, rawPreview] =
+          await Promise.all([
+            contract.registered(userAddress),
+            contract.improvementBp(userAddress),
+            contract.claimed(userAddress),
+            contract.participantRank(userAddress),
+            contract.previewPrizeFor(userAddress),
+          ]);
 
         setUserState({
           registered: Boolean(isRegistered),
           improvementBp: (rawImprovementBp as ethers.BigNumber).toBigInt(),
-          entryPaid: (rawEntryPaid as ethers.BigNumber).toBigInt(),
           claimed: Boolean(isClaimed),
           rank: (rawRank as ethers.BigNumber).toNumber(),
           previewPrize: (rawPreview.amount as ethers.BigNumber).toBigInt(),
@@ -373,7 +338,7 @@ export function SpringPushWidget(): JSX.Element {
         case ContestState.FINISHED:
           return { label: "Contest finished", seconds: -1 };
         case ContestState.FAILED:
-          return { label: "Contest failed — refunds available", seconds: -1 };
+          return { label: "Contest failed — minimum not met", seconds: -1 };
         case ContestState.UNINITIALIZED:
         default:
           return { label: "Contest not yet open", seconds: -1 };
@@ -381,7 +346,6 @@ export function SpringPushWidget(): JSX.Element {
     }, [snapshot, now]);
 
   const handleRegister = useCallback(async (): Promise<void> => {
-    if (!snapshot) return;
     if (!isConnected || !userAddress) {
       setActionError("Connect your wallet to register.");
       return;
@@ -400,7 +364,7 @@ export function SpringPushWidget(): JSX.Element {
           {
             type: "function",
             name: "register",
-            stateMutability: "payable",
+            stateMutability: "nonpayable",
             inputs: [],
             outputs: [],
           },
@@ -409,7 +373,6 @@ export function SpringPushWidget(): JSX.Element {
         args: [],
         account: userAddress as `0x${string}`,
         chain: getActiveChain(),
-        value: snapshot.defaultEntryFee,
       });
       setActionTxHash(hash);
       await refresh();
@@ -419,14 +382,7 @@ export function SpringPushWidget(): JSX.Element {
     } finally {
       setActionLoading(false);
     }
-  }, [
-    snapshot,
-    isConnected,
-    userAddress,
-    walletService,
-    escrowAddress,
-    refresh,
-  ]);
+  }, [isConnected, userAddress, walletService, escrowAddress, refresh]);
 
   const handleClaim = useCallback(async (): Promise<void> => {
     if (!isConnected || !userAddress) {
@@ -475,9 +431,6 @@ export function SpringPushWidget(): JSX.Element {
     setActionError("Proof submission flow is not yet wired up — coming soon.");
   }, [userAddress, escrowAddress]);
 
-  const totalPrizePool = snapshot
-    ? snapshot.prizePool + snapshot.entryFeesTotal
-    : 0n;
   const minMet = snapshot
     ? snapshot.participantCount >= snapshot.minParticipants
     : false;
@@ -619,11 +572,10 @@ export function SpringPushWidget(): JSX.Element {
                 Prize Pool
               </div>
               <div style={{ fontSize: 24, fontWeight: 600, color: "#F0F7F3" }}>
-                {formatEth(totalPrizePool)} ETH
+                {formatEth(snapshot.prizePool)} ETH
               </div>
               <div style={{ fontSize: 12, color: "#6B8C7A", marginTop: 4 }}>
-                Seed {formatEth(snapshot.prizePool)} + Entries{" "}
-                {formatEth(snapshot.entryFeesTotal)}
+                Seeded by Amach Health
               </div>
             </div>
 
@@ -683,35 +635,6 @@ export function SpringPushWidget(): JSX.Element {
                 {minMet
                   ? `Minimum (${snapshot.minParticipants}) met`
                   : `Needs ${snapshot.minParticipants - snapshot.participantCount} more to hit minimum`}
-              </div>
-            </div>
-
-            <div
-              style={{
-                background: "rgba(0,107,79,0.06)",
-                border: "1px solid rgba(0,107,79,0.18)",
-                borderRadius: 10,
-                padding: 16,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 11,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                  color: "#6B8C7A",
-                  marginBottom: 6,
-                }}
-              >
-                Entry Fee
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 600, color: "#F0F7F3" }}>
-                {formatEth(snapshot.defaultEntryFee, 5)} ETH
-              </div>
-              <div style={{ fontSize: 12, color: "#6B8C7A", marginTop: 4 }}>
-                {snapshot.participantCount > 0
-                  ? "From most recent registration"
-                  : "Default — set by registrant"}
               </div>
             </div>
           </div>
@@ -940,21 +863,8 @@ function ActionPanel({
     case ContestState.REGISTRATION_OPEN: {
       if (userState?.registered) {
         body = (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ color: "#4ade80", fontSize: 14, fontWeight: 500 }}>
-              Registered ✓
-            </div>
-            <div style={{ color: "#6B8C7A", fontSize: 13 }}>
-              Entry paid: {formatEth(userState.entryPaid, 5)} ETH
-            </div>
+          <div style={{ color: "#4ade80", fontSize: 14, fontWeight: 500 }}>
+            Registered ✓
           </div>
         );
       } else {
@@ -969,7 +879,7 @@ function ActionPanel({
             }}
           >
             <div style={{ color: "#6B8C7A", fontSize: 13 }}>
-              Pay {formatEth(snapshot.defaultEntryFee, 5)} ETH to enter.
+              Free to enter — claim your spot.
             </div>
             <button
               className={primaryButtonClass}
@@ -1134,8 +1044,7 @@ function ActionPanel({
     case ContestState.FAILED:
       body = (
         <div style={{ color: "#F59E0B", fontSize: 13 }}>
-          Contest did not meet the participant minimum. Registered participants
-          can claim a refund of their entry fee.
+          Contest did not meet the participant minimum.
         </div>
       );
       break;

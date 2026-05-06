@@ -13,9 +13,10 @@ interface IGroth16Verifier {
 /// @title SpringPushEscrowV1
 /// @notice Non-upgradeable prize escrow for the Spring Push Season One contest.
 /// @dev    Trust model = immutability. There is no upgrade path, no admin
-///         withdrawal, and no key that can drain the contract. Outflows are
-///         limited to: (1) verified-proof prize claims, (2) entry-fee refunds
-///         on a failed contest, and (3) a 180-day founder reclaim of strictly
+///         withdrawal, and no key that can drain the contract. Registration
+///         is free; the prize pool is seeded entirely by the admin at
+///         openRegistration(). Outflows are limited to: (1) verified-proof
+///         prize claims, and (2) a 180-day founder reclaim of strictly
 ///         residual ETH that was never claimed.
 contract SpringPushEscrowV1 is ReentrancyGuard {
     // -------------------------------------------------------------
@@ -77,14 +78,8 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
 
     /// @dev ETH seeded by the admin at openRegistration().
     uint256 public prizePool;
-    /// @dev Cumulative entry fees paid by all registrants.
-    uint256 public entryFeesTotal;
-    /// @dev Cumulative ETH paid out via claimPrize() + claimRefund().
+    /// @dev Cumulative ETH paid out via claimPrize().
     uint256 public totalClaimed;
-    /// @dev Entry fees forfeited by participants who never submitted a valid proof.
-    ///      Tracked but not directly withdrawable; surfaces only via founderReclaim
-    ///      after the 180-day delay.
-    uint256 public forfeitedFees;
     /// @dev Locked at finalize(). Equals the number of participants with a
     ///      verified proof on file.
     uint256 public qualifierCount;
@@ -95,23 +90,20 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
 
     address[] public participants;
     mapping(address => bool) public registered;
-    mapping(address => uint256) public entryPaid;
     mapping(address => uint256) public improvementBp;
     /// @dev 1-indexed rank assigned by finalize(). 0 means unranked.
     mapping(address => uint256) public participantRank;
     mapping(address => bool) public claimed;
-    mapping(address => bool) public refunded;
 
     // -------------------------------------------------------------
     // Events
     // -------------------------------------------------------------
 
     event ContestOpened(uint256 prizePool, uint256 startTime, bytes32 baselineRoot);
-    event ParticipantRegistered(address indexed participant, uint256 entryFee);
+    event ParticipantRegistered(address indexed participant);
     event RegistrationClosed(uint256 participantCount, ContestState state);
     event ProofSubmitted(address indexed participant, uint256 improvementBp);
     event PrizeClaimed(address indexed participant, uint256 amount, uint8 tier);
-    event RefundClaimed(address indexed participant, uint256 amount);
     event ContestFinalized(uint256 qualifierCount);
     event FounderReclaim(address indexed to, uint256 amount);
 
@@ -203,8 +195,9 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
         emit ContestOpened(msg.value, block.timestamp, _baselineRoot);
     }
 
-    /// @notice Closes registration. Below MIN_PARTICIPANTS the contest fails and
-    ///         entry fees become refundable; otherwise the active contest begins.
+    /// @notice Closes registration. Below MIN_PARTICIPANTS the contest fails;
+    ///         the seeded prize pool then sits in escrow until founderReclaim
+    ///         becomes callable. Otherwise the active contest begins.
     function closeRegistration()
         external
         onlyAdmin
@@ -230,23 +223,19 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     // Lifecycle: participant
     // -------------------------------------------------------------
 
-    /// @notice Registers msg.sender for the contest with a paid entry fee.
+    /// @notice Registers msg.sender for the contest. Free entry — the prize
+    ///         pool is seeded by the admin, not by participants.
     function register()
         external
-        payable
-        nonReentrant
         inState(ContestState.REGISTRATION_OPEN)
     {
-        if (msg.value == 0) revert ZeroValue();
         if (participants.length >= MAX_PARTICIPANTS) revert CapacityReached();
         if (registered[msg.sender]) revert AlreadyRegistered();
 
         registered[msg.sender] = true;
-        entryPaid[msg.sender] = msg.value;
-        entryFeesTotal += msg.value;
         participants.push(msg.sender);
 
-        emit ParticipantRegistered(msg.sender, msg.value);
+        emit ParticipantRegistered(msg.sender);
     }
 
     /// @notice Submits a Groth16 proof of improvement for the caller. Each
@@ -307,23 +296,11 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
 
         qualifierCount = len;
 
-        uint256 totalParticipants = participants.length;
-        uint256 nonQualifiers = totalParticipants - len;
-        forfeitedFees = 0;
-        for (uint256 i = 0; i < totalParticipants && nonQualifiers > 0; i++) {
-            address p = participants[i];
-            if (participantRank[p] == 0) {
-                forfeitedFees += entryPaid[p];
-            }
-        }
-
         state = ContestState.FINISHED;
         emit ContestFinalized(len);
     }
 
-    /// @notice Pays out a finalized prize plus the participant's original
-    ///         entry fee. Both flow in a single transfer; checks-effects-
-    ///         interactions enforced.
+    /// @notice Pays out a finalized prize from the admin-seeded pool.
     /// @dev    Spec language describes this as "callable during CLAIM_WINDOW".
     ///         Because finalize() must run first (it builds the ranking), the
     ///         actual gating state is FINISHED. The spec's CLAIM_WINDOW state
@@ -339,41 +316,16 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
         if (rank == 0) revert NotQualified();
 
         (uint256 prizeAmount, uint8 tier) = _prizeFor(rank);
-        uint256 entry = entryPaid[msg.sender];
-        uint256 payout = prizeAmount + entry;
 
         _checkInvariant();
 
         claimed[msg.sender] = true;
-        totalClaimed += payout;
+        totalClaimed += prizeAmount;
 
-        (bool sent, ) = payable(msg.sender).call{value: payout}("");
+        (bool sent, ) = payable(msg.sender).call{value: prizeAmount}("");
         if (!sent) revert InvariantBroken();
 
-        emit PrizeClaimed(msg.sender, payout, tier);
-    }
-
-    /// @notice Refunds the entry fee on a failed contest.
-    function claimRefund()
-        external
-        nonReentrant
-        inState(ContestState.FAILED)
-    {
-        if (!registered[msg.sender]) revert NotRegistered();
-        if (refunded[msg.sender]) revert AlreadyClaimed();
-
-        uint256 amount = entryPaid[msg.sender];
-        if (amount == 0) revert ZeroValue();
-
-        _checkInvariant();
-
-        refunded[msg.sender] = true;
-        totalClaimed += amount;
-
-        (bool sent, ) = payable(msg.sender).call{value: amount}("");
-        if (!sent) revert InvariantBroken();
-
-        emit RefundClaimed(msg.sender, amount);
+        emit PrizeClaimed(msg.sender, prizeAmount, tier);
     }
 
     /// @notice Sweeps strictly-residual ETH after the 180-day delay since the
@@ -451,9 +403,9 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     }
 
     /// @dev Sanity check: every payout path must keep the invariant
-    ///      balance == prizePool + entryFeesTotal - totalClaimed.
+    ///      balance + totalClaimed == prizePool.
     function _checkInvariant() internal view {
-        if (address(this).balance + totalClaimed != prizePool + entryFeesTotal) {
+        if (address(this).balance + totalClaimed != prizePool) {
             revert InvariantBroken();
         }
     }

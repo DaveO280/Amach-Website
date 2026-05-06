@@ -2,7 +2,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-const ENTRY_FEE = ethers.utils.parseEther("0.01");
 const PRIZE_POOL = ethers.utils.parseEther("10");
 const BASELINE = "0x" + "ab".repeat(32);
 const FINISH = "0x" + "cd".repeat(32);
@@ -293,10 +292,9 @@ describe("SpringPushEscrowV1", function () {
 
       const players = await createFundedWallets(MIN_PARTICIPANTS, "1");
       for (const p of players) {
-        await escrow.connect(p).register({ value: ENTRY_FEE });
+        await escrow.connect(p).register();
       }
       eq(await escrow.participantCount(), MIN_PARTICIPANTS);
-      eq(await escrow.entryFeesTotal(), ENTRY_FEE.mul(MIN_PARTICIPANTS));
 
       await escrow.connect(admin).closeRegistration();
       eq(await escrow.state(), State.ACTIVE);
@@ -336,9 +334,9 @@ describe("SpringPushEscrowV1", function () {
         .connect(admin)
         .openRegistration(BASELINE, { value: PRIZE_POOL });
       const [p] = await createFundedWallets(1, "1");
-      await escrow.connect(p).register({ value: ENTRY_FEE });
+      await escrow.connect(p).register();
       await expectCustomError(
-        escrow.connect(p).register({ value: ENTRY_FEE }),
+        escrow.connect(p).register(),
         escrow,
         "AlreadyRegistered",
       );
@@ -348,29 +346,19 @@ describe("SpringPushEscrowV1", function () {
       const { escrow } = await deployFixture();
       const [p] = await createFundedWallets(1, "1");
       await expectCustomError(
-        escrow.connect(p).register({ value: ENTRY_FEE }),
+        escrow.connect(p).register(),
         escrow,
         "WrongState",
-      );
-    });
-
-    it("rejects zero-value registration", async () => {
-      const { escrow, admin } = await deployFixture();
-      await escrow
-        .connect(admin)
-        .openRegistration(BASELINE, { value: PRIZE_POOL });
-      const [p] = await createFundedWallets(1, "1");
-      await expectCustomError(
-        escrow.connect(p).register({ value: 0 }),
-        escrow,
-        "ZeroValue",
       );
     });
 
     it("blocks blind ETH transfers via receive()", async () => {
       const { escrow, deployer } = await deployFixture();
       await expectRevert(
-        deployer.sendTransaction({ to: escrow.address, value: ENTRY_FEE }),
+        deployer.sendTransaction({
+          to: escrow.address,
+          value: ethers.utils.parseEther("0.01"),
+        }),
       );
     });
 
@@ -382,13 +370,13 @@ describe("SpringPushEscrowV1", function () {
 
       const players = await createFundedWallets(MAX_PARTICIPANTS, "1");
       for (const p of players) {
-        await escrow.connect(p).register({ value: ENTRY_FEE });
+        await escrow.connect(p).register();
       }
       eq(await escrow.participantCount(), MAX_PARTICIPANTS);
 
       const [overflow] = await createFundedWallets(1, "1");
       await expectCustomError(
-        escrow.connect(overflow).register({ value: ENTRY_FEE }),
+        escrow.connect(overflow).register(),
         escrow,
         "CapacityReached",
       );
@@ -402,7 +390,7 @@ describe("SpringPushEscrowV1", function () {
 
       const tooFew = await createFundedWallets(MIN_PARTICIPANTS - 1, "1");
       for (const p of tooFew) {
-        await escrow.connect(p).register({ value: ENTRY_FEE });
+        await escrow.connect(p).register();
       }
 
       await escrow.connect(admin).closeRegistration();
@@ -419,7 +407,7 @@ describe("SpringPushEscrowV1", function () {
         .openRegistration(BASELINE, { value: PRIZE_POOL });
       const players = await createFundedWallets(numPlayers, "1");
       for (const p of players) {
-        await escrow.connect(p).register({ value: ENTRY_FEE });
+        await escrow.connect(p).register();
       }
       await escrow.connect(admin).closeRegistration();
       return { ...fixture, players };
@@ -532,7 +520,7 @@ describe("SpringPushEscrowV1", function () {
         .openRegistration(BASELINE, { value: PRIZE_POOL });
       const players = await createFundedWallets(numPlayers, "1");
       for (const p of players) {
-        await escrow.connect(p).register({ value: ENTRY_FEE });
+        await escrow.connect(p).register();
       }
       await escrow.connect(admin).closeRegistration();
 
@@ -565,7 +553,7 @@ describe("SpringPushEscrowV1", function () {
         const cost = await gasCost(rcpt, tx);
         const after = await ethers.provider.getBalance(s.player.address);
         const received = after.sub(before).add(cost);
-        eq(received, s.expected.add(ENTRY_FEE));
+        eq(received, s.expected);
       }
 
       await expectCustomError(
@@ -582,7 +570,7 @@ describe("SpringPushEscrowV1", function () {
         .openRegistration(BASELINE, { value: PRIZE_POOL });
       const players = await createFundedWallets(MIN_PARTICIPANTS, "1");
       for (const p of players) {
-        await escrow.connect(p).register({ value: ENTRY_FEE });
+        await escrow.connect(p).register();
       }
       await escrow.connect(admin).closeRegistration();
 
@@ -605,51 +593,6 @@ describe("SpringPushEscrowV1", function () {
     });
   });
 
-  describe("claimRefund (failed contest)", () => {
-    it("refunds entry fee to all registrants on FAILED", async () => {
-      const { escrow, admin } = await deployFixture();
-      await escrow
-        .connect(admin)
-        .openRegistration(BASELINE, { value: PRIZE_POOL });
-
-      const players = await createFundedWallets(5, "1"); // < MIN
-      for (const p of players) {
-        await escrow.connect(p).register({ value: ENTRY_FEE });
-      }
-      await escrow.connect(admin).closeRegistration();
-      eq(await escrow.state(), State.FAILED);
-
-      for (const p of players) {
-        const before = await ethers.provider.getBalance(p.address);
-        const tx = await escrow.connect(p).claimRefund();
-        const rcpt = await tx.wait();
-        const cost = await gasCost(rcpt, tx);
-        const after = await ethers.provider.getBalance(p.address);
-        eq(after.sub(before).add(cost), ENTRY_FEE);
-      }
-
-      await expectCustomError(
-        escrow.connect(players[0]).claimRefund(),
-        escrow,
-        "AlreadyClaimed",
-      );
-    });
-
-    it("refund only callable in FAILED state", async () => {
-      const { escrow, admin } = await deployFixture();
-      await escrow
-        .connect(admin)
-        .openRegistration(BASELINE, { value: PRIZE_POOL });
-      const [p] = await createFundedWallets(1, "1");
-      await escrow.connect(p).register({ value: ENTRY_FEE });
-      await expectCustomError(
-        escrow.connect(p).claimRefund(),
-        escrow,
-        "WrongState",
-      );
-    });
-  });
-
   describe("founderReclaim", () => {
     async function setupFinalized() {
       const fixture = await deployFixture();
@@ -659,7 +602,7 @@ describe("SpringPushEscrowV1", function () {
         .openRegistration(BASELINE, { value: PRIZE_POOL });
       const players = await createFundedWallets(MIN_PARTICIPANTS, "1");
       for (const p of players) {
-        await escrow.connect(p).register({ value: ENTRY_FEE });
+        await escrow.connect(p).register();
       }
       await escrow.connect(admin).closeRegistration();
       for (let i = 0; i < players.length; i++) {

@@ -133,23 +133,23 @@ function stateBadgeStyle(state: ContestState): BadgeStyle {
   switch (state) {
     case ContestState.REGISTRATION_OPEN:
       return {
-        bg: "rgba(0,107,79,0.15)",
-        fg: "#4ade80",
-        border: "rgba(0,107,79,0.45)",
+        bg: "rgba(0,107,79,0.12)",
+        fg: "var(--color-emerald)",
+        border: "rgba(0,107,79,0.35)",
         pulse: false,
       };
     case ContestState.ACTIVE:
       return {
-        bg: "rgba(245,158,11,0.15)",
-        fg: "#F59E0B",
-        border: "rgba(245,158,11,0.45)",
+        bg: "var(--color-amber-muted)",
+        fg: "var(--color-amber)",
+        border: "rgba(245,158,11,0.35)",
         pulse: true,
       };
     case ContestState.CLAIMING:
       return {
-        bg: "rgba(99,102,241,0.15)",
-        fg: "#A5B4FC",
-        border: "rgba(99,102,241,0.45)",
+        bg: "rgba(99,102,241,0.12)",
+        fg: "var(--color-indigo)",
+        border: "rgba(99,102,241,0.35)",
         pulse: false,
       };
     case ContestState.FINISHED:
@@ -157,9 +157,9 @@ function stateBadgeStyle(state: ContestState): BadgeStyle {
     case ContestState.UNINITIALIZED:
     default:
       return {
-        bg: "rgba(107,140,122,0.12)",
-        fg: "#6B8C7A",
-        border: "rgba(107,140,122,0.30)",
+        bg: "rgba(107,140,122,0.10)",
+        fg: "var(--color-text-muted)",
+        border: "rgba(107,140,122,0.25)",
         pulse: false,
       };
   }
@@ -453,11 +453,9 @@ export function SpringPushWidget(): JSX.Element {
 
   return (
     <div
+      className="amach-card"
       style={{
-        background: "#080D0A",
-        color: "#F0F7F3",
-        border: "1px solid rgba(0,107,79,0.25)",
-        borderRadius: 16,
+        color: "var(--color-text-primary)",
         padding: 24,
       }}
     >
@@ -472,13 +470,13 @@ export function SpringPushWidget(): JSX.Element {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Trophy size={20} color="#006B4F" />
+          <Trophy size={20} color="var(--color-emerald)" />
           <h2
             style={{
               margin: 0,
               fontSize: 18,
               fontWeight: 600,
-              color: "#F0F7F3",
+              color: "var(--color-text-primary)",
             }}
           >
             Spring Push Season One
@@ -501,12 +499,12 @@ export function SpringPushWidget(): JSX.Element {
             {snapshot ? stateLabel(snapshot.state) : "LOADING"}
           </span>
           {phaseRemaining && phaseRemaining.seconds >= 0 && (
-            <span style={{ fontSize: 13, color: "#6B8C7A" }}>
+            <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
               {phaseRemaining.label}: {formatCountdown(phaseRemaining.seconds)}
             </span>
           )}
           {phaseRemaining && phaseRemaining.seconds < 0 && (
-            <span style={{ fontSize: 13, color: "#6B8C7A" }}>
+            <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
               {phaseRemaining.label}
             </span>
           )}
@@ -519,7 +517,7 @@ export function SpringPushWidget(): JSX.Element {
             display: "flex",
             alignItems: "center",
             gap: 8,
-            color: "#6B8C7A",
+            color: "var(--color-text-muted)",
             fontSize: 14,
           }}
         >
@@ -531,9 +529,9 @@ export function SpringPushWidget(): JSX.Element {
       {error && !snapshot && (
         <div
           style={{
-            background: "rgba(239,68,68,0.12)",
-            border: "1px solid rgba(239,68,68,0.35)",
-            color: "#fca5a5",
+            background: "rgba(239,68,68,0.10)",
+            border: "1px solid rgba(239,68,68,0.30)",
+            color: "#dc2626",
             padding: 12,
             borderRadius: 8,
             fontSize: 13,
@@ -554,8 +552,8 @@ export function SpringPushWidget(): JSX.Element {
           >
             <div
               style={{
-                background: "rgba(0,107,79,0.06)",
-                border: "1px solid rgba(0,107,79,0.18)",
+                background: "var(--color-bg-surface)",
+                border: "1px solid var(--color-border)",
                 borderRadius: 10,
                 padding: 16,
               }}
@@ -565,24 +563,36 @@ export function SpringPushWidget(): JSX.Element {
                   fontSize: 11,
                   textTransform: "uppercase",
                   letterSpacing: 0.5,
-                  color: "#6B8C7A",
+                  color: "var(--color-text-muted)",
                   marginBottom: 6,
                 }}
               >
                 Prize Pool
               </div>
-              <div style={{ fontSize: 24, fontWeight: 600, color: "#F0F7F3" }}>
+              <div
+                style={{
+                  fontSize: 24,
+                  fontWeight: 600,
+                  color: "var(--color-text-primary)",
+                }}
+              >
                 {formatEth(snapshot.prizePool)} ETH
               </div>
-              <div style={{ fontSize: 12, color: "#6B8C7A", marginTop: 4 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--color-text-muted)",
+                  marginTop: 4,
+                }}
+              >
                 Seeded by Amach Health
               </div>
             </div>
 
             <div
               style={{
-                background: "rgba(0,107,79,0.06)",
-                border: "1px solid rgba(0,107,79,0.18)",
+                background: "var(--color-bg-surface)",
+                border: "1px solid var(--color-border)",
                 borderRadius: 10,
                 padding: 16,
               }}
@@ -592,7 +602,7 @@ export function SpringPushWidget(): JSX.Element {
                   fontSize: 11,
                   textTransform: "uppercase",
                   letterSpacing: 0.5,
-                  color: "#6B8C7A",
+                  color: "var(--color-text-muted)",
                   marginBottom: 6,
                 }}
               >
@@ -602,7 +612,7 @@ export function SpringPushWidget(): JSX.Element {
                 style={{
                   fontSize: 24,
                   fontWeight: 600,
-                  color: "#F0F7F3",
+                  color: "var(--color-text-primary)",
                 }}
               >
                 {snapshot.participantCount} / {snapshot.maxParticipants}
@@ -610,7 +620,7 @@ export function SpringPushWidget(): JSX.Element {
               <div
                 style={{
                   height: 6,
-                  background: "rgba(255,255,255,0.06)",
+                  background: "var(--color-emerald-muted)",
                   borderRadius: 999,
                   marginTop: 10,
                   overflow: "hidden",
@@ -620,7 +630,7 @@ export function SpringPushWidget(): JSX.Element {
                   style={{
                     width: `${participantPct}%`,
                     height: "100%",
-                    background: "#006B4F",
+                    background: "var(--color-emerald)",
                     transition: "width 0.4s ease",
                   }}
                 />
@@ -628,7 +638,7 @@ export function SpringPushWidget(): JSX.Element {
               <div
                 style={{
                   fontSize: 12,
-                  color: minMet ? "#4ade80" : "#F59E0B",
+                  color: minMet ? "var(--color-emerald)" : "var(--color-amber)",
                   marginTop: 8,
                 }}
               >
@@ -647,21 +657,26 @@ export function SpringPushWidget(): JSX.Element {
                   fontWeight: 600,
                   textTransform: "uppercase",
                   letterSpacing: 0.5,
-                  color: "#F0F7F3",
+                  color: "var(--color-text-primary)",
                   margin: "0 0 12px",
                 }}
               >
                 Top 10 Leaderboard
               </h3>
               {leaderboard.length === 0 ? (
-                <div style={{ color: "#6B8C7A", fontSize: 13 }}>
+                <div
+                  style={{
+                    color: "var(--color-text-muted)",
+                    fontSize: 13,
+                  }}
+                >
                   No proofs submitted yet.
                 </div>
               ) : (
                 <div
                   style={{
-                    background: "rgba(0,107,79,0.04)",
-                    border: "1px solid rgba(0,107,79,0.18)",
+                    background: "var(--color-bg-surface)",
+                    border: "1px solid var(--color-border)",
                     borderRadius: 10,
                     overflow: "hidden",
                   }}
@@ -677,10 +692,22 @@ export function SpringPushWidget(): JSX.Element {
                     );
                     const tierColor =
                       tier === 1
-                        ? "#6366F1"
+                        ? "var(--color-indigo)"
                         : tier === 2
-                          ? "#006B4F"
-                          : "#6B8C7A";
+                          ? "var(--color-emerald)"
+                          : "var(--color-text-muted)";
+                    const tierBg =
+                      tier === 1
+                        ? "rgba(99,102,241,0.10)"
+                        : tier === 2
+                          ? "var(--color-emerald-muted)"
+                          : "rgba(107,140,122,0.08)";
+                    const tierBorder =
+                      tier === 1
+                        ? "rgba(99,102,241,0.35)"
+                        : tier === 2
+                          ? "rgba(0,107,79,0.35)"
+                          : "rgba(107,140,122,0.25)";
                     return (
                       <div
                         key={entry.address}
@@ -693,16 +720,16 @@ export function SpringPushWidget(): JSX.Element {
                           borderBottom:
                             idx === leaderboard.length - 1
                               ? "none"
-                              : "1px solid rgba(0,107,79,0.10)",
+                              : "1px solid var(--color-border)",
                           background: isUser
-                            ? "rgba(0,107,79,0.18)"
+                            ? "var(--color-emerald-muted)"
                             : "transparent",
                           fontSize: 13,
                         }}
                       >
                         <span
                           style={{
-                            color: "#6B8C7A",
+                            color: "var(--color-text-muted)",
                             fontVariantNumeric: "tabular-nums",
                           }}
                         >
@@ -710,7 +737,7 @@ export function SpringPushWidget(): JSX.Element {
                         </span>
                         <span
                           style={{
-                            color: "#F0F7F3",
+                            color: "var(--color-text-primary)",
                             fontFamily: "monospace",
                           }}
                         >
@@ -720,7 +747,7 @@ export function SpringPushWidget(): JSX.Element {
                               style={{
                                 marginLeft: 8,
                                 fontSize: 11,
-                                color: "#4ade80",
+                                color: "var(--color-emerald)",
                               }}
                             >
                               (you)
@@ -729,7 +756,7 @@ export function SpringPushWidget(): JSX.Element {
                         </span>
                         <span
                           style={{
-                            color: "#F0F7F3",
+                            color: "var(--color-text-primary)",
                             fontVariantNumeric: "tabular-nums",
                           }}
                         >
@@ -744,8 +771,8 @@ export function SpringPushWidget(): JSX.Element {
                             fontWeight: 600,
                             letterSpacing: 0.5,
                             color: tierColor,
-                            border: `1px solid ${tierColor}55`,
-                            background: `${tierColor}1A`,
+                            border: `1px solid ${tierBorder}`,
+                            background: tierBg,
                           }}
                         >
                           TIER {tier || "—"}
@@ -816,17 +843,17 @@ function ActionPanel({
   const primaryButtonClass =
     "px-4 py-2 rounded-lg font-medium text-sm transition-colors disabled:opacity-50";
   const primaryButtonStyle = {
-    background: "#006B4F",
+    background: "var(--color-emerald)",
     color: "#FFFFFF",
-    border: "1px solid rgba(0,107,79,0.45)",
+    border: "1px solid var(--color-emerald)",
   };
 
   if (!isConnected) {
     return (
       <div
         style={{
-          background: "rgba(0,107,79,0.06)",
-          border: "1px solid rgba(0,107,79,0.18)",
+          background: "var(--color-bg-surface)",
+          border: "1px solid var(--color-border)",
           borderRadius: 10,
           padding: 16,
           display: "flex",
@@ -836,7 +863,7 @@ function ActionPanel({
           flexWrap: "wrap",
         }}
       >
-        <div style={{ color: "#6B8C7A", fontSize: 13 }}>
+        <div style={{ color: "var(--color-text-muted)", fontSize: 13 }}>
           Connect your wallet to register or check your standing.
         </div>
         <button
@@ -852,21 +879,28 @@ function ActionPanel({
 
   let body: JSX.Element;
 
+  const mutedText = { color: "var(--color-text-muted)", fontSize: 13 } as const;
+  const successText = {
+    color: "var(--color-emerald)",
+    fontSize: 14,
+    fontWeight: 500,
+  } as const;
+  const bodyText = {
+    color: "var(--color-text-primary)",
+    fontSize: 13,
+  } as const;
+
   switch (snapshot.state) {
     case ContestState.UNINITIALIZED:
       body = (
-        <div style={{ color: "#6B8C7A", fontSize: 13 }}>
+        <div style={mutedText}>
           Contest has not yet opened. Check back soon.
         </div>
       );
       break;
     case ContestState.REGISTRATION_OPEN: {
       if (userState?.registered) {
-        body = (
-          <div style={{ color: "#4ade80", fontSize: 14, fontWeight: 500 }}>
-            Registered ✓
-          </div>
-        );
+        body = <div style={successText}>Registered ✓</div>;
       } else {
         body = (
           <div
@@ -878,9 +912,7 @@ function ActionPanel({
               flexWrap: "wrap",
             }}
           >
-            <div style={{ color: "#6B8C7A", fontSize: 13 }}>
-              Free to enter — claim your spot.
-            </div>
+            <div style={mutedText}>Free to enter — claim your spot.</div>
             <button
               className={primaryButtonClass}
               style={primaryButtonStyle}
@@ -897,9 +929,7 @@ function ActionPanel({
     case ContestState.ACTIVE: {
       if (!userState?.registered) {
         body = (
-          <div style={{ color: "#6B8C7A", fontSize: 13 }}>
-            Registration is closed for this contest.
-          </div>
+          <div style={mutedText}>Registration is closed for this contest.</div>
         );
       } else if (userState.improvementBp === 0n) {
         body = (
@@ -912,7 +942,7 @@ function ActionPanel({
               flexWrap: "wrap",
             }}
           >
-            <div style={{ color: "#6B8C7A", fontSize: 13 }}>
+            <div style={mutedText}>
               Submit a Groth16 proof of improvement to qualify.
             </div>
             <button
@@ -936,10 +966,8 @@ function ActionPanel({
               flexWrap: "wrap",
             }}
           >
-            <div style={{ color: "#4ade80", fontSize: 14, fontWeight: 500 }}>
-              Proof Submitted ✓
-            </div>
-            <div style={{ color: "#6B8C7A", fontSize: 13 }}>
+            <div style={successText}>Proof Submitted ✓</div>
+            <div style={mutedText}>
               Improvement: {formatBpAsPercent(userState.improvementBp)}
             </div>
           </div>
@@ -950,7 +978,7 @@ function ActionPanel({
     case ContestState.CLAIMING: {
       if (!userState?.registered) {
         body = (
-          <div style={{ color: "#6B8C7A", fontSize: 13 }}>
+          <div style={mutedText}>
             Contest is in the claim window. You are not a participant.
           </div>
         );
@@ -965,7 +993,7 @@ function ActionPanel({
               flexWrap: "wrap",
             }}
           >
-            <div style={{ color: "#6B8C7A", fontSize: 13 }}>
+            <div style={mutedText}>
               Last chance — submit your proof before the claim window closes.
             </div>
             <button
@@ -980,7 +1008,7 @@ function ActionPanel({
         );
       } else {
         body = (
-          <div style={{ color: "#6B8C7A", fontSize: 13 }}>
+          <div style={mutedText}>
             Proof submitted. Awaiting finalization to claim prize.
           </div>
         );
@@ -999,12 +1027,8 @@ function ActionPanel({
               flexWrap: "wrap",
             }}
           >
-            <div style={{ color: "#4ade80", fontSize: 14, fontWeight: 500 }}>
-              Prize Claimed ✓
-            </div>
-            <div style={{ color: "#6B8C7A", fontSize: 13 }}>
-              Tier {userState.previewTier || "—"}
-            </div>
+            <div style={successText}>Prize Claimed ✓</div>
+            <div style={mutedText}>Tier {userState.previewTier || "—"}</div>
           </div>
         );
       } else if (userState?.rank && userState.rank > 0) {
@@ -1018,7 +1042,7 @@ function ActionPanel({
               flexWrap: "wrap",
             }}
           >
-            <div style={{ color: "#F0F7F3", fontSize: 13 }}>
+            <div style={bodyText}>
               You finished rank #{userState.rank} (Tier {userState.previewTier}
               ). Claim {formatEth(userState.previewPrize, 5)} ETH.
             </div>
@@ -1034,7 +1058,7 @@ function ActionPanel({
         );
       } else {
         body = (
-          <div style={{ color: "#6B8C7A", fontSize: 13 }}>
+          <div style={mutedText}>
             Contest finished. Final standings posted on the leaderboard.
           </div>
         );
@@ -1043,24 +1067,20 @@ function ActionPanel({
     }
     case ContestState.FAILED:
       body = (
-        <div style={{ color: "#F59E0B", fontSize: 13 }}>
+        <div style={{ color: "var(--color-amber)", fontSize: 13 }}>
           Contest did not meet the participant minimum.
         </div>
       );
       break;
     default:
-      body = (
-        <div style={{ color: "#6B8C7A", fontSize: 13 }}>
-          Unknown contest state.
-        </div>
-      );
+      body = <div style={mutedText}>Unknown contest state.</div>;
   }
 
   return (
     <div
       style={{
-        background: "rgba(0,107,79,0.06)",
-        border: "1px solid rgba(0,107,79,0.18)",
+        background: "var(--color-bg-surface)",
+        border: "1px solid var(--color-border)",
         borderRadius: 10,
         padding: 16,
         display: "grid",
@@ -1071,10 +1091,10 @@ function ActionPanel({
       {actionError && (
         <div
           style={{
-            color: "#fca5a5",
+            color: "#dc2626",
             fontSize: 12,
-            background: "rgba(239,68,68,0.10)",
-            border: "1px solid rgba(239,68,68,0.30)",
+            background: "rgba(239,68,68,0.08)",
+            border: "1px solid rgba(239,68,68,0.25)",
             padding: 8,
             borderRadius: 6,
           }}
@@ -1083,9 +1103,14 @@ function ActionPanel({
         </div>
       )}
       {actionTxHash && (
-        <div style={{ color: "#6B8C7A", fontSize: 12 }}>
+        <div style={{ color: "var(--color-text-muted)", fontSize: 12 }}>
           Tx submitted:{" "}
-          <span style={{ fontFamily: "monospace", color: "#4ade80" }}>
+          <span
+            style={{
+              fontFamily: "monospace",
+              color: "var(--color-emerald)",
+            }}
+          >
             {actionTxHash.slice(0, 10)}…{actionTxHash.slice(-6)}
           </span>
         </div>

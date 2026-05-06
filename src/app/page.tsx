@@ -5,6 +5,7 @@ import BetaNotification from "@/components/BetaNotification";
 import HealthDashboardModal from "@/components/HealthDashboardModal";
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { OnboardingModal } from "@/components/OnboardingModal";
+import { SpringPushHomepageBanner } from "@/components/SpringPushHomepageBanner";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import WalletConnectButton from "@/components/WalletConnectButton";
 import { WalletSetupWizard } from "@/components/WalletSetupWizard";
@@ -103,6 +104,7 @@ const MainPage: React.FC = (): JSX.Element => {
 
   const navItems = [
     { label: "How it Works", href: "/how-it-works" },
+    { label: "Spring Push", href: "/spring-push" },
     { label: "Mission", href: "/mission" },
     { label: "Whitepaper", href: "/whitepaper" },
   ];
@@ -789,6 +791,20 @@ const MainPage: React.FC = (): JSX.Element => {
               Talk to Luma
             </button>
           </div>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════════════
+          SPRING PUSH BANNER
+      ══════════════════════════════════════════ */}
+      <section
+        style={{
+          padding: "0 24px 80px",
+          background: "var(--color-bg-primary)",
+        }}
+      >
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <SpringPushHomepageBanner />
         </div>
       </section>
 

@@ -4,7 +4,7 @@ import Papa from "papaparse";
 import { useState } from "react";
 import { HealthDashboard } from "../../components/dashboard/HealthDashboard";
 import { OnChainProfileDisplay } from "../../components/OnChainProfileDisplay";
-import { SpringPushWidget } from "../../components/SpringPushWidget";
+import { usePrivyWalletService } from "../../hooks/usePrivyWalletService";
 import { SelectionProvider } from "../../store/selectionStore/provider";
 import { HealthContext, UploadedFileSummary } from "../../types/HealthContext";
 import { exportCompleteBackup, importCompleteBackup } from "../../utils/utils";
@@ -30,6 +30,7 @@ export default function DashboardPage(): JSX.Element {
   const [healthContext, setHealthContext] =
     useState<HealthContext>(defaultContext);
   const [message, setMessage] = useState<string>("");
+  const walletService = usePrivyWalletService();
 
   // Handler for adding CSV to AI context
   const handleAddToAIContext = (csvFile: File | null): void => {
@@ -67,12 +68,9 @@ export default function DashboardPage(): JSX.Element {
 
         {/* On-Chain Profile Section */}
         <div className="mt-8">
-          <OnChainProfileDisplay userAddress="0x1177909D90D96b787d5e5A8ac613f88231650524" />
-        </div>
-
-        {/* Spring Push Season One Contest */}
-        <div className="mt-8">
-          <SpringPushWidget />
+          <OnChainProfileDisplay
+            userAddress={walletService.address ?? undefined}
+          />
         </div>
 
         <div style={{ margin: "1rem 0" }}>

@@ -8,9 +8,7 @@
  */
 
 export * from "./types";
-export {
-  AmachLeafV2 as _AmachLeafV2Type
-} from "./types";
+export type { AmachLeafV2 as _AmachLeafV2Type } from "./types";
 export {
   hashLeaf,
   hashLeafV1,
@@ -26,7 +24,7 @@ export {
   V2_VERSION_BYTE,
   V2_LEAF_TYPE_DAILY_SUMMARY,
   V2_SCHEMA_VERSION_DAILY_SUMMARY,
-  BN128_FIELD_SIZE
+  BN128_FIELD_SIZE,
 } from "./leaf";
 export {
   buildMerkleTree,
@@ -34,7 +32,7 @@ export {
   verifyMerklePath,
   parseRoot,
   nextPowerOf2,
-  ZERO_LEAF
+  ZERO_LEAF,
 } from "./merkle";
 export { runCategoryA } from "./checks/categoryA";
 export { runCategoryB } from "./checks/categoryB";
@@ -50,7 +48,7 @@ export {
   generateSeries,
   walletFromSeed,
   sourceHashFor,
-  SeededRandom
+  SeededRandom,
 } from "./generator/synthetic";
 export type {
   GeneratorConfig,
@@ -59,5 +57,5 @@ export type {
   FitnessLevel,
   DeviceProfile,
   NoiseProfile,
-  DailyMetricKey
+  DailyMetricKey,
 } from "./generator/synthetic";

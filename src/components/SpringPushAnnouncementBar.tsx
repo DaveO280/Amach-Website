@@ -108,11 +108,14 @@ export function SpringPushAnnouncementBar(): JSX.Element {
         justifyContent: "space-between",
         gap: 24,
         width: "100%",
-        padding: "0 24px",
-        minHeight: 42,
+        paddingTop: 0,
+        paddingBottom: 0,
+        paddingLeft: 24,
+        paddingRight: 24,
+        minHeight: 44,
         textDecoration: "none",
-        fontSize: "0.8rem",
-        lineHeight: 1.2,
+        fontSize: "14px",
+        lineHeight: 1.3,
       }}
     >
       {/* Left: identity */}
@@ -198,27 +201,27 @@ export function SpringPushAnnouncementBar(): JSX.Element {
 
       <style jsx>{`
         .spring-push-announcement-bar {
-          background: rgba(0, 107, 79, 0.08);
+          background: rgba(0, 107, 79, 0.1);
           border-bottom: 1px solid var(--color-border);
           color: var(--color-text-primary);
           transition: background 0.15s ease;
         }
         .spring-push-announcement-bar:hover {
-          background: rgba(0, 107, 79, 0.12);
+          background: rgba(0, 107, 79, 0.14);
         }
         :global([data-theme="dark"]) .spring-push-announcement-bar {
-          background: rgba(0, 107, 79, 0.12);
+          background: rgba(0, 107, 79, 0.16);
         }
         :global([data-theme="dark"]) .spring-push-announcement-bar:hover {
-          background: rgba(0, 107, 79, 0.18);
+          background: rgba(0, 107, 79, 0.22);
         }
 
         .spa-trophy {
-          font-size: 14px;
+          font-size: 16px;
           line-height: 1;
         }
         .spa-eyebrow {
-          font-size: 0.7rem;
+          font-size: 14px;
           font-weight: 600;
           letter-spacing: 0.1em;
           text-transform: uppercase;
@@ -282,7 +285,7 @@ export function SpringPushAnnouncementBar(): JSX.Element {
           white-space: nowrap;
         }
         .spa-count {
-          font-size: 0.95rem;
+          font-size: 16px;
           font-weight: 700;
           color: #006b4f;
           display: inline-block;
@@ -292,16 +295,17 @@ export function SpringPushAnnouncementBar(): JSX.Element {
           color: #4ade80;
         }
         .spa-count-divider {
+          font-size: 15px;
           color: var(--color-text-muted);
           font-weight: 500;
         }
         .spa-count-max {
-          font-size: 0.85rem;
+          font-size: 15px;
           font-weight: 600;
           color: var(--color-text-secondary);
         }
         .spa-count-label {
-          font-size: 0.75rem;
+          font-size: 14px;
           color: var(--color-text-muted);
           margin-left: 4px;
         }
@@ -313,7 +317,7 @@ export function SpringPushAnnouncementBar(): JSX.Element {
           white-space: nowrap;
         }
         .spa-prize-amount {
-          font-size: 0.8rem;
+          font-size: 14px;
           font-weight: 600;
           color: var(--color-text-primary);
         }
@@ -321,7 +325,7 @@ export function SpringPushAnnouncementBar(): JSX.Element {
           color: var(--color-text-muted);
         }
         .spa-prize-verified {
-          font-size: 0.75rem;
+          font-size: 14px;
           color: var(--color-text-muted);
         }
 
@@ -329,7 +333,7 @@ export function SpringPushAnnouncementBar(): JSX.Element {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          font-size: 0.8rem;
+          font-size: 14px;
           font-weight: 600;
           color: #006b4f;
           white-space: nowrap;
@@ -381,20 +385,20 @@ export function SpringPushAnnouncementBar(): JSX.Element {
         }
         @media (max-width: 640px) {
           .spring-push-announcement-bar {
-            font-size: 0.75rem;
+            font-size: 13px;
           }
           .spa-eyebrow {
-            font-size: 0.65rem;
+            font-size: 13px;
             letter-spacing: 0.08em;
           }
           .spa-progress-track {
             display: none;
           }
           .spa-prize-amount {
-            font-size: 0.75rem;
+            font-size: 13px;
           }
           .spa-cta {
-            font-size: 0.75rem;
+            font-size: 13px;
           }
         }
         @media (max-width: 480px) {

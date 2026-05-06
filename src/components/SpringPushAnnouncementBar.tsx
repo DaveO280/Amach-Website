@@ -92,89 +92,115 @@ export function SpringPushAnnouncementBar(): JSX.Element {
     : "Spring Push Season One";
   const ctaLabel = isFinished ? "View Results" : "View Contest";
 
+  // Layout-critical styles are inline so they CANNOT be lost to styled-jsx
+  // scoping (Next/Link renders <a>, which is display:inline by default; if
+  // the scoped flex rule fails to attach, the children collapse to the left).
   return (
     <Link
       href="/spring-push"
       aria-label={`${label}. ${count} of ${max} participants. ${PRIZE_DISPLAY} prize verified on-chain. ${ctaLabel}.`}
       className="spring-push-announcement-bar"
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 24,
+        width: "100%",
+        padding: "0 24px",
+        minHeight: 42,
+        textDecoration: "none",
+        fontSize: "0.8rem",
+        lineHeight: 1.2,
+      }}
     >
+      {/* Left: identity */}
       <div
-        className="spa-inner"
+        className="spa-left"
         style={{
-          width: "100%",
           display: "flex",
           flexDirection: "row",
-          justifyContent: "space-between",
           alignItems: "center",
-          gap: 24,
+          gap: 10,
+          flexShrink: 0,
+          minWidth: 0,
         }}
       >
-        {/* Left: identity */}
-        <div className="spa-left">
-          <span className="spa-trophy" aria-hidden="true">
-            🏆
+        <span className="spa-trophy" aria-hidden="true">
+          🏆
+        </span>
+        <span className="spa-eyebrow">{label}</span>
+        {isActive && (
+          <span className="spa-live-pill">
+            <span className="spa-live-dot" aria-hidden="true" />
+            LIVE
           </span>
-          <span className="spa-eyebrow">{label}</span>
-          {isActive && (
-            <span className="spa-live-pill">
-              <span className="spa-live-dot" aria-hidden="true" />
-              LIVE
-            </span>
-          )}
-        </div>
+        )}
+      </div>
 
-        {/* Center: ticker */}
-        <div className="spa-center" aria-live="polite">
-          <span className="spa-progress-track" aria-hidden="true">
-            <span
-              className="spa-progress-fill"
-              style={{ width: `${fillRatio * 100}%` }}
-            />
+      {/* Center: ticker */}
+      <div
+        className="spa-center"
+        aria-live="polite"
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 10,
+          flex: "1 1 auto",
+          minWidth: 0,
+        }}
+      >
+        <span className="spa-progress-track" aria-hidden="true">
+          <span
+            className="spa-progress-fill"
+            style={{ width: `${fillRatio * 100}%` }}
+          />
+        </span>
+        <span className="spa-count-wrap">
+          <span key={tickKey} className="spa-count">
+            {count}
           </span>
-          <span className="spa-count-wrap">
-            <span key={tickKey} className="spa-count">
-              {count}
-            </span>
-            <span className="spa-count-divider">/</span>
-            <span className="spa-count-max">{max}</span>
-            <span className="spa-count-label">participants</span>
-          </span>
-        </div>
+          <span className="spa-count-divider">/</span>
+          <span className="spa-count-max">{max}</span>
+          <span className="spa-count-label">participants</span>
+        </span>
+      </div>
 
-        {/* Right: prize + CTA */}
-        <div className="spa-right">
-          <span className="spa-prize">
-            <span className="spa-prize-amount">{PRIZE_DISPLAY} Prize</span>
-            <span className="spa-prize-divider" aria-hidden="true">
-              ·
-            </span>
-            <span className="spa-prize-verified">
-              <span aria-hidden="true">⛓</span> Verified on-chain
-            </span>
+      {/* Right: prize + CTA */}
+      <div
+        className="spa-right"
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 16,
+          flexShrink: 0,
+          minWidth: 0,
+        }}
+      >
+        <span className="spa-prize">
+          <span className="spa-prize-amount">{PRIZE_DISPLAY} Prize</span>
+          <span className="spa-prize-divider" aria-hidden="true">
+            ·
           </span>
-          <span className="spa-cta">
-            {ctaLabel}
-            <span aria-hidden="true">→</span>
+          <span className="spa-prize-verified">
+            <span aria-hidden="true">⛓</span> Verified on-chain
           </span>
-        </div>
+        </span>
+        <span className="spa-cta">
+          {ctaLabel}
+          <span aria-hidden="true">→</span>
+        </span>
       </div>
 
       <style jsx>{`
         .spring-push-announcement-bar {
-          position: relative;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 24px;
-          width: 100%;
-          padding: 0 24px;
-          min-height: 42px;
           background: rgba(0, 107, 79, 0.08);
           border-bottom: 1px solid var(--color-border);
           color: var(--color-text-primary);
-          text-decoration: none;
-          font-size: 0.8rem;
-          line-height: 1.2;
           transition: background 0.15s ease;
         }
         .spring-push-announcement-bar:hover {
@@ -185,26 +211,6 @@ export function SpringPushAnnouncementBar(): JSX.Element {
         }
         :global([data-theme="dark"]) .spring-push-announcement-bar:hover {
           background: rgba(0, 107, 79, 0.18);
-        }
-
-        .spa-left,
-        .spa-center,
-        .spa-right {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          min-width: 0;
-        }
-        .spa-left {
-          flex-shrink: 0;
-        }
-        .spa-center {
-          flex: 1 1 auto;
-          justify-content: center;
-        }
-        .spa-right {
-          flex-shrink: 0;
-          gap: 16px;
         }
 
         .spa-trophy {
@@ -375,8 +381,6 @@ export function SpringPushAnnouncementBar(): JSX.Element {
         }
         @media (max-width: 640px) {
           .spring-push-announcement-bar {
-            padding: 8px 16px;
-            gap: 12px;
             font-size: 0.75rem;
           }
           .spa-eyebrow {
@@ -385,9 +389,6 @@ export function SpringPushAnnouncementBar(): JSX.Element {
           }
           .spa-progress-track {
             display: none;
-          }
-          .spa-center {
-            flex: 0 0 auto;
           }
           .spa-prize-amount {
             font-size: 0.75rem;

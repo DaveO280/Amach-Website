@@ -110,8 +110,8 @@ export function SpringPushAnnouncementBar(): JSX.Element {
         width: "100%",
         paddingTop: 0,
         paddingBottom: 0,
-        paddingLeft: 24,
-        paddingRight: 24,
+        paddingLeft: 40,
+        paddingRight: 40,
         minHeight: 44,
         textDecoration: "none",
         fontSize: "14px",
@@ -201,19 +201,20 @@ export function SpringPushAnnouncementBar(): JSX.Element {
 
       <style jsx>{`
         .spring-push-announcement-bar {
-          background: rgba(0, 107, 79, 0.1);
-          border-bottom: 1px solid var(--color-border);
+          background: rgba(0, 107, 79, 0.18);
+          border-top: 1px solid rgba(0, 107, 79, 0.25);
+          border-bottom: 1px solid rgba(0, 107, 79, 0.25);
           color: var(--color-text-primary);
           transition: background 0.15s ease;
         }
         .spring-push-announcement-bar:hover {
-          background: rgba(0, 107, 79, 0.14);
+          background: rgba(0, 107, 79, 0.24);
         }
         :global([data-theme="dark"]) .spring-push-announcement-bar {
-          background: rgba(0, 107, 79, 0.16);
+          background: rgba(0, 107, 79, 0.28);
         }
         :global([data-theme="dark"]) .spring-push-announcement-bar:hover {
-          background: rgba(0, 107, 79, 0.22);
+          background: rgba(0, 107, 79, 0.34);
         }
 
         .spa-trophy {

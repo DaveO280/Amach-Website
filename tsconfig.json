@@ -55,5 +55,12 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "admin-app", "backup/**/*", ".next", "src 2"]
+  "exclude": [
+    "node_modules",
+    "admin-app",
+    "backup/**/*",
+    ".next",
+    "src 2",
+    "scripts/legitimacy/**/*"
+  ]
 }

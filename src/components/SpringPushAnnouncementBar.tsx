@@ -24,6 +24,9 @@ const REFRESH_MS = 30_000;
 const DEFAULT_MAX_PARTICIPANTS = 100;
 const PRIZE_DISPLAY = "$1,500";
 
+// Flip to true when the mainnet contest has concluded and results are available.
+const RESULTS_LIVE = false;
+
 interface Summary {
   state: ContestState;
   participantCount: number;
@@ -79,9 +82,10 @@ export function SpringPushAnnouncementBar(): JSX.Element {
   }, [escrowAddress, rpcUrl]);
 
   const isFinished =
-    summary?.state === ContestState.FINISHED ||
-    summary?.state === ContestState.FAILED;
-  const isActive = summary?.state === ContestState.ACTIVE;
+    RESULTS_LIVE &&
+    (summary?.state === ContestState.FINISHED ||
+      summary?.state === ContestState.FAILED);
+  const isActive = !RESULTS_LIVE && summary?.state === ContestState.ACTIVE;
 
   const count = summary?.participantCount ?? 0;
   const max = summary?.maxParticipants ?? DEFAULT_MAX_PARTICIPANTS;
@@ -116,6 +120,9 @@ export function SpringPushAnnouncementBar(): JSX.Element {
         textDecoration: "none",
         fontSize: "14px",
         lineHeight: 1.3,
+        background: "rgba(0, 107, 79, 0.22)",
+        borderTop: "1px solid rgba(0, 107, 79, 0.30)",
+        borderBottom: "1px solid rgba(0, 107, 79, 0.30)",
       }}
     >
       {/* Left: identity */}
@@ -201,20 +208,18 @@ export function SpringPushAnnouncementBar(): JSX.Element {
 
       <style jsx>{`
         .spring-push-announcement-bar {
-          background: rgba(0, 107, 79, 0.18);
-          border-top: 1px solid rgba(0, 107, 79, 0.25);
-          border-bottom: 1px solid rgba(0, 107, 79, 0.25);
           color: var(--color-text-primary);
           transition: background 0.15s ease;
         }
-        .spring-push-announcement-bar:hover {
-          background: rgba(0, 107, 79, 0.24);
+        :global(.spring-push-announcement-bar:hover) {
+          background: rgba(0, 107, 79, 0.28) !important;
         }
-        :global([data-theme="dark"]) .spring-push-announcement-bar {
-          background: rgba(0, 107, 79, 0.28);
+        :global([data-theme="dark"]) :global(.spring-push-announcement-bar) {
+          background: rgba(0, 107, 79, 0.28) !important;
         }
-        :global([data-theme="dark"]) .spring-push-announcement-bar:hover {
-          background: rgba(0, 107, 79, 0.34);
+        :global([data-theme="dark"])
+          :global(.spring-push-announcement-bar:hover) {
+          background: rgba(0, 107, 79, 0.34) !important;
         }
 
         .spa-trophy {

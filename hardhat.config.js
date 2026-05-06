@@ -23,6 +23,15 @@ module.exports = {
   },
   networks: {
     // ZKsync Era Sepolia Testnet
+    //
+    // Note: deploys here use the standard hardhat-ethers `getContractFactory`
+    // path (NOT @matterlabs/hardhat-zksync-deploy + zksolc). zkSync Era is
+    // EVM-equivalent and accepts solc-compiled bytecode for stateless
+    // contracts (Groth16 verifiers, plain-storage proxies, etc.), which is
+    // how every contract on this branch was deployed. If a future contract
+    // ever needs zksolc-specific bytecode, switch it via the dedicated
+    // hardhat.config.zksync.js (which already wires up zksync: true and
+    // ethNetwork: "sepolia").
     zksyncSepolia: {
       url: "https://sepolia.era.zksync.dev",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],

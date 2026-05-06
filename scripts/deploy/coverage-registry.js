@@ -5,7 +5,7 @@
  * persistent on-chain storage of coverage records.
  *
  * Usage:
- *   pnpm exec hardhat run scripts/deploy-coverage-registry.js --network zksyncSepolia
+ *   pnpm exec hardhat run scripts/deploy/coverage-registry.js --network zksyncSepolia
  *
  * Prerequisites:
  *   - .env has PRIVATE_KEY

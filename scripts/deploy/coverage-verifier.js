@@ -5,7 +5,7 @@
  * The verification key is baked in at compile time by snarkJS.
  *
  * Usage:
- *   pnpm exec hardhat run scripts/deploy-coverage-verifier.js --network zksyncSepolia
+ *   pnpm exec hardhat run scripts/deploy/coverage-verifier.js --network zksyncSepolia
  *
  * Prerequisites:
  *   - .env has PRIVATE_KEY (any funded wallet on the target network)

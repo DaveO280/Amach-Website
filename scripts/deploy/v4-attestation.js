@@ -5,7 +5,7 @@
  * @nomiclabs/hardhat-ethers + ethers v5 and avoid getAddress/ethers v6 conflicts.
  *
  * Usage:
- *   pnpm exec hardhat run scripts/deploy-v4-attestation.js --network zksyncSepolia
+ *   pnpm exec hardhat run scripts/deploy/v4-attestation.js --network zksyncSepolia
  *
  * Prerequisites:
  *   - .env has PRIVATE_KEY (deployer = proxy owner, with ETH on zkSync Sepolia for gas)

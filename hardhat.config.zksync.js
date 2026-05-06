@@ -4,7 +4,7 @@
  *
  * NOTE: Deployment with zksolc currently fails (bytecode/creation issue).
  * Use the default hardhat.config.js for deployments:
- *   pnpm exec hardhat run scripts/deploy-v4-attestation.js --network zksyncSepolia
+ *   pnpm exec hardhat run scripts/deploy/v4-attestation.js --network zksyncSepolia
  */
 
 require("@matterlabs/hardhat-zksync-solc");

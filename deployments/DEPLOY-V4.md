@@ -26,7 +26,7 @@ Upgrade the existing UUPS proxy on zkSync Sepolia to the V4 implementation (atte
 From project root:
 
 ```bash
-pnpm exec hardhat run scripts/deploy-v4-attestation.js --network zksyncSepolia
+pnpm exec hardhat run scripts/deploy/v4-attestation.js --network zksyncSepolia
 ```
 
 - **Proxy (unchanged):** `0x2A8015613623A6A8D369BcDC2bd6DD202230785a`

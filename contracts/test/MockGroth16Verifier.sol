@@ -16,8 +16,10 @@ contract MockGroth16Verifier {
     }
 
     function verifyProof(
-        bytes calldata,
-        uint256[4] calldata
+        uint[2] calldata,
+        uint[2][2] calldata,
+        uint[2] calldata,
+        uint[5] calldata
     ) external view returns (bool) {
         return shouldAccept;
     }

@@ -48,14 +48,25 @@ async function createFundedWallets(count, ether = "1") {
   return wallets;
 }
 
-function pubSignals(improvementBp, baseline = BASELINE) {
+function pubSignals(improvementBp, baseline = BASELINE, signFlag = 0) {
   return [
     ethers.BigNumber.from(baseline),
     ethers.BigNumber.from(FINISH),
     ethers.BigNumber.from(METRIC),
     ethers.BigNumber.from(improvementBp),
+    ethers.BigNumber.from(signFlag),
   ];
 }
+
+// Dummy Groth16 proof points. The mock verifier ignores their values, so any
+// in-field uint256 will do; the escrow only inspects pubSignals before the
+// verifier call.
+const PROOF_PA = [1, 2];
+const PROOF_PB = [
+  [1, 2],
+  [3, 4],
+];
+const PROOF_PC = [5, 6];
 
 /// Strict numeric equality between any two BigNumber-like values.
 function eq(actual, expected) {
@@ -417,11 +428,15 @@ describe("SpringPushEscrowV1", function () {
       const { escrow, players } = await setupActiveContest();
       const p = players[0];
 
-      await escrow.connect(p).submitProof("0x1234", pubSignals(500));
+      await escrow
+        .connect(p)
+        .submitProof(PROOF_PA, PROOF_PB, PROOF_PC, pubSignals(500));
       eq(await escrow.improvementBp(p.address), 500);
 
       await expectCustomError(
-        escrow.connect(p).submitProof("0x1234", pubSignals(700)),
+        escrow
+          .connect(p)
+          .submitProof(PROOF_PA, PROOF_PB, PROOF_PC, pubSignals(700)),
         escrow,
         "AlreadySubmitted",
       );
@@ -434,20 +449,44 @@ describe("SpringPushEscrowV1", function () {
       await expectCustomError(
         escrow
           .connect(players[0])
-          .submitProof("0x", pubSignals(100, wrongBaseline)),
+          .submitProof(
+            PROOF_PA,
+            PROOF_PB,
+            PROOF_PC,
+            pubSignals(100, wrongBaseline),
+          ),
         escrow,
         "BaselineMismatch",
       );
 
       await expectCustomError(
-        escrow.connect(players[0]).submitProof("0x", pubSignals(0)),
+        escrow
+          .connect(players[0])
+          .submitProof(PROOF_PA, PROOF_PB, PROOF_PC, pubSignals(0)),
         escrow,
         "ImprovementZero",
       );
 
+      // signFlag = 1 marks a negative improvement; Spring Push entries must be
+      // positive, so the escrow rejects with NegativeImprovement.
+      await expectCustomError(
+        escrow
+          .connect(players[0])
+          .submitProof(
+            PROOF_PA,
+            PROOF_PB,
+            PROOF_PC,
+            pubSignals(100, BASELINE, 1),
+          ),
+        escrow,
+        "NegativeImprovement",
+      );
+
       await verifier.setShouldAccept(false);
       await expectCustomError(
-        escrow.connect(players[0]).submitProof("0x", pubSignals(100)),
+        escrow
+          .connect(players[0])
+          .submitProof(PROOF_PA, PROOF_PB, PROOF_PC, pubSignals(100)),
         escrow,
         "InvalidProof",
       );
@@ -455,7 +494,9 @@ describe("SpringPushEscrowV1", function () {
 
       const [stranger] = await createFundedWallets(1, "1");
       await expectCustomError(
-        escrow.connect(stranger).submitProof("0x", pubSignals(100)),
+        escrow
+          .connect(stranger)
+          .submitProof(PROOF_PA, PROOF_PB, PROOF_PC, pubSignals(100)),
         escrow,
         "NotRegistered",
       );
@@ -468,7 +509,7 @@ describe("SpringPushEscrowV1", function () {
       for (let i = 0; i < players.length; i++) {
         await escrow
           .connect(players[i])
-          .submitProof("0x", pubSignals(100 + i * 10));
+          .submitProof(PROOF_PA, PROOF_PB, PROOF_PC, pubSignals(100 + i * 10));
       }
 
       await increaseTime(CONTEST_DURATION + CLAIM_WINDOW + 1);
@@ -500,7 +541,9 @@ describe("SpringPushEscrowV1", function () {
 
     it("rejects finalize before claim window ends", async () => {
       const { escrow, admin, players } = await setupActiveContest();
-      await escrow.connect(players[0]).submitProof("0x", pubSignals(100));
+      await escrow
+        .connect(players[0])
+        .submitProof(PROOF_PA, PROOF_PB, PROOF_PC, pubSignals(100));
       await increaseTime(CONTEST_DURATION + 1);
       await expectCustomError(
         escrow.connect(admin).finalize([players[0].address]),
@@ -527,7 +570,9 @@ describe("SpringPushEscrowV1", function () {
       // player[0] gets the highest score → ends up rank 1.
       for (let i = 0; i < players.length; i++) {
         const score = (numPlayers - i) * 100;
-        await escrow.connect(players[i]).submitProof("0x", pubSignals(score));
+        await escrow
+          .connect(players[i])
+          .submitProof(PROOF_PA, PROOF_PB, PROOF_PC, pubSignals(score));
       }
 
       await increaseTime(CONTEST_DURATION + CLAIM_WINDOW + 1);
@@ -579,7 +624,7 @@ describe("SpringPushEscrowV1", function () {
       for (let i = 0; i < submitters.length; i++) {
         await escrow
           .connect(submitters[i])
-          .submitProof("0x", pubSignals(1000 - i * 10));
+          .submitProof(PROOF_PA, PROOF_PB, PROOF_PC, pubSignals(1000 - i * 10));
       }
 
       await increaseTime(CONTEST_DURATION + CLAIM_WINDOW + 1);
@@ -608,7 +653,7 @@ describe("SpringPushEscrowV1", function () {
       for (let i = 0; i < players.length; i++) {
         await escrow
           .connect(players[i])
-          .submitProof("0x", pubSignals(2000 - i * 10));
+          .submitProof(PROOF_PA, PROOF_PB, PROOF_PC, pubSignals(2000 - i * 10));
       }
       await increaseTime(CONTEST_DURATION + CLAIM_WINDOW + 1);
       await escrow.connect(admin).finalize(players.map((p) => p.address));

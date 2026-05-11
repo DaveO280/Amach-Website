@@ -5,8 +5,10 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 interface IGroth16Verifier {
     function verifyProof(
-        bytes calldata proof,
-        uint256[4] calldata pubSignals
+        uint[2] calldata pA,
+        uint[2][2] calldata pB,
+        uint[2] calldata pC,
+        uint[5] calldata pubSignals
     ) external view returns (bool);
 }
 
@@ -121,6 +123,7 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     error InvalidProof();
     error BaselineMismatch();
     error ImprovementZero();
+    error NegativeImprovement();
     error AlreadyClaimed();
     error NotQualified();
     error TooEarly();
@@ -247,7 +250,22 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     /// @dev    Auto-advances ACTIVE → CLAIMING when block.timestamp passes
     ///         contestCloseTime, so the function works in either state without
     ///         requiring a separate close-contest call.
-    function submitProof(bytes calldata proof, uint256[4] calldata pubSignals)
+    ///
+    ///         The proof components and 5-element pubSignals tuple are forwarded
+    ///         verbatim to the snarkjs-generated Groth16 verifier. The circuit's
+    ///         public-signal order is:
+    ///           [baselineRoot, finishRoot, metricPointer, claimedMagnitudeBp,
+    ///            claimedSignFlag]
+    ///         Spring Push entries must be positive improvements, so signFlag
+    ///         (pubSignals[4]) is required to be 0. Previously this was enforced
+    ///         by a bytes-blob wrapper that dropped the signal; the wrapper is
+    ///         gone, so the escrow performs the check directly.
+    function submitProof(
+        uint[2] calldata pA,
+        uint[2][2] calldata pB,
+        uint[2] calldata pC,
+        uint[5] calldata pubSignals
+    )
         external
         nonReentrant
     {
@@ -262,8 +280,9 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
 
         if (uint256(baselineRoot) != pubSignals[0]) revert BaselineMismatch();
         if (pubSignals[3] == 0) revert ImprovementZero();
+        if (pubSignals[4] != 0) revert NegativeImprovement();
 
-        bool ok = IGroth16Verifier(IMPROVEMENT_VERIFIER).verifyProof(proof, pubSignals);
+        bool ok = IGroth16Verifier(IMPROVEMENT_VERIFIER).verifyProof(pA, pB, pC, pubSignals);
         if (!ok) revert InvalidProof();
 
         improvementBp[msg.sender] = pubSignals[3];

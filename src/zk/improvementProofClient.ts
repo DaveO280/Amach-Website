@@ -1,21 +1,24 @@
 "use client";
 
 import type { WalletClient } from "viem";
-import { encodeAbiParameters } from "viem";
 import { getActiveChain } from "@/lib/networkConfig";
 
 /**
  * Client-side helper for the Spring Push "Submit Proof" flow.
  *
- * The escrow contract (`SpringPushEscrowV1.submitProof`) takes:
- *   - `bytes proof`              — ABI-encoded Groth16 proof
- *   - `uint256[4] pubSignals`    — [baselineRoot, finishRoot, metricPointer, claimedMagnitudeBp]
+ * The escrow contract (`SpringPushEscrowV1.submitProof`) takes the raw
+ * Groth16 proof components plus the full 5-element public-signals tuple,
+ * forwarded verbatim to the snarkjs-generated `AverageImprovementProofV1Verifier`:
+ *   - `uint[2]    pA`
+ *   - `uint[2][2] pB`
+ *   - `uint[2]    pC`
+ *   - `uint[5]    pubSignals`   — [baselineRoot, finishRoot, metricPointer,
+ *                                  claimedMagnitudeBp, claimedSignFlag]
  *
  * The improvement circuit is the `AverageImprovementProofV1` Groth16 circuit
- * (N=2, M=2, treeDepth=7, metricPointer=64, metric=vo2max). The circuit itself
- * exposes 5 public signals; the on-chain `IGroth16Verifier` wrapper that the
- * escrow calls drops `claimedSignFlag` (a Spring Push entry must be a positive
- * improvement, so signFlag is forced to 0 by the wrapper).
+ * (N=2, M=2, treeDepth=7, metricPointer=64, metric=vo2max). Spring Push
+ * entries must be positive improvements, so the escrow asserts
+ * `claimedSignFlag == 0` before forwarding to the verifier.
  *
  * Artifacts live at `public/zk/improvement/` and are served at:
  *   /zk/improvement/improvement.wasm
@@ -29,8 +32,10 @@ const SUBMIT_PROOF_ABI = [
     name: "submitProof",
     stateMutability: "nonpayable",
     inputs: [
-      { name: "proof", type: "bytes" },
-      { name: "pubSignals", type: "uint256[4]" },
+      { name: "pA", type: "uint256[2]" },
+      { name: "pB", type: "uint256[2][2]" },
+      { name: "pC", type: "uint256[2]" },
+      { name: "pubSignals", type: "uint256[5]" },
     ],
     outputs: [],
   },
@@ -53,31 +58,32 @@ interface SnarkjsGroth16Proof {
   pi_c: string[];
 }
 
+export type Groth16ProofPoints = {
+  pA: [bigint, bigint];
+  pB: [[bigint, bigint], [bigint, bigint]];
+  pC: [bigint, bigint];
+};
+
 /**
- * Encodes a snarkjs Groth16 proof object into the `bytes` payload that the
- * escrow contract forwards to its verifier. The encoding scheme is
- * `abi.encode(uint[2] pA, uint[2][2] pB, uint[2] pC)` — the standard wrapping
- * used when a verifier exposes a bytes-blob entry point instead of split
- * (a, b, c) arguments. Note that snarkjs serializes pB as `[[x1, x2], ...]`
- * but Solidity verifiers expect the inner pair swapped, hence the reordering.
+ * Convert a snarkjs Groth16 proof object into the (pA, pB, pC) triple expected
+ * by the snarkjs-generated Solidity verifier. snarkjs serializes pB as
+ * `[[x1, x2], ...]` but the verifier expects the inner pair swapped, hence the
+ * reordering below.
  */
-function encodeGroth16ProofToBytes(proof: SnarkjsGroth16Proof): `0x${string}` {
-  return encodeAbiParameters(
-    [{ type: "uint256[2]" }, { type: "uint256[2][2]" }, { type: "uint256[2]" }],
-    [
-      [BigInt(proof.pi_a[0]), BigInt(proof.pi_a[1])],
-      [
-        [BigInt(proof.pi_b[0][1]), BigInt(proof.pi_b[0][0])],
-        [BigInt(proof.pi_b[1][1]), BigInt(proof.pi_b[1][0])],
-      ],
-      [BigInt(proof.pi_c[0]), BigInt(proof.pi_c[1])],
+function snarkjsProofToPoints(proof: SnarkjsGroth16Proof): Groth16ProofPoints {
+  return {
+    pA: [BigInt(proof.pi_a[0]), BigInt(proof.pi_a[1])],
+    pB: [
+      [BigInt(proof.pi_b[0][1]), BigInt(proof.pi_b[0][0])],
+      [BigInt(proof.pi_b[1][1]), BigInt(proof.pi_b[1][0])],
     ],
-  );
+    pC: [BigInt(proof.pi_c[0]), BigInt(proof.pi_c[1])],
+  };
 }
 
 export interface GeneratedImprovementProof {
-  proofBytes: `0x${string}`;
-  pubSignals: [bigint, bigint, bigint, bigint];
+  points: Groth16ProofPoints;
+  pubSignals: [bigint, bigint, bigint, bigint, bigint];
 }
 
 /**
@@ -149,14 +155,14 @@ async function fetchArtifact(url: string): Promise<ArrayBuffer> {
 /**
  * Run the Groth16 prover for the improvement circuit. Exported so that a
  * future v2-leaf-builder can plug in the witness data without duplicating the
- * artifact loading + ABI encoding boilerplate.
+ * artifact loading + proof-shaping boilerplate.
  *
  * The snarkjs public-signal order mirrors the `public` declaration in
- * `improvement.circom`:
+ * `improvement.circom` and matches what the verifier (and escrow) expect:
  *   [baselineRoot, finishRoot, metricPointer, claimedMagnitudeBp, claimedSignFlag]
  *
- * The escrow's 4-element `pubSignals` drops `claimedSignFlag` (the on-chain
- * verifier wrapper enforces signFlag = 0).
+ * The escrow asserts `claimedSignFlag == 0` (Spring Push entries must be
+ * positive improvements).
  */
 export async function proveImprovement(
   witness: ImprovementWitnessInput,
@@ -197,14 +203,13 @@ export async function proveImprovement(
   }
 
   return {
-    proofBytes: encodeGroth16ProofToBytes(proof),
-    // Drop publicSignals[4] (claimedSignFlag) — the escrow takes only the
-    // first four signals, with the wrapper verifier forcing signFlag = 0.
+    points: snarkjsProofToPoints(proof),
     pubSignals: [
       BigInt(publicSignals[0]),
       BigInt(publicSignals[1]),
       BigInt(publicSignals[2]),
       BigInt(publicSignals[3]),
+      BigInt(publicSignals[4]),
     ],
   };
 }
@@ -257,19 +262,18 @@ export async function generateAndSubmitProof(
   walletClient: WalletClient,
   escrowAddress: string,
 ): Promise<`0x${string}`> {
-  const { proofBytes, pubSignals } =
-    await generateImprovementProof(walletAddress);
+  const { points, pubSignals } = await generateImprovementProof(walletAddress);
 
   return walletClient.writeContract({
     address: escrowAddress as `0x${string}`,
     abi: SUBMIT_PROOF_ABI,
     functionName: "submitProof",
-    args: [proofBytes, pubSignals],
+    args: [points.pA, points.pB, points.pC, pubSignals],
     account: walletAddress as `0x${string}`,
     chain: getActiveChain(),
   });
 }
 
 export const __testing = {
-  encodeGroth16ProofToBytes,
+  snarkjsProofToPoints,
 };

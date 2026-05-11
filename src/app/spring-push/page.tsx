@@ -84,8 +84,7 @@ const SpringPushPage: React.FC = () => {
             marginBottom: 28,
           }}
         >
-          Spring Push{" "}
-          <span style={{ color: "var(--color-emerald)" }}>Season One</span>
+          <span style={{ color: "var(--color-emerald)" }}>Spring Push</span>
         </h1>
 
         <p
@@ -274,7 +273,7 @@ const SpringPushPage: React.FC = () => {
             margin: 0,
           }}
         >
-          © {new Date().getFullYear()} Amach Health · Spring Push Season One
+          © {new Date().getFullYear()} Amach Health · Spring Push
         </p>
       </footer>
     </div>

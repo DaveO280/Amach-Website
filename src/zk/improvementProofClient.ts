@@ -2,6 +2,7 @@
 
 import type { WalletClient } from "viem";
 import { getActiveChain } from "@/lib/networkConfig";
+import { buildImprovementWitness } from "@/zk/improvementWitnessBuilder";
 
 /**
  * Client-side helper for the Spring Push "Submit Proof" flow.
@@ -215,39 +216,22 @@ export async function proveImprovement(
 }
 
 /**
- * Generate a Groth16 improvement proof for the given wallet.
+ * Generate a Groth16 improvement proof for the given wallet. Builds the v2
+ * Merkle witness via `buildImprovementWitness` (see
+ * `improvementWitnessBuilder.ts`) and runs it through the bundled circuit
+ * artifacts via `proveImprovement`.
  *
- * TODO: replace with real witness inputs. Constructing the witness requires:
- *   1. Loading the user's v2 (124-byte) baseline + finish leaves containing
- *      VO2 max readings (decrypt from Storj via walletEncryption, then
- *      decode with a browser port of `zk/scripts/hash_leaf.js`).
- *   2. Building both Merkle trees (depth=7, Poseidon2 nodes over Poseidon4
- *      leaf hashes — see `AmachHealth-iOS/zk/scripts/build_tree.js`).
- *   3. Choosing N=2 baseline indices and M=2 finish indices, then assembling
- *      leaf-hash / chunks / path / index arrays via the witness-builder logic
- *      in `AmachHealth-iOS/zk/scripts/build_improvement_witness.js`.
- *   4. Asserting that the resulting baselineRoot matches the escrow's
- *      `baselineRoot()` storage slot (the contract reverts with
- *      `BaselineMismatch` otherwise).
- *
- * Until that v2 leaf infrastructure is ported into the web codebase, this
- * function intentionally throws so the Submit Proof button surfaces a clear
- * message rather than silently producing a bogus proof.
- *
- * The snarkjs prover itself is fully wired below via `proveImprovement` —
- * once a witness builder exists, it can call that function directly.
+ * The witness builder is responsible for sourcing the user's v2 baseline /
+ * finish leaves and selecting N=2 + M=2 indices. The pure math + tree
+ * construction is implemented; the Storj data-source wiring is still TODO
+ * inside `buildImprovementWitness` and currently throws a clear error
+ * pointing at the missing piece.
  */
 async function generateImprovementProof(
-  _walletAddress: string,
+  walletAddress: string,
 ): Promise<GeneratedImprovementProof> {
-  // TODO: replace with real witness inputs (see docstring above).
-  throw new Error(
-    "Improvement proof generation is not yet enabled in the browser. " +
-      "The Groth16 circuit artifacts are bundled and the snarkjs prover is " +
-      "wired (see proveImprovement), but the v2 Merkle leaf builder needed " +
-      "to construct a real witness has not been ported to the web yet. " +
-      "Submit Proof will become available once that lands.",
-  );
+  const witness = await buildImprovementWitness(walletAddress);
+  return proveImprovement(witness);
 }
 
 /**

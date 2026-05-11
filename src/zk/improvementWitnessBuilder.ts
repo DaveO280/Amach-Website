@@ -270,9 +270,14 @@ function toBufN(src: Uint8Array, len: number): Uint8Array {
 }
 
 function walletToBytes32(wallet: string): Uint8Array {
-  // EVM addresses are 20 bytes; serializer right-pads (the leaf format reserves
-  // 32 bytes for future longer-address ecosystems).
-  const raw = hexToBytes(strip0x(wallet).padStart(40, "0").slice(-40));
+  // Mirrors `toBuf32` in `zk/scripts/hash_leaf.js` (the on-disk leaf-format
+  // spec): inputs ≤ 32 bytes are right-aligned into a 32-byte buffer (zero
+  // bytes on the left); inputs > 32 bytes use the first 32. EVM 20-byte
+  // addresses round-trip through this as 12 zero bytes + 20 wallet bytes,
+  // matching the previous EVM-only behavior, but synthetic 32-byte test
+  // wallets (as used in hash_leaf.js's buildTestLeafV2 fixture) now
+  // preserve all 32 bytes — required for Swift/JS hash parity.
+  const raw = hexToBytes(strip0x(wallet));
   return toBufN(raw, 32);
 }
 

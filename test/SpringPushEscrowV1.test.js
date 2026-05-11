@@ -664,5 +664,54 @@ describe("SpringPushEscrowV1", function () {
         "ZeroValue",
       );
     });
+
+    async function setupFailed() {
+      const fixture = await deployFixture();
+      const { escrow, admin } = fixture;
+      await escrow
+        .connect(admin)
+        .openRegistration(BASELINE, { value: PRIZE_POOL });
+      const tooFew = await createFundedWallets(MIN_PARTICIPANTS - 1, "1");
+      for (const p of tooFew) {
+        await escrow.connect(p).register();
+      }
+      await escrow.connect(admin).closeRegistration();
+      return fixture;
+    }
+
+    it("anchors the reclaim clock when the contest FAILS at registration close", async () => {
+      const { escrow } = await setupFailed();
+      // The fix: contestCloseTime must be set on the FAILED transition so the
+      // seeded prize pool isn't permanently locked in escrow.
+      const closeTime = await escrow.contestCloseTime();
+      expect(closeTime.gt(0)).to.equal(true);
+      eq(await escrow.state(), State.FAILED);
+    });
+
+    it("FAILED: reverts before contestCloseTime + 180 days", async () => {
+      const { escrow, admin, signers } = await setupFailed();
+      await expectCustomError(
+        escrow.connect(admin).founderReclaim(signers[0].address),
+        escrow,
+        "TooEarly",
+      );
+    });
+
+    it("FAILED: sweeps seeded prize pool to target after 180d", async () => {
+      const { escrow, admin, signers } = await setupFailed();
+      await increaseTime(FOUNDER_RECLAIM_DELAY + 1);
+
+      const target = signers[5];
+      const targetBefore = await ethers.provider.getBalance(target.address);
+      const escrowBefore = await ethers.provider.getBalance(escrow.address);
+      eq(escrowBefore, PRIZE_POOL);
+
+      await escrow.connect(admin).founderReclaim(target.address);
+
+      const targetAfter = await ethers.provider.getBalance(target.address);
+      const escrowAfter = await ethers.provider.getBalance(escrow.address);
+      eq(targetAfter.sub(targetBefore), PRIZE_POOL);
+      eq(escrowAfter, 0);
+    });
   });
 });

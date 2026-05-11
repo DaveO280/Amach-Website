@@ -207,6 +207,10 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
 
         if (count < MIN_PARTICIPANTS) {
             state = ContestState.FAILED;
+            // Anchor the founder-reclaim delay to the moment of failure so the
+            // seeded prize pool isn't permanently stuck. Without this,
+            // founderReclaim() trips its contestCloseTime == 0 guard forever.
+            contestCloseTime = block.timestamp;
             emit RegistrationClosed(count, state);
             return;
         }

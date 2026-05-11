@@ -9,17 +9,18 @@ import { getActiveChain } from "@/lib/networkConfig";
  *
  * The escrow contract (`SpringPushEscrowV1.submitProof`) takes:
  *   - `bytes proof`              — ABI-encoded Groth16 proof
- *   - `uint256[4] pubSignals`    — [baselineRoot, currentRoot, dayWindow, improvementBp]
+ *   - `uint256[4] pubSignals`    — [baselineRoot, finishRoot, metricPointer, claimedMagnitudeBp]
  *
  * The improvement circuit is the `AverageImprovementProofV1` Groth16 circuit
- * (N=2, M=2, treeDepth=7, metricPointer=64, metric=vo2max). See
- * scripts/deploy-improvement-verifier.js for the deployment metadata.
+ * (N=2, M=2, treeDepth=7, metricPointer=64, metric=vo2max). The circuit itself
+ * exposes 5 public signals; the on-chain `IGroth16Verifier` wrapper that the
+ * escrow calls drops `claimedSignFlag` (a Spring Push entry must be a positive
+ * improvement, so signFlag is forced to 0 by the wrapper).
  *
- * Status: the circuit's `.wasm` and `.zkey` artifacts live under
- * `AmachHealth-iOS/zk/build/improvement/` and have not yet been copied into
- * this repo (we only have coverage artifacts under `zk-toolchain/build/`).
- * Once the artifacts land, fill in `generateImprovementProof` and remove the
- * stub error path. The on-chain submission below is the final shape.
+ * Artifacts live at `public/zk/improvement/` and are served at:
+ *   /zk/improvement/improvement.wasm
+ *   /zk/improvement/improvement_final.zkey
+ *   /zk/improvement/verification_key.json
  */
 
 const SUBMIT_PROOF_ABI = [
@@ -34,6 +35,17 @@ const SUBMIT_PROOF_ABI = [
     outputs: [],
   },
 ] as const;
+
+const WASM_URL = "/zk/improvement/improvement.wasm";
+const ZKEY_URL = "/zk/improvement/improvement_final.zkey";
+
+/**
+ * Circuit metric pointer for VO2 max — must match `improvement.circom`'s
+ * `AverageImprovementProof(2, 2, 7, 2, 2)` instantiation:
+ *   pointer = METRIC_CHUNK_IDX * 31 + METRIC_BYTE_OFFSET_IN_CHUNK = 2*31 + 2.
+ * The circuit asserts pointer equality, so this value is fixed.
+ */
+const METRIC_POINTER = 2 * 31 + 2;
 
 interface SnarkjsGroth16Proof {
   pi_a: string[];
@@ -69,48 +81,167 @@ export interface GeneratedImprovementProof {
 }
 
 /**
- * STUB: generate the Groth16 improvement proof in the browser.
+ * Witness inputs for the AverageImprovementProof circuit.
  *
- * To make this real, the caller needs:
- *   1. The user's encrypted Merkle genesis (baseline tree) decrypted via
- *      walletEncryption — `loadLatestGenesis` in devZkCoverageService.ts shows
- *      the storage shape. Browser ports must use the IndexedDB fallback path
- *      rather than `fs`, since the Storj retrieval already runs client-side.
- *   2. A current-window Merkle tree covering the most recent N days of
- *      VO2max readings (N=2 per the circuit metadata).
- *   3. The improvement circuit artifacts:
- *        - improvement_js/improvement.wasm
- *        - improvement_final.zkey
- *        - verification_key.json (optional — only for client-side sanity verify)
- *      These currently live at AmachHealth-iOS/zk/build/improvement/ and must
- *      be either bundled into `public/zk/improvement/` for fetch() loading, or
- *      served from the same CDN as the coverage artifacts will be when that
- *      flow ships.
- *   4. The witness input shape, which mirrors coverage but adds the metric
- *      pointer and the current-window leaves:
- *        - baseline_root, current_root
- *        - day_window
- *        - metric_pointer (=64 for VO2max)
- *        - baseline_leaf_hashes[N], baseline_merkle_paths[N], baseline_path_indices[N]
- *        - current_leaf_hashes[M],  current_merkle_paths[M],  current_path_indices[M]
- *        - baseline_metric_values[N], current_metric_values[M]
- *      Confirm the exact field names against the .circom source before wiring.
- *   5. `snarkjs.groth16.fullProve(witness, wasmUrl, zkeyUrl)` produces the
- *      proof + public signals. The signals come out as decimal strings; cast
- *      each to BigInt for `pubSignals[]`. The proof object can then be passed
- *      to `encodeGroth16ProofToBytes` above to get the `bytes` payload.
+ * Field names mirror `improvement.circom` exactly — snarkjs maps these
+ * directly onto circuit signals by name. All numeric values must be decimal
+ * strings (snarkjs converts them to field elements internally).
  *
- * Until those land, throw a clear error so the widget surfaces a useful
- * message instead of a silent failure.
+ * Shape constraints (N=2, M=2, depth=7):
+ *   - baselineLeafHashes:  length N
+ *   - baselineChunks:      N × 4 (each leaf chunked into 4 × 31-byte field elements)
+ *   - baselinePaths:       N × depth (Merkle inclusion siblings, leaf-to-root)
+ *   - baselineIdx:         N × depth (direction bits, '0' = left, '1' = right)
+ *   - finish* same shape with M = 2.
+ */
+export interface ImprovementWitnessInput {
+  baselineRoot: string;
+  finishRoot: string;
+  claimedMagnitudeBp: string;
+  claimedSignFlag: "0" | "1";
+  baselineLeafHashes: [string, string];
+  baselineChunks: [
+    [string, string, string, string],
+    [string, string, string, string],
+  ];
+  baselinePaths: [string[], string[]];
+  baselineIdx: [string[], string[]];
+  finishLeafHashes: [string, string];
+  finishChunks: [
+    [string, string, string, string],
+    [string, string, string, string],
+  ];
+  finishPaths: [string[], string[]];
+  finishIdx: [string[], string[]];
+}
+
+interface SnarkjsFullProveResult {
+  proof: SnarkjsGroth16Proof;
+  publicSignals: string[];
+}
+
+interface SnarkjsGroth16 {
+  fullProve(
+    input: Record<string, unknown>,
+    wasm: ArrayBuffer | Uint8Array | string,
+    zkey: ArrayBuffer | Uint8Array | string,
+  ): Promise<SnarkjsFullProveResult>;
+}
+
+interface SnarkjsModule {
+  groth16: SnarkjsGroth16;
+}
+
+/**
+ * Fetch a static artifact from `public/` as an ArrayBuffer. snarkjs accepts
+ * ArrayBuffers directly in the browser, avoiding any fs/path shims.
+ */
+async function fetchArtifact(url: string): Promise<ArrayBuffer> {
+  const res = await fetch(url, { cache: "force-cache" });
+  if (!res.ok) {
+    throw new Error(
+      `Failed to fetch ZK artifact ${url}: ${res.status} ${res.statusText}`,
+    );
+  }
+  return res.arrayBuffer();
+}
+
+/**
+ * Run the Groth16 prover for the improvement circuit. Exported so that a
+ * future v2-leaf-builder can plug in the witness data without duplicating the
+ * artifact loading + ABI encoding boilerplate.
+ *
+ * The snarkjs public-signal order mirrors the `public` declaration in
+ * `improvement.circom`:
+ *   [baselineRoot, finishRoot, metricPointer, claimedMagnitudeBp, claimedSignFlag]
+ *
+ * The escrow's 4-element `pubSignals` drops `claimedSignFlag` (the on-chain
+ * verifier wrapper enforces signFlag = 0).
+ */
+export async function proveImprovement(
+  witness: ImprovementWitnessInput,
+): Promise<GeneratedImprovementProof> {
+  const witnessInput: Record<string, unknown> = {
+    baselineRoot: witness.baselineRoot,
+    finishRoot: witness.finishRoot,
+    metricPointer: METRIC_POINTER.toString(10),
+    claimedMagnitudeBp: witness.claimedMagnitudeBp,
+    claimedSignFlag: witness.claimedSignFlag,
+    baselineLeafHashes: witness.baselineLeafHashes,
+    baselineChunks: witness.baselineChunks,
+    baselinePaths: witness.baselinePaths,
+    baselineIdx: witness.baselineIdx,
+    finishLeafHashes: witness.finishLeafHashes,
+    finishChunks: witness.finishChunks,
+    finishPaths: witness.finishPaths,
+    finishIdx: witness.finishIdx,
+  };
+
+  const [wasm, zkey] = await Promise.all([
+    fetchArtifact(WASM_URL),
+    fetchArtifact(ZKEY_URL),
+  ]);
+
+  // snarkjs has no published types; cast through unknown after dynamic import.
+  const snarkjs = (await import("snarkjs")) as unknown as SnarkjsModule;
+  const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+    witnessInput,
+    new Uint8Array(wasm),
+    new Uint8Array(zkey),
+  );
+
+  if (publicSignals.length !== 5) {
+    throw new Error(
+      `Unexpected publicSignals length ${publicSignals.length} (expected 5).`,
+    );
+  }
+
+  return {
+    proofBytes: encodeGroth16ProofToBytes(proof),
+    // Drop publicSignals[4] (claimedSignFlag) — the escrow takes only the
+    // first four signals, with the wrapper verifier forcing signFlag = 0.
+    pubSignals: [
+      BigInt(publicSignals[0]),
+      BigInt(publicSignals[1]),
+      BigInt(publicSignals[2]),
+      BigInt(publicSignals[3]),
+    ],
+  };
+}
+
+/**
+ * Generate a Groth16 improvement proof for the given wallet.
+ *
+ * TODO: replace with real witness inputs. Constructing the witness requires:
+ *   1. Loading the user's v2 (124-byte) baseline + finish leaves containing
+ *      VO2 max readings (decrypt from Storj via walletEncryption, then
+ *      decode with a browser port of `zk/scripts/hash_leaf.js`).
+ *   2. Building both Merkle trees (depth=7, Poseidon2 nodes over Poseidon4
+ *      leaf hashes — see `AmachHealth-iOS/zk/scripts/build_tree.js`).
+ *   3. Choosing N=2 baseline indices and M=2 finish indices, then assembling
+ *      leaf-hash / chunks / path / index arrays via the witness-builder logic
+ *      in `AmachHealth-iOS/zk/scripts/build_improvement_witness.js`.
+ *   4. Asserting that the resulting baselineRoot matches the escrow's
+ *      `baselineRoot()` storage slot (the contract reverts with
+ *      `BaselineMismatch` otherwise).
+ *
+ * Until that v2 leaf infrastructure is ported into the web codebase, this
+ * function intentionally throws so the Submit Proof button surfaces a clear
+ * message rather than silently producing a bogus proof.
+ *
+ * The snarkjs prover itself is fully wired below via `proveImprovement` —
+ * once a witness builder exists, it can call that function directly.
  */
 async function generateImprovementProof(
   _walletAddress: string,
 ): Promise<GeneratedImprovementProof> {
+  // TODO: replace with real witness inputs (see docstring above).
   throw new Error(
-    "Improvement proof generation is not yet enabled. The Groth16 " +
-      "circuit artifacts (improvement.wasm, improvement_final.zkey) have " +
-      "not been bundled into the web build yet. Submit Proof will become " +
-      "available once those artifacts are published.",
+    "Improvement proof generation is not yet enabled in the browser. " +
+      "The Groth16 circuit artifacts are bundled and the snarkjs prover is " +
+      "wired (see proveImprovement), but the v2 Merkle leaf builder needed " +
+      "to construct a real witness has not been ported to the web yet. " +
+      "Submit Proof will become available once that lands.",
   );
 }
 

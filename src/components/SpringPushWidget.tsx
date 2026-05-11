@@ -5,6 +5,7 @@ import { Loader2, Trophy } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivyWalletService } from "@/hooks/usePrivyWalletService";
 import { getActiveChain, getContractAddresses } from "@/lib/networkConfig";
+import { getCachedWalletEncryptionKey } from "@/utils/walletEncryption";
 import { generateAndSubmitProof } from "@/zk/improvementProofClient";
 
 const ESCROW_ABI = [
@@ -437,8 +438,13 @@ export function SpringPushWidget(): JSX.Element {
       if (!walletClient) {
         throw new Error("Could not get wallet client");
       }
+      const encryptionKey = await getCachedWalletEncryptionKey(
+        userAddress,
+        walletService.signMessage,
+      );
       const hash = await generateAndSubmitProof(
         userAddress,
+        encryptionKey,
         walletClient,
         escrowAddress,
       );

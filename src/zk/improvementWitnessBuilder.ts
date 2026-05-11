@@ -51,6 +51,8 @@
  */
 
 import { poseidon2, poseidon4 } from "poseidon-lite";
+import type { WalletEncryptionKey } from "@/utils/walletEncryption";
+import { fetchImprovementLeavesForWallet } from "@/zk/improvementLeafFetcher";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -743,44 +745,89 @@ export function buildImprovementWitnessFromLeaves(
 // Wallet-keyed entry point (per assignment spec)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Read the circuit metric (u16 BE at `METRIC_POINTER`) from a v2 leaf. */
+function readMetricFromLeaf(buf: Uint8Array): number {
+  const hi = buf[METRIC_POINTER] ?? 0;
+  const lo = buf[METRIC_POINTER + 1] ?? 0;
+  return (hi << 8) | lo;
+}
+
+/**
+ * Pick `k` indices into `leaves` that maximize honest improvement, ranking
+ * by the circuit metric (vo2max by default). Baseline-side picks the lowest
+ * `k` non-zero metrics; finish-side picks the highest `k`. Falls back to
+ * natural order when fewer than `k` non-zero candidates exist, letting the
+ * inner builder raise the appropriate zero-baseline error instead of silently
+ * picking padding leaves.
+ */
+function pickIndicesByMetric(
+  leaves: Uint8Array[],
+  k: number,
+  direction: "lowest-nonzero" | "highest",
+  label: string,
+): number[] {
+  if (leaves.length < k) {
+    throw new Error(
+      `${label}: need at least ${k} leaves, got ${leaves.length}`,
+    );
+  }
+  const ranked = leaves.map((buf, idx) => ({
+    idx,
+    metric: readMetricFromLeaf(buf),
+  }));
+  let candidates = ranked;
+  if (direction === "lowest-nonzero") {
+    const nonZero = ranked.filter((x) => x.metric > 0);
+    candidates =
+      nonZero.length >= k
+        ? nonZero.sort((a, b) => a.metric - b.metric)
+        : ranked.sort((a, b) => a.metric - b.metric);
+  } else {
+    candidates = ranked.slice().sort((a, b) => b.metric - a.metric);
+  }
+  return candidates.slice(0, k).map((x) => x.idx);
+}
+
 /**
  * Build the AverageImprovementProof witness for a given wallet's Spring Push
  * entry.
  *
- * TODO(data-source): wire this to the v2 leaf store. Once the iOS app (or the
- * web app's normalization pipeline) starts publishing baseline + finish v2
- * Merkle trees + leaf bundles to Storj — analogous to the existing
- * `merkle-genesis-tree` / `merkle-genesis-leaves` dataTypes — this function
- * should:
+ * Loads the wallet's latest `merkle-v2-baseline-leaves` and
+ * `merkle-v2-finish-leaves` bundles from Storj (via `/api/storj`), picks the
+ * N=2 lowest-non-zero-metric baseline indices and M=2 highest-metric finish
+ * indices to maximize the honest improvement claim, then delegates to
+ * `buildImprovementWitnessFromLeaves`.
  *
- *   1. Look up the active Spring Push contest's commit blocks (baseline/finish
- *      day ranges) from `SpringPushEscrowV1` or contest config.
- *   2. Load the two latest `merkle-v2-baseline-tree` + `merkle-v2-baseline-leaves`
- *      (and finish equivalents) from Storj, decrypted with the wallet's
- *      `WalletEncryptionKey`.
- *   3. Pick N=2 baseline indices and M=2 finish indices that maximize honest
- *      improvement under the contest's eligibility rules.
- *   4. Hand everything to `buildImprovementWitnessFromLeaves`.
- *
- * Until that lands, this function throws a clear data-source error so the
- * Submit Proof button surfaces a useful message rather than a snarkjs failure.
- *
- * @param walletAddress the wallet generating the proof — used to (eventually)
- *   key the Storj lookup. Currently consumed only for the error message.
+ * The wallet's encryption key is required because the leaf bundles are stored
+ * encrypted; the caller (e.g. the Spring Push widget) obtains it via
+ * `walletService.getWalletDerivedEncryptionKey()`.
  */
 export async function buildImprovementWitness(
   walletAddress: string,
+  encryptionKey: WalletEncryptionKey,
 ): Promise<ImprovementWitness> {
-  // TODO(data-source): replace this with the real Storj fetch + index pick
-  // described in the docstring above. The witness math itself is implemented
-  // in `buildImprovementWitnessFromLeaves` and can be tested directly with
-  // synthetic v2 leaves.
-  throw new Error(
-    "Improvement witness data source not yet wired. " +
-      `No v2 baseline/finish leaves are published for wallet ${walletAddress}. ` +
-      "Call buildImprovementWitnessFromLeaves directly once the iOS app (or a " +
-      "web-side equivalent) starts uploading merkle-v2-{baseline,finish}-{tree,leaves} to Storj.",
+  const { baselineLeaves, finishLeaves } =
+    await fetchImprovementLeavesForWallet(walletAddress, encryptionKey);
+
+  const baselineIndices = pickIndicesByMetric(
+    baselineLeaves,
+    N_BASELINE,
+    "lowest-nonzero",
+    "baselineLeaves",
   );
+  const finishIndices = pickIndicesByMetric(
+    finishLeaves,
+    M_FINISH,
+    "highest",
+    "finishLeaves",
+  );
+
+  return buildImprovementWitnessFromLeaves({
+    baselineLeaves,
+    finishLeaves,
+    baselineIndices,
+    finishIndices,
+  });
 }
 
 // Test/dev exports — exposed so unit tests and dev tools can hit the lower
@@ -792,4 +839,6 @@ export const __internal = {
   walletToBytes32,
   hexToBytes,
   bytesToHex,
+  pickIndicesByMetric,
+  readMetricFromLeaf,
 };

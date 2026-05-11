@@ -2,6 +2,7 @@
 
 import type { WalletClient } from "viem";
 import { getActiveChain } from "@/lib/networkConfig";
+import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 import { buildImprovementWitness } from "@/zk/improvementWitnessBuilder";
 
 /**
@@ -221,16 +222,15 @@ export async function proveImprovement(
  * `improvementWitnessBuilder.ts`) and runs it through the bundled circuit
  * artifacts via `proveImprovement`.
  *
- * The witness builder is responsible for sourcing the user's v2 baseline /
- * finish leaves and selecting N=2 + M=2 indices. The pure math + tree
- * construction is implemented; the Storj data-source wiring is still TODO
- * inside `buildImprovementWitness` and currently throws a clear error
- * pointing at the missing piece.
+ * The witness builder loads encrypted v2 leaf bundles from Storj, so the
+ * caller must supply the wallet's derived encryption key (typically obtained
+ * via `walletService.getWalletDerivedEncryptionKey()`).
  */
 async function generateImprovementProof(
   walletAddress: string,
+  encryptionKey: WalletEncryptionKey,
 ): Promise<GeneratedImprovementProof> {
-  const witness = await buildImprovementWitness(walletAddress);
+  const witness = await buildImprovementWitness(walletAddress, encryptionKey);
   return proveImprovement(witness);
 }
 
@@ -239,14 +239,19 @@ async function generateImprovementProof(
  * Spring Push escrow contract. Returns the submission tx hash.
  *
  * The widget calls this from its Submit Proof button handler; loading and
- * error state are owned by the widget.
+ * error state are owned by the widget. `encryptionKey` is required so the
+ * witness builder can decrypt the wallet's v2 leaf bundles from Storj.
  */
 export async function generateAndSubmitProof(
   walletAddress: string,
+  encryptionKey: WalletEncryptionKey,
   walletClient: WalletClient,
   escrowAddress: string,
 ): Promise<`0x${string}`> {
-  const { points, pubSignals } = await generateImprovementProof(walletAddress);
+  const { points, pubSignals } = await generateImprovementProof(
+    walletAddress,
+    encryptionKey,
+  );
 
   return walletClient.writeContract({
     address: escrowAddress as `0x${string}`,

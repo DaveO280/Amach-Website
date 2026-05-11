@@ -5,6 +5,7 @@ import { Loader2, Trophy } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivyWalletService } from "@/hooks/usePrivyWalletService";
 import { getActiveChain, getContractAddresses } from "@/lib/networkConfig";
+import { generateAndSubmitProof } from "@/zk/improvementProofClient";
 
 const ESCROW_ABI = [
   "function state() view returns (uint8)",
@@ -423,13 +424,33 @@ export function SpringPushWidget(): JSX.Element {
     }
   }, [isConnected, userAddress, walletService, escrowAddress, refresh]);
 
-  const handleSubmitProof = useCallback((): void => {
-    console.log("SpringPushWidget: Submit Proof flow not yet implemented", {
-      userAddress,
-      escrowAddress,
-    });
-    setActionError("Proof submission flow is not yet wired up — coming soon.");
-  }, [userAddress, escrowAddress]);
+  const handleSubmitProof = useCallback(async (): Promise<void> => {
+    if (!isConnected || !userAddress) {
+      setActionError("Connect your wallet to submit a proof.");
+      return;
+    }
+    setActionLoading(true);
+    setActionError(null);
+    setActionTxHash(null);
+    try {
+      const walletClient = await walletService.getWalletClient();
+      if (!walletClient) {
+        throw new Error("Could not get wallet client");
+      }
+      const hash = await generateAndSubmitProof(
+        userAddress,
+        walletClient,
+        escrowAddress,
+      );
+      setActionTxHash(hash);
+      await refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setActionError(message);
+    } finally {
+      setActionLoading(false);
+    }
+  }, [isConnected, userAddress, walletService, escrowAddress, refresh]);
 
   const minMet = snapshot
     ? snapshot.participantCount >= snapshot.minParticipants
@@ -824,7 +845,7 @@ interface ActionPanelProps {
   actionError: string | null;
   actionTxHash: string | null;
   onRegister: () => Promise<void>;
-  onSubmitProof: () => void;
+  onSubmitProof: () => Promise<void>;
   onClaim: () => Promise<void>;
 }
 
@@ -951,7 +972,7 @@ function ActionPanel({
               onClick={onSubmitProof}
               disabled={actionLoading}
             >
-              Submit Proof
+              {actionLoading ? "Generating proof…" : "Submit Proof"}
             </button>
           </div>
         );
@@ -1002,7 +1023,7 @@ function ActionPanel({
               onClick={onSubmitProof}
               disabled={actionLoading}
             >
-              Submit Proof
+              {actionLoading ? "Generating proof…" : "Submit Proof"}
             </button>
           </div>
         );

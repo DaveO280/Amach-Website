@@ -155,16 +155,23 @@ async function main(): Promise<void> {
   const baselineDayIds = [20490, 20491, 20492, 20493];
   const finishDayIds = [20580, 20581, 20582, 20583];
 
-  // VO2max is encoded as u16 in tenths of mL/kg/min (380 → 38.0). The witness
+  // VO2max is encoded as u16 in tenths of mL/kg/min (490 → 49.0). The witness
   // builder picks the 2 lowest-non-zero baseline values and the 2 highest
   // finish values, so the spread between selected leaves drives improvementBp.
-  //   baseline picks: 375 + 378 = 753
-  //   finish   picks: 485 + 482 = 967
-  //   improvement   = (967*2 − 753*2)*10000 / (753*2) ≈ 2841 bp (~28.4%)
-  const baselineVO2 = [380, 375, 385, 378];
-  const baselineSteps = [6800, 7200, 6500, 7000];
-  const finishVO2 = [480, 485, 478, 482];
-  const finishSteps = [12400, 13100, 12800, 13500];
+  //
+  // The circuit's SignedImprovementCheck enforces
+  //   claimedMagnitudeBp · baselineCross === diff · 10000
+  // as strict equality, so the chosen sums must make the honest improvement
+  // land on an integer bp. These values do — matches the working fixture in
+  // `scripts/test-spring-push-proof.ts`:
+  //   baseline picks: 490 + 510 = 1000 (indices 0, 1)
+  //   finish   picks: 620 + 600 = 1220 (indices 3, 0)
+  //   baselineCross = 1000·2 = 2000, finishCross = 1220·2 = 2440, diff = 440
+  //   claimedMagnitudeBp = 440·10000 / 2000 = 2200 (+22.00%)
+  const baselineVO2 = [490, 510, 530, 550];
+  const baselineSteps = [7800, 8100, 7950, 8200];
+  const finishVO2 = [600, 580, 590, 620];
+  const finishSteps = [11200, 10800, 11500, 12000];
 
   const baselineLeaves = baselineDayIds.map((day, i) =>
     buildLeaf(walletAddress, day, baselineVO2[i], baselineSteps[i], {

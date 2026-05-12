@@ -649,9 +649,42 @@ export function buildImprovementWitnessFromLeaves(
     finishCross >= baselineCross
       ? finishCross - baselineCross
       : baselineCross - finishCross;
-  // The circuit enforces strict equality. For non-integer-bp honest values the
-  // floor is taken — same behavior as the iOS builder.
-  const honestClaimMagnitudeBp = (diffMag * 10000n) / baselineCross;
+
+  // The circuit's SignedImprovementCheck enforces
+  //   claimedMagnitudeBp * baselineCross === diffMag * 10000
+  // as strict equality. Previously this builder returned the integer FLOOR of
+  // the honest quotient, which silently produced unprovable witnesses whenever
+  // the honest improvement wasn't a whole number of basis points (the prover
+  // failed at SignedImprovementCheck_…). Now we round half-up — the closest
+  // integer bp to the honest value — and then verify the rounded claim
+  // re-satisfies strict equality before returning. If it doesn't (i.e. the
+  // chosen baseline+finish sums genuinely don't divide cleanly into 1bp), we
+  // throw with a descriptive error rather than ship a witness the circuit
+  // will reject.
+  const numerator = diffMag * 10000n;
+  const floorBp = numerator / baselineCross;
+  const remainder = numerator - floorBp * baselineCross;
+  // Round half-up: bump when 2·remainder ≥ baselineCross.
+  const honestClaimMagnitudeBp =
+    remainder * 2n >= baselineCross ? floorBp + 1n : floorBp;
+  // Re-verify strict equality. After rounding the residual is bounded by
+  // baselineCross/2, so any drift here means the honest improvement isn't an
+  // integer bp and the proof would fail at SignedImprovementCheck.
+  const lhs = honestClaimMagnitudeBp * baselineCross;
+  if (lhs !== numerator) {
+    const drift = lhs > numerator ? lhs - numerator : numerator - lhs;
+    throw new Error(
+      `buildImprovementWitnessFromLeaves: chosen baseline+finish sums do not ` +
+        `yield an integer-bp honest improvement, so the circuit's strict ` +
+        `equality constraint cannot be satisfied. ` +
+        `baselineSum=${baselineSum}, finishSum=${finishSum}, N=${N}, M=${M}, ` +
+        `baselineCross=${baselineCross}, diffMag=${diffMag}, ` +
+        `rounded claimedMagnitudeBp=${honestClaimMagnitudeBp} ` +
+        `(off by ${drift} / baselineCross=${baselineCross}). ` +
+        `Pick baseline+finish leaves where (|finishSum·N − baselineSum·M| · 10000) ` +
+        `is exactly divisible by baselineSum·M.`,
+    );
+  }
 
   const expectedPointer = metricChunkIdx * 31 + metricByteOffsetInChunk;
 

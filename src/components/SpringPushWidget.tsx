@@ -7,6 +7,12 @@ import { usePrivyWalletService } from "@/hooks/usePrivyWalletService";
 import { getActiveChain, getContractAddresses } from "@/lib/networkConfig";
 import { getCachedWalletEncryptionKey } from "@/utils/walletEncryption";
 import { generateAndSubmitProof } from "@/zk/improvementProofClient";
+import {
+  __internal as witnessInternal,
+  hashLeafV2,
+  serializeLeafV2,
+  type AmachLeafV2Fields,
+} from "@/zk/improvementWitnessBuilder";
 
 const ESCROW_ABI = [
   "function state() view returns (uint8)",
@@ -69,6 +75,70 @@ interface LeaderboardEntry {
 
 const REFRESH_INTERVAL_MS = 30_000;
 const LEADERBOARD_BLOCK_LOOKBACK = 1000;
+
+const DEV_SEED_ENABLED = process.env.NEXT_PUBLIC_DEV_SEED_ENABLED === "true";
+
+// Fixture VO2max values (u16, deci-units = mL/kg/min × 10) chosen so the
+// integer-bp constraint in the improvement circuit is satisfied. Matches
+// the working fixture in `scripts/test-spring-push-proof.ts`:
+//   baseline picks (2 lowest): 490 + 510 = 1000
+//   finish picks   (2 highest): 620 + 600 = 1220
+//   baselineCross = 2000, finishCross = 2440, diff = 440
+//   claimedMagnitudeBp = 440 · 10000 / 2000 = 2200 (+22.00%)
+const SEED_BASELINE_DAY_IDS = [0, 1, 2, 3];
+const SEED_FINISH_DAY_IDS = [90, 91, 92, 93];
+const SEED_BASELINE_VO2 = [490, 510, 530, 550];
+const SEED_FINISH_VO2 = [600, 580, 590, 620];
+
+function buildSeedLeaf(
+  wallet: string,
+  dayId: number,
+  vo2max: number,
+): AmachLeafV2Fields {
+  return {
+    wallet,
+    dayId,
+    timezoneOffset: -300,
+    steps: 8000,
+    activeEnergy: 35000,
+    exerciseMins: 40,
+    hrv: 42,
+    restingHR: 58,
+    sleepMins: 450,
+    workoutCount: 1,
+    sourceCount: 2,
+    dataFlags: 0x0000_03ff,
+    vo2max,
+    weight: 7800,
+    bodyFatPct: 1850,
+    leanMass: 6300,
+    deepSleepMins: 75,
+    remSleepMins: 95,
+    lightSleepMins: 240,
+    awakeMins: 20,
+    sourceHash:
+      "1111111111111111111111111111111111111111111111111111111111111111",
+  };
+}
+
+// Compute the depth-7 Merkle root the improvement circuit will verify
+// against. Mirrors `buildImprovementWitnessFromLeaves`: serialize each leaf,
+// Poseidon4-hash it, pad with the deterministic dummy leaf up to 128, then
+// fold pairs up the tree.
+function computeBaselineRoot(leaves: AmachLeafV2Fields[]): bigint {
+  const TARGET = 128;
+  const DEPTH = 7;
+  const dummy = witnessInternal.makeDummyLeafV2();
+  const bufs: Uint8Array[] = leaves.map(serializeLeafV2);
+  while (bufs.length < TARGET) bufs.push(dummy);
+  const hashes = bufs.map(hashLeafV2);
+  const tree = witnessInternal.buildMerkleTree(hashes, DEPTH);
+  return tree[tree.length - 1][0];
+}
+
+function bigintToBytes32Hex(value: bigint): string {
+  return "0x" + value.toString(16).padStart(64, "0");
+}
 
 function truncateAddress(addr: string): string {
   if (!addr) return "";
@@ -187,6 +257,9 @@ export function SpringPushWidget(): JSX.Element {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionTxHash, setActionTxHash] = useState<string | null>(null);
+  const [seedLoading, setSeedLoading] = useState(false);
+  const [seedError, setSeedError] = useState<string | null>(null);
+  const [seedBaselineRoot, setSeedBaselineRoot] = useState<string | null>(null);
 
   const readProvider = useMemo(
     () => new ethers.providers.JsonRpcProvider(rpcUrl),
@@ -457,6 +530,66 @@ export function SpringPushWidget(): JSX.Element {
       setActionLoading(false);
     }
   }, [isConnected, userAddress, walletService, escrowAddress, refresh]);
+
+  const handleSeedTestLeaves = useCallback(async (): Promise<void> => {
+    if (!isConnected || !userAddress) {
+      setSeedError("Connect your wallet to seed test leaves.");
+      return;
+    }
+    setSeedLoading(true);
+    setSeedError(null);
+    setSeedBaselineRoot(null);
+    try {
+      const encryptionKey = await getCachedWalletEncryptionKey(
+        userAddress,
+        walletService.signMessage,
+      );
+
+      const baselineLeaves = SEED_BASELINE_DAY_IDS.map((day, i) =>
+        buildSeedLeaf(userAddress, day, SEED_BASELINE_VO2[i]),
+      );
+      const finishLeaves = SEED_FINISH_DAY_IDS.map((day, i) =>
+        buildSeedLeaf(userAddress, day, SEED_FINISH_VO2[i]),
+      );
+
+      const postWindow = async (
+        windowName: "baseline" | "finish",
+        leaves: AmachLeafV2Fields[],
+      ): Promise<void> => {
+        const res = await fetch("/api/merkle/v2/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            walletAddress: userAddress,
+            encryptionKey,
+            window: windowName,
+            leaves,
+          }),
+        });
+        const json = (await res.json()) as {
+          success?: boolean;
+          error?: string;
+        };
+        if (!res.ok || json.success === false) {
+          throw new Error(
+            `[${windowName}] upload failed (${res.status}): ${json.error ?? "unknown error"}`,
+          );
+        }
+      };
+
+      await postWindow("baseline", baselineLeaves);
+      await postWindow("finish", finishLeaves);
+
+      const rootHex = bigintToBytes32Hex(computeBaselineRoot(baselineLeaves));
+      console.log("🌱 Seed Test Leaves — baselineRoot:", rootHex);
+      setSeedBaselineRoot(rootHex);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setSeedError(message);
+    } finally {
+      setSeedLoading(false);
+    }
+  }, [isConnected, userAddress, walletService]);
 
   const minMet = snapshot
     ? snapshot.participantCount >= snapshot.minParticipants
@@ -824,6 +957,104 @@ export function SpringPushWidget(): JSX.Element {
             onSubmitProof={handleSubmitProof}
             onClaim={handleClaim}
           />
+
+          {DEV_SEED_ENABLED && (
+            <div
+              style={{
+                border: "1px dashed var(--color-border)",
+                borderRadius: 10,
+                padding: 14,
+                background: "transparent",
+                color: "var(--color-text-muted)",
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ fontSize: 12 }}>
+                  Dev helper — seeds the integer-bp-clean fixture leaves to
+                  Storj for this wallet (baseline + finish windows).
+                </div>
+                <button
+                  onClick={handleSeedTestLeaves}
+                  disabled={seedLoading || !isConnected}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    background: "transparent",
+                    color: "var(--color-text-muted)",
+                    border: "1px dashed var(--color-border)",
+                    cursor:
+                      seedLoading || !isConnected ? "not-allowed" : "pointer",
+                    opacity: seedLoading || !isConnected ? 0.6 : 1,
+                  }}
+                >
+                  {seedLoading
+                    ? "Seeding test leaves…"
+                    : "🌱 Seed Test Leaves (dev only)"}
+                </button>
+              </div>
+              {seedError && (
+                <div
+                  style={{
+                    color: "#dc2626",
+                    fontSize: 12,
+                    background: "rgba(239,68,68,0.08)",
+                    border: "1px solid rgba(239,68,68,0.25)",
+                    padding: 8,
+                    borderRadius: 6,
+                  }}
+                >
+                  {seedError}
+                </div>
+              )}
+              {seedBaselineRoot && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--color-text-primary)",
+                    background: "var(--color-bg-surface)",
+                    border: "1px solid var(--color-border)",
+                    padding: 10,
+                    borderRadius: 6,
+                    display: "grid",
+                    gap: 4,
+                  }}
+                >
+                  <div
+                    style={{
+                      textTransform: "uppercase",
+                      letterSpacing: 0.5,
+                      fontSize: 10,
+                      color: "var(--color-text-muted)",
+                    }}
+                  >
+                    baselineRoot (copy into openRegistration)
+                  </div>
+                  <code
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: 12,
+                      wordBreak: "break-all",
+                      userSelect: "all",
+                    }}
+                  >
+                    {seedBaselineRoot}
+                  </code>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

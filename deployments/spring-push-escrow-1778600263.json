@@ -1,0 +1,29 @@
+{
+  "contract": "SpringPushEscrowV1",
+  "address": "0xE545f70C27cE00955BbA350733BB23aC2b5a5dAE",
+  "deployer": "0xC9fFD981932FA4F91A0f31184264Ce079d196c48",
+  "txHash": "0x5ee78a33557843a74ad5f121562f73859d4783f7f4a25da66f64db2d2b22f1fd",
+  "network": {
+    "name": "unknown",
+    "chainId": 300
+  },
+  "mode": "speed-run",
+  "constructorArgs": {
+    "verifier": "0x2248040f9833A6C91bfC161F244E0238da64615b",
+    "admin": "0xC9fFD981932FA4F91A0f31184264Ce079d196c48",
+    "contestDuration": 300,
+    "claimWindow": 180,
+    "maxParticipants": 5,
+    "minParticipants": 2
+  },
+  "immutables": {
+    "CONTEST_DURATION": "300",
+    "CLAIM_WINDOW": "180",
+    "MAX_PARTICIPANTS": "5",
+    "MIN_PARTICIPANTS": "2",
+    "FOUNDER_RECLAIM_DELAY": "15552000",
+    "IMPROVEMENT_VERIFIER": "0x2248040f9833A6C91bfC161F244E0238da64615b",
+    "ADMIN": "0xC9fFD981932FA4F91A0f31184264Ce079d196c48"
+  },
+  "deployedAt": "2026-05-12T15:37:43.000Z"
+}

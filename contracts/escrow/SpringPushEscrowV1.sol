@@ -85,6 +85,10 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     /// @dev Locked at finalize(). Equals the number of participants with a
     ///      verified proof on file.
     uint256 public qualifierCount;
+    /// @dev Manually-tracked balance of seeded-and-not-yet-paid-out ETH. Used
+    ///      by the claim-path invariant in place of address(this).balance so
+    ///      that forced ETH (e.g. via selfdestruct) cannot break the check.
+    uint256 private _trackedBalance;
 
     // -------------------------------------------------------------
     // Per-participant storage
@@ -192,6 +196,7 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
         if (_baselineRoot == bytes32(0)) revert ZeroValue();
 
         prizePool = msg.value;
+        _trackedBalance = msg.value;
         baselineRoot = _baselineRoot;
         state = ContestState.REGISTRATION_OPEN;
 
@@ -340,10 +345,10 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
 
         (uint256 prizeAmount, uint8 tier) = _prizeFor(rank);
 
-        _checkInvariant();
-
         claimed[msg.sender] = true;
+        _trackedBalance -= prizeAmount;
         totalClaimed += prizeAmount;
+        _checkInvariant();
 
         (bool sent, ) = payable(msg.sender).call{value: prizeAmount}("");
         if (!sent) revert InvariantBroken();
@@ -426,9 +431,11 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     }
 
     /// @dev Sanity check: every payout path must keep the invariant
-    ///      balance + totalClaimed == prizePool.
+    ///      tracked balance + totalClaimed == prizePool. Uses _trackedBalance
+    ///      rather than address(this).balance so an attacker cannot brick
+    ///      claims by force-feeding ETH via selfdestruct.
     function _checkInvariant() internal view {
-        if (address(this).balance + totalClaimed != prizePool) {
+        if (_trackedBalance + totalClaimed != prizePool) {
             revert InvariantBroken();
         }
     }

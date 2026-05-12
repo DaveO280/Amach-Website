@@ -608,6 +608,47 @@ describe("SpringPushEscrowV1", function () {
       );
     });
 
+    it("claimPrize survives forced ETH via selfdestruct (no InvariantBroken)", async () => {
+      // Regression test for the address(this).balance invariant footgun:
+      // an attacker can force ETH into the escrow via selfdestruct, which —
+      // with the old check — would make balance + totalClaimed != prizePool
+      // and brick every claim. The fix tracks the seeded balance manually.
+      const { escrow, admin } = await deployFixture();
+      await escrow
+        .connect(admin)
+        .openRegistration(BASELINE, { value: PRIZE_POOL });
+      const players = await createFundedWallets(MIN_PARTICIPANTS, "1");
+      for (const p of players) {
+        await escrow.connect(p).register();
+      }
+      await escrow.connect(admin).closeRegistration();
+      for (let i = 0; i < players.length; i++) {
+        await escrow
+          .connect(players[i])
+          .submitProof(PROOF_PA, PROOF_PB, PROOF_PC, pubSignals(2000 - i * 10));
+      }
+      await increaseTime(CONTEST_DURATION + CLAIM_WINDOW + 1);
+      await escrow.connect(admin).finalize(players.map((p) => p.address));
+
+      // Force ETH into the escrow via a selfdestructing helper. After this
+      // call, address(escrow).balance > prizePool, which would have tripped
+      // the old invariant.
+      const Attacker = await ethers.getContractFactory("SelfDestructAttacker");
+      const forcedAmount = ethers.utils.parseEther("0.5");
+      const attacker = await Attacker.deploy(escrow.address, {
+        value: forcedAmount,
+      });
+      await attacker.deployed();
+
+      const escrowBal = await ethers.provider.getBalance(escrow.address);
+      expect(escrowBal.gt(PRIZE_POOL)).to.equal(true);
+
+      // claimPrize must succeed — the fix uses a tracked balance instead of
+      // address(this).balance, so forced ETH cannot brick the invariant.
+      await escrow.connect(players[0]).claimPrize();
+      expect(await escrow.claimed(players[0].address)).to.equal(true);
+    });
+
     it("rejects claim without proof (NotQualified)", async () => {
       const { escrow, admin } = await deployFixture();
       await escrow

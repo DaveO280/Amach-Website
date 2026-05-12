@@ -34,8 +34,13 @@ import * as snarkjs from "snarkjs";
 // Test fixture: realistic baseline + finish v2 daily summaries
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Mirrors `TEST_CONFIG.TEST_WALLETS[0]` in `src/lib/test-config.ts`. */
-const TEST_WALLET = "0x1234567890123456789012345678901234567890";
+/** Wallet address baked into every leaf (bytes 4..35 of the v2 layout). The
+ *  Merkle root depends on this — override it via TEST_WALLET=0x… when you
+ *  need to precompute the root for a specific wallet (e.g. for
+ *  `openRegistration(baselineRoot)`). Defaults to `TEST_CONFIG.TEST_WALLETS[0]`
+ *  in `src/lib/test-config.ts`. */
+const TEST_WALLET =
+  process.env.TEST_WALLET ?? "0x1234567890123456789012345678901234567890";
 
 /** Build a v2 daily-summary leaf with the supplied overrides on top of
  *  realistic defaults. vo2max + steps + restingHR + hrv default to a healthy
@@ -176,12 +181,16 @@ async function main(): Promise<void> {
   console.log(
     `improvementBp: ${witness.meta.improvementBp} (signFlag=${witness.meta.signFlag})`,
   );
-  console.log(
-    `baselineRoot hex: ${witness.meta.baselineRoot.slice(0, 14)}…${witness.meta.baselineRoot.slice(-6)}`,
-  );
-  console.log(
-    `finishRoot hex:   ${witness.meta.finishRoot.slice(0, 14)}…${witness.meta.finishRoot.slice(-6)}`,
-  );
+  // Print the full 32-byte left-padded hex form too — that's what
+  // `openRegistration(baselineRoot)` and the verifier expect on-chain. The
+  // BN254 scalar field is 254 bits, so the high byte may be < 0x20 and the
+  // raw `0x…` representation can be shorter than 64 hex chars; pad explicitly.
+  const baselineRoot32 =
+    "0x" + BigInt(witness.baselineRoot).toString(16).padStart(64, "0");
+  const finishRoot32 =
+    "0x" + BigInt(witness.finishRoot).toString(16).padStart(64, "0");
+  console.log(`baselineRoot hex (32B): ${baselineRoot32}`);
+  console.log(`finishRoot   hex (32B): ${finishRoot32}`);
 
   // Step 4: run groth16.fullProve.
   const repoRoot = path.resolve(__dirname, "..");

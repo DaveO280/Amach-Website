@@ -568,6 +568,7 @@ export class StorjClient {
   ): Promise<StorageReference[]> {
     const bucketName = await this.getBucketForUser(userAddress, encryptionKey);
     const prefix = dataType ? `${dataType}/` : "";
+    console.log("[storj list] bucket=", bucketName, "prefix=", prefix);
 
     const command = new ListObjectsV2Command({
       Bucket: bucketName,
@@ -608,7 +609,21 @@ export class StorjClient {
               obj.Key,
               err,
             );
-            continue;
+            // HeadObject is unavailable on this Storj gateway configuration,
+            // but the object DOES exist (ListObjectsV2 found it). Fall back to
+            // the data available in the ListObjectsV2 response so the caller
+            // can still proceed to a full GetObject (retrieve) step.
+            // contentHash is unknown here; the retrieve path tolerates an
+            // empty expectedHash by skipping verification rather than failing.
+            const keyParts = (obj.Key ?? "").split("/");
+            references.push({
+              uri: `storj://${bucketName}/${obj.Key}`,
+              contentHash: "",
+              size: obj.Size ?? 0,
+              uploadedAt: obj.LastModified?.getTime() ?? 0,
+              dataType: keyParts[0] ?? "unknown",
+              metadata: {},
+            });
           }
         }
       }

@@ -96,11 +96,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       },
     );
 
+    // Log the full URI so you can read the bucket name from server logs and
+    // compare it to the "[storj list] bucket=" line produced by listUserData.
+    const uploadedBucket = stored.storjUri?.split("/")?.[2] ?? "unknown";
     console.log(
       "[upload] stored",
       body.window,
       "leaves for",
       body.walletAddress,
+      "bucket:",
+      uploadedBucket,
       "uri:",
       stored.storjUri ?? "unknown",
     );

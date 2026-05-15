@@ -266,6 +266,12 @@ export function SpringPushWidget(): JSX.Element {
   const [seedError, setSeedError] = useState<string | null>(null);
   const [seedStatus, setSeedStatus] = useState<string | null>(null);
   const [seedBaselineRoot, setSeedBaselineRoot] = useState<string | null>(null);
+  const [cachedBaselineLeaves, setCachedBaselineLeaves] = useState<
+    AmachLeafV2Fields[] | null
+  >(null);
+  const [cachedFinishLeaves, setCachedFinishLeaves] = useState<
+    AmachLeafV2Fields[] | null
+  >(null);
 
   const readProvider = useMemo(
     () => new ethers.providers.JsonRpcProvider(rpcUrl),
@@ -526,6 +532,9 @@ export function SpringPushWidget(): JSX.Element {
         encryptionKey,
         walletClient,
         escrowAddress,
+        cachedBaselineLeaves && cachedFinishLeaves
+          ? { baseline: cachedBaselineLeaves, finish: cachedFinishLeaves }
+          : undefined,
       );
       setActionTxHash(hash);
       await refresh();
@@ -535,7 +544,15 @@ export function SpringPushWidget(): JSX.Element {
     } finally {
       setActionLoading(false);
     }
-  }, [isConnected, userAddress, walletService, escrowAddress, refresh]);
+  }, [
+    isConnected,
+    userAddress,
+    walletService,
+    escrowAddress,
+    refresh,
+    cachedBaselineLeaves,
+    cachedFinishLeaves,
+  ]);
 
   const handleSeedTestLeaves = useCallback(async (): Promise<void> => {
     if (!isConnected || !userAddress) {
@@ -588,6 +605,8 @@ export function SpringPushWidget(): JSX.Element {
       await postWindow("baseline", baselineLeaves);
       setSeedStatus("Uploading baseline… ✅  Uploading finish…");
       await postWindow("finish", finishLeaves);
+      setCachedBaselineLeaves(baselineLeaves);
+      setCachedFinishLeaves(finishLeaves);
       setSeedStatus("Uploading baseline… ✅  Uploading finish… ✅  Verifying baseline…");
 
       // Verification round-trip: confirm both windows are actually readable back from Storj.
@@ -1064,6 +1083,17 @@ export function SpringPushWidget(): JSX.Element {
                   }}
                 >
                   {seedStatus}
+                </div>
+              )}
+              {cachedBaselineLeaves && cachedFinishLeaves && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "var(--color-emerald)",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  Leaves cached in memory — Submit Proof will use these directly
                 </div>
               )}
               {seedError && (

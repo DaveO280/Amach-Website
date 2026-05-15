@@ -843,9 +843,25 @@ function pickIndicesByMetric(
 export async function buildImprovementWitness(
   walletAddress: string,
   encryptionKey: WalletEncryptionKey,
+  preloadedLeaves?: {
+    baseline: AmachLeafV2Fields[];
+    finish: AmachLeafV2Fields[];
+  },
 ): Promise<ImprovementWitness> {
-  const { baselineLeaves, finishLeaves } =
-    await fetchImprovementLeavesForWallet(walletAddress, encryptionKey);
+  let baselineLeaves: Uint8Array[];
+  let finishLeaves: Uint8Array[];
+
+  if (preloadedLeaves) {
+    baselineLeaves = preloadedLeaves.baseline.map(serializeLeafV2);
+    finishLeaves = preloadedLeaves.finish.map(serializeLeafV2);
+  } else {
+    const fetched = await fetchImprovementLeavesForWallet(
+      walletAddress,
+      encryptionKey,
+    );
+    baselineLeaves = fetched.baselineLeaves;
+    finishLeaves = fetched.finishLeaves;
+  }
 
   const baselineIndices = pickIndicesByMetric(
     baselineLeaves,

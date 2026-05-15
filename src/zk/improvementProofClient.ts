@@ -3,7 +3,10 @@
 import type { WalletClient } from "viem";
 import { getActiveChain } from "@/lib/networkConfig";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
-import { buildImprovementWitness } from "@/zk/improvementWitnessBuilder";
+import {
+  buildImprovementWitness,
+  type AmachLeafV2Fields,
+} from "@/zk/improvementWitnessBuilder";
 
 /**
  * Client-side helper for the Spring Push "Submit Proof" flow.
@@ -229,8 +232,16 @@ export async function proveImprovement(
 async function generateImprovementProof(
   walletAddress: string,
   encryptionKey: WalletEncryptionKey,
+  preloadedLeaves?: {
+    baseline: AmachLeafV2Fields[];
+    finish: AmachLeafV2Fields[];
+  },
 ): Promise<GeneratedImprovementProof> {
-  const witness = await buildImprovementWitness(walletAddress, encryptionKey);
+  const witness = await buildImprovementWitness(
+    walletAddress,
+    encryptionKey,
+    preloadedLeaves,
+  );
   return proveImprovement(witness);
 }
 
@@ -247,10 +258,15 @@ export async function generateAndSubmitProof(
   encryptionKey: WalletEncryptionKey,
   walletClient: WalletClient,
   escrowAddress: string,
+  preloadedLeaves?: {
+    baseline: AmachLeafV2Fields[];
+    finish: AmachLeafV2Fields[];
+  },
 ): Promise<`0x${string}`> {
   const { points, pubSignals } = await generateImprovementProof(
     walletAddress,
     encryptionKey,
+    preloadedLeaves,
   );
 
   return walletClient.writeContract({

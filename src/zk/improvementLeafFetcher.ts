@@ -114,7 +114,7 @@ function leafEntryToBytes(
   return serializeLeafV2(entry as AmachLeafV2Fields);
 }
 
-async function fetchLatestLeavesBundle(
+export async function fetchLatestLeavesBundle(
   walletAddress: string,
   encryptionKey: WalletEncryptionKey,
   dataType: string,

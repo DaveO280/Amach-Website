@@ -96,6 +96,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       },
     );
 
+    console.log(
+      "[upload] stored",
+      body.window,
+      "leaves for",
+      body.walletAddress,
+      "uri:",
+      stored.storjUri ?? "unknown",
+    );
+    if (!stored?.storjUri) {
+      throw new Error("Storj write returned no URI");
+    }
+
     return NextResponse.json({
       success: true,
       storjUri: stored.storjUri,

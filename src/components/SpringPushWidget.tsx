@@ -8,6 +8,11 @@ import { getActiveChain, getContractAddresses } from "@/lib/networkConfig";
 import { getCachedWalletEncryptionKey } from "@/utils/walletEncryption";
 import { generateAndSubmitProof } from "@/zk/improvementProofClient";
 import {
+  BASELINE_LEAVES_DATATYPE,
+  FINISH_LEAVES_DATATYPE,
+  fetchLatestLeavesBundle,
+} from "@/zk/improvementLeafFetcher";
+import {
   __internal as witnessInternal,
   hashLeafV2,
   serializeLeafV2,
@@ -259,6 +264,7 @@ export function SpringPushWidget(): JSX.Element {
   const [actionTxHash, setActionTxHash] = useState<string | null>(null);
   const [seedLoading, setSeedLoading] = useState(false);
   const [seedError, setSeedError] = useState<string | null>(null);
+  const [seedStatus, setSeedStatus] = useState<string | null>(null);
   const [seedBaselineRoot, setSeedBaselineRoot] = useState<string | null>(null);
 
   const readProvider = useMemo(
@@ -538,6 +544,7 @@ export function SpringPushWidget(): JSX.Element {
     }
     setSeedLoading(true);
     setSeedError(null);
+    setSeedStatus(null);
     setSeedBaselineRoot(null);
     try {
       const encryptionKey = await getCachedWalletEncryptionKey(
@@ -577,8 +584,52 @@ export function SpringPushWidget(): JSX.Element {
         }
       };
 
+      setSeedStatus("Uploading baseline…");
       await postWindow("baseline", baselineLeaves);
+      setSeedStatus("Uploading baseline… ✅  Uploading finish…");
       await postWindow("finish", finishLeaves);
+      setSeedStatus("Uploading baseline… ✅  Uploading finish… ✅  Verifying baseline…");
+
+      // Verification round-trip: confirm both windows are actually readable back from Storj.
+      let baselineOk = false;
+      try {
+        const bytes = await fetchLatestLeavesBundle(
+          userAddress,
+          encryptionKey,
+          BASELINE_LEAVES_DATATYPE,
+        );
+        baselineOk = bytes.length > 0;
+      } catch {
+        baselineOk = false;
+      }
+
+      setSeedStatus(
+        `Uploading baseline… ✅  Uploading finish… ✅  Verifying baseline… ${baselineOk ? "✅" : "❌"}  Verifying finish…`,
+      );
+
+      let finishOk = false;
+      try {
+        const bytes = await fetchLatestLeavesBundle(
+          userAddress,
+          encryptionKey,
+          FINISH_LEAVES_DATATYPE,
+        );
+        finishOk = bytes.length > 0;
+      } catch {
+        finishOk = false;
+      }
+
+      setSeedStatus(
+        `Uploading baseline… ✅  Uploading finish… ✅  Verifying baseline… ${baselineOk ? "✅" : "❌"}  Verifying finish… ${finishOk ? "✅" : "❌"}`,
+      );
+
+      if (!baselineOk || !finishOk) {
+        const failedWindow = !baselineOk ? "baseline" : "finish";
+        setSeedError(
+          `Upload succeeded but ${failedWindow} leaves not readable back from Storj — Storj HeadObject may be failing. Check server logs.`,
+        );
+        return;
+      }
 
       const rootHex = bigintToBytes32Hex(computeBaselineRoot(baselineLeaves));
       console.log("🌱 Seed Test Leaves — baselineRoot:", rootHex);
@@ -1004,6 +1055,17 @@ export function SpringPushWidget(): JSX.Element {
                     : "🌱 Seed Test Leaves (dev only)"}
                 </button>
               </div>
+              {seedStatus && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "var(--color-text-muted)",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  {seedStatus}
+                </div>
+              )}
               {seedError && (
                 <div
                   style={{

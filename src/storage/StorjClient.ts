@@ -602,8 +602,12 @@ export class StorjClient {
               dataType: dataTypeValue,
               metadata: md,
             });
-          } catch {
-            // Skip objects we can't get metadata for
+          } catch (err) {
+            console.error(
+              "[storj list] HeadObject failed for key",
+              obj.Key,
+              err,
+            );
             continue;
           }
         }

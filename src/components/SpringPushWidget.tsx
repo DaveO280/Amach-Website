@@ -79,6 +79,7 @@ interface LeaderboardEntry {
 }
 
 const REFRESH_INTERVAL_MS = 30_000;
+const FAST_REFRESH_INTERVAL_MS = 5_000;
 const LEADERBOARD_BLOCK_LOOKBACK = 1000;
 
 const DEV_SEED_ENABLED = process.env.NEXT_PUBLIC_DEV_SEED_ENABLED === "true";
@@ -178,6 +179,13 @@ function formatCountdown(secondsRemaining: number): string {
   if (days > 0) return `${days}d ${hours}h ${minutes}m`;
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
+}
+
+function formatMSS(secondsRemaining: number): string {
+  const safe = Math.max(0, secondsRemaining);
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function stateLabel(state: ContestState): string {
@@ -396,41 +404,80 @@ export function SpringPushWidget(): JSX.Element {
   }, [escrowAddress, readProvider, userAddress]);
 
   useEffect(() => {
-    refresh();
-    const interval = setInterval(refresh, REFRESH_INTERVAL_MS);
-    return (): void => clearInterval(interval);
-  }, [refresh]);
-
-  useEffect(() => {
     const tick = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return (): void => clearInterval(tick);
   }, []);
 
-  const phaseRemaining: { label: string; seconds: number } | null =
-    useMemo(() => {
-      if (!snapshot) return null;
-      switch (snapshot.state) {
-        case ContestState.REGISTRATION_OPEN:
-          return { label: "Registration open", seconds: -1 };
-        case ContestState.ACTIVE:
-          return {
-            label: "Contest closes in",
-            seconds: Math.max(0, snapshot.contestCloseTime - now),
-          };
-        case ContestState.CLAIMING:
-          return {
-            label: "Claim window closes in",
-            seconds: Math.max(0, snapshot.claimWindowEndTime - now),
-          };
-        case ContestState.FINISHED:
-          return { label: "Contest finished", seconds: -1 };
-        case ContestState.FAILED:
-          return { label: "Contest failed — minimum not met", seconds: -1 };
-        case ContestState.UNINITIALIZED:
-        default:
-          return { label: "Contest not yet open", seconds: -1 };
-      }
-    }, [snapshot, now]);
+  const phaseRemaining: {
+    label: string;
+    seconds: number;
+    format: "mss" | "long";
+    amber: boolean;
+  } | null = useMemo(() => {
+    if (!snapshot) return null;
+    switch (snapshot.state) {
+      case ContestState.REGISTRATION_OPEN:
+        return {
+          label: "Registration open",
+          seconds: -1,
+          format: "long",
+          amber: false,
+        };
+      case ContestState.ACTIVE:
+        return {
+          label: "Contest ends in",
+          seconds: Math.max(0, snapshot.contestCloseTime - now),
+          format: "mss",
+          amber: false,
+        };
+      case ContestState.CLAIMING:
+        return {
+          label: "Claim window closes in",
+          seconds: Math.max(0, snapshot.claimWindowEndTime - now),
+          format: "mss",
+          amber: true,
+        };
+      case ContestState.FINISHED:
+        return {
+          label: "Contest finished",
+          seconds: -1,
+          format: "long",
+          amber: false,
+        };
+      case ContestState.FAILED:
+        return {
+          label: "Contest failed — minimum not met",
+          seconds: -1,
+          format: "long",
+          amber: false,
+        };
+      case ContestState.UNINITIALIZED:
+      default:
+        return {
+          label: "Contest not yet open",
+          seconds: -1,
+          format: "long",
+          amber: false,
+        };
+    }
+  }, [snapshot, now]);
+
+  const countdownExpired = Boolean(
+    snapshot &&
+    ((snapshot.state === ContestState.ACTIVE &&
+      snapshot.contestCloseTime - now <= 0) ||
+      (snapshot.state === ContestState.CLAIMING &&
+        snapshot.claimWindowEndTime - now <= 0)),
+  );
+
+  useEffect(() => {
+    refresh();
+    const intervalMs = countdownExpired
+      ? FAST_REFRESH_INTERVAL_MS
+      : REFRESH_INTERVAL_MS;
+    const interval = setInterval(refresh, intervalMs);
+    return (): void => clearInterval(interval);
+  }, [refresh, countdownExpired]);
 
   const handleRegister = useCallback(async (): Promise<void> => {
     if (!isConnected || !userAddress) {
@@ -607,7 +654,9 @@ export function SpringPushWidget(): JSX.Element {
       await postWindow("finish", finishLeaves);
       setCachedBaselineLeaves(baselineLeaves);
       setCachedFinishLeaves(finishLeaves);
-      setSeedStatus("Uploading baseline… ✅  Uploading finish… ✅  Verifying baseline…");
+      setSeedStatus(
+        "Uploading baseline… ✅  Uploading finish… ✅  Verifying baseline…",
+      );
 
       // Verification round-trip: confirm both windows are actually readable back from Storj.
       let baselineOk = false;
@@ -729,8 +778,21 @@ export function SpringPushWidget(): JSX.Element {
             {snapshot ? stateLabel(snapshot.state) : "LOADING"}
           </span>
           {phaseRemaining && phaseRemaining.seconds >= 0 && (
-            <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
-              {phaseRemaining.label}: {formatCountdown(phaseRemaining.seconds)}
+            <span
+              style={{
+                fontSize: 13,
+                color: phaseRemaining.amber
+                  ? "var(--color-amber)"
+                  : "var(--color-text-muted)",
+                fontVariantNumeric:
+                  phaseRemaining.format === "mss" ? "tabular-nums" : undefined,
+                fontWeight: phaseRemaining.amber ? 600 : undefined,
+              }}
+            >
+              {phaseRemaining.label}{" "}
+              {phaseRemaining.format === "mss"
+                ? formatMSS(phaseRemaining.seconds)
+                : formatCountdown(phaseRemaining.seconds)}
             </span>
           )}
           {phaseRemaining && phaseRemaining.seconds < 0 && (

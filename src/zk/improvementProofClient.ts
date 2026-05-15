@@ -270,8 +270,11 @@ export async function generateAndSubmitProof(
   );
 
   // zkSync Era Sepolia rejects transactions whose maxFeePerGas is below the
-  // current block baseFee. Estimate fees and bump 20% so the tx stays above
-  // the baseFee through the next block or two.
+  // current block baseFee. Estimate fees and bump 50% so the tx stays above
+  // the baseFee through the next block or two. zkSync doesn't consume miner
+  // tips like L1 does, so maxPriorityFeePerGas is pinned to 0 — this also
+  // avoids the failure mode where the bumped priority fee exceeds the
+  // current low base-fee maxFeePerGas (~0.036 gwei on Sepolia).
   const chain = getActiveChain();
   const publicClient = createPublicClient({
     chain,
@@ -279,11 +282,9 @@ export async function generateAndSubmitProof(
   });
   const feeData = await publicClient.estimateFeesPerGas();
   const maxFeePerGas = feeData.maxFeePerGas
-    ? (feeData.maxFeePerGas * 120n) / 100n
+    ? (feeData.maxFeePerGas * 150n) / 100n
     : parseGwei("0.5");
-  const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas
-    ? (feeData.maxPriorityFeePerGas * 120n) / 100n
-    : parseGwei("0.1");
+  const maxPriorityFeePerGas = 0n;
 
   return walletClient.writeContract({
     address: escrowAddress as `0x${string}`,

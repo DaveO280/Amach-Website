@@ -313,10 +313,11 @@ export function SpringPushWidget(): JSX.Element {
     [rpcUrl],
   );
 
-  const [deadlines, setDeadlines] = useState<{
-    contestCloseTime: number;
-    claimWindowEndTime: number;
-  } | null>(null);
+  // Deadlines read via viem publicClient (stored in ms, or null until loaded).
+  const [contestCloseTime, setContestCloseTime] = useState<number | null>(null);
+  const [claimWindowEndTime, setClaimWindowEndTime] = useState<number | null>(
+    null,
+  );
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -459,10 +460,8 @@ export function SpringPushWidget(): JSX.Element {
           }),
         ]);
         if (cancelled) return;
-        setDeadlines({
-          contestCloseTime: Number(closeTime),
-          claimWindowEndTime: Number(claimEnd),
-        });
+        setContestCloseTime(Number(closeTime) * 1000);
+        setClaimWindowEndTime(Number(claimEnd) * 1000);
       } catch (err) {
         console.warn("SpringPushWidget: failed to read deadlines", err);
       }
@@ -473,12 +472,17 @@ export function SpringPushWidget(): JSX.Element {
     };
   }, [publicClient, escrowAddress, snapshot?.state]);
 
-  // Prefer the viem-read deadlines; fall back to the snapshot so the countdown
-  // renders immediately on first paint while the viem read is still in-flight.
+  // Prefer the viem-read deadlines (stored in ms); fall back to the snapshot
+  // (in seconds) so the countdown renders immediately on first paint while
+  // the viem read is still in flight.
   const contestCloseSec =
-    deadlines?.contestCloseTime ?? snapshot?.contestCloseTime ?? 0;
+    contestCloseTime !== null
+      ? Math.floor(contestCloseTime / 1000)
+      : (snapshot?.contestCloseTime ?? 0);
   const claimWindowEndSec =
-    deadlines?.claimWindowEndTime ?? snapshot?.claimWindowEndTime ?? 0;
+    claimWindowEndTime !== null
+      ? Math.floor(claimWindowEndTime / 1000)
+      : (snapshot?.claimWindowEndTime ?? 0);
 
   const phaseRemaining: {
     label: string;

@@ -3,6 +3,7 @@
 import { ethers } from "ethers";
 import { Loader2, Trophy } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPublicClient, http } from "viem";
 import { usePrivyWalletService } from "@/hooks/usePrivyWalletService";
 import { getActiveChain, getContractAddresses } from "@/lib/networkConfig";
 import { getCachedWalletEncryptionKey } from "@/utils/walletEncryption";
@@ -18,6 +19,23 @@ import {
   serializeLeafV2,
   type AmachLeafV2Fields,
 } from "@/zk/improvementWitnessBuilder";
+
+const DEADLINE_ABI = [
+  {
+    type: "function",
+    name: "contestCloseTime",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "claimWindowEndTime",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+] as const;
 
 const ESCROW_ABI = [
   "function state() view returns (uint8)",
@@ -286,6 +304,20 @@ export function SpringPushWidget(): JSX.Element {
     [rpcUrl],
   );
 
+  const publicClient = useMemo(
+    () =>
+      createPublicClient({
+        chain: getActiveChain(),
+        transport: http(rpcUrl),
+      }),
+    [rpcUrl],
+  );
+
+  const [deadlines, setDeadlines] = useState<{
+    contestCloseTime: number;
+    claimWindowEndTime: number;
+  } | null>(null);
+
   const refresh = useCallback(async (): Promise<void> => {
     try {
       const contract = new ethers.Contract(
@@ -408,6 +440,46 @@ export function SpringPushWidget(): JSX.Element {
     return (): void => clearInterval(tick);
   }, []);
 
+  // Read both deadlines via viem publicClient on mount and whenever the
+  // contest state changes (e.g. ACTIVE → CLAIMING after the chain transitions).
+  useEffect(() => {
+    let cancelled = false;
+    const readDeadlines = async (): Promise<void> => {
+      try {
+        const [closeTime, claimEnd] = await Promise.all([
+          publicClient.readContract({
+            address: escrowAddress as `0x${string}`,
+            abi: DEADLINE_ABI,
+            functionName: "contestCloseTime",
+          }),
+          publicClient.readContract({
+            address: escrowAddress as `0x${string}`,
+            abi: DEADLINE_ABI,
+            functionName: "claimWindowEndTime",
+          }),
+        ]);
+        if (cancelled) return;
+        setDeadlines({
+          contestCloseTime: Number(closeTime),
+          claimWindowEndTime: Number(claimEnd),
+        });
+      } catch (err) {
+        console.warn("SpringPushWidget: failed to read deadlines", err);
+      }
+    };
+    void readDeadlines();
+    return (): void => {
+      cancelled = true;
+    };
+  }, [publicClient, escrowAddress, snapshot?.state]);
+
+  // Prefer the viem-read deadlines; fall back to the snapshot so the countdown
+  // renders immediately on first paint while the viem read is still in-flight.
+  const contestCloseSec =
+    deadlines?.contestCloseTime ?? snapshot?.contestCloseTime ?? 0;
+  const claimWindowEndSec =
+    deadlines?.claimWindowEndTime ?? snapshot?.claimWindowEndTime ?? 0;
+
   const phaseRemaining: {
     label: string;
     seconds: number;
@@ -426,14 +498,14 @@ export function SpringPushWidget(): JSX.Element {
       case ContestState.ACTIVE:
         return {
           label: "Contest ends in",
-          seconds: Math.max(0, snapshot.contestCloseTime - now),
+          seconds: Math.max(0, contestCloseSec - now),
           format: "mss",
           amber: false,
         };
       case ContestState.CLAIMING:
         return {
           label: "Claim window closes in",
-          seconds: Math.max(0, snapshot.claimWindowEndTime - now),
+          seconds: Math.max(0, claimWindowEndSec - now),
           format: "mss",
           amber: true,
         };
@@ -460,14 +532,13 @@ export function SpringPushWidget(): JSX.Element {
           amber: false,
         };
     }
-  }, [snapshot, now]);
+  }, [snapshot, now, contestCloseSec, claimWindowEndSec]);
 
   const countdownExpired = Boolean(
     snapshot &&
-    ((snapshot.state === ContestState.ACTIVE &&
-      snapshot.contestCloseTime - now <= 0) ||
+    ((snapshot.state === ContestState.ACTIVE && contestCloseSec - now <= 0) ||
       (snapshot.state === ContestState.CLAIMING &&
-        snapshot.claimWindowEndTime - now <= 0)),
+        claimWindowEndSec - now <= 0)),
   );
 
   useEffect(() => {

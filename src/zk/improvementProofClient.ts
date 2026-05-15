@@ -1,6 +1,6 @@
 "use client";
 
-import type { WalletClient } from "viem";
+import { createPublicClient, http, parseGwei, type WalletClient } from "viem";
 import { getActiveChain } from "@/lib/networkConfig";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 import {
@@ -269,13 +269,31 @@ export async function generateAndSubmitProof(
     preloadedLeaves,
   );
 
+  // zkSync Era Sepolia rejects transactions whose maxFeePerGas is below the
+  // current block baseFee. Estimate fees and bump 20% so the tx stays above
+  // the baseFee through the next block or two.
+  const chain = getActiveChain();
+  const publicClient = createPublicClient({
+    chain,
+    transport: http(chain.rpcUrls.default.http[0]),
+  });
+  const feeData = await publicClient.estimateFeesPerGas();
+  const maxFeePerGas = feeData.maxFeePerGas
+    ? (feeData.maxFeePerGas * 120n) / 100n
+    : parseGwei("0.5");
+  const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas
+    ? (feeData.maxPriorityFeePerGas * 120n) / 100n
+    : parseGwei("0.1");
+
   return walletClient.writeContract({
     address: escrowAddress as `0x${string}`,
     abi: SUBMIT_PROOF_ABI,
     functionName: "submitProof",
     args: [points.pA, points.pB, points.pC, pubSignals],
     account: walletAddress as `0x${string}`,
-    chain: getActiveChain(),
+    chain,
+    maxFeePerGas,
+    maxPriorityFeePerGas,
   });
 }
 

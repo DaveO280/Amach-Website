@@ -895,7 +895,7 @@ export function SpringPushWidget(): JSX.Element {
     }
   }, [isConnected, userAddress, walletService]);
 
-  // Window the "Generate from Health Data" button applies to in the current
+  // Window the "Use My Health Data" button applies to in the current
   // contest state. baseline at REGISTRATION_OPEN, finish at ACTIVE/CLAIMING.
   // Any other state hides the button entirely.
   const generateWindow: WindowType | null = useMemo(() => {
@@ -931,47 +931,19 @@ export function SpringPushWidget(): JSX.Element {
       );
 
       setGenerateStatus(
-        `Reading apple-health-full-export and projecting ${generateWindow} leaves…`,
+        `Reading your Apple Health export and projecting ${generateWindow} leaves…`,
       );
+      // projectStorjHealthToV2Leaves takes the bare PBKDF2 key string; pass
+      // `.key` rather than the full `WalletEncryptionKey` object.
       const leaves = await projectStorjHealthToV2Leaves(
         userAddress,
-        encryptionKey,
+        encryptionKey.key,
         generateWindow,
       );
 
-      const identityToken = await getIdentityToken();
-      if (!identityToken) {
-        throw new Error(
-          "Could not retrieve Privy identity token — please reconnect your wallet and try again.",
-        );
-      }
-
-      setGenerateStatus(
-        `Projected ${leaves.length} day(s). Uploading ${generateWindow} bundle…`,
-      );
-      const uploadRes = await fetch("/api/merkle/v2/upload", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${identityToken}`,
-        },
-        body: JSON.stringify({
-          walletAddress: userAddress,
-          encryptionKey,
-          window: generateWindow,
-          leaves,
-        }),
-      });
-      const uploadJson = (await uploadRes.json()) as {
-        success?: boolean;
-        error?: string;
-      };
-      if (!uploadRes.ok || uploadJson.success === false) {
-        throw new Error(
-          `Upload failed (${uploadRes.status}): ${uploadJson.error ?? "unknown error"}`,
-        );
-      }
-
+      // Cache in memory + sessionStorage. Submit Proof's in-memory shortcut
+      // will use these directly — no Storj upload required for the projection
+      // path (iOS-direct-sync users still publish bundles via the sync flow).
       if (generateWindow === "baseline") {
         setCachedBaselineLeaves(leaves);
       } else {
@@ -994,11 +966,23 @@ export function SpringPushWidget(): JSX.Element {
       }
 
       setGenerateStatus(
-        `✅ ${generateWindow} bundle uploaded (${leaves.length} day(s) cached).`,
+        `✅ Projected ${leaves.length} day(s) for the ${generateWindow} window — cached and ready for Submit Proof.`,
       );
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      setGenerateError(message);
+      const rawMessage = err instanceof Error ? err.message : "Unknown error";
+      // The projection layer throws a specific message when the wallet has no
+      // apple-health-full-export at all; expand that into actionable guidance
+      // so users know where to go next instead of treating the failure as a
+      // generic error.
+      const isMissingExport =
+        /No apple-health-full-export found on Storj/i.test(rawMessage);
+      setGenerateError(
+        isMissingExport
+          ? "No Apple Health data found on Storj for this wallet. " +
+              "Open Settings → Storage and upload your Apple Health export first, " +
+              "then come back and try again."
+          : rawMessage,
+      );
     } finally {
       setGenerateLoading(false);
     }
@@ -1412,12 +1396,13 @@ export function SpringPushWidget(): JSX.Element {
                     color: "var(--color-text-muted)",
                   }}
                 >
-                  Generate the{" "}
+                  Project the{" "}
                   <strong style={{ color: "var(--color-text-primary)" }}>
                     {generateWindow}
                   </strong>{" "}
                   leaf bundle from your existing Apple Health export on Storj.
-                  Requires an `apple-health-full-export` upload.
+                  Requires an `apple-health-full-export` upload via the
+                  health-sync flow.
                 </div>
                 <button
                   onClick={handleGenerateFromHealthData}
@@ -1430,9 +1415,7 @@ export function SpringPushWidget(): JSX.Element {
                     cursor: generateLoading ? "not-allowed" : "pointer",
                   }}
                 >
-                  {generateLoading
-                    ? "Generating…"
-                    : `Generate ${generateWindow} from Health Data`}
+                  {generateLoading ? "Projecting…" : "Use My Health Data"}
                 </button>
               </div>
               {generateStatus && (

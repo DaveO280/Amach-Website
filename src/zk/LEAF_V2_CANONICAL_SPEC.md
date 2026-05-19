@@ -316,7 +316,7 @@ Metric keys are camelCased HK identifiers via
 | `restingHR`       | `restingHeartRate * 10`             | `latest` → bare number                      |
 | `sleepMins`       | `sleep.total`                       | rounded                                     |
 | `workoutCount`    | `0`                                 | no per-day workout list in export           |
-| `sourceCount`     | `1`                                 | per-day source set not preserved            |
+| `sourceCount`     | `0`                                 | per-day source set not preserved            |
 | `dataFlags`       | derived presence bits, see §12.3    |                                             |
 | `vo2max`          | `vO2Max * 10`                       | `latest`; **the circuit's metric byte**     |
 | `weight`          | `bodyMass * 100`                    | `latest`, kg                                |
@@ -389,14 +389,17 @@ re-projection:
 
 ```
 sourceHash_web = SHA256( utf8(
-  walletAddress.toLowerCase()
+  "web-export:"
+    + walletAddress.toLowerCase()
     + ":"
     + dayId.toString(10)
-    + ":web-export"
 ) )
 ```
 
 - 32 bytes, lowercase wallet, decimal `dayId`, ASCII-only.
+- The `web-export:` prefix is domain-separation, not a comment — future
+  origins (e.g. `csv-import:`, `garmin-fit:`) get their own prefixes so a
+  collision across substitute hashes is impossible.
 - Will **not** match an iOS-direct-sync `sourceHash` for the same wallet+day.
   That mismatch is contained to chunk4 of the leaf — chunk2 (which contains
   the `vo2max` metric byte at 64–65) is unaffected, so the improvement proof
@@ -407,12 +410,15 @@ sourceHash_web = SHA256( utf8(
 
 ### 12.6 12-month recency check
 
-The contest only accepts data from the last 12 calendar months (rolling). The
-projection layer enforces this by date-string comparison against
-`today_local - 12 months`:
+The contest only accepts data from the last 12 months (rolling). The
+projection layer enforces this with an **exact-day cutoff (365 days)** —
+chosen over `subMonths(today, 12)` because the calendar-month form silently
+shifts by one day across leap-year boundaries (Feb 29 vs Mar 1 re-projection
+of the same export would change which days are eligible). A fixed 365-day
+window keeps the cutoff stable.
 
 ```
-cutoff = subMonths(localMidnightToday, 12)   // same calendar day, one year earlier
+cutoff = subDays(localMidnightToday, 365)
 include day iff parseLocalDate(dayKey) >= cutoff
 ```
 

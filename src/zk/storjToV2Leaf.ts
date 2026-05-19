@@ -40,6 +40,11 @@ const STORJ_DATATYPE = "apple-health-full-export";
 /** Days from "today" that separate baseline (older) from finish (newer). */
 const FINISH_WINDOW_DAYS = 30;
 
+/** 12-month recency filter — exclude days older than this many days from
+ *  today. Spec §12.6 uses an exact-day cutoff (365), not a calendar-month
+ *  diff, so the boundary is stable across leap years. */
+const RECENCY_WINDOW_DAYS = 365;
+
 /** 2024-01-01 epoch for dayId, matching `MerkleLeaf.dayId(for:in:)`. */
 const EPOCH_YEAR = 2024;
 const EPOCH_MONTH = 1; // 1-indexed
@@ -73,14 +78,23 @@ export type WindowType = "baseline" | "finish";
  * requested window's date range, and project each surviving day into the
  * v2 leaf shape. Throws if the projection yields zero days — the caller
  * should surface that to the user rather than uploading an empty bundle.
+ *
+ * `encryptionKey` is the bare PBKDF2-derived key string (i.e.
+ * `WalletEncryptionKey.key`) — the call site usually has the full
+ * `WalletEncryptionKey` object on hand and should pass `.key` here. The full
+ * object is reconstructed internally for the Storj API; only `key` is used
+ * by the server-side crypto layer.
  */
 export async function projectStorjHealthToV2Leaves(
   walletAddress: string,
-  encryptionKey: WalletEncryptionKey,
+  encryptionKey: string,
   windowType: WindowType,
 ): Promise<AmachLeafV2Fields[]> {
   if (!walletAddress) {
     throw new Error("projectStorjHealthToV2Leaves: walletAddress is required");
+  }
+  if (!encryptionKey) {
+    throw new Error("projectStorjHealthToV2Leaves: encryptionKey is required");
   }
   if (windowType !== "baseline" && windowType !== "finish") {
     throw new Error(
@@ -88,10 +102,16 @@ export async function projectStorjHealthToV2Leaves(
     );
   }
 
-  const payload = await fetchLatestAppleHealthExport(
+  // The Storj API consumes a full `WalletEncryptionKey` shape but only
+  // exercises the `key` field for encrypt/decrypt. `derivedAt` is metadata-
+  // only on the wire, so a fresh stamp is safe here.
+  const walletKey: WalletEncryptionKey = {
+    key: encryptionKey,
     walletAddress,
-    encryptionKey,
-  );
+    derivedAt: Date.now(),
+  };
+
+  const payload = await fetchLatestAppleHealthExport(walletAddress, walletKey);
   if (!payload) {
     throw new Error(
       "No apple-health-full-export found on Storj for this wallet. " +
@@ -109,14 +129,18 @@ export async function projectStorjHealthToV2Leaves(
 
   const now = new Date();
   const todayLocal = startOfLocalDay(now);
-  const twelveMonthsAgo = subMonthsLocal(todayLocal, 12);
+  // Spec §12.6: exact-day cutoff (365 days from today), not a calendar-month
+  // diff. Picked over `subMonths` because the latter shifts by one day across
+  // leap-year boundaries, which silently changes which days are eligible
+  // when the same export is re-projected on Feb 29 vs Mar 1.
+  const recencyCutoff = subDaysLocal(todayLocal, RECENCY_WINDOW_DAYS);
   const finishCutoff = subDaysLocal(todayLocal, FINISH_WINDOW_DAYS);
 
-  // 12-month recency: drop anything older than 12 months. Then split into
+  // 12-month recency: drop anything older than 365 days. Then split into
   // baseline (older than `finishCutoff`) and finish (within last 30 days).
   const eligibleKeys = allDateKeys.filter((key) => {
     const d = parseLocalDateKey(key);
-    return d !== null && d.getTime() >= twelveMonthsAgo.getTime();
+    return d !== null && d.getTime() >= recencyCutoff.getTime();
   });
   if (eligibleKeys.length === 0) {
     throw new Error(
@@ -226,8 +250,10 @@ async function projectDay(args: ProjectDayArgs): Promise<AmachLeafV2Fields> {
   // No per-day workout list in the Storj export — bit 6 stays off.
   const workoutCount = 0;
 
-  // No per-day source bundle list either — bit 8 stays off, source count 1.
-  const sourceCount = 1;
+  // No per-day source bundle list either — bit 8 stays off, and per task
+  // spec we encode sourceCount as 0 (the aggregate strips per-day source
+  // info, so reporting any positive count would be a lie).
+  const sourceCount = 0;
 
   const bloodOxygenPresent = summary.oxygenSaturation !== undefined;
 
@@ -492,12 +518,6 @@ function subDaysLocal(date: Date, days: number): Date {
   return d;
 }
 
-function subMonthsLocal(date: Date, months: number): Date {
-  const d = new Date(date.getTime());
-  d.setMonth(d.getMonth() - months);
-  return d;
-}
-
 /** Days since 2024-01-01 (local-tz Gregorian day-diff). Mirrors
  *  `MerkleLeaf.dayId(for:in:)` in Swift. Pre-epoch dates clamp to 0. */
 function computeDayIdLocal(date: Date): number {
@@ -560,13 +580,18 @@ function warnIfOutOfRange(
  *  re-projections of the same data produce byte-equal leaves, but it will
  *  NOT match an iOS-direct-sync `sourceHash` for the same day.
  *
- *  Input string: `${walletAddress.toLowerCase()}:${dayId}:web-export`.
+ *  Input string: `web-export:${walletAddress.toLowerCase()}:${dayId}`.
+ *  The `web-export:` prefix is load-bearing — domain-separates the substitute
+ *  from any future origin (e.g. `csv-import:`) that wants to use the same
+ *  pattern. Wallet is lowercased so checksum-cased vs lowercase inputs
+ *  produce the same hash; dayId is decimal so leading-zero variants can't
+ *  exist.
  */
 async function deterministicSourceHashHex(
   walletAddress: string,
   dayId: number,
 ): Promise<string> {
-  const input = `${walletAddress.toLowerCase()}:${dayId.toString(10)}:web-export`;
+  const input = `web-export:${walletAddress.toLowerCase()}:${dayId.toString(10)}`;
   const bytes = new TextEncoder().encode(input);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return uint8ArrayToHex(new Uint8Array(digest));

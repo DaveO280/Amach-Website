@@ -258,3 +258,178 @@ hash_leaf.js code names this "chunk 2" because it counts from zero).
   `MerkleLeaf.dayId`): `AmachHealth/Sources/Models/MerkleLeaf.swift`
 - Website serializer & circuit pointer: [`improvementWitnessBuilder.ts`](improvementWitnessBuilder.ts)
 - Circuit constants: `AverageImprovementProof(N=2, M=2, depth=7, metricChunkIdx=2, metricByteOffsetInChunk=2)`
+
+## 12. Web Storj projection (Storj → v2 leaf)
+
+This section is **canonical for the web projection path** in
+[`storjToV2Leaf.ts`](storjToV2Leaf.ts) — the module that turns an existing
+`apple-health-full-export` Storj object into the same `AmachLeafV2Fields[]`
+that iOS direct-sync produces. §§ 1–11 define the wire format; this section
+defines how Storj-stored aggregates are mapped into it so that iOS direct-sync
+and web XML-export-derived leaves can coexist (and, where possible, agree
+byte-for-byte) for the same underlying day.
+
+### 12.1 Storj payload shape (recap)
+
+The `apple-health-full-export` payload (see
+`src/storage/appleHealth/AppleHealthStorjService.ts`) is keyed by local
+calendar date (`YYYY-MM-DD`) and stores per-metric aggregates whose shape
+depends on the metric's aggregation strategy
+(`metricAggregationStrategies.ts`):
+
+```ts
+type DailySummaryValue =
+  | { total: number; count: number } // sum, count, duration
+  | { avg: number; count: number } // avg
+  | { avg: number; min: number; max: number; count: number } // avg_min_max
+  | number; // latest
+
+type SleepSummary = {
+  total: number;
+  inBed: number;
+  awake: number;
+  core: number;
+  deep: number;
+  rem: number;
+  efficiency?: number;
+};
+
+type DailySummary = {
+  [metricKey: string]: DailySummaryValue | SleepSummary | number;
+};
+```
+
+Metric keys are camelCased HK identifiers via
+`normalizeMetricKey('HKQuantityTypeIdentifierStepCount') === 'stepCount'`.
+
+### 12.2 Field mapping
+
+| v2 field          | Storj reader                        | Notes                                       |
+| ----------------- | ----------------------------------- | ------------------------------------------- |
+| `wallet`          | caller-supplied                     | same convention as §2 (right-aligned)       |
+| `dayId`           | parse the `YYYY-MM-DD` key          | see §4 — Gregorian day diff vs. 2024-01-01  |
+| `timezoneOffset`  | `-(new Date().getTimezoneOffset())` | browser local tz at projection time         |
+| `steps`           | `stepCount.total`                   | rounded                                     |
+| `activeEnergy`    | `activeEnergyBurned.total * 100`    | half-up round                               |
+| `exerciseMins`    | `appleExerciseTime.total`           | rounded                                     |
+| `hrv`             | `heartRateVariabilitySDNN.avg * 10` | iOS ≥2-sample rule not enforceable from agg |
+| `restingHR`       | `restingHeartRate * 10`             | `latest` → bare number                      |
+| `sleepMins`       | `sleep.total`                       | rounded                                     |
+| `workoutCount`    | `0`                                 | no per-day workout list in export           |
+| `sourceCount`     | `1`                                 | per-day source set not preserved            |
+| `dataFlags`       | derived presence bits, see §12.3    |                                             |
+| `vo2max`          | `vO2Max * 10`                       | `latest`; **the circuit's metric byte**     |
+| `weight`          | `bodyMass * 100`                    | `latest`, kg                                |
+| `bodyFatPct`      | `bodyFatPercentage * 100`           | **see §12.4 — units differ from iOS**       |
+| `leanMass`        | `leanBodyMass * 100`                | `latest`, kg                                |
+| `deepSleepMins`   | `sleep.deep`                        | already in minutes                          |
+| `remSleepMins`    | `sleep.rem`                         |                                             |
+| `lightSleepMins`  | `sleep.core`                        | "core" is HealthKit's term for "light"      |
+| `awakeMins`       | `sleep.awake`                       | only the awake-during-sleep portion         |
+| `reservedPayload` | `undefined`                         | server defaults to 12 zero bytes            |
+| `sourceHash`      | deterministic substitute, see §12.5 |                                             |
+
+All u16/u32 outputs are explicitly clamped (`Math.min(v, MAX)`) before
+serialization — JS bitwise `& 0xffff` in the underlying writer silently
+wraps, which would corrupt a leaf rather than saturate it.
+
+### 12.3 dataFlags from Storj data
+
+Same bit positions as §3; presence rules are adapted to what the aggregate
+preserves:
+
+| Bit | Set when                                                |
+| --: | ------------------------------------------------------- |
+|   0 | `stepCount.total > 0`                                   |
+|   1 | `activeEnergyBurned.total > 0`                          |
+|   2 | `appleExerciseTime.total > 0`                           |
+|   3 | `heartRateVariabilitySDNN` key present and `avg > 0`    |
+|   4 | `restingHeartRate` key present (any value, including 0) |
+|   5 | `sleep.total > 0`                                       |
+|   6 | always `0` (no per-day workout list)                    |
+|   7 | `oxygenSaturation` key present for the day              |
+|   8 | always `0` (no per-day source count)                    |
+
+This deviates from iOS in two places:
+
+- **HRV (bit 3)** uses `avg > 0` rather than ≥ 2 raw samples — the Storj
+  aggregate already collapses to an average and `count`. In practice
+  `count >= 2` is almost always true when the metric is present at all
+  on a day, so the resulting bit matches iOS in the common case. When
+  `count === 1` the web projection will mark HRV present but iOS would
+  not. This is a known minor divergence; it does not affect the circuit
+  metric (vo2max) and so does not block proof generation.
+- **`multiSourceDay` (bit 8)** is always 0 from a Storj projection.
+
+### 12.4 Body-fat unit caveat
+
+`HKQuantityTypeIdentifierBodyFatPercentage` is returned by HealthKit as a
+**fraction** (0.185 = 18.5%). iOS multiplies by 10000 to produce basis points
+(1850).
+
+The Apple Health XML export — the source of the web Storj payload — stores
+body fat as a **percentage value** (18.5, not 0.185). Whatever parser
+populates `dailySummaries.bodyFatPercentage` therefore yields a number in the
+0–100 range. The web projection multiplies that value by **100** (not 10000)
+to land on the same basis-points integer iOS produces.
+
+If the underlying parser is ever changed to normalize bodyFat to a fraction,
+this multiplier MUST change to 10000 to stay byte-equal with iOS.
+
+### 12.5 sourceHash substitute
+
+The Storj `apple-health-full-export` payload does not preserve per-day source
+bundle IDs (only an export-wide watch/phone/other percentage split on the
+manifest). The web projection therefore cannot reproduce iOS's
+`SHA256(sorted-bundle-ids)` directly.
+
+Instead, it uses a deterministic substitute that is byte-stable per
+(wallet, day) so the same XML upload produces the same `sourceHash` on every
+re-projection:
+
+```
+sourceHash_web = SHA256( utf8(
+  walletAddress.toLowerCase()
+    + ":"
+    + dayId.toString(10)
+    + ":web-export"
+) )
+```
+
+- 32 bytes, lowercase wallet, decimal `dayId`, ASCII-only.
+- Will **not** match an iOS-direct-sync `sourceHash` for the same wallet+day.
+  That mismatch is contained to chunk4 of the leaf — chunk2 (which contains
+  the `vo2max` metric byte at 64–65) is unaffected, so the improvement proof
+  still validates against either origin's tree.
+- iOS can optionally adopt the same substitute if/when it grows an "import
+  Apple Health XML export" path, by passing the substitute string when the
+  origin is a generic XML rather than HealthKit-direct samples.
+
+### 12.6 12-month recency check
+
+The contest only accepts data from the last 12 calendar months (rolling). The
+projection layer enforces this by date-string comparison against
+`today_local - 12 months`:
+
+```
+cutoff = subMonths(localMidnightToday, 12)   // same calendar day, one year earlier
+include day iff parseLocalDate(dayKey) >= cutoff
+```
+
+Zero remaining days is a **hard error** — the projection throws rather than
+returning an empty array, so the UI can surface "no recent data" instead of
+producing a tree with only padding leaves.
+
+### 12.7 Sanity ranges (warn-only)
+
+Days outside these ranges still ship (partial/unusual data is still data),
+but the projection emits `console.warn` so we can spot pathological exports:
+
+- `steps`: 0..100,000
+- `hrv` (ms, post divide-by-10): 1..300
+- `restingHR` (bpm, post divide-by-10): 30..200
+- `sleepMins`: 0..1440
+
+These bounds intentionally match the spec the iOS team uses for their own
+sanity checks; they're guard-rails against parser bugs, not validation
+constraints on the user.

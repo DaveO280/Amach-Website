@@ -20,6 +20,10 @@ import {
   serializeLeafV2,
   type AmachLeafV2Fields,
 } from "@/zk/improvementWitnessBuilder";
+import {
+  projectStorjHealthToV2Leaves,
+  type WindowType,
+} from "@/zk/storjToV2Leaf";
 
 const DEADLINE_ABI = [
   {
@@ -328,6 +332,9 @@ export function SpringPushWidget(): JSX.Element {
   const [cachedFinishLeaves, setCachedFinishLeaves] = useState<
     AmachLeafV2Fields[] | null
   >(null);
+  const [generateLoading, setGenerateLoading] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [generateStatus, setGenerateStatus] = useState<string | null>(null);
 
   // #7 — Rehydrate cached leaves from sessionStorage on mount and whenever the
   // wallet changes. Stored per-wallet so a wallet-switch can't leak leaves.
@@ -888,6 +895,115 @@ export function SpringPushWidget(): JSX.Element {
     }
   }, [isConnected, userAddress, walletService]);
 
+  // Window the "Generate from Health Data" button applies to in the current
+  // contest state. baseline at REGISTRATION_OPEN, finish at ACTIVE/CLAIMING.
+  // Any other state hides the button entirely.
+  const generateWindow: WindowType | null = useMemo(() => {
+    if (!snapshot) return null;
+    if (snapshot.state === ContestState.REGISTRATION_OPEN) return "baseline";
+    if (
+      snapshot.state === ContestState.ACTIVE ||
+      snapshot.state === ContestState.CLAIMING
+    ) {
+      return "finish";
+    }
+    return null;
+  }, [snapshot]);
+
+  const handleGenerateFromHealthData = useCallback(async (): Promise<void> => {
+    if (!isConnected || !userAddress) {
+      setGenerateError("Connect your wallet first.");
+      return;
+    }
+    if (!generateWindow) {
+      setGenerateError(
+        "Health-data generation is only available during the contest's baseline (registration) and finish (active/claiming) windows.",
+      );
+      return;
+    }
+    setGenerateLoading(true);
+    setGenerateError(null);
+    setGenerateStatus(null);
+    try {
+      const encryptionKey = await getCachedWalletEncryptionKey(
+        userAddress,
+        walletService.signMessage,
+      );
+
+      setGenerateStatus(
+        `Reading apple-health-full-export and projecting ${generateWindow} leaves…`,
+      );
+      const leaves = await projectStorjHealthToV2Leaves(
+        userAddress,
+        encryptionKey,
+        generateWindow,
+      );
+
+      const identityToken = await getIdentityToken();
+      if (!identityToken) {
+        throw new Error(
+          "Could not retrieve Privy identity token — please reconnect your wallet and try again.",
+        );
+      }
+
+      setGenerateStatus(
+        `Projected ${leaves.length} day(s). Uploading ${generateWindow} bundle…`,
+      );
+      const uploadRes = await fetch("/api/merkle/v2/upload", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${identityToken}`,
+        },
+        body: JSON.stringify({
+          walletAddress: userAddress,
+          encryptionKey,
+          window: generateWindow,
+          leaves,
+        }),
+      });
+      const uploadJson = (await uploadRes.json()) as {
+        success?: boolean;
+        error?: string;
+      };
+      if (!uploadRes.ok || uploadJson.success === false) {
+        throw new Error(
+          `Upload failed (${uploadRes.status}): ${uploadJson.error ?? "unknown error"}`,
+        );
+      }
+
+      if (generateWindow === "baseline") {
+        setCachedBaselineLeaves(leaves);
+      } else {
+        setCachedFinishLeaves(leaves);
+      }
+      if (typeof window !== "undefined") {
+        const key = userAddress.toLowerCase();
+        try {
+          const ssKey =
+            generateWindow === "baseline"
+              ? `${SS_BASELINE_LEAVES_PREFIX}${key}`
+              : `${SS_FINISH_LEAVES_PREFIX}${key}`;
+          window.sessionStorage.setItem(ssKey, JSON.stringify(leaves));
+        } catch (err) {
+          console.warn(
+            "SpringPushWidget: failed to persist generated leaves",
+            err,
+          );
+        }
+      }
+
+      setGenerateStatus(
+        `✅ ${generateWindow} bundle uploaded (${leaves.length} day(s) cached).`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setGenerateError(message);
+    } finally {
+      setGenerateLoading(false);
+    }
+  }, [isConnected, userAddress, walletService, generateWindow]);
+
   const minMet = snapshot
     ? snapshot.participantCount >= snapshot.minParticipants
     : false;
@@ -1269,6 +1385,104 @@ export function SpringPushWidget(): JSX.Element {
             onSubmitProof={handleSubmitProof}
             onClaim={handleClaim}
           />
+
+          {generateWindow && isConnected && (
+            <div
+              style={{
+                border: "1px solid var(--color-border)",
+                borderRadius: 10,
+                padding: 14,
+                background: "var(--color-bg-surface)",
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--color-text-muted)",
+                  }}
+                >
+                  Generate the{" "}
+                  <strong style={{ color: "var(--color-text-primary)" }}>
+                    {generateWindow}
+                  </strong>{" "}
+                  leaf bundle from your existing Apple Health export on Storj.
+                  Requires an `apple-health-full-export` upload.
+                </div>
+                <button
+                  onClick={handleGenerateFromHealthData}
+                  disabled={generateLoading}
+                  className="px-4 py-2 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+                  style={{
+                    background: "var(--color-emerald)",
+                    color: "#FFFFFF",
+                    border: "1px solid var(--color-emerald)",
+                    cursor: generateLoading ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {generateLoading
+                    ? "Generating…"
+                    : `Generate ${generateWindow} from Health Data`}
+                </button>
+              </div>
+              {generateStatus && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "var(--color-text-muted)",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  {generateStatus}
+                </div>
+              )}
+              {(cachedBaselineLeaves || cachedFinishLeaves) && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "var(--color-emerald)",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  Leaves cached in memory —{" "}
+                  {cachedBaselineLeaves
+                    ? `baseline (${cachedBaselineLeaves.length})`
+                    : "baseline (—)"}
+                  {" / "}
+                  {cachedFinishLeaves
+                    ? `finish (${cachedFinishLeaves.length})`
+                    : "finish (—)"}
+                  {cachedBaselineLeaves && cachedFinishLeaves
+                    ? " — Submit Proof will use these directly"
+                    : ""}
+                </div>
+              )}
+              {generateError && (
+                <div
+                  style={{
+                    color: "#dc2626",
+                    fontSize: 12,
+                    background: "rgba(239,68,68,0.08)",
+                    border: "1px solid rgba(239,68,68,0.25)",
+                    padding: 8,
+                    borderRadius: 6,
+                  }}
+                >
+                  {generateError}
+                </div>
+              )}
+            </div>
+          )}
 
           {DEV_SEED_ENABLED && (
             <div

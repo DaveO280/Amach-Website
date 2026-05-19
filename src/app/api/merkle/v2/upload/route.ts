@@ -19,6 +19,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
+import { requirePrivyWalletOwner } from "@/lib/privyServerAuth";
 import { getStorageService } from "@/storage";
 import {
   buildStoredPayload,
@@ -51,6 +52,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 400 },
       );
     }
+
+    // Auth: caller must hold a Privy identity token whose linked accounts
+    // include body.walletAddress. Rejects with 401 on missing/invalid token,
+    // 403 if the wallet doesn't belong to the authenticated user.
+    const auth = await requirePrivyWalletOwner(request, body.walletAddress);
+    if (!auth.ok) {
+      return auth.response;
+    }
+
     if (!isUploadWindow(body.window)) {
       return NextResponse.json(
         { success: false, error: 'window must be "baseline" or "finish"' },

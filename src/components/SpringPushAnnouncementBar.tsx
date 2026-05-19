@@ -9,6 +9,7 @@ const SUMMARY_ABI = [
   "function state() view returns (uint8)",
   "function participantCount() view returns (uint256)",
   "function MAX_PARTICIPANTS() view returns (uint256)",
+  "function prizePool() view returns (uint256)",
 ];
 
 enum ContestState {
@@ -22,18 +23,35 @@ enum ContestState {
 
 const REFRESH_MS = 30_000;
 const DEFAULT_MAX_PARTICIPANTS = 100;
-const PRIZE_DISPLAY = "$1,500";
+const PRIZE_DISPLAY_FALLBACK = "$1,500";
+
+// Kill switch — flip via env to hide the bar entirely without a code change.
+// Defaults to ON when the var is unset, so existing deploys keep the bar.
+const ANNOUNCEMENT_ENABLED =
+  process.env.NEXT_PUBLIC_SPRING_PUSH_ANNOUNCEMENT_ENABLED !== "false";
 
 // Flip to true when the mainnet contest has concluded and results are available.
 const RESULTS_LIVE = false;
+
+function formatPrizeFromWei(prizeWei: bigint): string {
+  // Display up to 3 decimals of ETH, dropping trailing zeros (e.g. "0.5 ETH"
+  // not "0.5000 ETH"). Tiny pools (< 0.001 ETH) fall through to a wider format
+  // rather than rendering as "0 ETH".
+  const eth = parseFloat(ethers.utils.formatEther(prizeWei.toString()));
+  if (!Number.isFinite(eth) || eth <= 0) return PRIZE_DISPLAY_FALLBACK;
+  const formatted =
+    eth >= 0.001 ? eth.toFixed(3).replace(/\.?0+$/, "") : eth.toString();
+  return `${formatted} ETH`;
+}
 
 interface Summary {
   state: ContestState;
   participantCount: number;
   maxParticipants: number;
+  prizeDisplay: string;
 }
 
-export function SpringPushAnnouncementBar(): JSX.Element {
+export function SpringPushAnnouncementBar(): JSX.Element | null {
   const escrowAddress = useMemo(
     () => getContractAddresses().SPRING_PUSH_ESCROW_CONTRACT,
     [],
@@ -44,22 +62,42 @@ export function SpringPushAnnouncementBar(): JSX.Element {
   const [tickKey, setTickKey] = useState(0);
 
   useEffect(() => {
+    if (!ANNOUNCEMENT_ENABLED) return;
     let cancelled = false;
+    // If no contract address is configured, skip the on-chain fetch entirely
+    // and let the fallback prize display render.
+    if (!escrowAddress) {
+      setSummary({
+        state: ContestState.UNINITIALIZED,
+        participantCount: 0,
+        maxParticipants: DEFAULT_MAX_PARTICIPANTS,
+        prizeDisplay: PRIZE_DISPLAY_FALLBACK,
+      });
+      return;
+    }
     const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
     const contract = new ethers.Contract(escrowAddress, SUMMARY_ABI, provider);
 
     const load = async (): Promise<void> => {
       try {
-        const [rawState, rawCount, rawMax] = await Promise.all([
+        const [rawState, rawCount, rawMax, rawPrize] = await Promise.all([
           contract.state(),
           contract.participantCount(),
           contract.MAX_PARTICIPANTS(),
+          contract
+            .prizePool()
+            .catch((): ethers.BigNumber => ethers.BigNumber.from(0)),
         ]);
         if (cancelled) return;
+        const prizeWei = (rawPrize as ethers.BigNumber).toBigInt();
         const next: Summary = {
           state: Number(rawState) as ContestState,
           participantCount: (rawCount as ethers.BigNumber).toNumber(),
           maxParticipants: (rawMax as ethers.BigNumber).toNumber(),
+          prizeDisplay:
+            prizeWei > 0n
+              ? formatPrizeFromWei(prizeWei)
+              : PRIZE_DISPLAY_FALLBACK,
         };
         setSummary((prev) => {
           if (prev && prev.participantCount !== next.participantCount) {
@@ -81,6 +119,9 @@ export function SpringPushAnnouncementBar(): JSX.Element {
     };
   }, [escrowAddress, rpcUrl]);
 
+  // Kill switch: hide the bar entirely. Done AFTER hooks to keep call order stable.
+  if (!ANNOUNCEMENT_ENABLED) return null;
+
   const isFinished =
     RESULTS_LIVE &&
     (summary?.state === ContestState.FINISHED ||
@@ -90,6 +131,7 @@ export function SpringPushAnnouncementBar(): JSX.Element {
   const count = summary?.participantCount ?? 0;
   const max = summary?.maxParticipants ?? DEFAULT_MAX_PARTICIPANTS;
   const fillRatio = Math.min(1, count / Math.max(1, max));
+  const prizeDisplay = summary?.prizeDisplay ?? PRIZE_DISPLAY_FALLBACK;
 
   const label = isFinished
     ? "Spring Push — Final Results"
@@ -102,7 +144,7 @@ export function SpringPushAnnouncementBar(): JSX.Element {
   return (
     <Link
       href="/spring-push"
-      aria-label={`${label}. ${count} of ${max} participants. ${PRIZE_DISPLAY} prize verified on-chain. ${ctaLabel}.`}
+      aria-label={`${label}. ${count} of ${max} participants. ${prizeDisplay} prize verified on-chain. ${ctaLabel}.`}
       className="spring-push-announcement-bar"
       style={{
         position: "relative",
@@ -192,7 +234,7 @@ export function SpringPushAnnouncementBar(): JSX.Element {
         }}
       >
         <span className="spa-prize">
-          <span className="spa-prize-amount">{PRIZE_DISPLAY} Prize</span>
+          <span className="spa-prize-amount">{prizeDisplay} Prize</span>
           <span className="spa-prize-divider" aria-hidden="true">
             ·
           </span>

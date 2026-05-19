@@ -1,5 +1,6 @@
 "use client";
 
+import { getIdentityToken } from "@privy-io/react-auth";
 import { ethers } from "ethers";
 import { Loader2, Trophy } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -98,9 +99,38 @@ interface LeaderboardEntry {
 
 const REFRESH_INTERVAL_MS = 30_000;
 const FAST_REFRESH_INTERVAL_MS = 5_000;
-const LEADERBOARD_BLOCK_LOOKBACK = 1000;
+// zkSync Era produces a block every ~2s, so 3,000,000 blocks ≈ 6,000,000s
+// ≈ 69 days of history — enough to cover the full 90-day Spring Push contest
+// from registration through claim window with a comfortable safety margin.
+// NOTE: this is a stopgap. The correct long-term fix is to index ProofSubmitted
+// events off-chain (Storj, Subgraph, etc.) instead of scanning historical logs.
+const LEADERBOARD_BLOCK_LOOKBACK = 3_000_000;
 
 const DEV_SEED_ENABLED = process.env.NEXT_PUBLIC_DEV_SEED_ENABLED === "true";
+
+// Two hours past `claimWindowEndTime` is the threshold for surfacing a
+// "finalize is overdue" message to participants. Below this, the standard
+// "Awaiting finalization to claim prize." copy is shown.
+const FINALIZE_OVERDUE_GRACE_SECONDS = 2 * 60 * 60;
+
+// sessionStorage keys (per-wallet) for persisting preloaded leaves across
+// refreshes. Cleared once the contest leaves the CLAIMING state.
+const SS_BASELINE_LEAVES_PREFIX = "amach_sp_leaves_baseline_";
+const SS_FINISH_LEAVES_PREFIX = "amach_sp_leaves_finish_";
+
+// #14 — Safety net: if a prod deploy somehow has the dev-seed env var enabled,
+// crash loudly in the console so it shows up in logs even if the button is
+// hidden by other guards. This runs at module load (once).
+if (
+  typeof process !== "undefined" &&
+  process.env.NEXT_PUBLIC_DEV_SEED_ENABLED === "true" &&
+  process.env.NODE_ENV === "production"
+) {
+  console.error(
+    "[SpringPushWidget] FATAL MISCONFIGURATION: NEXT_PUBLIC_DEV_SEED_ENABLED=true in a production build. " +
+      "The dev seed flow MUST NOT ship to prod. Unset this env var and redeploy.",
+  );
+}
 
 // Fixture VO2max values (u16, deci-units = mL/kg/min × 10) chosen so the
 // integer-bp constraint in the improvement circuit is satisfied. Matches
@@ -299,6 +329,27 @@ export function SpringPushWidget(): JSX.Element {
     AmachLeafV2Fields[] | null
   >(null);
 
+  // #7 — Rehydrate cached leaves from sessionStorage on mount and whenever the
+  // wallet changes. Stored per-wallet so a wallet-switch can't leak leaves.
+  useEffect(() => {
+    if (typeof window === "undefined" || !userAddress) return;
+    const key = userAddress.toLowerCase();
+    try {
+      const baselineRaw = window.sessionStorage.getItem(
+        `${SS_BASELINE_LEAVES_PREFIX}${key}`,
+      );
+      const finishRaw = window.sessionStorage.getItem(
+        `${SS_FINISH_LEAVES_PREFIX}${key}`,
+      );
+      if (baselineRaw)
+        setCachedBaselineLeaves(JSON.parse(baselineRaw) as AmachLeafV2Fields[]);
+      if (finishRaw)
+        setCachedFinishLeaves(JSON.parse(finishRaw) as AmachLeafV2Fields[]);
+    } catch (err) {
+      console.warn("SpringPushWidget: failed to rehydrate cached leaves", err);
+    }
+  }, [userAddress]);
+
   const readProvider = useMemo(
     () => new ethers.providers.JsonRpcProvider(rpcUrl),
     [rpcUrl],
@@ -440,6 +491,27 @@ export function SpringPushWidget(): JSX.Element {
     const tick = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return (): void => clearInterval(tick);
   }, []);
+
+  // #7 — Once the contest transitions out of CLAIMING (FINISHED or FAILED),
+  // the cached leaves are no longer useful for proof submission. Drop them
+  // from both component state and sessionStorage so a future contest can't
+  // accidentally reuse stale fixture data.
+  useEffect(() => {
+    if (!snapshot || !userAddress || typeof window === "undefined") return;
+    const isPostClaiming =
+      snapshot.state === ContestState.FINISHED ||
+      snapshot.state === ContestState.FAILED;
+    if (!isPostClaiming) return;
+    const key = userAddress.toLowerCase();
+    try {
+      window.sessionStorage.removeItem(`${SS_BASELINE_LEAVES_PREFIX}${key}`);
+      window.sessionStorage.removeItem(`${SS_FINISH_LEAVES_PREFIX}${key}`);
+    } catch (err) {
+      console.warn("SpringPushWidget: failed to clear cached leaves", err);
+    }
+    setCachedBaselineLeaves(null);
+    setCachedFinishLeaves(null);
+  }, [snapshot, userAddress]);
 
   // Read both deadlines via viem publicClient on mount and whenever the
   // contest state changes (e.g. ACTIVE → CLAIMING after the chain transitions).
@@ -698,13 +770,25 @@ export function SpringPushWidget(): JSX.Element {
         buildSeedLeaf(userAddress, day, SEED_FINISH_VO2[i]),
       );
 
+      // The leaf-upload route is now Privy-auth-gated — caller must hold an
+      // identity token whose linked accounts include `userAddress`.
+      const identityToken = await getIdentityToken();
+      if (!identityToken) {
+        throw new Error(
+          "Could not retrieve Privy identity token — please reconnect your wallet and try again.",
+        );
+      }
+
       const postWindow = async (
         windowName: "baseline" | "finish",
         leaves: AmachLeafV2Fields[],
       ): Promise<void> => {
         const res = await fetch("/api/merkle/v2/upload", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${identityToken}`,
+          },
           body: JSON.stringify({
             walletAddress: userAddress,
             encryptionKey,
@@ -729,6 +813,25 @@ export function SpringPushWidget(): JSX.Element {
       await postWindow("finish", finishLeaves);
       setCachedBaselineLeaves(baselineLeaves);
       setCachedFinishLeaves(finishLeaves);
+      // Persist for refresh-survival; matches the per-wallet rehydrate effect.
+      if (typeof window !== "undefined" && userAddress) {
+        const key = userAddress.toLowerCase();
+        try {
+          window.sessionStorage.setItem(
+            `${SS_BASELINE_LEAVES_PREFIX}${key}`,
+            JSON.stringify(baselineLeaves),
+          );
+          window.sessionStorage.setItem(
+            `${SS_FINISH_LEAVES_PREFIX}${key}`,
+            JSON.stringify(finishLeaves),
+          );
+        } catch (err) {
+          console.warn(
+            "SpringPushWidget: failed to persist cached leaves",
+            err,
+          );
+        }
+      }
       setSeedStatus(
         "Uploading baseline… ✅  Uploading finish… ✅  Verifying baseline…",
       );
@@ -1160,6 +1263,8 @@ export function SpringPushWidget(): JSX.Element {
             actionLoading={actionLoading}
             actionError={actionError}
             actionTxHash={actionTxHash}
+            now={now}
+            claimWindowEndSec={claimWindowEndSec}
             onRegister={handleRegister}
             onSubmitProof={handleSubmitProof}
             onClaim={handleClaim}
@@ -1310,6 +1415,8 @@ interface ActionPanelProps {
   actionLoading: boolean;
   actionError: string | null;
   actionTxHash: string | null;
+  now: number;
+  claimWindowEndSec: number;
   onRegister: () => Promise<void>;
   onSubmitProof: () => Promise<void>;
   onClaim: () => Promise<void>;
@@ -1323,6 +1430,8 @@ function ActionPanel({
   actionLoading,
   actionError,
   actionTxHash,
+  now,
+  claimWindowEndSec,
   onRegister,
   onSubmitProof,
   onClaim,
@@ -1494,7 +1603,19 @@ function ActionPanel({
           </div>
         );
       } else {
-        body = (
+        // #12 — If the claim window has been over for more than the grace
+        // period and we're STILL in CLAIMING, finalize() hasn't been called.
+        // Surface this so users don't think the app is broken.
+        const claimWindowOverdueSec = now - claimWindowEndSec;
+        const finalizeOverdue =
+          claimWindowEndSec > 0 &&
+          claimWindowOverdueSec > FINALIZE_OVERDUE_GRACE_SECONDS;
+        body = finalizeOverdue ? (
+          <div style={{ color: "var(--color-amber)", fontSize: 13 }}>
+            Finalization pending — check back soon or contact support if this
+            persists.
+          </div>
+        ) : (
           <div style={mutedText}>
             Proof submitted. Awaiting finalization to claim prize.
           </div>

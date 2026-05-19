@@ -47,7 +47,7 @@ version byte fails proof construction before hashing.
 | 54..55     | 2    | `restingHR`       | u16 BE  | bpm × 10. First `HKQuantityTypeIdentifierRestingHeartRate` of the day; `0` if absent.                                                             |
 | 56..57     | 2    | `sleepMins`       | u16 BE  | Total minutes from `HKCategoryTypeIdentifierSleepAnalysis` whose `sourceBundleID` contains `"com.apple.health"`, summed by `endDate − startDate`. |
 | 58         | 1    | `workoutCount`    | u8      | Distinct `HKWorkout` sessions starting in the day. Capped at 255.                                                                                 |
-| 59         | 1    | `sourceCount`     | u8      | Distinct `sourceBundleID` strings across samples + workouts. Capped at 255.                                                                       |
+| 59         | 1    | `sourceCount`     | u8      | Distinct `sourceBundleID` strings across samples + workouts. Capped at 255. **Resting-HR sample sources are excluded** (see §7).                  |
 | 60..63     | 4    | `dataFlags`       | u32 BE  | Bitmask — see §3. **Widened from v1's u16** to leave room for v2-only presence bits.                                                              |
 | **64..65** | 2    | `vo2max`          | u16 BE  | ml/(kg·min) × 10. Mean of `HKQuantityTypeIdentifierVO2Max` for the day; `0` absent. **Circuit metric pointer lands here** (see §6).               |
 | 66..67     | 2    | `weight`          | u16 BE  | kg × 100. Most recent `HKQuantityTypeIdentifierBodyMass` (by `endDate`); `0` absent.                                                              |
@@ -74,9 +74,17 @@ version byte fails proof construction before hashing.
   double-count) and `= 1` (`asleepUnspecified`, can't be attributed to a
   stage). Stage minutes are **not required to sum to `sleepMins`** — older
   trackers report only unspecified asleep.
-- **Half-up rounding** (`floor(x + 0.5)`) is used for every integer encoding
-  — not banker's rounding — so iOS, Node, and the circuit pre-image stay
-  bit-identical.
+- **Rounding mode varies by field.** Half-up (`floor(x + 0.5)`, Swift's
+  `roundedHalfUp` helper) is used for `steps`, `activeEnergy`, `hrv`,
+  `restingHR`, `vo2max`, `weight`, `bodyFatPct`, and `leanMass`. The
+  duration-derived fields — `exerciseMins`, `sleepMins`, and the four
+  sleep-stage minutes — use Swift's default `.rounded()` (banker's /
+  half-to-even) on the seconds-÷-60 quotient before clamping. A TypeScript
+  reimplementation should use `Math.round` (half-away-from-zero, which
+  equals half-up for non-negative inputs) for the first group and an
+  explicit half-to-even rounder for the duration group. Inputs are usually
+  integer-second aligned in practice, but for byte parity on `*.5`-second
+  edge cases this split matters.
 - **Empty-day skip**: a normalized day is dropped if `dataFlags == 0 &&
 workoutCount == 0 && sleepMins == 0 && no v2 metric is present`. A
   workout-derived `vo2max` is enough to keep a day on its own.
@@ -135,10 +143,18 @@ timezoneOffset = Int16(leaf.timezone.secondsFromGMT() / 60)
 
 - Minutes from UTC, signed (i16). Range covers any real-world offset
   (±840 minutes ≪ ±32767).
-- DST: `secondsFromGMT()` is evaluated at the leaf's `date` (midnight local
-  of that day), so the offset reflects the rules **in effect on that day**.
-  Two adjacent leaves can have different `timezoneOffset` values across a
-  DST transition.
+- DST: `secondsFromGMT()` is called **with no date argument**, so it returns
+  the offset at the moment of normalization — _not_ the offset that was in
+  effect on the leaf's `date`. The Apple docs define
+  `func secondsFromGMT() -> Int` as "the current difference in seconds
+  between the time zone and GMT." Practical consequence: within a single
+  normalization run, every leaf — regardless of its `dayId` — is branded
+  with the _same_ offset (the device's current offset). Two adjacent leaves
+  spanning a DST transition therefore get **identical** `timezoneOffset`
+  values, and re-normalizing the same window in a different season can
+  produce different bytes for the same `dayId`. (If a future revision wants
+  per-day historical offsets, it must switch to `secondsFromGMT(for: date)`
+  and bump `schemaVersion`.)
 
 ### What determines the timezone
 
@@ -191,7 +207,13 @@ Steps:
 
 1. Collect every `sourceBundleID` seen on the day across both quantity/
    category samples **and** workouts. Deduplicated via `Set<String>` before
-   hashing.
+   hashing. **Resting-HR samples are excluded** from this set: the iOS
+   normalizer builds `allSourceIDs` from `daySamples + dayWorkouts` only,
+   and `dayRHRSamples` is a separate array passed in via a dedicated
+   HealthKit query. A TypeScript reimplementation that lumps RHR sources in
+   will produce a different `sourceHash` (and a different `sourceCount`
+   when an RHR-only source like a chest strap shows up) — to stay
+   byte-identical, RHR source IDs must not feed into either field.
 2. Sort the **unique** strings alphabetically (Swift `String.sorted()` —
    Unicode-scalar lexicographic order; ASCII bundle IDs sort the obvious
    way, e.g. `"com.apple.health" < "com.apple.health.watchOS" < "com.whoop.WhoopHealth"`).

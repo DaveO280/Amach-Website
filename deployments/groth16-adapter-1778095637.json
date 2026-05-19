@@ -1,0 +1,12 @@
+{
+  "contract": "Groth16VerifierAdapter",
+  "address": "0xF99179Ac16aaE7b55c0cc72aaAfBEc4BEB5ce594",
+  "deployer": "0xC9fFD981932FA4F91A0f31184264Ce079d196c48",
+  "txHash": "0xdf1b60f96ddf7e1b072f5ad2ca4d61a14293951e754f8674e94d852bccff5ddf",
+  "network": {
+    "name": "unknown",
+    "chainId": 300
+  },
+  "underlyingVerifier": "0x2248040f9833A6C91bfC161F244E0238da64615b",
+  "deployedAt": "2026-05-06T19:27:17.000Z"
+}

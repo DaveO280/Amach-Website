@@ -1478,6 +1478,18 @@ export function SpringPushWidget(): JSX.Element {
                     : ""}
                 </div>
               )}
+              {baselineRootHash && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "var(--color-emerald)",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  Baseline committed: {baselineRootHash.slice(0, 6)}…
+                  {baselineRootHash.slice(-4)}
+                </div>
+              )}
               {generateError && (
                 <div
                   style={{
@@ -1563,6 +1575,18 @@ export function SpringPushWidget(): JSX.Element {
                   Leaves cached in memory — Submit Proof will use these directly
                 </div>
               )}
+              {baselineRootHash && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "var(--color-emerald)",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  Baseline committed: {baselineRootHash.slice(0, 6)}…
+                  {baselineRootHash.slice(-4)}
+                </div>
+              )}
               {seedError && (
                 <div
                   style={{
@@ -1598,7 +1622,7 @@ export function SpringPushWidget(): JSX.Element {
                       color: "var(--color-text-muted)",
                     }}
                   >
-                    baselineRoot (copy into openRegistration)
+                    baselineRoot (commits at register())
                   </div>
                   <code
                     style={{

@@ -143,7 +143,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
   // IMPORTANT: React Hooks must be called unconditionally
   // PrivyProvider is in the layout, so these hooks should always be available
   // If PrivyProvider isn't in the tree, these hooks will throw, but that's expected
-  const { wallets, ready: walletsReady } = useWallets();
+  const { wallets } = useWallets();
   const { ready, authenticated, login, logout, user } = usePrivy();
   const { signMessage: privySignMessage } = useSignMessage();
 
@@ -152,13 +152,6 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
     address?: string;
     getEthereumProvider?: () => Promise<unknown>;
     walletClientType?: string;
-    // ConnectedWallet exposes a direct personal_sign helper that, for Privy
-    // embedded wallets, runs `connect({showPrompt:false})` first to ensure the
-    // wallet-proxy iframe is initialized before signing. Strictly more robust
-    // than calling `getEthereumProvider().request("personal_sign", ...)`
-    // directly on a freshly-created embedded wallet.
-    sign?: (message: string) => Promise<string>;
-    isConnected?: () => Promise<boolean>;
   };
   const embeddedWallet = wallets?.find(
     (w: WalletLike) =>
@@ -178,203 +171,43 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         hasUser: !!user,
         userId: user?.id?.substring(0, 20),
         walletsCount: wallets?.length || 0,
-        walletsReady,
-        walletClientType: wallet?.walletClientType,
         hasAddress: !!address,
         address: address?.substring(0, 10) + "...",
         isConnected,
       });
     }
-  }, [
-    ready,
-    authenticated,
-    user,
-    wallets,
-    walletsReady,
-    wallet,
-    address,
-    isConnected,
-  ]);
-
-  // Mirror walletsReady into a ref so async signing flows can poll the
-  // CURRENT value rather than a stale closure value.
-  const walletsReadyRef = useRef(walletsReady);
-  walletsReadyRef.current = walletsReady;
-
-  // Pre-warm the embedded-wallet proxy iframe as soon as the wallet is
-  // available. The Privy SDK lazily initializes `walletProxy` on the first
-  // signing operation, and that first init has been timing out for newly
-  // signed-in users (manifests as Privy's "An error has occurred, please
-  // try again" inside the sign modal). Calling `getEthereumProvider()`
-  // eagerly triggers proxy initialization in the background so that by the
-  // time the user clicks "Seed" / "Sign", the proxy is already connected.
-  const proxyInitTriedRef = useRef<string | null>(null);
-  React.useEffect(() => {
-    if (!isConnected || !wallet?.address || !wallet.getEthereumProvider) return;
-    if (proxyInitTriedRef.current === wallet.address) return;
-    proxyInitTriedRef.current = wallet.address;
-    (async (): Promise<void> => {
-      try {
-        console.log("🔥 Pre-warming Privy wallet proxy for", wallet.address);
-        await wallet.getEthereumProvider?.();
-        console.log("✅ Wallet proxy pre-warmed");
-      } catch (err) {
-        // Non-fatal — the real signing call will retry. We log so the failure
-        // is visible in the console if it later surfaces in the sign flow.
-        console.warn(
-          "⚠️ Pre-warm of wallet proxy failed (will retry on sign):",
-          err instanceof Error ? err.message : err,
-        );
-      }
-    })();
-  }, [isConnected, wallet]);
+  }, [ready, authenticated, user, wallets, address, isConnected]);
 
   // Sign message helper
-  //
-  // Strategy — try three signing paths in order of robustness:
-  //   1. `wallet.sign(message)` — the SDK's ConnectedWallet method. For Privy
-  //      embedded wallets it runs `connector.connect({showPrompt:false})`
-  //      before issuing `personal_sign`, so the wallet-proxy iframe is
-  //      guaranteed initialized. For injected wallets (MetaMask, etc.) it
-  //      delegates to the native provider. Most robust path for newly
-  //      created embedded wallets.
-  //   2. `wallet.getEthereumProvider().request("personal_sign", ...)` —
-  //      direct EIP-1193 call. Works once the proxy is initialized; same
-  //      surface viem's walletClient uses for `writeContract`.
-  //   3. `privySignMessage` modal — last-resort fallback. This is the path
-  //      that has been failing intermittently with "An error has occurred,
-  //      please try again" when the wallet proxy times out at first use.
-  //
-  // All three paths produce an identical signature per EIP-191 (same digest
-  // regardless of whether the input is passed as a hex string or raw UTF-8),
-  // so existing encrypted Storj data remains decryptable when we switch
-  // between paths.
   const signMessage = useCallback(
     async (message: string): Promise<string> => {
       if (!isConnected || !address) {
         throw new Error("Wallet not connected");
       }
 
-      const normalizeSignature = (sig: unknown): string => {
-        if (typeof sig !== "string") {
-          throw new Error("Invalid signature received - not a string");
-        }
-        if (sig.length < 132) {
-          throw new Error(
-            "Invalid signature received - signature too short " +
-              `(got ${sig.length} chars, expected 132)`,
-          );
-        }
-        return sig;
-      };
-
-      const isUserRejection = (err: unknown): boolean => {
-        const m = err instanceof Error ? err.message : String(err ?? "");
-        return /reject|denied|cancel/i.test(m);
-      };
-
-      // If Privy's wallet hook hasn't fully wired up the embedded wallet yet,
-      // wait briefly for it to become ready before attempting any sign — this
-      // avoids racing the wallet-proxy iframe's first-init and is the most
-      // common cause of "An error has occurred, please try again" for fresh
-      // email-login sessions. We poll the ref so we see updates that arrive
-      // during the wait, not the stale closure value captured at click time.
-      if (
-        !walletsReadyRef.current &&
-        (wallet?.walletClientType === "privy" ||
-          wallet?.walletClientType === "privy-v2")
-      ) {
-        console.log("⏳ Waiting for Privy embedded wallet to become ready…");
-        const start = Date.now();
-        while (!walletsReadyRef.current && Date.now() - start < 15000) {
-          await new Promise((r) => setTimeout(r, 200));
-        }
-        if (!walletsReadyRef.current) {
-          console.warn(
-            "⚠️ Wallet still not ready after 15s — attempting sign anyway",
-          );
-        }
-      }
-
-      // ── Path 1: wallet.sign() (preferred for embedded wallets) ────────
-      if (typeof wallet?.sign === "function") {
-        try {
-          console.log(
-            "📝 Signing via ConnectedWallet.sign() (",
-            wallet.walletClientType,
-            ")…",
-          );
-          const sig = await wallet.sign(message);
-          const signature = normalizeSignature(sig);
-          console.log("✍️ Signed via wallet.sign()");
-          return signature;
-        } catch (err) {
-          if (isUserRejection(err)) {
-            throw new Error(
-              "Signature request was cancelled. Please try again and approve the signature.",
-            );
-          }
-          console.warn(
-            "⚠️ wallet.sign() failed, falling back to EIP-1193 provider:",
-            err instanceof Error ? err.message : err,
-          );
-        }
-      }
-
-      // ── Path 2: EIP-1193 provider.request("personal_sign") ────────────
-      if (typeof wallet?.getEthereumProvider === "function") {
-        try {
-          console.log(
-            "📝 Signing via wallet.getEthereumProvider() (",
-            wallet.walletClientType,
-            ")…",
-          );
-          const provider = (await wallet.getEthereumProvider()) as {
-            request?: (args: {
-              method: string;
-              params?: unknown[];
-            }) => Promise<unknown>;
-          } | null;
-
-          if (provider?.request) {
-            const sig = (await provider.request({
-              method: "personal_sign",
-              params: [message, address],
-            })) as string;
-            const signature = normalizeSignature(sig);
-            console.log("✍️ Signed via EIP-1193 provider");
-            return signature;
-          }
-          console.warn(
-            "⚠️ Wallet provider missing request(); falling back to Privy modal",
-          );
-        } catch (err) {
-          if (isUserRejection(err)) {
-            throw new Error(
-              "Signature request was cancelled. Please try again and approve the signature.",
-            );
-          }
-          console.warn(
-            "⚠️ EIP-1193 personal_sign failed, falling back to Privy modal:",
-            err instanceof Error ? err.message : err,
-          );
-        }
-      }
-
-      // ── Path 3: Privy modal (last resort) ─────────────────────────────
       try {
-        console.log("📝 Falling back to Privy modal signature…");
+        console.log(
+          "📝 Requesting signature from Privy (popup should appear)...",
+        );
+        console.log(
+          "💡 IMPORTANT: Please wait for the popup and click 'Approve'",
+        );
+        console.log(
+          "💡 The popup may take a moment to appear - please do not close or reload the page",
+        );
 
+        // Ensure we're still connected before requesting signature
         if (!isConnected || !address) {
           throw new Error(
             "Wallet connection lost - please reconnect and try again",
           );
         }
 
-        // Defer signature request to next tick to avoid React render conflicts
-        // when the Privy modal mounts.
+        // Request signature - this will open the Privy modal
+        // Wrap in setTimeout to defer to next event loop tick and prevent React render conflicts
         const result = await new Promise<{ signature: string }>(
           (resolve, reject) => {
+            // Defer signature request to avoid React hook order issues when modal appears
             setTimeout(async () => {
               try {
                 const signatureResult = await privySignMessage(
@@ -396,15 +229,26 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
           },
         );
 
-        const signature = normalizeSignature(result.signature);
-        console.log("✍️ Signed via Privy modal");
+        const signature = result.signature as string;
+
+        if (!signature || signature.length < 132) {
+          throw new Error(
+            "Invalid signature received from Privy - signature too short",
+          );
+        }
+
+        console.log("✍️ Message signed successfully with Privy");
         return signature;
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
-        console.error("❌ All signing paths failed:", errorMessage);
+        console.error("❌ Failed to sign message:", errorMessage);
 
-        if (isUserRejection(error)) {
+        // Re-throw with more context
+        if (
+          errorMessage.includes("User rejected") ||
+          errorMessage.includes("User denied")
+        ) {
           throw new Error(
             "Signature request was cancelled. Please try again and approve the signature.",
           );
@@ -413,9 +257,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         throw new Error(`Failed to sign message: ${errorMessage}`);
       }
     },
-    // walletsReady is read via walletsReadyRef inside, so it intentionally
-    // doesn't need to be a dependency here.
-    [isConnected, address, wallet, privySignMessage],
+    [isConnected, address, privySignMessage],
   );
 
   // Get wallet-derived encryption key

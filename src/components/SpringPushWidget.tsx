@@ -8,7 +8,10 @@ import { createPublicClient, http } from "viem";
 import { usePrivyWalletService } from "@/hooks/usePrivyWalletService";
 import { getActiveChain, getContractAddresses } from "@/lib/networkConfig";
 import { getCachedWalletEncryptionKey } from "@/utils/walletEncryption";
-import { generateAndSubmitProof } from "@/zk/improvementProofClient";
+import {
+  generateAndSubmitProof,
+  registerForContest,
+} from "@/zk/improvementProofClient";
 import {
   BASELINE_LEAVES_DATATYPE,
   FINISH_LEAVES_DATATYPE,
@@ -336,6 +339,26 @@ export function SpringPushWidget(): JSX.Element {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [generateStatus, setGenerateStatus] = useState<string | null>(null);
 
+  // Caller's baseline Merkle root, derived from cached baseline leaves
+  // whenever they're present. The escrow's register() reverts on a zero root,
+  // so this drives the Register button's disabled state — the user must seed
+  // (via dev-only test leaves) or project (via "Use My Health Data") their
+  // baseline window before they can claim a spot.
+  const baselineRootHash = useMemo<`0x${string}` | null>(() => {
+    if (!cachedBaselineLeaves || cachedBaselineLeaves.length === 0) return null;
+    try {
+      return bigintToBytes32Hex(
+        computeBaselineRoot(cachedBaselineLeaves),
+      ) as `0x${string}`;
+    } catch (err) {
+      console.warn(
+        "SpringPushWidget: failed to compute baseline root from cached leaves",
+        err,
+      );
+      return null;
+    }
+  }, [cachedBaselineLeaves]);
+
   // #7 — Rehydrate cached leaves from sessionStorage on mount and whenever the
   // wallet changes. Stored per-wallet so a wallet-switch can't leak leaves.
   useEffect(() => {
@@ -638,6 +661,12 @@ export function SpringPushWidget(): JSX.Element {
       setActionError("Connect your wallet to register.");
       return;
     }
+    if (!baselineRootHash) {
+      setActionError(
+        'Seed your baseline window first — use "Use My Health Data" (or the dev-only "Seed Test Leaves" button) to compute and pin your baseline Merkle root before registering.',
+      );
+      return;
+    }
     setActionLoading(true);
     setActionError(null);
     setActionTxHash(null);
@@ -646,22 +675,12 @@ export function SpringPushWidget(): JSX.Element {
       if (!walletClient) {
         throw new Error("Could not get wallet client");
       }
-      const hash = await walletClient.writeContract({
-        address: escrowAddress as `0x${string}`,
-        abi: [
-          {
-            type: "function",
-            name: "register",
-            stateMutability: "nonpayable",
-            inputs: [],
-            outputs: [],
-          },
-        ] as const,
-        functionName: "register",
-        args: [],
-        account: userAddress as `0x${string}`,
-        chain: getActiveChain(),
-      });
+      const hash = await registerForContest(
+        walletClient,
+        userAddress,
+        escrowAddress,
+        baselineRootHash,
+      );
       setActionTxHash(hash);
       await refresh();
     } catch (err) {
@@ -670,7 +689,14 @@ export function SpringPushWidget(): JSX.Element {
     } finally {
       setActionLoading(false);
     }
-  }, [isConnected, userAddress, walletService, escrowAddress, refresh]);
+  }, [
+    isConnected,
+    userAddress,
+    walletService,
+    escrowAddress,
+    refresh,
+    baselineRootHash,
+  ]);
 
   const handleClaim = useCallback(async (): Promise<void> => {
     if (!isConnected || !userAddress) {
@@ -1365,6 +1391,7 @@ export function SpringPushWidget(): JSX.Element {
             actionTxHash={actionTxHash}
             now={now}
             claimWindowEndSec={claimWindowEndSec}
+            baselineRootHash={baselineRootHash}
             onRegister={handleRegister}
             onSubmitProof={handleSubmitProof}
             onClaim={handleClaim}
@@ -1614,6 +1641,11 @@ interface ActionPanelProps {
   actionTxHash: string | null;
   now: number;
   claimWindowEndSec: number;
+  // Caller's per-wallet baseline Merkle root, derived from cached baseline
+  // leaves. `null` until the user seeds (or projects) their baseline window.
+  // Drives the Register button's disabled state — the escrow's register()
+  // reverts on a zero root.
+  baselineRootHash: `0x${string}` | null;
   onRegister: () => Promise<void>;
   onSubmitProof: () => Promise<void>;
   onClaim: () => Promise<void>;
@@ -1629,6 +1661,7 @@ function ActionPanel({
   actionTxHash,
   now,
   claimWindowEndSec,
+  baselineRootHash,
   onRegister,
   onSubmitProof,
   onClaim,
@@ -1695,25 +1728,76 @@ function ActionPanel({
       if (userState?.registered) {
         body = <div style={successText}>Registered ✓</div>;
       } else {
+        const canRegister = Boolean(baselineRootHash);
         body = (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={mutedText}>Free to enter — claim your spot.</div>
-            <button
-              className={primaryButtonClass}
-              style={primaryButtonStyle}
-              onClick={onRegister}
-              disabled={actionLoading}
+          <div style={{ display: "grid", gap: 10 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
             >
-              {actionLoading ? "Submitting…" : "Register"}
-            </button>
+              <div style={mutedText}>
+                {canRegister
+                  ? "Free to enter — your baseline root is ready."
+                  : "Seed your baseline window first, then register."}
+              </div>
+              <button
+                className={primaryButtonClass}
+                style={{
+                  ...primaryButtonStyle,
+                  cursor:
+                    actionLoading || !canRegister ? "not-allowed" : "pointer",
+                }}
+                onClick={onRegister}
+                disabled={actionLoading || !canRegister}
+                title={
+                  canRegister
+                    ? undefined
+                    : 'Use "Use My Health Data" (or the dev-only "Seed Test Leaves" button) to compute your baseline Merkle root before registering.'
+                }
+              >
+                {actionLoading ? "Submitting…" : "Register"}
+              </button>
+            </div>
+            {baselineRootHash && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--color-text-primary)",
+                  background: "var(--color-bg-surface)",
+                  border: "1px solid var(--color-border)",
+                  padding: 10,
+                  borderRadius: 6,
+                  display: "grid",
+                  gap: 4,
+                }}
+              >
+                <div
+                  style={{
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
+                    fontSize: 10,
+                    color: "var(--color-text-muted)",
+                  }}
+                >
+                  Your baseline root (committed at register)
+                </div>
+                <code
+                  style={{
+                    fontFamily: "monospace",
+                    fontSize: 12,
+                    wordBreak: "break-all",
+                    userSelect: "all",
+                  }}
+                >
+                  {baselineRootHash}
+                </code>
+              </div>
+            )}
           </div>
         );
       }

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # spring-push-full-redeploy.sh
 # Deploys a fresh SpringPushEscrowV1 (SPEED_RUN) to zkSync Sepolia,
-# opens registration with the new baseline root, updates networkConfig.ts,
+# opens registration (no contest-wide baseline — each participant commits
+# their own baseline root at register() time), updates networkConfig.ts,
 # updates the iOS Swift file, then commits + pushes on vibrant-hawking-316975.
 #
 # Usage:  bash scripts/deploy/spring-push-full-redeploy.sh
@@ -9,7 +10,6 @@
 
 set -euo pipefail
 
-BASELINE_ROOT="0x0109b3e5791014ef27f42aae5a93a26639db0fa7c70bd64a0e8f799f5d2f9a3b"
 SEED_ETH="0.01"
 NETWORK="zksyncSepolia"
 IOS_SERVICE_PATH="/Users/dave/AmachHealth-iOS"
@@ -20,9 +20,9 @@ echo ""
 echo "══════════════════════════════════════════════════════"
 echo "  SpringPushEscrowV1 — full redeploy (SPEED_RUN)"
 echo "══════════════════════════════════════════════════════"
-echo "  Baseline root : $BASELINE_ROOT"
 echo "  Prize seed    : $SEED_ETH ETH"
 echo "  Network       : $NETWORK (chainId 300)"
+echo "  Baseline root : per-participant (committed at register())"
 echo ""
 
 # ── 1. Deploy ──────────────────────────────────────────────────────────────
@@ -46,7 +46,6 @@ echo "✅  New contract address: $NEW_ADDRESS"
 echo ""
 echo "▶ Step 2/4  Opening registration (seed $SEED_ETH ETH)..."
 ESCROW_ADDRESS="$NEW_ADDRESS" \
-  BASELINE_ROOT="$BASELINE_ROOT" \
   SEED_ETH="$SEED_ETH" \
   pnpm exec hardhat run \
     scripts/deploy/spring-push-open-registration.js \
@@ -54,7 +53,7 @@ ESCROW_ADDRESS="$NEW_ADDRESS" \
     --no-compile 2>&1
 
 echo ""
-echo "✅  Registration open. baselineRoot locked on-chain."
+echo "✅  Registration open. Each participant will commit their own baselineRoot at register()."
 
 # ── 3. Update networkConfig.ts ─────────────────────────────────────────────
 echo ""
@@ -121,9 +120,9 @@ fi
 
 git commit -m "chore(escrow): redeploy SpringPushEscrowV1 → $NEW_ADDRESS
 
-- New baselineRoot: $BASELINE_ROOT
 - SPEED_RUN mode (contest=300s, claim=180s, max=5, min=2, prize=0.01 ETH)
-- Registration opened, prize pool seeded"
+- Registration opened, prize pool seeded
+- Per-participant baseline roots — committed at register() time"
 
 git push origin claude/vibrant-hawking-316975
 
@@ -131,6 +130,6 @@ echo ""
 echo "══════════════════════════════════════════════════════"
 echo "  DONE"
 echo "  New escrow  : $NEW_ADDRESS"
-echo "  Baseline    : $BASELINE_ROOT"
 echo "  State       : REGISTRATION_OPEN"
+echo "  Baseline    : per-participant (committed at register())"
 echo "══════════════════════════════════════════════════════"

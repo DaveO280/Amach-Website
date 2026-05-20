@@ -1,7 +1,12 @@
 /**
- * One-shot: registers caller, prints participant list, then closes registration.
+ * One-shot: registers caller (committing BASELINE_ROOT as their baseline),
+ * prints participant list, then closes registration.
  *
- * Env: ESCROW_ADDRESS, optional REGISTER_ONLY=true to skip closeRegistration.
+ * Env:
+ *   ESCROW_ADDRESS   required — deployed SpringPushEscrowV1 address
+ *   BASELINE_ROOT    required — 32-byte hex (0x-prefixed) baseline Merkle root
+ *                    pinned to the caller's wallet at register()
+ *   REGISTER_ONLY    optional — set to "true" to skip closeRegistration
  */
 
 /* eslint-disable no-console */
@@ -9,8 +14,13 @@ const { ethers } = require("hardhat");
 
 async function main() {
   const escrowAddress = process.env.ESCROW_ADDRESS;
+  const baselineRoot = process.env.BASELINE_ROOT;
   if (!escrowAddress || !ethers.utils.isAddress(escrowAddress)) {
     console.error("❌ ESCROW_ADDRESS missing or invalid");
+    process.exit(1);
+  }
+  if (!baselineRoot || !/^0x[0-9a-fA-F]{64}$/.test(baselineRoot)) {
+    console.error("❌ BASELINE_ROOT missing or not a 32-byte 0x-hex string");
     process.exit(1);
   }
 
@@ -37,7 +47,7 @@ async function main() {
   if (alreadyRegistered) {
     console.log("   ⚠️  caller already registered — skipping register()");
   } else {
-    const txR = await escrow.register();
+    const txR = await escrow.register(baselineRoot);
     console.log("   register tx:", txR.hash);
     const rR = await txR.wait();
     console.log("   register mined in block:", rR.blockNumber);

@@ -46,6 +46,16 @@ const SUBMIT_PROOF_ABI = [
   },
 ] as const;
 
+const REGISTER_ABI = [
+  {
+    type: "function",
+    name: "register",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "_baselineRoot", type: "bytes32" }],
+    outputs: [],
+  },
+] as const;
+
 const WASM_URL = "/zk/improvement/improvement.wasm";
 const ZKEY_URL = "/zk/improvement/improvement_final.zkey";
 
@@ -291,6 +301,43 @@ export async function generateAndSubmitProof(
     abi: SUBMIT_PROOF_ABI,
     functionName: "submitProof",
     args: [points.pA, points.pB, points.pC, pubSignals],
+    account: walletAddress as `0x${string}`,
+    chain,
+    maxFeePerGas,
+    maxPriorityFeePerGas,
+  });
+}
+
+/**
+ * Submits a `register(bytes32)` tx to the Spring Push escrow, committing the
+ * caller's baseline Merkle root. The contract reverts on a zero root, so the
+ * widget gates the Register button on having one computed locally first.
+ *
+ * The widget owns loading and error state; this helper just shapes the call
+ * and returns the tx hash.
+ */
+export async function registerForContest(
+  walletClient: WalletClient,
+  walletAddress: string,
+  escrowAddress: string,
+  baselineRoot: `0x${string}`,
+): Promise<`0x${string}`> {
+  const chain = getActiveChain();
+  const publicClient = createPublicClient({
+    chain,
+    transport: http(chain.rpcUrls.default.http[0]),
+  });
+  const feeData = await publicClient.estimateFeesPerGas();
+  const maxFeePerGas = feeData.maxFeePerGas
+    ? (feeData.maxFeePerGas * 150n) / 100n
+    : parseGwei("0.5");
+  const maxPriorityFeePerGas = 0n;
+
+  return walletClient.writeContract({
+    address: escrowAddress as `0x${string}`,
+    abi: REGISTER_ABI,
+    functionName: "register",
+    args: [baselineRoot],
     account: walletAddress as `0x${string}`,
     chain,
     maxFeePerGas,

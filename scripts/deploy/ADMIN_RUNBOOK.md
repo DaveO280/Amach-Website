@@ -10,9 +10,10 @@ All commands assume:
 - You have `hardhat` configured and the deployer private key wired into
   `hardhat.config.js` (`accounts: [process.env.PRIVATE_KEY]`).
 - The network is `zksyncSepolia` (chainId 300) unless noted.
-- You are the contract `ADMIN`. The `register()`, `closeRegistration()`,
-  `openRegistration()`, `finalize()`, and `founderReclaim()` calls all gate
-  on this — non-admin signers will revert.
+- You are the contract `ADMIN`. `openRegistration()`, `closeRegistration()`,
+  `finalize()`, and `founderReclaim()` are admin-gated — non-admin signers
+  will revert. `register()` is open to any wallet; each participant commits
+  their own baseline Merkle root at that point.
 
 The contract state machine, for reference:
 
@@ -41,28 +42,32 @@ SPEED_RUN=true pnpm exec hardhat run \
 **Full automated path:** `bash scripts/deploy/spring-push-full-redeploy.sh`
 runs steps 1 + 2 + updates `src/lib/networkConfig.ts` and the iOS Swift
 file with the new address. Use this for testnet redeploys. Edit the
-constants at the top of the script first (`BASELINE_ROOT`, `SEED_ETH`,
-`NETWORK`, `IOS_SERVICE_PATH`, `OLD_ESCROW`).
+constants at the top of the script first (`SEED_ETH`, `NETWORK`,
+`IOS_SERVICE_PATH`, `OLD_ESCROW`).
 
 ---
 
 ## 2. Open registration
 
 Transitions UNINITIALIZED → REGISTRATION_OPEN and seeds the prize pool.
+There is no contest-wide baseline root — each participant commits their
+own at register() time, so this step has no baseline argument.
 
 ```bash
 ESCROW_ADDRESS=0x... \
-BASELINE_ROOT=0x...   # 32-byte hex (the depth-7 Merkle root of the baseline window) \
 SEED_ETH=0.01 \
 pnpm exec hardhat run \
   scripts/deploy/spring-push-open-registration.js \
   --network zksyncSepolia
 ```
 
-- `BASELINE_ROOT` must match the root the participants' iOS app will commit
-  against. For dev runs, the Web `Seed Test Leaves (dev only)` button prints
-  this root in the UI.
 - `SEED_ETH` is sent as `msg.value` and becomes `prizePool`.
+- After this transitions to REGISTRATION_OPEN, participants call
+  `register(bytes32 _baselineRoot)` from the website / iOS app and pin
+  their own baseline Merkle root. The Web `Seed Test Leaves (dev only)`
+  button prints the per-wallet root in the UI; the production widget
+  computes it from the user's projected health data and passes it to
+  the register tx automatically.
 
 ---
 
@@ -87,8 +92,17 @@ pnpm exec hardhat run \
   early.
 
 For testnet smoke runs there's also `spring-push-register-and-close.js`,
-which `register()`s the deployer wallet first and then closes — useful when
-the deployer is the only participant and you need to skip past the gate.
+which `register()`s the deployer wallet first (committing the supplied
+`BASELINE_ROOT`) and then closes — useful when the deployer is the only
+participant and you need to skip past the gate:
+
+```bash
+ESCROW_ADDRESS=0x... \
+BASELINE_ROOT=0x... \
+pnpm exec hardhat run \
+  scripts/deploy/spring-push-register-and-close.js \
+  --network zksyncSepolia
+```
 
 ---
 

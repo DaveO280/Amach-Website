@@ -73,7 +73,6 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     // -------------------------------------------------------------
 
     ContestState public state;
-    bytes32 public baselineRoot;
     uint256 public contestStartTime;
     uint256 public contestCloseTime;
     uint256 public claimWindowEndTime;
@@ -96,6 +95,12 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
 
     address[] public participants;
     mapping(address => bool) public registered;
+    /// @dev Each participant commits their own baseline Merkle root at
+    ///      register() time. This decouples the contest from a single
+    ///      pre-agreed baseline window: participants seed and pin their own
+    ///      reference data, and submitProof() verifies pubSignals[0] against
+    ///      the caller's stored root.
+    mapping(address => bytes32) public participantBaselineRoot;
     mapping(address => uint256) public improvementBp;
     /// @dev 1-indexed rank assigned by finalize(). 0 means unranked.
     mapping(address => uint256) public participantRank;
@@ -105,8 +110,8 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     // Events
     // -------------------------------------------------------------
 
-    event ContestOpened(uint256 prizePool, uint256 startTime, bytes32 baselineRoot);
-    event ParticipantRegistered(address indexed participant);
+    event ContestOpened(uint256 prizePool, uint256 startTime);
+    event ParticipantRegistered(address indexed participant, bytes32 baselineRoot);
     event RegistrationClosed(uint256 participantCount, ContestState state);
     event ProofSubmitted(address indexed participant, uint256 improvementBp);
     event PrizeClaimed(address indexed participant, uint256 amount, uint8 tier);
@@ -135,6 +140,7 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     error DuplicateInRanking();
     error ZeroAddress();
     error ZeroValue();
+    error ZeroBaselineRoot();
     error InvariantBroken();
 
     // -------------------------------------------------------------
@@ -184,23 +190,23 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     // Lifecycle: admin
     // -------------------------------------------------------------
 
-    /// @notice Seeds the prize pool, records the baseline Merkle root, and opens
-    ///         registration. Single-shot; once called the prize pool is locked in.
-    function openRegistration(bytes32 _baselineRoot)
+    /// @notice Seeds the prize pool and opens registration. Single-shot; once
+    ///         called the prize pool is locked in. Each participant commits
+    ///         their own baseline Merkle root at register() time, so there is
+    ///         no contest-wide baseline parameter here.
+    function openRegistration()
         external
         payable
         onlyAdmin
         inState(ContestState.UNINITIALIZED)
     {
         if (msg.value == 0) revert ZeroValue();
-        if (_baselineRoot == bytes32(0)) revert ZeroValue();
 
         prizePool = msg.value;
         _trackedBalance = msg.value;
-        baselineRoot = _baselineRoot;
         state = ContestState.REGISTRATION_OPEN;
 
-        emit ContestOpened(msg.value, block.timestamp, _baselineRoot);
+        emit ContestOpened(msg.value, block.timestamp);
     }
 
     /// @notice Closes registration. Below MIN_PARTICIPANTS the contest fails;
@@ -235,19 +241,24 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
     // Lifecycle: participant
     // -------------------------------------------------------------
 
-    /// @notice Registers msg.sender for the contest. Free entry — the prize
-    ///         pool is seeded by the admin, not by participants.
-    function register()
+    /// @notice Registers msg.sender for the contest and commits their own
+    ///         baseline Merkle root. Free entry — the prize pool is seeded by
+    ///         the admin, not by participants. The baseline root is pinned
+    ///         per-participant so submitProof() can verify each entry against
+    ///         the data the participant locked in at registration.
+    function register(bytes32 _baselineRoot)
         external
         inState(ContestState.REGISTRATION_OPEN)
     {
+        if (_baselineRoot == bytes32(0)) revert ZeroBaselineRoot();
         if (participants.length >= MAX_PARTICIPANTS) revert CapacityReached();
         if (registered[msg.sender]) revert AlreadyRegistered();
 
         registered[msg.sender] = true;
+        participantBaselineRoot[msg.sender] = _baselineRoot;
         participants.push(msg.sender);
 
-        emit ParticipantRegistered(msg.sender);
+        emit ParticipantRegistered(msg.sender, _baselineRoot);
     }
 
     /// @notice Submits a Groth16 proof of improvement for the caller. Each
@@ -283,7 +294,7 @@ contract SpringPushEscrowV1 is ReentrancyGuard {
         if (!registered[msg.sender]) revert NotRegistered();
         if (improvementBp[msg.sender] != 0) revert AlreadySubmitted();
 
-        if (uint256(baselineRoot) != pubSignals[0]) revert BaselineMismatch();
+        if (uint256(participantBaselineRoot[msg.sender]) != pubSignals[0]) revert BaselineMismatch();
         if (pubSignals[3] == 0) revert ImprovementZero();
         if (pubSignals[4] != 0) revert NegativeImprovement();
 

@@ -1,9 +1,9 @@
 "use client";
 
-import { getIdentityToken } from "@privy-io/react-auth";
+import { getIdentityToken, useIdentityToken } from "@privy-io/react-auth";
 import { ethers } from "ethers";
 import { Loader2, Trophy } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPublicClient, http } from "viem";
 import { usePrivyWalletService } from "@/hooks/usePrivyWalletService";
 import { getActiveChain, getContractAddresses } from "@/lib/networkConfig";
@@ -310,6 +310,19 @@ export function SpringPushWidget(): JSX.Element {
   const walletService = usePrivyWalletService();
   const userAddress = walletService.address;
   const isConnected = walletService.isConnected;
+  // Identity-token hook: reads the token from Privy's in-memory state, which
+  // is the most reliable source on fresh embedded-wallet sessions (the
+  // top-level `getIdentityToken()` reads from the identity-token cookie,
+  // which has been observed to return null for users who just logged in via
+  // email — the cookie isn't populated until the next refresh). We use the
+  // hook value first, then fall back to the function (which calls
+  // `updateUserAndIdToken()` internally) so we cover both cookie and
+  // cookieless setups.
+  const { identityToken: hookIdentityToken } = useIdentityToken();
+  // Mirror into a ref so async handlers see the latest token without us
+  // having to thread it through every dependency array.
+  const hookIdentityTokenRef = useRef(hookIdentityToken);
+  hookIdentityTokenRef.current = hookIdentityToken;
 
   const escrowAddress = useMemo(
     () => getContractAddresses().SPRING_PUSH_ESCROW_CONTRACT,
@@ -804,12 +817,34 @@ export function SpringPushWidget(): JSX.Element {
         buildSeedLeaf(userAddress, day, SEED_FINISH_VO2[i]),
       );
 
-      // The leaf-upload route is now Privy-auth-gated — caller must hold an
+      // The leaf-upload route is Privy-auth-gated — caller must hold an
       // identity token whose linked accounts include `userAddress`.
-      const identityToken = await getIdentityToken();
+      //
+      // Resolution order, most reliable first:
+      //   1. `useIdentityToken()` hook value (in-memory state; updated as
+      //      soon as Privy issues the token, even before the cookie is set).
+      //   2. `getIdentityToken()` function — calls `updateUserAndIdToken()`
+      //      internally to refresh and falls back to the cookie. Required
+      //      for cookieless setups and as a force-refresh.
+      //   3. Brief poll loop — for fresh email-login sessions the token may
+      //      take a moment to propagate after authentication completes.
+      let identityToken: string | null = hookIdentityTokenRef.current;
+      if (!identityToken) {
+        identityToken = await getIdentityToken();
+      }
+      if (!identityToken) {
+        const waitStart = Date.now();
+        while (!identityToken && Date.now() - waitStart < 10000) {
+          await new Promise((r) => setTimeout(r, 250));
+          identityToken =
+            hookIdentityTokenRef.current ?? (await getIdentityToken());
+        }
+      }
       if (!identityToken) {
         throw new Error(
-          "Could not retrieve Privy identity token — please reconnect your wallet and try again.",
+          "Could not retrieve Privy identity token. If you just signed in, " +
+            "wait a moment and try again. If this keeps happening, sign out " +
+            "and back in — identity tokens may need to be re-issued.",
         );
       }
 

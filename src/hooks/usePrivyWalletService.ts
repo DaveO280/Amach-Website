@@ -179,35 +179,107 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
   }, [ready, authenticated, user, wallets, address, isConnected]);
 
   // Sign message helper
+  //
+  // Strategy: prefer the wallet's EIP-1193 provider (`personal_sign`) for ALL
+  // wallet types — Privy embedded and injected (MetaMask, etc.) alike. Privy's
+  // `useSignMessage` hook has been observed to throw a generic "error has
+  // occurred, please try again" for embedded wallets during health-data
+  // seeding flows, and the provider path is the same one viem's walletClient
+  // uses for `writeContract`, so signatures stay consistent for a given
+  // wallet. We fall back to `privySignMessage` only if the provider path
+  // genuinely isn't available (e.g. wallet object missing `getEthereumProvider`).
   const signMessage = useCallback(
     async (message: string): Promise<string> => {
       if (!isConnected || !address) {
         throw new Error("Wallet not connected");
       }
 
+      const normalizeSignature = (sig: string): string => {
+        if (!sig || typeof sig !== "string") {
+          throw new Error("Invalid signature received - not a string");
+        }
+        if (sig.length < 132) {
+          throw new Error(
+            "Invalid signature received - signature too short " +
+              `(got ${sig.length} chars, expected 132)`,
+          );
+        }
+        return sig;
+      };
+
+      // ── Path 1: EIP-1193 provider (preferred) ──────────────────────────
+      // Works for Privy embedded wallets AND injected wallets uniformly.
+      // For embedded Privy wallets, `getEthereumProvider()` returns a provider
+      // that routes through Privy's iframe signing without going through the
+      // `useSignMessage` modal flow that has been failing for some users.
+      if (wallet?.getEthereumProvider) {
+        try {
+          console.log(
+            "📝 Requesting signature via wallet provider (EIP-1193)...",
+          );
+          const provider = (await wallet.getEthereumProvider()) as {
+            request?: (args: {
+              method: string;
+              params?: unknown[];
+            }) => Promise<unknown>;
+          } | null;
+
+          if (provider?.request) {
+            const sig = (await provider.request({
+              method: "personal_sign",
+              params: [message, address],
+            })) as string;
+            const signature = normalizeSignature(sig);
+            console.log("✍️ Message signed successfully (provider path)");
+            return signature;
+          }
+          console.warn(
+            "⚠️ Wallet provider missing request(); falling back to Privy modal",
+          );
+        } catch (providerError) {
+          const errorMessage =
+            providerError instanceof Error
+              ? providerError.message
+              : "Unknown error";
+          // User-rejection from the provider path should NOT fall through to
+          // the modal — surface it immediately so the user isn't prompted twice.
+          if (
+            errorMessage.includes("User rejected") ||
+            errorMessage.includes("User denied") ||
+            errorMessage.includes("rejected") ||
+            errorMessage.includes("denied")
+          ) {
+            console.error(
+              "❌ User rejected signature (provider path):",
+              errorMessage,
+            );
+            throw new Error(
+              "Signature request was cancelled. Please try again and approve the signature.",
+            );
+          }
+          console.warn(
+            "⚠️ Provider personal_sign failed, falling back to Privy modal:",
+            errorMessage,
+          );
+        }
+      }
+
+      // ── Path 2: Privy useSignMessage fallback ──────────────────────────
       try {
         console.log(
-          "📝 Requesting signature from Privy (popup should appear)...",
-        );
-        console.log(
-          "💡 IMPORTANT: Please wait for the popup and click 'Approve'",
-        );
-        console.log(
-          "💡 The popup may take a moment to appear - please do not close or reload the page",
+          "📝 Falling back to Privy modal signature (popup should appear)...",
         );
 
-        // Ensure we're still connected before requesting signature
         if (!isConnected || !address) {
           throw new Error(
             "Wallet connection lost - please reconnect and try again",
           );
         }
 
-        // Request signature - this will open the Privy modal
-        // Wrap in setTimeout to defer to next event loop tick and prevent React render conflicts
+        // Defer signature request to next tick to avoid React render conflicts
+        // when the Privy modal mounts.
         const result = await new Promise<{ signature: string }>(
           (resolve, reject) => {
-            // Defer signature request to avoid React hook order issues when modal appears
             setTimeout(async () => {
               try {
                 const signatureResult = await privySignMessage(
@@ -229,22 +301,14 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
           },
         );
 
-        const signature = result.signature as string;
-
-        if (!signature || signature.length < 132) {
-          throw new Error(
-            "Invalid signature received from Privy - signature too short",
-          );
-        }
-
-        console.log("✍️ Message signed successfully with Privy");
+        const signature = normalizeSignature(result.signature as string);
+        console.log("✍️ Message signed successfully (Privy modal fallback)");
         return signature;
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
         console.error("❌ Failed to sign message:", errorMessage);
 
-        // Re-throw with more context
         if (
           errorMessage.includes("User rejected") ||
           errorMessage.includes("User denied")
@@ -257,7 +321,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         throw new Error(`Failed to sign message: ${errorMessage}`);
       }
     },
-    [isConnected, address, privySignMessage],
+    [isConnected, address, wallet, privySignMessage],
   );
 
   // Get wallet-derived encryption key

@@ -819,32 +819,17 @@ export function SpringPushWidget(): JSX.Element {
 
       // The leaf-upload route is Privy-auth-gated — caller must hold an
       // identity token whose linked accounts include `userAddress`.
-      //
-      // Resolution order, most reliable first:
-      //   1. `useIdentityToken()` hook value (in-memory state; updated as
-      //      soon as Privy issues the token, even before the cookie is set).
-      //   2. `getIdentityToken()` function — calls `updateUserAndIdToken()`
-      //      internally to refresh and falls back to the cookie. Required
-      //      for cookieless setups and as a force-refresh.
-      //   3. Brief poll loop — for fresh email-login sessions the token may
-      //      take a moment to propagate after authentication completes.
+      // Prefer the `useIdentityToken()` hook value (in-memory state, no API
+      // call); fall back to `getIdentityToken()` exactly once if the hook
+      // hasn't populated yet. Never poll — each `getIdentityToken()` call
+      // hits auth.privy.io and a loop will trip the upstream 429 limiter.
       let identityToken: string | null = hookIdentityTokenRef.current;
       if (!identityToken) {
         identityToken = await getIdentityToken();
       }
       if (!identityToken) {
-        const waitStart = Date.now();
-        while (!identityToken && Date.now() - waitStart < 10000) {
-          await new Promise((r) => setTimeout(r, 250));
-          identityToken =
-            hookIdentityTokenRef.current ?? (await getIdentityToken());
-        }
-      }
-      if (!identityToken) {
         throw new Error(
-          "Could not retrieve Privy identity token. If you just signed in, " +
-            "wait a moment and try again. If this keeps happening, sign out " +
-            "and back in — identity tokens may need to be re-issued.",
+          "Could not retrieve Privy identity token — please reconnect your wallet and try again.",
         );
       }
 

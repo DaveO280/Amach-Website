@@ -61,9 +61,10 @@ const ESCROW_ABI = [
   "function claimed(address) view returns (bool)",
   "function participantRank(address) view returns (uint256)",
   "function previewPrizeFor(address) view returns (uint256 amount, uint8 tier)",
-  "function register()",
+  "function register(bytes32 _baselineRoot)",
   "function claimPrize()",
-  "event ParticipantRegistered(address indexed participant)",
+  "function participantBaselineRoot(address) view returns (bytes32)",
+  "event ParticipantRegistered(address indexed participant, bytes32 baselineRoot)",
   "event ProofSubmitted(address indexed participant, uint256 improvementBp)",
   "event PrizeClaimed(address indexed participant, uint256 amount, uint8 tier)",
 ];

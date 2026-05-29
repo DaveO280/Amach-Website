@@ -29,7 +29,10 @@ import type {
   DailySummaryValue,
   SleepSummary,
 } from "@/storage/appleHealth/AppleHealthStorjService";
-import type { AmachLeafV2Fields } from "@/zk/improvementWitnessBuilder";
+import {
+  TREE_SIZE,
+  type AmachLeafV2Fields,
+} from "@/zk/improvementWitnessBuilder";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -202,7 +205,9 @@ export async function projectStorjHealthToV2Leaves(
   // Deterministic ordering (ascending by dayId) so re-uploads of the same
   // underlying data produce byte-equal bundles.
   leaves.sort((a, b) => a.dayId - b.dayId);
-  return leaves;
+  // Circuit is depth-7 (TREE_SIZE=128); keep the most-recent days so the
+  // picker (lowest-2-baseline, highest-2-finish) works on representative data.
+  return leaves.length > TREE_SIZE ? leaves.slice(-TREE_SIZE) : leaves;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

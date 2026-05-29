@@ -2,8 +2,8 @@
  * Integration tests for POST /api/merkle/v2/upload
  *
  * Covers:
- *   - Auth layer: 401 on missing token, 401 on invalid token,
- *     500 on missing server env vars
+ *   - Auth layer: 401 on missing token, 401 on invalid/expired token,
+ *     401 on real jose JWSSignatureVerificationFailed (not 500), 500 on missing env var
  *   - Input validation: 400 on missing fields, bad window, empty leaves,
  *     leaves over capacity
  *   - Happy path: mock Privy + mock Storj → 200 with expected response shape
@@ -181,6 +181,41 @@ describe("POST /api/merkle/v2/upload — auth", () => {
     expect(res.status).toBe(401);
     expect(json.success).toBe(false);
     expect(json.error).toMatch(/invalid.*token|invalid.*access/i);
+  });
+
+  it("returns 401 (not 500) when jose throws a signature-verification error", async () => {
+    // jose v6 is ESM-only so jest.requireActual cannot load it; instead we
+    // construct an error that faithfully mirrors what jose's
+    // JWSSignatureVerificationFailed looks like at runtime (name + code).
+    // This exercises the same catch block that real jose errors hit, and
+    // confirms the auth-failure path returns 401 — not the "not configured" 500.
+    const sigErr = Object.assign(new Error("signature verification failed"), {
+      name: "JWSSignatureVerificationFailed",
+      code: "ERR_JWS_SIGNATURE_VERIFICATION_FAILED",
+    });
+    mockVerify.mockRejectedValueOnce(sigErr);
+
+    // Structurally valid base64url JWT (header.payload.wrong-signature) — the
+    // kind of token a caller might forge or that was signed with a rotated key.
+    const fakeToken =
+      "eyJhbGciOiJFUzI1NiJ9" + // {"alg":"ES256"}
+      ".eyJzdWIiOiJ0ZXN0In0" + // {"sub":"test"}
+      ".AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"; // bad signature
+
+    const req = makeRequest(
+      {
+        walletAddress: TEST_ADDRESS,
+        encryptionKey: MOCK_ENCRYPTION_KEY,
+        window: "baseline",
+        leaves: [BASE_WIRE_LEAF],
+      },
+      fakeToken,
+    );
+    const res = await POST(req);
+    const json = await res.json();
+    expect(res.status).toBe(401);
+    expect(json.success).toBe(false);
+    expect(json.error).not.toMatch(/not configured/i);
   });
 
   it("returns 500 when NEXT_PUBLIC_PRIVY_APP_ID is missing", async () => {

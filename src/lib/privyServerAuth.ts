@@ -20,6 +20,23 @@ import { createRemoteJWKSet, jwtVerify, errors as joseErrors } from "jose";
 const PRIVY_ISSUER = "privy.io";
 const PRIVY_JWKS_BASE = "https://auth.privy.io/api/v1/apps";
 
+/** Thrown at module load when the required env var is absent. */
+export class MissingPrivyConfigError extends Error {
+  constructor() {
+    super(
+      "NEXT_PUBLIC_PRIVY_APP_ID is not set. " +
+        "Add it to Vercel project settings (Production, Preview, Development).",
+    );
+    this.name = "MissingPrivyConfigError";
+  }
+}
+
+// Fail at cold-start rather than mid-request. Skip in test environments where
+// the env var is set per-test inside beforeEach().
+if (process.env.NODE_ENV !== "test" && !process.env.NEXT_PUBLIC_PRIVY_APP_ID) {
+  throw new MissingPrivyConfigError();
+}
+
 // Module-scope cache — survives warm serverless invocations.
 let cachedJwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 let cachedJwksAppId: string | null = null;

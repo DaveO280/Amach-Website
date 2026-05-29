@@ -1,13 +1,9 @@
 "use client";
 
-import {
-  getIdentityToken,
-  useIdentityToken,
-  usePrivy,
-} from "@privy-io/react-auth";
+import { usePrivy } from "@privy-io/react-auth";
 import { ethers } from "ethers";
 import { Loader2, Trophy } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPublicClient, http } from "viem";
 import { usePrivyWalletService } from "@/hooks/usePrivyWalletService";
 import { getActiveChain, getContractAddresses } from "@/lib/networkConfig";
@@ -314,48 +310,13 @@ export function SpringPushWidget(): JSX.Element {
   const walletService = usePrivyWalletService();
   const userAddress = walletService.address;
   const isConnected = walletService.isConnected;
-  // usePrivy directly so we can inspect user?.id and authenticated independently
-  // of whether the embedded wallet has been provisioned yet.
-  const { user, authenticated } = usePrivy();
-  // Identity-token hook: reads the token from Privy's in-memory state, which
-  // is the most reliable source on fresh embedded-wallet sessions (the
-  // top-level `getIdentityToken()` reads from the identity-token cookie,
-  // which has been observed to return null for users who just logged in via
-  // email — the cookie isn't populated until the next refresh). We use the
-  // hook value first, then fall back to the function (which calls
-  // `updateUserAndIdToken()` internally) so we cover both cookie and
-  // cookieless setups.
-  const { identityToken: hookIdentityToken } = useIdentityToken();
-
-  // Resolved identity token: starts from the Privy hook (in-memory state,
-  // populated immediately for returning sessions) and is upgraded once by the
-  // warm-up effect below (covers fresh email logins where the cookie path
-  // isn't set yet). Stored in state so every subsequent button click reads
-  // a cached string — zero API calls after the first warm-up.
-  const [resolvedIdentityToken, setResolvedIdentityToken] = useState<
-    string | null
-  >(hookIdentityToken ?? null);
-
-  // Keep state in sync whenever Privy's own hook updates (e.g. token refresh).
-  useEffect(() => {
-    if (hookIdentityToken && hookIdentityToken !== resolvedIdentityToken) {
-      setResolvedIdentityToken(hookIdentityToken);
-    }
-  }, [hookIdentityToken, resolvedIdentityToken]);
-
-  // Ref mirror so async handlers always see the latest value without needing
-  // it in dependency arrays.
-  const resolvedIdentityTokenRef = useRef(resolvedIdentityToken);
-  resolvedIdentityTokenRef.current = resolvedIdentityToken;
-
-  // One-shot guard: marks this wallet session as seen so the button-click
-  // path can detect a first-time login. No getIdentityToken() call here —
-  // the warm-up was causing duplicate API calls that triggered Privy 429s.
-  const tokenWarmedUpRef = useRef(false);
-  useEffect(() => {
-    if (!isConnected || tokenWarmedUpRef.current) return;
-    tokenWarmedUpRef.current = true;
-  }, [isConnected]);
+  // usePrivy provides getAccessToken() — the standard Privy method for API
+  // auth. It caches the token internally and auto-refreshes before expiry.
+  // This replaces the earlier standalone getIdentityToken() / useIdentityToken()
+  // approach, which was returning null because it requires an optional Privy
+  // dashboard feature (identity tokens) that is separate from the standard
+  // JWT auth flow.
+  const { user, authenticated, getAccessToken } = usePrivy();
 
   const escrowAddress = useMemo(
     () => getContractAddresses().SPRING_PUSH_ESCROW_CONTRACT,
@@ -850,43 +811,23 @@ export function SpringPushWidget(): JSX.Element {
         buildSeedLeaf(userAddress, day, SEED_FINISH_VO2[i]),
       );
 
-      // The leaf-upload route is Privy-auth-gated — caller must hold an
-      // identity token whose linked accounts include `userAddress`.
-      //
-      // Resolution order:
-      //   1. resolvedIdentityTokenRef — synced from useIdentityToken() hook;
-      //      zero API calls for returning users.
-      //   2. One getIdentityToken() call after a 2 s wait — covers new users
-      //      whose embedded wallet is still provisioning at button-click time.
-      //      Exactly one API call max to stay well below Privy's rate limit.
-      let identityToken: string | null = resolvedIdentityTokenRef.current;
-      console.log("[SpringPush] identity token resolution start:", {
-        hookToken: hookIdentityToken
-          ? hookIdentityToken.substring(0, 20) + "…"
-          : null,
-        cachedToken: identityToken
-          ? identityToken.substring(0, 20) + "…"
-          : null,
+      // The leaf-upload route is Privy-auth-gated. Use the standard Privy
+      // access token (getAccessToken handles caching + auto-refresh).
+      console.log("[SpringPush] fetching access token:", {
         userId: user?.id ?? null,
         authenticated,
       });
-      if (!identityToken) {
-        await new Promise((r) => setTimeout(r, 2000));
-        identityToken = await getIdentityToken();
-        console.log("[SpringPush] getIdentityToken() returned:", {
-          hasToken: !!identityToken,
-          token: identityToken ? identityToken.substring(0, 20) + "…" : null,
-          userId: user?.id ?? null,
-          authenticated,
-        });
-        if (identityToken) {
-          setResolvedIdentityToken(identityToken);
-        }
-      }
-      if (!identityToken) {
+      const accessToken = await getAccessToken();
+      console.log("[SpringPush] getAccessToken() returned:", {
+        hasToken: !!accessToken,
+        token: accessToken ? accessToken.substring(0, 20) + "…" : null,
+        userId: user?.id ?? null,
+        authenticated,
+      });
+      if (!accessToken) {
         const reason = !user?.id
           ? "Not signed in — please refresh and sign in again."
-          : "Identity token unavailable — check that Privy identity tokens are enabled in the dashboard (Settings → Advanced → Identity tokens).";
+          : "Could not get access token — please try again.";
         throw new Error(reason);
       }
 
@@ -898,7 +839,7 @@ export function SpringPushWidget(): JSX.Element {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${identityToken}`,
+            Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify({
             walletAddress: userAddress,
@@ -1003,7 +944,7 @@ export function SpringPushWidget(): JSX.Element {
     walletService,
     user,
     authenticated,
-    hookIdentityToken,
+    getAccessToken,
   ]);
 
   // Window the "Use My Health Data" button applies to in the current

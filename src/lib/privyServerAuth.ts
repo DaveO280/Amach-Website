@@ -1,13 +1,13 @@
 /**
  * Privy server-side auth helpers for protected API routes.
  *
- * Verifies the Privy identity token a logged-in client sends in the
- * `Authorization: Bearer …` header, parses it into a `User`, and checks that
- * a claimed Ethereum wallet address is one of the user's linked accounts.
+ * Verifies the Privy access token a logged-in client sends in the
+ * `Authorization: Bearer …` header and confirms the user is authenticated.
  *
- * Why identity tokens (not access tokens): identity tokens are self-contained
- * JWTs carrying the User object inline (including `linked_accounts`), so we
- * can verify wallet ownership locally with no extra Privy API roundtrip.
+ * Why access tokens (not identity tokens): access tokens are issued to every
+ * authenticated user by `usePrivy().getAccessToken()` with no extra dashboard
+ * configuration. Identity tokens are an optional Privy feature (requires
+ * explicit enablement in the dashboard) and are not available in all auth flows.
  *
  * Env vars consumed:
  *   - NEXT_PUBLIC_PRIVY_APP_ID  (required) — same as the client uses
@@ -17,11 +17,7 @@
  */
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import {
-  verifyIdentityToken,
-  InvalidAuthTokenError,
-  type LinkedAccount,
-} from "@privy-io/node";
+import { verifyAccessToken, InvalidAuthTokenError } from "@privy-io/node";
 
 function normalizePemEnvVar(raw: string): string {
   // Vercel-style envs serialize newlines as the two-character sequence `\n`.
@@ -37,25 +33,6 @@ function extractBearerToken(request: NextRequest): string | null {
   return match ? match[1].trim() : null;
 }
 
-function getEthereumAddressesFromLinkedAccounts(
-  accounts: ReadonlyArray<LinkedAccount>,
-): string[] {
-  const out: string[] = [];
-  for (const acc of accounts) {
-    // External wallets and smart wallets expose chain_type + address.
-    if (
-      (acc.type === "wallet" || acc.type === "smart_wallet") &&
-      "chain_type" in acc &&
-      acc.chain_type === "ethereum" &&
-      "address" in acc &&
-      typeof acc.address === "string"
-    ) {
-      out.push(acc.address.toLowerCase());
-    }
-  }
-  return out;
-}
-
 interface AuthFailure {
   ok: false;
   response: NextResponse;
@@ -66,17 +43,21 @@ interface AuthSuccess {
 }
 
 /**
- * Verify the bearer identity token and confirm `claimedAddress` is one of the
- * caller's linked Ethereum wallets. Returns either a NextResponse to short-
- * circuit the route, or a success record with the verified user id.
+ * Verify the Privy access token in the Authorization bearer header.
+ * Returns either a NextResponse to short-circuit the route, or a success
+ * record with the verified Privy user id.
+ *
+ * The `claimedAddress` parameter is accepted for API compatibility but is not
+ * verified against linked_accounts — access tokens carry only user_id, not
+ * the full linked_accounts list. The on-chain registration step (which
+ * requires a wallet signature) provides the binding security guarantee.
  *
  *   401 — token missing or fails signature/expiry verification
- *   403 — token is valid but wallet doesn't belong to the caller
  *   500 — server is missing PRIVY_APP_ID or PRIVY_VERIFICATION_KEY
  */
 export async function requirePrivyWalletOwner(
   request: NextRequest,
-  claimedAddress: string,
+  _claimedAddress: string,
 ): Promise<AuthFailure | AuthSuccess> {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
   const verificationKeyRaw = process.env.PRIVY_VERIFICATION_KEY;
@@ -105,18 +86,18 @@ export async function requirePrivyWalletOwner(
     };
   }
 
-  let user;
+  let result;
   try {
-    user = await verifyIdentityToken({
-      identity_token: token,
+    result = await verifyAccessToken({
+      access_token: token,
       app_id: appId,
       verification_key: normalizePemEnvVar(verificationKeyRaw),
     });
   } catch (err) {
     const message =
       err instanceof InvalidAuthTokenError
-        ? "Invalid or expired identity token"
-        : "Failed to verify identity token";
+        ? "Invalid or expired access token"
+        : "Failed to verify access token";
     console.warn("[privyServerAuth] token verification failed:", err);
     return {
       ok: false,
@@ -127,22 +108,5 @@ export async function requirePrivyWalletOwner(
     };
   }
 
-  const linkedEthAddresses = getEthereumAddressesFromLinkedAccounts(
-    user.linked_accounts,
-  );
-  if (!linkedEthAddresses.includes(claimedAddress.toLowerCase())) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        {
-          success: false,
-          error:
-            "Wallet address in body is not linked to the authenticated user",
-        },
-        { status: 403 },
-      ),
-    };
-  }
-
-  return { ok: true, userId: user.id };
+  return { ok: true, userId: result.user_id };
 }

@@ -18,9 +18,9 @@ import { POST } from "../route";
 // Mocks
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Mock @privy-io/node verifyIdentityToken
+// Mock @privy-io/node verifyAccessToken
 jest.mock("@privy-io/node", () => ({
-  verifyIdentityToken: jest.fn(),
+  verifyAccessToken: jest.fn(),
   InvalidAuthTokenError: class InvalidAuthTokenError extends Error {
     constructor(msg = "invalid token") {
       super(msg);
@@ -38,7 +38,7 @@ jest.mock("@/storage", () => ({
 // Imports (after mocks are registered)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { verifyIdentityToken, InvalidAuthTokenError } from "@privy-io/node";
+import { verifyAccessToken, InvalidAuthTokenError } from "@privy-io/node";
 import { getStorageService } from "@/storage";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -101,18 +101,15 @@ function makeRequest(body: unknown, token?: string): NextRequest {
   });
 }
 
-// Privy user object returned by verifyIdentityToken for TEST_ADDRESS
-function mockPrivyUser(address = TEST_ADDRESS) {
+// Access token claims returned by verifyAccessToken
+function mockAccessTokenClaims() {
   return {
-    id: "privy:test-user-id",
-    linked_accounts: [
-      {
-        type: "wallet",
-        chain_type: "ethereum",
-        address,
-        wallet_client_type: "privy",
-      },
-    ],
+    app_id: TEST_APP_ID,
+    issuer: "privy.io",
+    issued_at: Math.floor(Date.now() / 1000) - 10,
+    expiration: Math.floor(Date.now() / 1000) + 300,
+    session_id: "sess:test",
+    user_id: "privy:test-user-id",
   };
 }
 
@@ -120,8 +117,8 @@ function mockPrivyUser(address = TEST_ADDRESS) {
 // Setup
 // ─────────────────────────────────────────────────────────────────────────────
 
-const mockVerify = verifyIdentityToken as jest.MockedFunction<
-  typeof verifyIdentityToken
+const mockVerify = verifyAccessToken as jest.MockedFunction<
+  typeof verifyAccessToken
 >;
 const mockGetStorage = getStorageService as jest.MockedFunction<
   typeof getStorageService
@@ -185,30 +182,6 @@ describe("POST /api/merkle/v2/upload — auth", () => {
     expect(json.error).toMatch(/invalid.*expired|invalid.*token/i);
   });
 
-  it("returns 403 when wallet is not linked to the authenticated user", async () => {
-    // Token is valid but links a DIFFERENT wallet address
-    const differentAddress = "0x1234567890123456789012345678901234567890";
-    mockVerify.mockResolvedValueOnce(
-      mockPrivyUser(differentAddress) as Awaited<
-        ReturnType<typeof verifyIdentityToken>
-      >,
-    );
-    const req = makeRequest(
-      {
-        walletAddress: TEST_ADDRESS, // different from linked account
-        encryptionKey: MOCK_ENCRYPTION_KEY,
-        window: "baseline",
-        leaves: [BASE_WIRE_LEAF],
-      },
-      TEST_TOKEN,
-    );
-    const res = await POST(req);
-    const json = await res.json();
-    expect(res.status).toBe(403);
-    expect(json.success).toBe(false);
-    expect(json.error).toMatch(/not linked/i);
-  });
-
   it("returns 500 when server env vars are missing", async () => {
     delete process.env.NEXT_PUBLIC_PRIVY_APP_ID;
     const req = makeRequest(
@@ -236,7 +209,7 @@ describe("POST /api/merkle/v2/upload — input validation", () => {
   beforeEach(() => {
     // Auth always passes for validation tests
     mockVerify.mockResolvedValue(
-      mockPrivyUser() as Awaited<ReturnType<typeof verifyIdentityToken>>,
+      mockAccessTokenClaims() as Awaited<ReturnType<typeof verifyAccessToken>>,
     );
   });
 
@@ -309,7 +282,7 @@ describe("POST /api/merkle/v2/upload — input validation", () => {
 describe("POST /api/merkle/v2/upload — happy path", () => {
   beforeEach(() => {
     mockVerify.mockResolvedValue(
-      mockPrivyUser() as Awaited<ReturnType<typeof verifyIdentityToken>>,
+      mockAccessTokenClaims() as Awaited<ReturnType<typeof verifyAccessToken>>,
     );
   });
 

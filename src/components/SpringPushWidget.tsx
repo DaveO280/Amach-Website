@@ -319,24 +319,44 @@ export function SpringPushWidget(): JSX.Element {
   // `updateUserAndIdToken()` internally) so we cover both cookie and
   // cookieless setups.
   const { identityToken: hookIdentityToken } = useIdentityToken();
-  // Mirror into a ref so async handlers see the latest token without us
-  // having to thread it through every dependency array.
-  const hookIdentityTokenRef = useRef(hookIdentityToken);
-  hookIdentityTokenRef.current = hookIdentityToken;
 
-  // Guards a single proactive getIdentityToken() warm-up call per component
-  // lifetime. Privy's auth state (ready/authenticated/address) can toggle
-  // multiple times while it initialises, so a plain useEffect([isConnected])
-  // would fire several times and stack requests — hitting the upstream 429
-  // rate limit. The ref ensures the call happens exactly once.
+  // Resolved identity token: starts from the Privy hook (in-memory state,
+  // populated immediately for returning sessions) and is upgraded once by the
+  // warm-up effect below (covers fresh email logins where the cookie path
+  // isn't set yet). Stored in state so every subsequent button click reads
+  // a cached string — zero API calls after the first warm-up.
+  const [resolvedIdentityToken, setResolvedIdentityToken] = useState<
+    string | null
+  >(hookIdentityToken ?? null);
+
+  // Keep state in sync whenever Privy's own hook updates (e.g. token refresh).
+  useEffect(() => {
+    if (hookIdentityToken && hookIdentityToken !== resolvedIdentityToken) {
+      setResolvedIdentityToken(hookIdentityToken);
+    }
+  }, [hookIdentityToken, resolvedIdentityToken]);
+
+  // Ref mirror so async handlers always see the latest value without needing
+  // it in dependency arrays.
+  const resolvedIdentityTokenRef = useRef(resolvedIdentityToken);
+  resolvedIdentityTokenRef.current = resolvedIdentityToken;
+
+  // One-shot warm-up: fires exactly once per component lifetime (ref guard
+  // prevents re-firing when Privy toggles ready/authenticated during init).
+  // Calls getIdentityToken() — which triggers updateUserAndIdToken() — and
+  // stores the result. Subsequent button clicks read from resolvedIdentityToken
+  // (state), so they need zero API calls unless the warm-up itself failed.
   const tokenWarmedUpRef = useRef(false);
   useEffect(() => {
     if (!isConnected || tokenWarmedUpRef.current) return;
     tokenWarmedUpRef.current = true;
-    getIdentityToken().catch(() => {
-      // Best-effort warm-up — ignore errors; the hook will still be read
-      // at button-click time, which covers most cases without any extra call.
-    });
+    getIdentityToken()
+      .then((token) => {
+        if (token) setResolvedIdentityToken(token);
+      })
+      .catch(() => {
+        // Ignore — button-click path will try once more if state is still null.
+      });
   }, [isConnected]);
 
   const escrowAddress = useMemo(
@@ -834,14 +854,20 @@ export function SpringPushWidget(): JSX.Element {
 
       // The leaf-upload route is Privy-auth-gated — caller must hold an
       // identity token whose linked accounts include `userAddress`.
-      // Read the hook first (zero API calls — in-memory state updated by the
-      // proactive warm-up that fired at connect time). Only fall back to one
-      // getIdentityToken() call if the hook is still null (e.g. the warm-up
-      // hasn't returned yet). No retry loop — each call hits auth.privy.io
-      // and loops cause 429s.
-      let identityToken: string | null = hookIdentityTokenRef.current;
+      //
+      // Resolution order (each step costs zero API calls until the last):
+      //   1. resolvedIdentityTokenRef — state cached by the warm-up effect;
+      //      populated the moment the user connected, so this is instant for
+      //      most clicks.
+      //   2. getIdentityToken() — one API call if state is still null (e.g.
+      //      warm-up is in flight). Result is saved back into state so
+      //      subsequent clicks also pay zero.
+      //
+      // No retry loop — loops hit auth.privy.io's 429 limiter.
+      let identityToken: string | null = resolvedIdentityTokenRef.current;
       if (!identityToken) {
         identityToken = await getIdentityToken();
+        if (identityToken) setResolvedIdentityToken(identityToken);
       }
       if (!identityToken) {
         throw new Error(

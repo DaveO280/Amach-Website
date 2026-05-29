@@ -343,20 +343,28 @@ export function SpringPushWidget(): JSX.Element {
 
   // One-shot warm-up: fires exactly once per component lifetime (ref guard
   // prevents re-firing when Privy toggles ready/authenticated during init).
-  // Calls getIdentityToken() — which triggers updateUserAndIdToken() — and
-  // stores the result. Subsequent button clicks read from resolvedIdentityToken
-  // (state), so they need zero API calls unless the warm-up itself failed.
+  // For new users the embedded wallet isn't provisioned yet when the OTP is
+  // accepted, so the first getIdentityToken() call can return null. We retry
+  // up to 3 times with 2 s gaps — stops as soon as we get a token. 3 calls
+  // over 4 seconds is well below auth.privy.io's rate limit.
   const tokenWarmedUpRef = useRef(false);
   useEffect(() => {
     if (!isConnected || tokenWarmedUpRef.current) return;
     tokenWarmedUpRef.current = true;
-    getIdentityToken()
-      .then((token) => {
-        if (token) setResolvedIdentityToken(token);
-      })
-      .catch(() => {
-        // Ignore — button-click path will try once more if state is still null.
-      });
+    (async (): Promise<void> => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+        try {
+          const token = await getIdentityToken();
+          if (token) {
+            setResolvedIdentityToken(token);
+            return;
+          }
+        } catch {
+          // swallow; next iteration will retry
+        }
+      }
+    })();
   }, [isConnected]);
 
   const escrowAddress = useMemo(
@@ -855,19 +863,23 @@ export function SpringPushWidget(): JSX.Element {
       // The leaf-upload route is Privy-auth-gated — caller must hold an
       // identity token whose linked accounts include `userAddress`.
       //
-      // Resolution order (each step costs zero API calls until the last):
+      // Resolution order:
       //   1. resolvedIdentityTokenRef — state cached by the warm-up effect;
-      //      populated the moment the user connected, so this is instant for
-      //      most clicks.
-      //   2. getIdentityToken() — one API call if state is still null (e.g.
-      //      warm-up is in flight). Result is saved back into state so
-      //      subsequent clicks also pay zero.
-      //
-      // No retry loop — loops hit auth.privy.io's 429 limiter.
+      //      zero API calls for returning users.
+      //   2. Patient retry: up to 3 getIdentityToken() calls, 2 s apart.
+      //      Needed for brand-new Privy users whose embedded wallet is still
+      //      provisioning when they click the button. 3 calls / 4 s is well
+      //      below the upstream 429 threshold.
       let identityToken: string | null = resolvedIdentityTokenRef.current;
       if (!identityToken) {
-        identityToken = await getIdentityToken();
-        if (identityToken) setResolvedIdentityToken(identityToken);
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+          identityToken = await getIdentityToken();
+          if (identityToken) {
+            setResolvedIdentityToken(identityToken);
+            break;
+          }
+        }
       }
       if (!identityToken) {
         throw new Error(

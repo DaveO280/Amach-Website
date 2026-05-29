@@ -1,6 +1,10 @@
 "use client";
 
-import { getIdentityToken, useIdentityToken } from "@privy-io/react-auth";
+import {
+  getIdentityToken,
+  useIdentityToken,
+  usePrivy,
+} from "@privy-io/react-auth";
 import { ethers } from "ethers";
 import { Loader2, Trophy } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -310,6 +314,9 @@ export function SpringPushWidget(): JSX.Element {
   const walletService = usePrivyWalletService();
   const userAddress = walletService.address;
   const isConnected = walletService.isConnected;
+  // usePrivy directly so we can inspect user?.id and authenticated independently
+  // of whether the embedded wallet has been provisioned yet.
+  const { user, authenticated } = usePrivy();
   // Identity-token hook: reads the token from Privy's in-memory state, which
   // is the most reliable source on fresh embedded-wallet sessions (the
   // top-level `getIdentityToken()` reads from the identity-token cookie,
@@ -853,17 +860,34 @@ export function SpringPushWidget(): JSX.Element {
       //      whose embedded wallet is still provisioning at button-click time.
       //      Exactly one API call max to stay well below Privy's rate limit.
       let identityToken: string | null = resolvedIdentityTokenRef.current;
+      console.log("[SpringPush] identity token resolution start:", {
+        hookToken: hookIdentityToken
+          ? hookIdentityToken.substring(0, 20) + "…"
+          : null,
+        cachedToken: identityToken
+          ? identityToken.substring(0, 20) + "…"
+          : null,
+        userId: user?.id ?? null,
+        authenticated,
+      });
       if (!identityToken) {
         await new Promise((r) => setTimeout(r, 2000));
         identityToken = await getIdentityToken();
+        console.log("[SpringPush] getIdentityToken() returned:", {
+          hasToken: !!identityToken,
+          token: identityToken ? identityToken.substring(0, 20) + "…" : null,
+          userId: user?.id ?? null,
+          authenticated,
+        });
         if (identityToken) {
           setResolvedIdentityToken(identityToken);
         }
       }
       if (!identityToken) {
-        throw new Error(
-          "Identity token not ready yet — please wait a moment and try again.",
-        );
+        const reason = !user?.id
+          ? "Not signed in — please refresh and sign in again."
+          : "Identity token unavailable — check that Privy identity tokens are enabled in the dashboard (Settings → Advanced → Identity tokens).";
+        throw new Error(reason);
       }
 
       const postWindow = async (
@@ -973,7 +997,14 @@ export function SpringPushWidget(): JSX.Element {
     } finally {
       setSeedLoading(false);
     }
-  }, [isConnected, userAddress, walletService]);
+  }, [
+    isConnected,
+    userAddress,
+    walletService,
+    user,
+    authenticated,
+    hookIdentityToken,
+  ]);
 
   // Window the "Use My Health Data" button applies to in the current
   // contest state. baseline at REGISTRATION_OPEN, finish at ACTIVE/CLAIMING.

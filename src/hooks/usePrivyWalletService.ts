@@ -352,20 +352,33 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
       await login();
       console.log("✅ Privy login() completed");
 
-      // Wait for connection to establish with longer timeout
+      // Wait for Privy state to settle after OTP acceptance.
+      // After email login, `user` is populated before `wallets` — the
+      // embedded wallet is provisioned asynchronously and may take several
+      // more seconds to appear in the `wallets` array. Checking `user`
+      // (not `address`) prevents a false-negative here.
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      if (ready && authenticated && address) {
-        console.log("✅ Connected to Privy wallet:", address);
+      if (ready && authenticated && user) {
+        if (address) {
+          console.log("✅ Connected to Privy wallet:", address);
+        } else {
+          console.log(
+            "✅ Authenticated — embedded wallet still provisioning:",
+            user.id,
+            { walletsCount: wallets?.length ?? 0 },
+          );
+        }
         return { success: true };
       } else {
-        console.warn("⚠️ Login completed but wallet not connected:", {
+        console.warn("⚠️ Login completed but user not authenticated:", {
           ready,
           authenticated,
+          hasUser: !!user,
           hasAddress: !!address,
-          walletsCount: wallets?.length || 0,
+          walletsCount: wallets?.length ?? 0,
         });
-        return { success: false, error: "Failed to connect to wallet" };
+        return { success: false, error: "Authentication failed" };
       }
     } catch (error) {
       const errorMessage =
@@ -373,7 +386,7 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
       console.error("❌ Privy connection failed:", errorMessage, error);
       return { success: false, error: errorMessage };
     }
-  }, [login, ready, authenticated, address, wallets]);
+  }, [login, ready, authenticated, address, wallets, user]);
 
   // Disconnect method
   const disconnect = useCallback(async (): Promise<void> => {

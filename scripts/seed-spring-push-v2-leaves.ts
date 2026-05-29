@@ -102,10 +102,17 @@ async function uploadWindow(
   encryptionKey: WalletEncryptionKey,
   window: "baseline" | "finish",
   leaves: WireLeaf[],
+  identityToken?: string,
 ): Promise<UploadResponse> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (identityToken) {
+    headers["Authorization"] = `Bearer ${identityToken}`;
+  }
   const res = await fetch(`${BASE_URL}/api/merkle/v2/upload`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ walletAddress, encryptionKey, window, leaves }),
   });
   const json = (await res.json()) as UploadResponse;
@@ -124,6 +131,13 @@ async function main(): Promise<void> {
       "Set TEST_WALLET_PRIVATE_KEY (or PRIVATE_KEY) to a 0x-prefixed key for the test wallet.",
     );
   }
+  // The /api/merkle/v2/upload endpoint is Privy-auth-gated. Pass a real Privy
+  // identity token via PRIVY_IDENTITY_TOKEN. Obtain one by opening the app in
+  // a browser, logging in, then running in the console:
+  //   (await import('@privy-io/react-auth')).getIdentityToken()
+  // When testing against the local dev server the env var is optional IF you
+  // have temporarily disabled the auth check, but it is required for Vercel.
+  const identityToken = process.env.PRIVY_IDENTITY_TOKEN;
   const pk = (
     rawKey.startsWith("0x") ? rawKey : `0x${rawKey}`
   ) as `0x${string}`;
@@ -132,6 +146,22 @@ async function main(): Promise<void> {
 
   console.log("🔑 Test wallet:", walletAddress);
   console.log("🌐 Base URL:   ", BASE_URL);
+  if (identityToken) {
+    console.log(
+      "🪪 Identity token: present (",
+      identityToken.slice(0, 16) + "…)",
+    );
+  } else {
+    console.warn(
+      "⚠️  PRIVY_IDENTITY_TOKEN not set — request will be sent without auth.\n" +
+        "   This will succeed against a local dev server that has auth disabled,\n" +
+        "   but will fail (401) against the deployed Vercel app.\n" +
+        "   To get a token: open the app, log in, then run in the browser console:\n" +
+        '     const { getIdentityToken } = await import("@privy-io/react-auth");\n' +
+        "     console.log(await getIdentityToken());\n" +
+        "   Then re-run: PRIVY_IDENTITY_TOKEN=<token> pnpm exec tsx scripts/seed-spring-push-v2-leaves.ts",
+    );
+  }
 
   const message = getKeyDerivationMessage(walletAddress);
   const signature = await account.signMessage({ message });
@@ -194,6 +224,7 @@ async function main(): Promise<void> {
     encryptionKey,
     "baseline",
     baselineLeaves,
+    identityToken,
   );
   console.log(`   dataType:    ${baselineRes.dataType}`);
   console.log(`   storjUri:    ${baselineRes.storjUri}`);
@@ -209,6 +240,7 @@ async function main(): Promise<void> {
     encryptionKey,
     "finish",
     finishLeaves,
+    identityToken,
   );
   console.log(`   dataType:    ${finishRes.dataType}`);
   console.log(`   storjUri:    ${finishRes.storjUri}`);

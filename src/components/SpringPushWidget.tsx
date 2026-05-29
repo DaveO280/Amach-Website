@@ -324,6 +324,20 @@ export function SpringPushWidget(): JSX.Element {
   const hookIdentityTokenRef = useRef(hookIdentityToken);
   hookIdentityTokenRef.current = hookIdentityToken;
 
+  // Proactively warm up the identity token the moment the wallet connects.
+  // For email-based logins the cookie isn't populated immediately, so
+  // hookIdentityToken starts null. Calling getIdentityToken() now triggers
+  // Privy's updateUserAndIdToken() which populates the hook state well before
+  // the user clicks "Seed Test Leaves" — avoids the race that produced the
+  // "Could not retrieve Privy identity token" error. One call is enough; no
+  // loop needed (loops cause 429s at auth.privy.io).
+  useEffect(() => {
+    if (!isConnected) return;
+    getIdentityToken().catch(() => {
+      // Best-effort warm-up — ignore errors; the button click will retry.
+    });
+  }, [isConnected]);
+
   const escrowAddress = useMemo(
     () => getContractAddresses().SPRING_PUSH_ESCROW_CONTRACT,
     [],
@@ -820,12 +834,18 @@ export function SpringPushWidget(): JSX.Element {
       // The leaf-upload route is Privy-auth-gated — caller must hold an
       // identity token whose linked accounts include `userAddress`.
       // Prefer the `useIdentityToken()` hook value (in-memory state, no API
-      // call); fall back to `getIdentityToken()` exactly once if the hook
-      // hasn't populated yet. Never poll — each `getIdentityToken()` call
-      // hits auth.privy.io and a loop will trip the upstream 429 limiter.
+      // call); fall back to `getIdentityToken()` if the hook hasn't populated
+      // yet. If still null, wait 1 s and try once more — a short race on
+      // page-load can delay Privy's updateUserAndIdToken() by ~500 ms. Two
+      // attempts total is safe; a tight loop hits auth.privy.io's 429 limiter.
       let identityToken: string | null = hookIdentityTokenRef.current;
       if (!identityToken) {
         identityToken = await getIdentityToken();
+      }
+      if (!identityToken) {
+        await new Promise((r) => setTimeout(r, 1000));
+        identityToken =
+          hookIdentityTokenRef.current ?? (await getIdentityToken());
       }
       if (!identityToken) {
         throw new Error(

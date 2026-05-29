@@ -2,8 +2,8 @@
  * Integration tests for POST /api/merkle/v2/upload
  *
  * Covers:
- *   - Auth layer: 401 on missing token, 401 on invalid token, 403 on
- *     wallet-mismatch, 500 on missing server env vars
+ *   - Auth layer: 401 on missing token, 401 on invalid token,
+ *     500 on missing server env vars
  *   - Input validation: 400 on missing fields, bad window, empty leaves,
  *     leaves over capacity
  *   - Happy path: mock Privy + mock Storj → 200 with expected response shape
@@ -18,14 +18,18 @@ import { POST } from "../route";
 // Mocks
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Mock @privy-io/node verifyAccessToken
-jest.mock("@privy-io/node", () => ({
-  verifyAccessToken: jest.fn(),
-  InvalidAuthTokenError: class InvalidAuthTokenError extends Error {
-    constructor(msg = "invalid token") {
-      super(msg);
-      this.name = "InvalidAuthTokenError";
-    }
+// Mock jose so we never hit the live Privy JWKS endpoint.
+// createRemoteJWKSet returns a mock key function; jwtVerify is controlled per test.
+jest.mock("jose", () => ({
+  createRemoteJWKSet: jest.fn().mockReturnValue(jest.fn()),
+  jwtVerify: jest.fn(),
+  errors: {
+    JWTExpired: class JWTExpired extends Error {
+      constructor() {
+        super("jwt expired");
+        this.name = "JWTExpired";
+      }
+    },
   },
 }));
 
@@ -38,7 +42,7 @@ jest.mock("@/storage", () => ({
 // Imports (after mocks are registered)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { verifyAccessToken, InvalidAuthTokenError } from "@privy-io/node";
+import { jwtVerify } from "jose";
 import { getStorageService } from "@/storage";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,7 +53,6 @@ const TEST_ADDRESS =
   "0xabababababababababababababababababababababab".toLowerCase();
 const TEST_TOKEN = "privy.test.jwt";
 const TEST_APP_ID = "test-app-id";
-const TEST_VERIFICATION_KEY = "test-verification-key";
 
 const MOCK_ENCRYPTION_KEY = {
   key: "deadbeef".repeat(8),
@@ -101,15 +104,18 @@ function makeRequest(body: unknown, token?: string): NextRequest {
   });
 }
 
-// Access token claims returned by verifyAccessToken
-function mockAccessTokenClaims() {
+// jwtVerify returns { payload, protectedHeader }. We only need payload.sub.
+function mockJwtPayload(userId = "privy:test-user-id") {
   return {
-    app_id: TEST_APP_ID,
-    issuer: "privy.io",
-    issued_at: Math.floor(Date.now() / 1000) - 10,
-    expiration: Math.floor(Date.now() / 1000) + 300,
-    session_id: "sess:test",
-    user_id: "privy:test-user-id",
+    payload: {
+      sub: userId,
+      aud: TEST_APP_ID,
+      iss: "privy.io",
+      iat: Math.floor(Date.now() / 1000) - 10,
+      exp: Math.floor(Date.now() / 1000) + 300,
+      sid: "sess:test",
+    },
+    protectedHeader: { alg: "ES256" },
   };
 }
 
@@ -117,9 +123,7 @@ function mockAccessTokenClaims() {
 // Setup
 // ─────────────────────────────────────────────────────────────────────────────
 
-const mockVerify = verifyAccessToken as jest.MockedFunction<
-  typeof verifyAccessToken
->;
+const mockVerify = jwtVerify as jest.MockedFunction<typeof jwtVerify>;
 const mockGetStorage = getStorageService as jest.MockedFunction<
   typeof getStorageService
 >;
@@ -127,7 +131,6 @@ const mockGetStorage = getStorageService as jest.MockedFunction<
 beforeEach(() => {
   jest.clearAllMocks();
   process.env.NEXT_PUBLIC_PRIVY_APP_ID = TEST_APP_ID;
-  process.env.PRIVY_VERIFICATION_KEY = TEST_VERIFICATION_KEY;
 
   // Default happy-path storage mock
   mockGetStorage.mockReturnValue({
@@ -141,7 +144,6 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.NEXT_PUBLIC_PRIVY_APP_ID;
-  delete process.env.PRIVY_VERIFICATION_KEY;
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -156,7 +158,6 @@ describe("POST /api/merkle/v2/upload — auth", () => {
       window: "baseline",
       leaves: [BASE_WIRE_LEAF],
     });
-    // No token header — strip it
     const res = await POST(req);
     const json = await res.json();
     expect(res.status).toBe(401);
@@ -165,7 +166,7 @@ describe("POST /api/merkle/v2/upload — auth", () => {
   });
 
   it("returns 401 when token verification fails", async () => {
-    mockVerify.mockRejectedValueOnce(new InvalidAuthTokenError("bad token"));
+    mockVerify.mockRejectedValueOnce(new Error("invalid signature"));
     const req = makeRequest(
       {
         walletAddress: TEST_ADDRESS,
@@ -179,10 +180,10 @@ describe("POST /api/merkle/v2/upload — auth", () => {
     const json = await res.json();
     expect(res.status).toBe(401);
     expect(json.success).toBe(false);
-    expect(json.error).toMatch(/invalid.*expired|invalid.*token/i);
+    expect(json.error).toMatch(/invalid.*token|invalid.*access/i);
   });
 
-  it("returns 500 when server env vars are missing", async () => {
+  it("returns 500 when NEXT_PUBLIC_PRIVY_APP_ID is missing", async () => {
     delete process.env.NEXT_PUBLIC_PRIVY_APP_ID;
     const req = makeRequest(
       {
@@ -209,7 +210,7 @@ describe("POST /api/merkle/v2/upload — input validation", () => {
   beforeEach(() => {
     // Auth always passes for validation tests
     mockVerify.mockResolvedValue(
-      mockAccessTokenClaims() as Awaited<ReturnType<typeof verifyAccessToken>>,
+      mockJwtPayload() as unknown as Awaited<ReturnType<typeof jwtVerify>>,
     );
   });
 
@@ -282,7 +283,7 @@ describe("POST /api/merkle/v2/upload — input validation", () => {
 describe("POST /api/merkle/v2/upload — happy path", () => {
   beforeEach(() => {
     mockVerify.mockResolvedValue(
-      mockAccessTokenClaims() as Awaited<ReturnType<typeof verifyAccessToken>>,
+      mockJwtPayload() as unknown as Awaited<ReturnType<typeof jwtVerify>>,
     );
   });
 

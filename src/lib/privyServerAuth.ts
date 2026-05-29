@@ -2,28 +2,36 @@
  * Privy server-side auth helpers for protected API routes.
  *
  * Verifies the Privy access token a logged-in client sends in the
- * `Authorization: Bearer …` header and confirms the user is authenticated.
+ * `Authorization: Bearer …` header using Privy's public JWKS endpoint.
  *
- * Why access tokens (not identity tokens): access tokens are issued to every
- * authenticated user by `usePrivy().getAccessToken()` with no extra dashboard
- * configuration. Identity tokens are an optional Privy feature (requires
- * explicit enablement in the dashboard) and are not available in all auth flows.
+ * Why JWKS (not a static PEM key): the JWKS is fetched once from
+ * `https://auth.privy.io/api/v1/apps/{appId}/jwks.json` (public, no auth
+ * required) and cached at module scope. This removes the need for a
+ * `PRIVY_VERIFICATION_KEY` env var, avoids copy-paste errors with PEM
+ * formatting, and handles key rotation automatically.
  *
  * Env vars consumed:
- *   - NEXT_PUBLIC_PRIVY_APP_ID  (required) — same as the client uses
- *   - PRIVY_VERIFICATION_KEY    (required) — ES256 SPKI PEM string from the
- *     Privy dashboard. `\n` escapes are normalized so it can be pasted into
- *     Vercel / .env without manual newline handling.
+ *   - NEXT_PUBLIC_PRIVY_APP_ID  (required) — same value the client uses
  */
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { verifyAccessToken, InvalidAuthTokenError } from "@privy-io/node";
+import { createRemoteJWKSet, jwtVerify, errors as joseErrors } from "jose";
 
-function normalizePemEnvVar(raw: string): string {
-  // Vercel-style envs serialize newlines as the two-character sequence `\n`.
-  return raw.includes("-----BEGIN") && raw.includes("\\n")
-    ? raw.replace(/\\n/g, "\n")
-    : raw;
+const PRIVY_ISSUER = "privy.io";
+const PRIVY_JWKS_BASE = "https://auth.privy.io/api/v1/apps";
+
+// Module-scope cache — survives warm serverless invocations.
+let cachedJwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+let cachedJwksAppId: string | null = null;
+
+function getPrivyJwks(appId: string): ReturnType<typeof createRemoteJWKSet> {
+  if (!cachedJwks || cachedJwksAppId !== appId) {
+    cachedJwks = createRemoteJWKSet(
+      new URL(`${PRIVY_JWKS_BASE}/${appId}/jwks.json`),
+    );
+    cachedJwksAppId = appId;
+  }
+  return cachedJwks;
 }
 
 function extractBearerToken(request: NextRequest): string | null {
@@ -47,24 +55,23 @@ interface AuthSuccess {
  * Returns either a NextResponse to short-circuit the route, or a success
  * record with the verified Privy user id.
  *
- * The `claimedAddress` parameter is accepted for API compatibility but is not
- * verified against linked_accounts — access tokens carry only user_id, not
- * the full linked_accounts list. The on-chain registration step (which
- * requires a wallet signature) provides the binding security guarantee.
+ * The `claimedAddress` parameter is accepted for API compatibility. Access
+ * tokens carry only user_id (not linked_accounts), so wallet ownership is
+ * not re-verified here; the on-chain registration step (wallet signature)
+ * provides the binding security guarantee.
  *
- *   401 — token missing or fails signature/expiry verification
- *   500 — server is missing PRIVY_APP_ID or PRIVY_VERIFICATION_KEY
+ *   401 — token missing or fails signature/expiry/issuer verification
+ *   500 — server is missing NEXT_PUBLIC_PRIVY_APP_ID
  */
 export async function requirePrivyWalletOwner(
   request: NextRequest,
   _claimedAddress: string,
 ): Promise<AuthFailure | AuthSuccess> {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
-  const verificationKeyRaw = process.env.PRIVY_VERIFICATION_KEY;
 
-  if (!appId || !verificationKeyRaw) {
+  if (!appId) {
     console.error(
-      "[privyServerAuth] Missing NEXT_PUBLIC_PRIVY_APP_ID or PRIVY_VERIFICATION_KEY — refusing to authenticate.",
+      "[privyServerAuth] Missing NEXT_PUBLIC_PRIVY_APP_ID — refusing to authenticate.",
     );
     return {
       ok: false,
@@ -86,18 +93,23 @@ export async function requirePrivyWalletOwner(
     };
   }
 
-  let result;
+  let userId: string;
   try {
-    result = await verifyAccessToken({
-      access_token: token,
-      app_id: appId,
-      verification_key: normalizePemEnvVar(verificationKeyRaw),
+    const { payload } = await jwtVerify(token, getPrivyJwks(appId), {
+      issuer: PRIVY_ISSUER,
+      audience: appId,
     });
+    if (typeof payload.sub !== "string" || !payload.sub) {
+      throw new Error("Token payload missing sub claim");
+    }
+    userId = payload.sub;
   } catch (err) {
-    const message =
-      err instanceof InvalidAuthTokenError
-        ? "Invalid or expired access token"
-        : "Failed to verify access token";
+    const isExpired =
+      err instanceof joseErrors.JWTExpired ||
+      (err instanceof Error && err.message.includes("expired"));
+    const message = isExpired
+      ? "Access token expired — please refresh and try again."
+      : "Invalid access token";
     console.warn("[privyServerAuth] token verification failed:", err);
     return {
       ok: false,
@@ -108,5 +120,5 @@ export async function requirePrivyWalletOwner(
     };
   }
 
-  return { ok: true, userId: result.user_id };
+  return { ok: true, userId };
 }

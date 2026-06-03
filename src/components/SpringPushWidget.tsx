@@ -706,11 +706,22 @@ export function SpringPushWidget(): JSX.Element {
         escrowAddress,
         baselineRootHash,
       );
+      // Wait for on-chain confirmation before declaring success
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status === "reverted") {
+        throw new Error(
+          `Registration reverted on-chain — the contract rejected this call (tx: ${hash.slice(0, 10)}…). Check that the baseline root is non-zero and you are not already registered.`,
+        );
+      }
       setActionTxHash(hash);
       await refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
-      setActionError(message);
+      setActionError(
+        /user is not a signer/i.test(message)
+          ? `Wallet session mismatch: your Privy login doesn't own this embedded wallet. Log out, then log back in with the correct account and try again. (${message})`
+          : message,
+      );
     } finally {
       setActionLoading(false);
     }
@@ -719,6 +730,7 @@ export function SpringPushWidget(): JSX.Element {
     userAddress,
     walletService,
     escrowAddress,
+    publicClient,
     refresh,
     baselineRootHash,
   ]);
@@ -752,15 +764,33 @@ export function SpringPushWidget(): JSX.Element {
         account: userAddress as `0x${string}`,
         chain: getActiveChain(),
       });
+      // Wait for on-chain confirmation before declaring success
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status === "reverted") {
+        throw new Error(
+          `Claim transaction reverted on-chain (tx: ${hash.slice(0, 10)}…). The contract may require finalization first, or the prize was already claimed.`,
+        );
+      }
       setActionTxHash(hash);
       await refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
-      setActionError(message);
+      setActionError(
+        /user is not a signer/i.test(message)
+          ? `Wallet session mismatch: your Privy login doesn't own this embedded wallet. Log out, then log back in with the correct account and try again. (${message})`
+          : message,
+      );
     } finally {
       setActionLoading(false);
     }
-  }, [isConnected, userAddress, walletService, escrowAddress, refresh]);
+  }, [
+    isConnected,
+    userAddress,
+    walletService,
+    escrowAddress,
+    publicClient,
+    refresh,
+  ]);
 
   const handleSubmitProof = useCallback(async (): Promise<void> => {
     if (!isConnected || !userAddress) {
@@ -775,6 +805,21 @@ export function SpringPushWidget(): JSX.Element {
       if (!walletClient) {
         throw new Error("Could not get wallet client");
       }
+
+      // Pre-flight: catch session/wallet mismatches before spending 30s proving.
+      // walletClient.account is set from the wallet service's address; if Privy's
+      // underlying session belongs to a different user the writeContract will fail
+      // with "User is not a signer". Catching it here surfaces the error immediately.
+      const signerAddress = walletClient.account?.address;
+      if (
+        signerAddress &&
+        signerAddress.toLowerCase() !== userAddress.toLowerCase()
+      ) {
+        throw new Error(
+          `Wallet session mismatch: the signer (${signerAddress.slice(0, 6)}…) doesn't match your connected address (${userAddress.slice(0, 6)}…). Reload the page and reconnect your wallet.`,
+        );
+      }
+
       const encryptionKey = await getCachedWalletEncryptionKey(
         userAddress,
         walletService.signMessage,
@@ -788,11 +833,23 @@ export function SpringPushWidget(): JSX.Element {
           ? { baseline: cachedBaselineLeaves, finish: cachedFinishLeaves }
           : undefined,
       );
+      // Wait for on-chain confirmation — writeContract returns the hash as soon
+      // as the tx is broadcast; the contract may still revert after that.
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status === "reverted") {
+        throw new Error(
+          `Proof transaction reverted on-chain — the verifier or escrow rejected the proof (tx: ${hash.slice(0, 10)}…). Verify your leaf data and try again.`,
+        );
+      }
       setActionTxHash(hash);
       await refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
-      setActionError(message);
+      setActionError(
+        /user is not a signer/i.test(message)
+          ? `Wallet session mismatch: your Privy login doesn't own this embedded wallet. Log out, then log back in with the correct account and try again. (${message})`
+          : message,
+      );
     } finally {
       setActionLoading(false);
     }
@@ -801,6 +858,7 @@ export function SpringPushWidget(): JSX.Element {
     userAddress,
     walletService,
     escrowAddress,
+    publicClient,
     refresh,
     cachedBaselineLeaves,
     cachedFinishLeaves,

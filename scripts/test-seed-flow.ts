@@ -54,7 +54,7 @@ const BASE_URL =
   process.env.BASE_URL ??
   "https://amach-website-7w6jh21re-daveo280s-projects.vercel.app";
 
-const ESCROW_ADDRESS = "0x63513dAEC71Cc841B3Eab994811fa3451CBfED48";
+const ESCROW_ADDRESS = "0x99A695c61fC6775C03e3359D50613A2c8bc90806";
 
 const zkSyncSepolia = defineChain({
   id: 300,

@@ -13,7 +13,7 @@ set -euo pipefail
 SEED_ETH="0.01"
 NETWORK="zksyncSepolia"
 IOS_SERVICE_PATH="/Users/dave/AmachHealth-iOS"
-OLD_ESCROW="0x07EDbAd94B23b44a3dAfe83E913Ad7C3D493b985"
+OLD_ESCROW="0x99A695c61fC6775C03e3359D50613A2c8bc90806"
 NETWORK_CONFIG="src/lib/networkConfig.ts"
 
 echo ""

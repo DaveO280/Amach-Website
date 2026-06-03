@@ -311,10 +311,19 @@ export function SpringPushWidget(): JSX.Element {
   const userAddress = walletService.address;
   const isConnected = walletService.isConnected;
 
-  // Tracks the latest userAddress synchronously so in-flight refreshes from a
-  // previous wallet can detect they're stale and bail before calling setUserState.
+  // Generation counter — incremented synchronously during the render phase when
+  // the wallet address changes. setInterval callbacks are macrotasks that can
+  // fire before React commits a new render and writes the updated address to a
+  // ref, so the old ref-only guard was insufficient: an old-wallet interval could
+  // slip through while the ref still held the previous value. A generation value
+  // captured at the START of each refresh and compared before any setState call
+  // is immune to that race because the increment happens in the render path.
   const userAddressRef = useRef<string | null | undefined>(userAddress);
-  userAddressRef.current = userAddress;
+  const refreshGenRef = useRef(0);
+  if (userAddressRef.current !== userAddress) {
+    refreshGenRef.current += 1;
+    userAddressRef.current = userAddress;
+  }
   // usePrivy provides getAccessToken() — the standard Privy method for API
   // auth. It caches the token internally and auto-refreshes before expiry.
   // This replaces the earlier standalone getIdentityToken() / useIdentityToken()
@@ -373,9 +382,14 @@ export function SpringPushWidget(): JSX.Element {
   }, [cachedBaselineLeaves]);
 
   // #7 — Rehydrate cached leaves from sessionStorage on mount and whenever the
-  // wallet changes. Stored per-wallet so a wallet-switch can't leak leaves.
+  // wallet changes. Always writes both slots (null if not found) so leaves from
+  // a previous wallet are never carried over to a new one.
   useEffect(() => {
-    if (typeof window === "undefined" || !userAddress) return;
+    if (typeof window === "undefined" || !userAddress) {
+      setCachedBaselineLeaves(null);
+      setCachedFinishLeaves(null);
+      return;
+    }
     const key = userAddress.toLowerCase();
     try {
       const baselineRaw = window.sessionStorage.getItem(
@@ -384,19 +398,31 @@ export function SpringPushWidget(): JSX.Element {
       const finishRaw = window.sessionStorage.getItem(
         `${SS_FINISH_LEAVES_PREFIX}${key}`,
       );
-      if (baselineRaw)
-        setCachedBaselineLeaves(JSON.parse(baselineRaw) as AmachLeafV2Fields[]);
-      if (finishRaw)
-        setCachedFinishLeaves(JSON.parse(finishRaw) as AmachLeafV2Fields[]);
+      setCachedBaselineLeaves(
+        baselineRaw ? (JSON.parse(baselineRaw) as AmachLeafV2Fields[]) : null,
+      );
+      setCachedFinishLeaves(
+        finishRaw ? (JSON.parse(finishRaw) as AmachLeafV2Fields[]) : null,
+      );
     } catch (err) {
       console.warn("SpringPushWidget: failed to rehydrate cached leaves", err);
+      setCachedBaselineLeaves(null);
+      setCachedFinishLeaves(null);
     }
   }, [userAddress]);
 
-  // Clear stale user state immediately when the wallet address changes so we
-  // never show the previous wallet's registered/claimed status to a new wallet.
+  // Clear ALL per-wallet state when the address changes. Previously only
+  // userState was reset here, leaving actionTxHash, actionError, and generate/
+  // seed status from the old wallet visible under the new wallet.
   useEffect(() => {
     setUserState(null);
+    setActionError(null);
+    setActionTxHash(null);
+    setGenerateStatus(null);
+    setGenerateError(null);
+    setSeedStatus(null);
+    setSeedError(null);
+    setSeedBaselineRoot(null);
   }, [userAddress]);
 
   const readProvider = useMemo(
@@ -420,6 +446,10 @@ export function SpringPushWidget(): JSX.Element {
   );
 
   const refresh = useCallback(async (): Promise<void> => {
+    // Capture the generation at the start of this call. If the wallet changes
+    // before we reach setUserState, the generation will have been incremented
+    // and we'll bail rather than writing stale data.
+    const myGen = refreshGenRef.current;
     try {
       const contract = new ethers.Contract(
         escrowAddress,
@@ -514,11 +544,11 @@ export function SpringPushWidget(): JSX.Element {
             contract.previewPrizeFor(userAddress),
           ]);
 
-        // Guard: if the wallet changed while this refresh was in flight, discard
-        // the result. Without this, a slow refresh for wallet A can complete
-        // after wallet B connects and overwrite wallet B's state with A's data
-        // (e.g. registered: true), making every wallet appear registered.
-        if (userAddress !== userAddressRef.current) return;
+        // Guard: bail if the wallet changed while async reads were in flight.
+        // The generation counter is incremented synchronously during the render
+        // phase when userAddress changes, so this catches the race where a
+        // setInterval callback fires before React commits the new render.
+        if (myGen !== refreshGenRef.current) return;
 
         setUserState({
           registered: Boolean(isRegistered),

@@ -3,7 +3,7 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { ethers } from "ethers";
 import { Loader2, Trophy } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPublicClient, http } from "viem";
 import { usePrivyWalletService } from "@/hooks/usePrivyWalletService";
 import { getActiveChain, getContractAddresses } from "@/lib/networkConfig";
@@ -310,6 +310,11 @@ export function SpringPushWidget(): JSX.Element {
   const walletService = usePrivyWalletService();
   const userAddress = walletService.address;
   const isConnected = walletService.isConnected;
+
+  // Tracks the latest userAddress synchronously so in-flight refreshes from a
+  // previous wallet can detect they're stale and bail before calling setUserState.
+  const userAddressRef = useRef<string | null | undefined>(userAddress);
+  userAddressRef.current = userAddress;
   // usePrivy provides getAccessToken() — the standard Privy method for API
   // auth. It caches the token internally and auto-refreshes before expiry.
   // This replaces the earlier standalone getIdentityToken() / useIdentityToken()
@@ -386,6 +391,12 @@ export function SpringPushWidget(): JSX.Element {
     } catch (err) {
       console.warn("SpringPushWidget: failed to rehydrate cached leaves", err);
     }
+  }, [userAddress]);
+
+  // Clear stale user state immediately when the wallet address changes so we
+  // never show the previous wallet's registered/claimed status to a new wallet.
+  useEffect(() => {
+    setUserState(null);
   }, [userAddress]);
 
   const readProvider = useMemo(
@@ -502,6 +513,12 @@ export function SpringPushWidget(): JSX.Element {
             contract.participantRank(userAddress),
             contract.previewPrizeFor(userAddress),
           ]);
+
+        // Guard: if the wallet changed while this refresh was in flight, discard
+        // the result. Without this, a slow refresh for wallet A can complete
+        // after wallet B connects and overwrite wallet B's state with A's data
+        // (e.g. registered: true), making every wallet appear registered.
+        if (userAddress !== userAddressRef.current) return;
 
         setUserState({
           registered: Boolean(isRegistered),

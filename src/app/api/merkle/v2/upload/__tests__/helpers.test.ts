@@ -12,10 +12,7 @@
  *   - buildStoredPayload: top-level shape + per-entry shape
  */
 
-import {
-  BASELINE_LEAVES_DATATYPE,
-  FINISH_LEAVES_DATATYPE,
-} from "@/zk/improvementLeafFetcher";
+import { BASELINE_LEAVES_DATATYPE, FINISH_LEAVES_DATATYPE } from "../helpers";
 import {
   hashLeafV2,
   serializeLeafV2,

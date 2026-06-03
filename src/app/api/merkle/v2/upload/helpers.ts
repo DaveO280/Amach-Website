@@ -40,10 +40,11 @@ import {
   hashLeafV2,
   serializeLeafV2,
 } from "@/zk/improvementWitnessBuilder";
-import {
-  BASELINE_LEAVES_DATATYPE,
-  FINISH_LEAVES_DATATYPE,
-} from "@/zk/improvementLeafFetcher";
+// Inline the dataType strings rather than importing from the "use client"
+// improvementLeafFetcher module. Server-side code cannot read exported values
+// from client modules — Next.js replaces them with client-reference stubs.
+export const BASELINE_LEAVES_DATATYPE = "merkle-v2-baseline-leaves";
+export const FINISH_LEAVES_DATATYPE = "merkle-v2-finish-leaves";
 
 export type UploadWindow = "baseline" | "finish";
 

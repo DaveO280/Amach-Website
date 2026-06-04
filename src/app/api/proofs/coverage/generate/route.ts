@@ -3,7 +3,7 @@ import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 import { generateCoverage } from "@/zk/devZkCoverageService";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 180;
 
 type Body = {
   walletAddress: string;

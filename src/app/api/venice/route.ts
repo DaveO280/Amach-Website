@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 // Vercel Hobby plan: max 60s, Pro plan: max 300s
 // Set to 300 for Pro plan, or 60 for Hobby
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 // Remove artificial timeout limits - let Venice API handle its own timeouts
 // Only use timeout if explicitly set in environment variable

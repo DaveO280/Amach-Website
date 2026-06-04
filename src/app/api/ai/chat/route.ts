@@ -20,7 +20,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 interface ChatMessage {
   role: "user" | "assistant" | "system";

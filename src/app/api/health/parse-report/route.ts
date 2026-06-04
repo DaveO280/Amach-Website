@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseHealthReport } from "@/utils/reportParsers";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 // CORS headers
 const corsHeaders = {

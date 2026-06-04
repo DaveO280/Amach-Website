@@ -3,7 +3,7 @@ import type { SolidityProof } from "@/zk/devZkCoverageService";
 import { verifyCoverage } from "@/zk/devZkCoverageService";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 type Body = {
   proof: SolidityProof;

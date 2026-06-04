@@ -6,7 +6,7 @@ import {
 } from "@/zk/devZkCoverageService";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 type Body = {
   walletAddress: string;

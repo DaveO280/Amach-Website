@@ -6,6 +6,8 @@
 import type {
   BloodworkReportData,
   DexaReportData,
+  GutHealthReportData,
+  GutHealthSpeciesEntry,
   ParsedReportSummary,
 } from "@/types/reportData";
 import {
@@ -386,8 +388,169 @@ export class StorjReportService {
     }
   }
 
+  private fingerprintGutHealth(report: GutHealthReportData): string {
+    const normalized = {
+      type: "gut-health",
+      provider: report.provider,
+      kit_id: report.kit_id ?? null,
+      collection_date: report.collection_date ?? null,
+      microbiome_score: report.summary.microbiome_score ?? null,
+      gut_type: report.summary.gut_type ?? null,
+    };
+    return this.hashString(this.stableStringify(normalized));
+  }
+
   /**
-   * Store a parsed report summary (handles both DEXA and Bloodwork)
+   * Store a gut health report (Layer 1 — structured metrics) to Storj.
+   * The species list (Layer 2) is stored separately via storeGutHealthSpecies.
+   */
+  async storeGutHealthReport(
+    report: GutHealthReportData,
+    userAddress: string,
+    encryptionKey: WalletEncryptionKey,
+    options?: ReportStorageOptions,
+  ): Promise<ReportStorageResult> {
+    try {
+      console.log(`💾 Storing gut health report (Layer 1) to Storj...`);
+
+      const fingerprint = this.fingerprintGutHealth(report);
+      const duplicate = await this.findDuplicate(
+        userAddress,
+        encryptionKey,
+        "gut-health-report",
+        fingerprint,
+      );
+      if (duplicate) {
+        console.log(
+          `♻️ Duplicate gut health report detected, reusing: ${duplicate.storjUri}`,
+        );
+        return {
+          success: true,
+          storjUri: duplicate.storjUri,
+          contentHash: duplicate.contentHash,
+          reportId: duplicate.reportId,
+          duplicate: true,
+        };
+      }
+
+      // Store without rawText to keep the Layer 1 object lean
+      const { rawText: _rawText, species: _species, ...payload } = report;
+
+      const reportId = `gut-${report.collection_date ?? Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      const stored = await this.storageService.storeHealthData<
+        Omit<GutHealthReportData, "rawText" | "species">
+      >(payload, userAddress, encryptionKey, {
+        dataType: "gut-health-report",
+        metadata: {
+          reportid: reportId,
+          reporttype: "gut-health",
+          provider: report.provider,
+          reportfingerprint: fingerprint,
+          collectiondate: report.collection_date ?? "",
+          microbiomescore: String(report.summary.microbiome_score ?? ""),
+          confidence: String(report.confidence),
+          ...options?.metadata,
+        },
+        onProgress: options?.onProgress,
+      });
+
+      console.log(`✅ Gut health report stored: ${stored.storjUri}`);
+
+      return {
+        success: true,
+        storjUri: stored.storjUri,
+        contentHash: stored.contentHash,
+        reportId,
+      };
+    } catch (error) {
+      console.error("❌ Failed to store gut health report:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  /**
+   * Store the species list (Layer 2) separately so ZK proofs can target it
+   * independently of the structured metrics.
+   */
+  async storeGutHealthSpecies(
+    species: GutHealthSpeciesEntry[],
+    reportId: string,
+    userAddress: string,
+    encryptionKey: WalletEncryptionKey,
+    options?: ReportStorageOptions,
+  ): Promise<ReportStorageResult> {
+    try {
+      console.log(
+        `💾 Storing gut health species list (Layer 2, ${species.length} entries) to Storj...`,
+      );
+
+      const stored = await this.storageService.storeHealthData<
+        GutHealthSpeciesEntry[]
+      >(species, userAddress, encryptionKey, {
+        dataType: "gut-health-species",
+        metadata: {
+          reportid: reportId,
+          speciescount: String(species.length),
+          ...options?.metadata,
+        },
+        onProgress: options?.onProgress,
+      });
+
+      console.log(`✅ Gut health species stored: ${stored.storjUri}`);
+
+      return {
+        success: true,
+        storjUri: stored.storjUri,
+        contentHash: stored.contentHash,
+        reportId,
+      };
+    } catch (error) {
+      console.error("❌ Failed to store gut health species:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  async retrieveGutHealthReport(
+    storjUri: string,
+    encryptionKey: WalletEncryptionKey,
+  ): Promise<Omit<GutHealthReportData, "rawText" | "species"> | null> {
+    try {
+      console.log(`📥 Retrieving gut health report from Storj: ${storjUri}`);
+      const retrieved = await this.storageService.retrieveHealthData<
+        Omit<GutHealthReportData, "rawText" | "species">
+      >(storjUri, encryptionKey);
+      return retrieved.data ?? null;
+    } catch (error) {
+      console.error("❌ Failed to retrieve gut health report:", error);
+      return null;
+    }
+  }
+
+  async retrieveGutHealthSpecies(
+    storjUri: string,
+    encryptionKey: WalletEncryptionKey,
+  ): Promise<GutHealthSpeciesEntry[] | null> {
+    try {
+      console.log(`📥 Retrieving gut health species from Storj: ${storjUri}`);
+      const retrieved = await this.storageService.retrieveHealthData<
+        GutHealthSpeciesEntry[]
+      >(storjUri, encryptionKey);
+      return retrieved.data ?? null;
+    } catch (error) {
+      console.error("❌ Failed to retrieve gut health species:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Store a parsed report summary (handles DEXA, Bloodwork, and Gut Health)
    *
    * @param reportSummary - Parsed report summary
    * @param userAddress - User's wallet address
@@ -410,6 +573,13 @@ export class StorjReportService {
       );
     } else if (reportSummary.report.type === "bloodwork") {
       return this.storeBloodworkReport(
+        reportSummary.report,
+        userAddress,
+        encryptionKey,
+        options,
+      );
+    } else if (reportSummary.report.type === "gut-health") {
+      return this.storeGutHealthReport(
         reportSummary.report,
         userAddress,
         encryptionKey,

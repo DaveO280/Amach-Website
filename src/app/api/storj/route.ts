@@ -511,6 +511,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
                   typedEncryptionKey,
                 ),
               );
+            } else if (reportType === "gut-health") {
+              verifiedDecrypt = Boolean(
+                await reportService.retrieveGutHealthReport(
+                  stored.storjUri,
+                  typedEncryptionKey,
+                ),
+              );
             } else {
               verifiedDecrypt = Boolean(
                 await reportService.retrieveDexaReport(
@@ -552,6 +559,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
               storjUri,
               typedEncryptionKey,
               body?.rawText,
+            );
+          } else if (reportType === "gut-health") {
+            result = await reportService.retrieveGutHealthReport(
+              storjUri,
+              typedEncryptionKey,
+            );
+          } else if (reportType === "gut-health-species") {
+            result = await reportService.retrieveGutHealthSpecies(
+              storjUri,
+              typedEncryptionKey,
             );
           } else {
             result = await reportService.retrieveDexaReport(

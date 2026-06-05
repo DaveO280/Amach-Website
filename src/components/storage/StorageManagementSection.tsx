@@ -279,7 +279,9 @@ export function StorageManagementSection({
           items.filter(
             (i) =>
               i.dataType === "bloodwork-report-fhir" ||
-              i.dataType === "dexa-report-fhir",
+              i.dataType === "dexa-report-fhir" ||
+              i.dataType === "gut-health-report" ||
+              i.dataType === "gut-health-species",
           ),
         );
       } catch (error) {
@@ -586,6 +588,8 @@ export function StorageManagementSection({
       const TEST_DATA_TYPES = new Set([
         "bloodwork-report-fhir",
         "dexa-report-fhir",
+        "gut-health-report",
+        "gut-health-species",
       ]);
       const list =
         testsDataType === "all"
@@ -657,6 +661,8 @@ export function StorageManagementSection({
       const TEST_DATA_TYPES = new Set([
         "bloodwork-report-fhir",
         "dexa-report-fhir",
+        "gut-health-report",
+        "gut-health-species",
       ]);
       const filteredLegacy =
         testsDataType === "all"
@@ -971,7 +977,9 @@ export function StorageManagementSection({
       const legacyMode = testsBucketMode === "legacy";
       const isReport =
         item.dataType === "dexa-report-fhir" ||
-        item.dataType === "bloodwork-report-fhir";
+        item.dataType === "bloodwork-report-fhir" ||
+        item.dataType === "gut-health-report" ||
+        item.dataType === "gut-health-species";
 
       let action: string;
       let reportType: string | undefined;
@@ -988,7 +996,11 @@ export function StorageManagementSection({
             ? "bloodwork"
             : item.dataType === "dexa-report-fhir"
               ? "dexa"
-              : undefined;
+              : item.dataType === "gut-health-report"
+                ? "gut-health"
+                : item.dataType === "gut-health-species"
+                  ? "gut-health-species"
+                  : undefined;
       }
 
       const resp = await fetch("/api/storj", {
@@ -1069,6 +1081,15 @@ export function StorageManagementSection({
    */
   const handleAttestItem = async (item: StorjListItem): Promise<void> => {
     if (!encryptionKey) return;
+    if (
+      item.dataType === "gut-health-report" ||
+      item.dataType === "gut-health-species"
+    ) {
+      setAttestStatus(
+        "On-chain attestation for gut health reports is not yet supported.",
+      );
+      return;
+    }
 
     setAttestLoading(true);
     setAttestStatus("");
@@ -2031,9 +2052,13 @@ export function StorageManagementSection({
                     onChange={(e) => setTestsDataType(e.target.value)}
                   >
                     <option value="bloodwork-report-fhir">
-                      bloodwork-report-fhir
+                      Bloodwork Report
                     </option>
-                    <option value="dexa-report-fhir">dexa-report-fhir</option>
+                    <option value="dexa-report-fhir">DEXA Report</option>
+                    <option value="gut-health-report">Gut Health Report</option>
+                    <option value="gut-health-species">
+                      Gut Health Species
+                    </option>
                     <option value="all">all test reports</option>
                   </select>
                 </div>
@@ -2128,7 +2153,15 @@ export function StorageManagementSection({
                             }}
                           >
                             <div className="text-xs font-medium text-gray-900">
-                              {item.dataType}
+                              {item.dataType === "bloodwork-report-fhir"
+                                ? "Bloodwork Report"
+                                : item.dataType === "dexa-report-fhir"
+                                  ? "DEXA Report"
+                                  : item.dataType === "gut-health-report"
+                                    ? "Gut Health Report"
+                                    : item.dataType === "gut-health-species"
+                                      ? "Gut Health Species"
+                                      : item.dataType}
                             </div>
                             <div className="text-[11px] text-gray-600 mt-1 break-all">
                               {item.uri}

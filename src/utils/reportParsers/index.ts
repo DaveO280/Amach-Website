@@ -9,13 +9,17 @@ import {
   parseMedicalRecordWithAI,
   createFallbackMedicalRecord,
 } from "./aiMedicalRecordParser";
+import {
+  parseGutHealthReport,
+  looksLikeGutHealthReport,
+} from "./gutHealthParser";
 import type {
   ParsedReportSummary,
   ParsedHealthReport,
 } from "@/types/reportData";
 
 export interface ReportParsingOptions {
-  inferredType?: "dexa" | "bloodwork" | "medical-record";
+  inferredType?: "dexa" | "bloodwork" | "medical-record" | "gut-health";
   sourceName?: string;
   // Legacy option used by some callers; currently ignored by the parser.
   useAI?: boolean;
@@ -30,6 +34,24 @@ export async function parseHealthReport(
   }
 
   const reports: ParsedHealthReport[] = [];
+
+  // Gut-health is checked first — it has distinctive markers that don't
+  // overlap with DEXA/bloodwork, so an early return is safe.
+  const isGutHealth =
+    options.inferredType === "gut-health" ||
+    (options.inferredType === undefined && looksLikeGutHealthReport(rawText));
+
+  if (isGutHealth) {
+    const gut = parseGutHealthReport(rawText);
+    if (gut) {
+      if (options.sourceName && !gut.source) gut.source = options.sourceName;
+      reports.push(gut);
+    }
+    return reports.map((report) => ({
+      report,
+      extractedAt: new Date().toISOString(),
+    }));
+  }
 
   // Check type if not explicitly set
   const isDexa =
@@ -330,3 +352,4 @@ export async function parseHealthReport(
 export * from "./dexaParser";
 export * from "./bloodworkParser";
 export * from "./aiMedicalRecordParser";
+export * from "./gutHealthParser";

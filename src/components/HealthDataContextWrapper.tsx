@@ -1,6 +1,7 @@
 "use client";
 
 import { useHealthDataQuery } from "@/data/hooks/useHealthDataQuery";
+import { useStorjAppleHealthQuery } from "@/data/hooks/useStorjAppleHealthQuery";
 import { HealthDataResults } from "@/data/types/healthMetrics";
 import {
   ChatMessage,
@@ -19,7 +20,13 @@ import {
 } from "@/utils/dailyHealthScoreCalculator";
 import { extractDatePart } from "@/utils/dataDeduplicator";
 import { processSleepData } from "@/utils/sleepDataProcessor";
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { healthDataProcessor } from "@/data/processors/HealthDataProcessor";
 import {
   normalizeUserProfile,
@@ -36,6 +43,7 @@ import type {
 import { buildContextVaultSnapshot } from "@/utils/contextVault";
 import { useWalletService } from "@/hooks/useWalletService";
 import { healthDataStore } from "@/data/store/healthDataStore";
+import { useStorjHealthSync } from "@/hooks/useStorjHealthSync";
 
 // Profile type
 interface ProfileData extends NormalizedUserProfile {}
@@ -151,8 +159,14 @@ export default function HealthDataContextWrapper({
   children: React.ReactNode;
 }): JSX.Element {
   const walletService = useWalletService();
-  // Health data state
-  const { data: metricData = {}, isPending, error } = useHealthDataQuery();
+  // Sync Apple Health data from Storj into IndexedDB when local data is absent
+  useStorjHealthSync();
+  // Health data state — IndexedDB is primary; Storj fills any gaps
+  const {
+    data: indexedDbMetricData = {},
+    isPending,
+    error,
+  } = useHealthDataQuery();
   const [processingState, setProcessingState] = useState<ProcessingState>(
     defaultProcessingState,
   );
@@ -172,6 +186,28 @@ export default function HealthDataContextWrapper({
     loadHealthProfileFromBlockchain,
     getDecryptedProfile,
   } = walletService;
+
+  // Fetch Apple Health + breathing sessions from Storj (background, non-blocking).
+  // Only fires when the wallet encryption key is already cached (no popup).
+  const { data: storjHealthData } = useStorjAppleHealthQuery(
+    isConnected ? (address ?? undefined) : undefined,
+  );
+
+  // Merged metric data: IndexedDB wins for any metric type it has data for;
+  // Storj fills the gaps (primary case: iOS-only users whose IndexedDB is empty).
+  const metricData = useMemo((): HealthDataByType => {
+    if (!storjHealthData || Object.keys(storjHealthData).length === 0) {
+      return indexedDbMetricData;
+    }
+    // Start with Storj data, then overwrite with IndexedDB data where available
+    const merged: HealthDataByType = { ...storjHealthData };
+    for (const [key, points] of Object.entries(indexedDbMetricData)) {
+      if (Array.isArray(points) && points.length > 0) {
+        merged[key] = points;
+      }
+    }
+    return merged;
+  }, [indexedDbMetricData, storjHealthData]);
 
   // Load long-range processed aggregates on startup (enables fast charts / tool-use without reprocessing raw data).
   useEffect(() => {

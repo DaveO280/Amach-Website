@@ -620,7 +620,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
 
   const inferReportType = (
     fileName: string,
-  ): "dexa" | "bloodwork" | undefined => {
+  ): "dexa" | "bloodwork" | "gut-health" | undefined => {
     const lower = fileName.toLowerCase();
     if (lower.includes("dexa") || lower.includes("dxa")) {
       return "dexa";
@@ -633,6 +633,16 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       lower.includes("hormone")
     ) {
       return "bloodwork";
+    }
+    if (
+      lower.includes("gut") ||
+      lower.includes("microbiome") ||
+      lower.includes("tinyhealth") ||
+      lower.includes("tiny-health") ||
+      lower.includes("viome") ||
+      lower.includes("thryve")
+    ) {
+      return "gut-health";
     }
     return undefined;
   };
@@ -988,29 +998,116 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           );
           const idx = reportIdx >= 0 ? reportIdx : originalIdx;
 
-          const resp = await fetch("/api/storj", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "report/store",
-              userAddress: address,
-              encryptionKey,
-              data: r,
-              options: {
-                metadata: {
-                  uploadedAt: new Date().toISOString(),
-                  source: "chat-ui",
+          let storjUri: string;
+          let storjSpeciesUri: string | undefined;
+          let contentHash: string;
+
+          if (r.report.type === "gut-health") {
+            // Gut health uses its own dedicated endpoint (parse+store in one call)
+            const gutResp = await fetch("/api/gut-health/upload", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text: r.report.rawText,
+                walletAddress: address,
+                encryptionKey,
+              }),
+            });
+            const gutPayload = await gutResp.json();
+            if (!gutResp.ok || !gutPayload?.success) {
+              throw new Error(
+                gutPayload?.error || "Failed to save gut health report",
+              );
+            }
+            storjUri = gutPayload.storjUri as string;
+            storjSpeciesUri = gutPayload.storjSpeciesUri as string | undefined;
+            contentHash = (gutPayload.contentHash as string | undefined) || "";
+            if (!contentHash) {
+              throw new Error(
+                "Gut health save succeeded but no contentHash returned; cannot record on-chain marker.",
+              );
+            }
+
+            await recordReportUploadOnChain({
+              storjUri,
+              contentHash,
+              reportType: "gut-health",
+            });
+
+            if (reportIdx >= 0) {
+              updateReport(reportIdx, {
+                storjUri,
+                storjSpeciesUri,
+                savedToStorjAt: new Date().toISOString(),
+              });
+            }
+
+            if (address) {
+              try {
+                await storjItemsCache.initialize();
+                await storjItemsCache.cacheItem(address, {
+                  uri: storjUri,
+                  contentHash,
+                  size: 0,
+                  uploadedAt: Date.now(),
+                  dataType: "gut-health-report",
+                  metadata: {
+                    reportType: "gut-health",
+                    uploadedAt: new Date().toISOString(),
+                    source: "chat-ui",
+                  },
+                });
+                if (storjSpeciesUri) {
+                  await storjItemsCache.cacheItem(address, {
+                    uri: storjSpeciesUri,
+                    contentHash: "",
+                    size: 0,
+                    uploadedAt: Date.now(),
+                    dataType: "gut-health-species",
+                    metadata: {
+                      reportType: "gut-health",
+                      uploadedAt: new Date().toISOString(),
+                      source: "chat-ui",
+                    },
+                  });
+                }
+              } catch (error) {
+                console.error(
+                  "[CosaintChatUI] Failed to cache gut-health item to IndexedDB:",
+                  error,
+                );
+              }
+            }
+          } else {
+            const resp = await fetch("/api/storj", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "report/store",
+                userAddress: address,
+                encryptionKey,
+                data: r,
+                options: {
+                  metadata: {
+                    uploadedAt: new Date().toISOString(),
+                    source: "chat-ui",
+                  },
+                  skipVerification: true,
                 },
-                skipVerification: true, // Skip slow verification step
-              },
-            }),
-          });
+              }),
+            });
 
-          const payload = await resp.json();
-          const result = payload?.result;
+            const payload = await resp.json();
+            const result = payload?.result;
 
-          if (result?.success && result?.storjUri) {
-            const contentHash =
+            if (!(result?.success && result?.storjUri)) {
+              throw new Error(
+                result?.error || "Failed to save report to Storj",
+              );
+            }
+
+            storjUri = result.storjUri as string;
+            contentHash =
               (result?.contentHash as string | undefined) ||
               (result?.existingContentHash as string | undefined) ||
               "";
@@ -1021,25 +1118,23 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             }
 
             await recordReportUploadOnChain({
-              storjUri: result.storjUri,
+              storjUri,
               contentHash,
               reportType: r.report.type,
             });
 
-            // Update the report if it exists in the main reports array
             if (reportIdx >= 0) {
               updateReport(reportIdx, {
-                storjUri: result.storjUri,
+                storjUri,
                 savedToStorjAt: new Date().toISOString(),
               });
             }
 
-            // Cache to IndexedDB for fast access in Storage Manager
             if (address) {
               try {
                 await storjItemsCache.initialize();
                 await storjItemsCache.cacheItem(address, {
-                  uri: result.storjUri,
+                  uri: storjUri,
                   contentHash,
                   size: result.size || 0,
                   uploadedAt: Date.now(),
@@ -1058,14 +1153,11 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                   "[CosaintChatUI] Failed to cache item to IndexedDB:",
                   error,
                 );
-                // Don't throw - caching failure shouldn't break the save
               }
             }
-
-            results.push({ success: true, idx });
-          } else {
-            throw new Error(result?.error || "Failed to save report to Storj");
           }
+
+          results.push({ success: true, idx });
         } catch (error) {
           console.error(`❌ Failed to save report:`, error);
           const errorMessage = getAttestationErrorMessage(error);
@@ -1538,18 +1630,20 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             return {
               type: r.report.type,
               hasMetrics: r.report.metrics?.length || 0,
-              hasRegions: "N/A",
             };
-          } else {
-            // Must be dexa
+          } else if (r.report.type === "dexa") {
             return {
               type: r.report.type,
-              hasMetrics: "N/A",
-              hasRegions:
-                r.report.type === "dexa"
-                  ? r.report.regions?.length || 0
-                  : "N/A",
+              hasRegions: r.report.regions?.length || 0,
             };
+          } else if (r.report.type === "gut-health") {
+            return {
+              type: r.report.type,
+              microbiomeScore: r.report.summary?.microbiome_score,
+              speciesCount: r.report.species?.length || 0,
+            };
+          } else {
+            return { type: r.report.type };
           }
         }),
       );

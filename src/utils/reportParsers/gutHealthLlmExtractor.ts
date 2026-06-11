@@ -1,9 +1,13 @@
 /**
  * LLM-based gut health report extractor.
  *
- * Used when the regex parser returns low confidence. Sends the PDF text to
- * Venice with a structured extraction prompt and maps the response to
- * GutHealthReportData.
+ * Primary parser for Tiny Health gut microbiome reports.  Regex is not viable
+ * for this format: Tiny Health uses a multi-column visual layout where status
+ * indicators are not text-adjacent to metric values, and the microbiome score
+ * is a gauge chart absent from text extraction entirely.
+ *
+ * Uses callLlmExtractor (shared Venice pipeline) with an explicit
+ * ANTI_HALLUCINATION_RULES block and post-parse validation.
  */
 
 import type {
@@ -13,7 +17,11 @@ import type {
   GutHealthSpeciesEntry,
   GutHealthStatus,
 } from "@/types/reportData";
-import { callVenice } from "./veniceClient";
+import { callLlmExtractor, ANTI_HALLUCINATION_RULES } from "./llmPipeline";
+import {
+  validateExtractedValues,
+  GUT_HEALTH_VALIDATION_RULES,
+} from "./hallucinationGuard";
 
 // ── Internal LLM response shape ────────────────────────────────────────────
 
@@ -187,10 +195,40 @@ function classifySpecies(c: string): GutHealthSpeciesEntry["classification"] {
   return "unknown";
 }
 
+/** Flatten nested LlmResult to a path→value map for the hallucination guard. */
+function flattenForValidation(
+  p: LlmResult,
+): Record<string, number | undefined | null> {
+  const dr = p.metrics?.diversity_resilience ?? {};
+  const gb = p.metrics?.gut_barrier_inflammation ?? {};
+  return {
+    microbiome_score: p.microbiome_score,
+    beneficial_pct: p.beneficial_pct,
+    variable_pct: p.variable_pct,
+    unfriendly_pct: p.unfriendly_pct,
+    unknown_pct: p.unknown_pct,
+    "diversity_resilience.shannon_diversity": dr.shannon_diversity?.value,
+    "diversity_resilience.species_richness": dr.species_richness?.value,
+    "diversity_resilience.microbiome_age": dr.microbiome_age?.value,
+    "diversity_resilience.gut_resilience_score": dr.gut_resilience_score?.value,
+    "diversity_resilience.bacteroidota": dr.bacteroidota?.value,
+    "diversity_resilience.firmicutes": dr.firmicutes?.value,
+    "diversity_resilience.proteobacteria": dr.proteobacteria?.value,
+    "gut_barrier_inflammation.hexa_lps_index": gb.hexa_lps_index?.value,
+    "gut_barrier_inflammation.mucus_degradation_index":
+      gb.mucus_degradation_index?.value,
+    "gut_barrier_inflammation.hydrogen_sulfide_index":
+      gb.hydrogen_sulfide_index?.value,
+  };
+}
+
 // ── Prompt ─────────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT =
-  "You are a precise data extraction assistant. Return ONLY valid JSON with no markdown, code blocks, or explanation.";
+const SYSTEM_PROMPT = [
+  "You are a precise data extraction assistant. Return ONLY valid JSON with no markdown, code blocks, or explanation.",
+  "",
+  ANTI_HALLUCINATION_RULES,
+].join("\n");
 
 function buildPrompt(text: string): string {
   return `Extract all structured data from this Tiny Health gut microbiome report text.
@@ -200,12 +238,13 @@ EXTRACTION RULES:
 - gut_type: the dominant microbiome type (e.g. "Bacteroides", "Prevotella", "Lachnospiraceae")
 - Metric values with unit "%" are species/group percentages
 - Metric values with unit "rpkm" are pathway production values
-- Inflammation indices (hexa_lps_index, mucus_degradation_index, hydrogen_sulfide_index): 0-100 scale, unit ""
+- Inflammation indices (hexa_lps_index, mucus_degradation_index, hydrogen_sulfide_index): 0–100 scale, unit ""
 - Status values must be exactly one of: "great", "okay", "improving", "needs_support"
 - Species classification must be: "beneficial", "variable", "unfriendly", or "unknown"
 - Extract ALL species listed anywhere in the report with their percentages
 - recommendations: the "Clinical indication examples" action items for each category
-- top_focus_areas: the top 3-5 metrics listed as priority focus areas with their values
+- top_focus_areas: the top 3–5 metrics listed as priority focus areas with their values
+- If a value is not explicitly stated in the text, return null — do NOT estimate or fill typical values
 
 RETURN THIS EXACT JSON SCHEMA (use null for missing values, empty arrays for no items):
 {
@@ -336,43 +375,27 @@ export async function extractGutHealthWithLlm(
   rawText: string,
 ): Promise<GutHealthReportData | null> {
   try {
-    // Collapse runs of whitespace introduced by the PDF text stream
+    // Collapse runs of whitespace left by the PDF text stream
     const text = rawText.replace(/[ \t]{2,}/g, " ").trim();
 
-    const response = (await callVenice({
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildPrompt(text) },
-      ],
-      max_tokens: 8000,
+    const raw = await callLlmExtractor(SYSTEM_PROMPT, buildPrompt(text), {
+      maxTokens: 8000,
       temperature: 0.1,
-      response_format: { type: "json_object" },
-    })) as { choices?: Array<{ message?: { content?: string } }> };
+      logTag: "gutHealthLlmExtractor",
+    });
 
-    const content = response?.choices?.[0]?.message?.content;
-    if (!content) {
-      console.warn("[gutHealthLlmExtractor] Empty response from Venice");
-      return null;
-    }
+    if (!raw) return null;
 
-    let parsed: LlmResult;
-    try {
-      parsed = JSON.parse(content) as LlmResult;
-    } catch {
-      // Strip markdown fences if the model ignored instructions
-      const stripped =
-        content.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1] ??
-        content.match(/\{[\s\S]*\}/)?.[0];
-      if (!stripped) {
-        console.warn(
-          "[gutHealthLlmExtractor] Could not parse JSON from response",
-        );
-        return null;
-      }
-      parsed = JSON.parse(stripped) as LlmResult;
-    }
+    const parsed = raw as LlmResult;
 
-    // ── Map to GutHealthReportData ───────────────────────────────────────
+    // ── Post-parse validation ──────────────────────────────────────────────
+    const { confidencePenalty } = validateExtractedValues(
+      flattenForValidation(parsed),
+      GUT_HEALTH_VALIDATION_RULES,
+      "gutHealthLlmExtractor",
+    );
+
+    // ── Map to GutHealthReportData ─────────────────────────────────────────
 
     const m = parsed.metrics ?? {};
     const bm = m.beneficial_microbes ?? {};
@@ -400,7 +423,7 @@ export async function extractGutHealthWithLlm(
       value: f.value ?? undefined,
     }));
 
-    // Confidence: count how many key fields were actually extracted
+    // Confidence: count extracted key fields, subtract hallucination penalty
     let hits = 0;
     if (parsed.microbiome_score != null) hits++;
     if (parsed.gut_type) hits++;
@@ -410,7 +433,7 @@ export async function extractGutHealthWithLlm(
     if (sc.butyrate?.value != null) hits++;
     if (dr.shannon_diversity?.value != null) hits++;
     if (speciesArr.length > 0) hits++;
-    const confidence = Math.min(1, Math.max(0.3, hits / 8));
+    const confidence = Math.min(1, Math.max(0.3, hits / 8 - confidencePenalty));
 
     return {
       type: "gut-health",

@@ -49,7 +49,7 @@ import type {
 export interface ReportParsingOptions {
   inferredType?: "dexa" | "bloodwork" | "medical-record" | "gut-health";
   sourceName?: string;
-  // Legacy option used by some callers; currently ignored by the parser.
+  /** @deprecated AI is now the default for all types. This option is ignored. */
   useAI?: boolean;
 }
 
@@ -110,43 +110,41 @@ export async function parseHealthReport(
   if (isDexa) {
     let dexa: ParsedHealthReport | null = null;
 
-    // Try AI parsing first if enabled, then merge with regex parser for best results
+    // AI-first: LLM extracts BMD; regex extracts body composition; results merged.
     let aiResult: ParsedHealthReport | null = null;
     let regexResult: ParsedHealthReport | null = null;
 
-    if (options.useAI) {
-      console.log("[ReportParser] 🤖 Using AI to parse DEXA report...");
-      try {
-        aiResult = await parseDexaReportWithAI(rawText, options.sourceName);
+    console.log("[ReportParser] 🤖 Using AI to parse DEXA report...");
+    try {
+      aiResult = await parseDexaReportWithAI(rawText, options.sourceName);
 
-        if (aiResult) {
-          const hasRegions = aiResult.regions && aiResult.regions.length > 0;
-          const hasMeaningfulData =
-            aiResult.totalBodyFatPercent !== undefined ||
-            aiResult.boneDensityTotal?.bmd !== undefined ||
-            aiResult.totalLeanMassKg !== undefined;
+      if (aiResult) {
+        const hasRegions = aiResult.regions && aiResult.regions.length > 0;
+        const hasMeaningfulData =
+          aiResult.totalBodyFatPercent !== undefined ||
+          aiResult.boneDensityTotal?.bmd !== undefined ||
+          aiResult.totalLeanMassKg !== undefined;
 
-          if (hasRegions) {
-            console.log(
-              `[ReportParser] ✅ AI parser extracted ${aiResult.regions.length} regions`,
-            );
-          } else if (hasMeaningfulData) {
-            console.warn(
-              `[ReportParser] ⚠️ AI parser extracted data but 0 regions (confidence: ${aiResult.confidence}).`,
-            );
-          } else {
-            console.warn(
-              `[ReportParser] ⚠️ AI parser returned report with no meaningful data.`,
-            );
-            aiResult = null;
-          }
+        if (hasRegions) {
+          console.log(
+            `[ReportParser] ✅ AI parser extracted ${aiResult.regions.length} regions`,
+          );
+        } else if (hasMeaningfulData) {
+          console.warn(
+            `[ReportParser] ⚠️ AI parser extracted data but 0 regions (confidence: ${aiResult.confidence}).`,
+          );
         } else {
-          console.log("[ReportParser] AI parser timed out or returned null.");
+          console.warn(
+            `[ReportParser] ⚠️ AI parser returned report with no meaningful data.`,
+          );
+          aiResult = null;
         }
-      } catch (aiError) {
-        console.error("[ReportParser] ❌ AI parser error:", aiError);
-        aiResult = null;
+      } else {
+        console.log("[ReportParser] AI parser timed out or returned null.");
       }
+    } catch (aiError) {
+      console.error("[ReportParser] ❌ AI parser error:", aiError);
+      aiResult = null;
     }
 
     // Always run regex parser to get body composition data (fat/lean mass)
@@ -317,28 +315,26 @@ export async function parseHealthReport(
   if (isBloodwork) {
     let blood: ParsedHealthReport | null = null;
 
-    // Try AI parsing first if enabled, fall back to regex
-    if (options.useAI) {
-      console.log("[ReportParser] 🤖 Using AI to parse bloodwork report...");
-      try {
-        blood = await parseBloodworkReportWithAI(rawText, options.sourceName);
-        if (blood && blood.metrics.length > 0) {
-          console.log(
-            `[ReportParser] ✅ AI parser extracted ${blood.metrics.length} metrics`,
-          );
-        } else if (blood) {
-          console.warn(
-            `[ReportParser] ⚠️ AI parser returned report with 0 metrics, falling back to regex...`,
-          );
-          blood = null; // Force fallback
-        }
-      } catch (aiError) {
-        console.error("[ReportParser] ❌ AI parser error:", aiError);
-        blood = null; // Force fallback
+    // AI-first: LLM handles all lab report formats; regex is a fallback.
+    console.log("[ReportParser] 🤖 Using AI to parse bloodwork report...");
+    try {
+      blood = await parseBloodworkReportWithAI(rawText, options.sourceName);
+      if (blood && blood.metrics.length > 0) {
+        console.log(
+          `[ReportParser] ✅ AI parser extracted ${blood.metrics.length} metrics`,
+        );
+      } else if (blood) {
+        console.warn(
+          `[ReportParser] ⚠️ AI parser returned report with 0 metrics, falling back to regex...`,
+        );
+        blood = null;
       }
+    } catch (aiError) {
+      console.error("[ReportParser] ❌ AI parser error:", aiError);
+      blood = null;
     }
 
-    // Fall back to regex parser if AI parsing failed or wasn't enabled
+    // Regex fallback if AI failed
     if (!blood) {
       console.log("[ReportParser] 📝 Using regex to parse bloodwork report...");
       blood = parseBloodworkReport(rawText);
@@ -400,3 +396,5 @@ export * from "./gutHealthParser";
 export * from "./gutHealthLlmExtractor";
 export * from "./parseConfig";
 export * from "./veniceModels";
+export * from "./llmPipeline";
+export * from "./hallucinationGuard";

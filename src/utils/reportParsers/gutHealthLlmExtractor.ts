@@ -222,16 +222,170 @@ function flattenForValidation(
   };
 }
 
+// ── Disease marker sanitizer ───────────────────────────────────────────────
+
+/**
+ * Disease markers (h_pylori, candida, etc.) should be null unless the text
+ * contains explicit positive-detection language with a quantified abundance.
+ * This is a post-parse hard guard — any value not confirmed positive is zeroed.
+ */
+function sanitizeDiseaseMarkers(
+  dm: NonNullable<LlmResult["metrics"]>["disruptive_microbes"],
+  rawText: string,
+): void {
+  if (!dm) return;
+  const DISEASE_MARKERS = [
+    "h_pylori",
+    "blastocystis",
+    "cryptosporidium",
+    "giardia",
+    "entamoeba_histolytica",
+    "candida",
+    "aspergillus",
+  ] as const;
+
+  const lowerText = rawText.toLowerCase();
+
+  for (const marker of DISEASE_MARKERS) {
+    const field = dm[marker];
+    if (!field || field.value == null) continue;
+
+    const displayName = marker.replace(/_/g, " ");
+    const idx = lowerText.indexOf(displayName);
+    if (idx === -1) {
+      // Marker not even mentioned — definitely hallucinated
+      dm[marker] = null;
+      console.warn(
+        `[gutHealthLlmExtractor] ⚠️ Nulled ${marker} — not mentioned in text`,
+      );
+      continue;
+    }
+
+    // Check the ±300 chars around the marker for positive-detection language
+    const context = lowerText.slice(Math.max(0, idx - 50), idx + 300);
+    const notDetected =
+      /not detected|negative|absent|0\.00\s*%|0%|<\s*0\.0/.test(context);
+    const positiveDetection =
+      /detected|present|\d+\.\d+\s*%|\d+\s*rpkm/.test(context) && !notDetected;
+
+    if (!positiveDetection || notDetected) {
+      dm[marker] = null;
+      console.warn(
+        `[gutHealthLlmExtractor] ⚠️ Nulled ${marker} — no positive detection in text (context: "${context.slice(0, 80).replace(/\n/g, " ")}")`,
+      );
+    }
+  }
+}
+
+// ── Merge helper ──────────────────────────────────────────────────────────
+
+/** Deep-merge pass2 into pass1: pass1 wins unless its value is null/undefined. */
+function mergeLlmResults(pass1: LlmResult, pass2: LlmResult): LlmResult {
+  const merged: LlmResult = { ...pass1 };
+
+  // Top-level scalar fields: fill from pass2 if pass1 is null
+  const scalars: Array<keyof LlmResult> = [
+    "gut_type",
+    "beneficial_pct",
+    "variable_pct",
+    "unfriendly_pct",
+    "unknown_pct",
+    "kit_id",
+    "collection_date",
+    "report_date",
+    "patient_sex",
+    "report_version",
+    "microbiome_score",
+  ];
+  for (const k of scalars) {
+    if (merged[k] == null && pass2[k] != null) {
+      (merged as Record<string, unknown>)[k] = pass2[k];
+    }
+  }
+
+  // Species: take the longer list (pass 2 covers later pages)
+  if ((pass2.species?.length ?? 0) > (pass1.species?.length ?? 0)) {
+    merged.species = pass2.species;
+  }
+
+  // Recommendations: concatenate, deduplicate
+  if ((pass2.recommendations?.length ?? 0) > 0) {
+    const combined = [
+      ...(pass1.recommendations ?? []),
+      ...(pass2.recommendations ?? []),
+    ];
+    merged.recommendations = [...new Set(combined)];
+  }
+
+  // top_focus_areas: take the longer list
+  if (
+    (pass2.top_focus_areas?.length ?? 0) > (pass1.top_focus_areas?.length ?? 0)
+  ) {
+    merged.top_focus_areas = pass2.top_focus_areas;
+  }
+
+  // Category statuses: fill missing from pass2
+  if (pass2.category_statuses) {
+    merged.category_statuses = merged.category_statuses ?? {};
+    for (const [k, v] of Object.entries(pass2.category_statuses)) {
+      const key = k as keyof NonNullable<LlmResult["category_statuses"]>;
+      if (merged.category_statuses[key] == null && v != null) {
+        merged.category_statuses[key] = v;
+      }
+    }
+  }
+
+  // Metrics: merge category by category, field by field
+  if (pass2.metrics) {
+    merged.metrics = merged.metrics ?? {};
+    for (const [cat, catData] of Object.entries(pass2.metrics)) {
+      if (!catData) continue;
+      const key = cat as keyof NonNullable<LlmResult["metrics"]>;
+      if (!merged.metrics[key]) {
+        (merged.metrics as Record<string, unknown>)[key] = catData;
+      } else {
+        const existingCat = merged.metrics[key] as Record<
+          string,
+          LlmMetric | null | undefined
+        >;
+        for (const [metric, value] of Object.entries(
+          catData as Record<string, LlmMetric | null | undefined>,
+        )) {
+          if (existingCat[metric] == null && value != null) {
+            existingCat[metric] = value;
+          }
+        }
+      }
+    }
+  }
+
+  return merged;
+}
+
 // ── Prompt ─────────────────────────────────────────────────────────────────
+
+const DISEASE_MARKER_RULES = `
+DISEASE MARKER RULES — CRITICAL PATIENT SAFETY:
+The following pathogens must return null UNLESS the report explicitly states a POSITIVE
+detection with a quantified numeric abundance value:
+  h_pylori, blastocystis, cryptosporidium, giardia, entamoeba_histolytica, candida, aspergillus
+Indicators that mean NULL: "not detected", "negative", "0%", "<0.001%", not mentioned.
+NEVER return a non-null value for a disease marker based on:
+  - mention in a reference range or comparison table
+  - educational background text about the organism
+  - "not detected" or absence from the sample`.trim();
 
 const SYSTEM_PROMPT = [
   "You are a precise data extraction assistant. Return ONLY valid JSON with no markdown, code blocks, or explanation.",
   "",
   ANTI_HALLUCINATION_RULES,
+  "",
+  DISEASE_MARKER_RULES,
 ].join("\n");
 
-function buildPrompt(text: string): string {
-  return `Extract all structured data from this Tiny Health gut microbiome report text.
+function buildPass1Prompt(text: string): string {
+  return `Extract structured data from PASS 1 of this Tiny Health gut microbiome report.
+Focus on: summary scores, category statuses, individual metric values, disease markers.
 
 EXTRACTION RULES:
 - microbiome_score: the overall score out of 100 shown on the summary page (e.g. 61)
@@ -241,14 +395,11 @@ EXTRACTION RULES:
 - Inflammation indices (hexa_lps_index, mucus_degradation_index, hydrogen_sulfide_index): 0–100 scale, unit ""
 - Status values must be exactly one of: "great", "okay", "improving", "needs_support"
 - Species classification must be: "beneficial", "variable", "unfriendly", or "unknown"
-- Extract ALL species listed anywhere in the report with their percentages
 - recommendations: the "Clinical indication examples" action items for each category
 - top_focus_areas: the top 3–5 metrics listed as priority focus areas with their values
 - If a value is not explicitly stated in the text, return null — do NOT estimate or fill typical values
 
 RETURN THIS EXACT JSON SCHEMA (use null for missing values, empty arrays for no items):
-{
-  "kit_id": string|null,
   "collection_date": string|null,
   "report_date": string|null,
   "patient_sex": string|null,
@@ -365,36 +516,171 @@ RETURN THIS EXACT JSON SCHEMA (use null for missing values, empty arrays for no 
   "top_focus_areas": [{"category":string,"metric":string,"value":number|null}]
 }
 
-REPORT TEXT:
+PASS 1 TEXT (first portion of report):
+${text}`;
+}
+
+function buildPass2Prompt(text: string): string {
+  return `Extract structured data from PASS 2 of this Tiny Health gut microbiome report.
+This is the CONTINUATION of the report.  Focus on:
+  - Full species list (all species with abundance_pct and classification)
+  - Diversity & resilience metrics (shannon_diversity, species_richness, bacteroidota, firmicutes, etc.)
+  - Short chain fatty acid pathways (butyrate, propionate, acetate in rpkm)
+  - Digestive capacity pathways (cellulose, resistant_starch, vitamins in rpkm)
+  - Microbial enzyme/metabolite pathways (histamine_index, secondary_bile_acids, etc.)
+  - Recommendations text
+
+Return null for any field not explicitly present in this passage.
+Return empty arrays for species/recommendations if not present here.
+
+RETURN THIS EXACT JSON SCHEMA (use null for missing values, empty arrays for no items):
+{
+  "kit_id": null,
+  "collection_date": null,
+  "report_date": null,
+  "patient_sex": null,
+  "report_version": null,
+  "microbiome_score": null,
+  "gut_type": string|null,
+  "beneficial_pct": number|null,
+  "variable_pct": number|null,
+  "unfriendly_pct": number|null,
+  "unknown_pct": number|null,
+  "category_statuses": {
+    "beneficial_microbes": null,
+    "disruptive_microbes": null,
+    "gut_barrier_inflammation": null,
+    "short_chain_fatty_acids": string|null,
+    "digestive_capacity": null,
+    "diversity_resilience": string|null,
+    "microbial_enzymes_metabolites": string|null
+  },
+  "metrics": {
+    "beneficial_microbes": null,
+    "disruptive_microbes": null,
+    "gut_barrier_inflammation": null,
+    "short_chain_fatty_acids": {
+      "butyrate": {"value":number,"unit":"rpkm","status":string}|null,
+      "propionate": {"value":number,"unit":"rpkm","status":string}|null,
+      "acetate": {"value":number,"unit":"rpkm","status":string}|null
+    },
+    "digestive_capacity": {
+      "cellulose": {"value":number,"unit":"rpkm","status":string}|null,
+      "resistant_starch": {"value":number,"unit":"rpkm","status":string}|null,
+      "chitin": {"value":number,"unit":"rpkm","status":string}|null,
+      "pectin": {"value":number,"unit":"rpkm","status":string}|null,
+      "fructooligosaccharides": {"value":number,"unit":"rpkm","status":string}|null,
+      "galactooligosaccharides": {"value":number,"unit":"rpkm","status":string}|null,
+      "xylooligosaccharides": {"value":number,"unit":"rpkm","status":string}|null,
+      "isomaltooligosaccharides": {"value":number,"unit":"rpkm","status":string}|null,
+      "protein_breakdown": {"value":number,"unit":"rpkm","status":string}|null,
+      "trimethylamine": {"value":number,"unit":"rpkm","status":string}|null,
+      "ammonia": {"value":number,"unit":"rpkm","status":string}|null,
+      "branched_chain_amino_acids": {"value":number,"unit":"rpkm","status":string}|null,
+      "p_cresol": {"value":number,"unit":"rpkm","status":string}|null,
+      "indole_3_propionic_acid": {"value":number,"unit":"rpkm","status":string}|null,
+      "vitamin_b2": {"value":number,"unit":"rpkm","status":string}|null,
+      "vitamin_b7": {"value":number,"unit":"rpkm","status":string}|null,
+      "vitamin_b9": {"value":number,"unit":"rpkm","status":string}|null,
+      "vitamin_b12": {"value":number,"unit":"rpkm","status":string}|null,
+      "vitamin_k": {"value":number,"unit":"rpkm","status":string}|null
+    },
+    "diversity_resilience": {
+      "shannon_diversity": {"value":number,"unit":"","status":string}|null,
+      "species_richness": {"value":number,"unit":"","status":string}|null,
+      "microbiome_age": {"value":number,"unit":"years","status":string}|null,
+      "gut_resilience_score": {"value":number,"unit":"","status":string}|null,
+      "oral_microbes": {"value":number,"unit":"%","status":string}|null,
+      "bacteroidota": {"value":number,"unit":"%","status":string}|null,
+      "firmicutes": {"value":number,"unit":"%","status":string}|null,
+      "actinobacteriota": {"value":number,"unit":"%","status":string}|null,
+      "proteobacteria": {"value":number,"unit":"%","status":string}|null,
+      "firmicutes_bacteroidota_ratio": {"value":number,"unit":"","status":string}|null,
+      "proteobacteria_actinobacteriota_ratio": {"value":number,"unit":"","status":string}|null,
+      "prevotella_bacteroides_ratio": {"value":number,"unit":"","status":string}|null,
+      "bacteroides": {"value":number,"unit":"%","status":string}|null,
+      "prevotella": {"value":number,"unit":"%","status":string}|null,
+      "ruminococcus": {"value":number,"unit":"%","status":string}|null,
+      "blautia": {"value":number,"unit":"%","status":string}|null,
+      "roseburia": {"value":number,"unit":"%","status":string}|null,
+      "phocaeicola_dorei": {"value":number,"unit":"%","status":string}|null
+    },
+    "microbial_enzymes_metabolites": {
+      "histamine_index": {"value":number,"unit":"","status":string}|null,
+      "beta_glucuronidase_capacity": {"value":number,"unit":"rpkm","status":string}|null,
+      "gaba_production": {"value":number,"unit":"rpkm","status":string}|null,
+      "gaba_breakdown": {"value":number,"unit":"rpkm","status":string}|null,
+      "unconjugated_bile_acids": {"value":number,"unit":"rpkm","status":string}|null,
+      "secondary_bile_acids": {"value":number,"unit":"rpkm","status":string}|null,
+      "urolithin_producing_species": {"value":number,"unit":"rpkm","status":string}|null
+    }
+  },
+  "species": [{"name":string,"abundance_pct":number,"classification":string}],
+  "recommendations": [string],
+  "top_focus_areas": [{"category":string,"metric":string,"value":number|null}]
+}
+
+PASS 2 TEXT (continuation of report):
 ${text}`;
 }
 
 // ── Main export ────────────────────────────────────────────────────────────
 
+const PASS_SIZE = 40000; // chars per pass ≈ 10K input tokens
+
 export async function extractGutHealthWithLlm(
   rawText: string,
 ): Promise<GutHealthReportData | null> {
   try {
-    // Collapse whitespace and truncate — Tiny Health PDFs run 60-70 pages;
-    // the key data (scores, metrics, species) is in the first ~25 pages.
-    // Sending 70K+ chars would exceed the Venice context budget.
     const cleaned = rawText.replace(/[ \t]{2,}/g, " ").trim();
-    // 40K chars ≈ 10K input tokens.  Leaves headroom for the 8K output budget.
-    // Captures ~30 of 66 pages — enough for scores, metrics, and most species.
-    const text =
-      cleaned.length > 40000
-        ? cleaned.substring(0, 40000) + "\n... (truncated)"
-        : cleaned;
 
-    const raw = await callLlmExtractor(SYSTEM_PROMPT, buildPrompt(text), {
-      maxTokens: 8000,
-      temperature: 0.1,
-      logTag: "gutHealthLlmExtractor",
-    });
+    // Pass 1: first 40K chars — summary, category statuses, metric values, disease markers
+    const pass1Text = cleaned.substring(0, PASS_SIZE);
+    console.log(
+      `[gutHealthLlmExtractor] Pass 1: ${pass1Text.length} chars (of ${cleaned.length} total)`,
+    );
 
-    if (!raw) return null;
+    const raw1 = await callLlmExtractor(
+      SYSTEM_PROMPT,
+      buildPass1Prompt(pass1Text),
+      { maxTokens: 8000, temperature: 0.1, logTag: "gutHealthLlmExtractor/p1" },
+    );
+    if (!raw1) return null;
 
-    const parsed = raw as LlmResult;
+    let parsed = raw1 as LlmResult;
+
+    // Apply disease-marker sanitizer to pass 1 (disruptive_microbes section)
+    sanitizeDiseaseMarkers(parsed.metrics?.disruptive_microbes, pass1Text);
+
+    // Pass 2: chars 40K–80K — species list, pathways, diversity, recommendations
+    if (cleaned.length > PASS_SIZE) {
+      const pass2Text = cleaned.substring(PASS_SIZE, PASS_SIZE * 2);
+      console.log(
+        `[gutHealthLlmExtractor] Pass 2: chars ${PASS_SIZE}–${PASS_SIZE + pass2Text.length}`,
+      );
+      try {
+        const raw2 = await callLlmExtractor(
+          SYSTEM_PROMPT,
+          buildPass2Prompt(pass2Text),
+          {
+            maxTokens: 8000,
+            temperature: 0.1,
+            logTag: "gutHealthLlmExtractor/p2",
+          },
+        );
+        if (raw2) {
+          parsed = mergeLlmResults(parsed, raw2 as LlmResult);
+          console.log(
+            `[gutHealthLlmExtractor] Merged: ${parsed.species?.length ?? 0} species total`,
+          );
+        }
+      } catch (err) {
+        console.warn(
+          "[gutHealthLlmExtractor] Pass 2 failed, continuing with pass 1 only:",
+          err,
+        );
+      }
+    }
 
     // ── Post-parse validation ──────────────────────────────────────────────
     const { confidencePenalty } = validateExtractedValues(

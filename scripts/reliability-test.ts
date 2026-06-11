@@ -45,9 +45,11 @@ if (!process.env.VENICE_API_KEY) {
 import type {
   GutHealthReportData,
   DexaReportData,
+  BloodworkReportData,
 } from "../src/types/reportData";
 import { extractGutHealthWithLlm } from "../src/utils/reportParsers/gutHealthLlmExtractor";
 import { parseDexaReportWithAI } from "../src/utils/reportParsers/aiDexaParser";
+import { parseBloodworkReportWithAI } from "../src/utils/reportParsers/aiBloodworkParser";
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
@@ -57,6 +59,7 @@ const NUMERIC_TOLERANCE = 0.5; // values within ±0.5 count as "consistent"
 
 const GUT_PDF = "/Users/dave/Desktop/tiny_health_report_GCF795 (1).pdf";
 const DEXA_PDF = "/Users/dave/Downloads/DXA O'Gara, David.pdf";
+const BLOODWORK_TXT = join(__dirname, "../tests/fixtures/sample_bloodwork.txt");
 
 // ── PDF text extraction ────────────────────────────────────────────────────
 
@@ -261,6 +264,88 @@ function flattenDexa(r: DexaReportData | null): Record<string, unknown> {
     "total.boneDensityGPerCm2": total?.boneDensityGPerCm2 ?? null,
     "total.tScore": total?.tScore ?? null,
     confidence: r.confidence ?? null,
+  };
+}
+
+/** Flatten BloodworkReportData into path→value pairs for analysis. */
+function flattenBloodwork(
+  r: BloodworkReportData | null,
+): Record<string, unknown> {
+  if (!r) return { _null_result: true };
+
+  // Helper: find a metric by name (case-insensitive, partial match)
+  const find = (name: string): BloodworkMetric | undefined => {
+    const lower = name.toLowerCase();
+    return r.metrics?.find(
+      (m) =>
+        m.name?.toLowerCase().includes(lower) ||
+        lower.includes(m.name?.toLowerCase() ?? ""),
+    );
+  };
+
+  const val = (name: string) => find(name)?.value ?? null;
+  const flag = (name: string) => find(name)?.flag ?? null;
+
+  return {
+    // Report metadata
+    reportDate: r.reportDate ?? null,
+    laboratory: r.laboratory ?? null,
+    metricCount: r.metrics?.length ?? null,
+    confidence: r.confidence ?? null,
+
+    // CBC
+    "cbc.wbc": val("white blood cell"),
+    "cbc.rbc": val("red blood cell"),
+    "cbc.hemoglobin": val("hemoglobin"),
+    "cbc.hematocrit": val("hematocrit"),
+    "cbc.platelets": val("platelet"),
+    "cbc.mcv": val("mcv"),
+    "cbc.neutrophils_pct": val("neutrophil"),
+    "cbc.lymphocytes_pct": val("lymphocyte"),
+
+    // Metabolic
+    "met.glucose": val("glucose"),
+    "met.creatinine": val("creatinine"),
+    "met.egfr": val("egfr"),
+    "met.sodium": val("sodium"),
+    "met.potassium": val("potassium"),
+    "met.alt": val("alt"),
+    "met.ast": val("ast"),
+    "met.alk_phos": val("alkaline phosphatase"),
+
+    // Lipid panel
+    "lipid.total_chol": val("total cholesterol"),
+    "lipid.hdl": val("hdl"),
+    "lipid.ldl": val("ldl"),
+    "lipid.triglycerides": val("triglyceride"),
+    "lipid.ldl_flag": flag("ldl"),
+
+    // HbA1c
+    hba1c: val("hba1c"),
+
+    // Thyroid
+    "thyroid.tsh": val("tsh"),
+    "thyroid.free_t4": val("free t4"),
+
+    // Vitamins & minerals
+    "vit.d": val("vitamin d"),
+    "vit.b12": val("vitamin b12"),
+    "vit.ferritin": val("ferritin"),
+    "vit.magnesium": val("magnesium"),
+
+    // Inflammatory
+    "inflam.hscrp": val("hscrp"),
+    "inflam.homocysteine": val("homocysteine"),
+
+    // Hormones
+    "hormone.testosterone_total": val("testosterone, total"),
+    "hormone.testosterone_free": val("testosterone, free"),
+    "hormone.dheas": val("dhea"),
+    "hormone.cortisol": val("cortisol"),
+    "hormone.igf1": val("igf-1"),
+
+    // Misc
+    uric_acid: val("uric acid"),
   };
 }
 
@@ -521,6 +606,44 @@ async function main() {
   );
   log(dexaTable);
 
+  // ── Bloodwork ─────────────────────────────────────────────────────────────
+
+  log("\n\n📄 Loading bloodwork text fixture...");
+  let bloodText: string;
+  try {
+    bloodText = readFileSync(BLOODWORK_TXT, "utf-8");
+    log(`   ✓ Loaded ${bloodText.length.toLocaleString()} chars\n`);
+  } catch (e: any) {
+    log(`   ❌ Failed to load bloodwork fixture: ${e.message}`);
+    process.exit(1);
+  }
+
+  log(`🔬 Running bloodwork extractor ${RUNS}× ...`);
+  const bloodResults = await runBatched(
+    () => parseBloodworkReportWithAI(bloodText),
+    RUNS,
+    CONCURRENCY,
+    "bloodwork",
+  );
+
+  const nullBloodRuns = bloodResults.filter((r) => r === null).length;
+  log(
+    `\n   Schema compliance: ${RUNS - nullBloodRuns}/${RUNS} runs returned non-null result`,
+  );
+
+  const bloodFlattened = bloodResults.map(flattenBloodwork);
+  const bloodFieldNames = Object.keys(bloodFlattened[0] ?? {}).filter(
+    (k) => k !== "_null_result",
+  );
+
+  const bloodStats = bloodFieldNames.map((field) => {
+    const values = bloodFlattened.map((r) => r[field] ?? null);
+    return analyzeField(field, values);
+  });
+
+  const bloodTable = printTable("BLOODWORK — sample_bloodwork.txt", bloodStats);
+  log(bloodTable);
+
   // ── Final summary ─────────────────────────────────────────────────────────
 
   const elapsed = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
@@ -530,6 +653,9 @@ async function main() {
     (s) => !s.consistent && s.nullRate < 100,
   );
   const dexaInconsistent = dexaStats.filter(
+    (s) => !s.consistent && s.nullRate < 100,
+  );
+  const bloodInconsistent = bloodStats.filter(
     (s) => !s.consistent && s.nullRate < 100,
   );
 
@@ -554,6 +680,17 @@ async function main() {
     if (dexaInconsistent.length > 0) {
       log(`⚠️  DEXA: ${dexaInconsistent.length} inconsistent field(s):`);
       dexaInconsistent.forEach((s) => log(`     ${s.field}: ${s.notes}`));
+    }
+  }
+
+  if (bloodInconsistent.length === 0 && nullBloodRuns === 0) {
+    log("✅ Bloodwork: STABLE — all fields consistent, no null results");
+  } else {
+    if (nullBloodRuns > 0)
+      log(`⚠️  Bloodwork: ${nullBloodRuns} runs returned null (call failures)`);
+    if (bloodInconsistent.length > 0) {
+      log(`⚠️  Bloodwork: ${bloodInconsistent.length} inconsistent field(s):`);
+      bloodInconsistent.forEach((s) => log(`     ${s.field}: ${s.notes}`));
     }
   }
 

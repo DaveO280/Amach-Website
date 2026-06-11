@@ -578,6 +578,11 @@ ${textToParse}`;
         model: modelName,
         stream: false,
         response_format: { type: "json_object" },
+        venice_parameters: {
+          disable_thinking: true,
+          strip_thinking_response: true,
+          include_venice_system_prompt: false,
+        },
       })) as Record<string, unknown>;
 
       const choices = data?.choices as

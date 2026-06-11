@@ -186,6 +186,7 @@ Use null for any field whose value is not explicitly present in the report.`,
 
           // Extract fat/lean mass (try various field names)
           const fatLbs =
+            (typeof data.fat_lbs === "number" ? data.fat_lbs : undefined) ??
             (typeof data.fat_mass_lbs === "number"
               ? data.fat_mass_lbs
               : undefined) ??
@@ -194,6 +195,7 @@ Use null for any field whose value is not explicitly present in the report.`,
               ? data["fat mass"]
               : undefined);
           const leanLbs =
+            (typeof data.lean_lbs === "number" ? data.lean_lbs : undefined) ??
             (typeof data.lean_mass_lbs === "number"
               ? data.lean_mass_lbs
               : undefined) ??
@@ -240,6 +242,14 @@ Use null for any field whose value is not explicitly present in the report.`,
           if (bmd !== undefined) {
             metrics.boneDensityGPerCm2 = bmd;
           }
+
+          // Extract tScore/zScore at region level (present in "total" region)
+          const rTScore =
+            typeof data.t_score === "number" ? data.t_score : undefined;
+          const rZScore =
+            typeof data.z_score === "number" ? data.z_score : undefined;
+          if (rTScore !== undefined) metrics.tScore = rTScore;
+          if (rZScore !== undefined) metrics.zScore = rZScore;
 
           if (
             metrics.fatMassKg !== undefined ||
@@ -318,32 +328,33 @@ Use null for any field whose value is not explicitly present in the report.`,
       }
     }
 
-    // Extract Android/Gynoid ratio
+    // Extract Android/Gynoid ratio — AI may return a plain number or an object
     const agRatios = findField(parsed, [
+      "android_gynoid_ratio",
       "android_gynoid_ratios",
       "ag_ratio",
       "android_gynoid",
     ]);
-    if (agRatios && typeof agRatios === "object") {
+    if (typeof agRatios === "number") {
+      androidGynoidRatio = agRatios;
+    } else if (agRatios && typeof agRatios === "object") {
       const ratios = agRatios as Record<string, unknown>;
       androidGynoidRatio =
-        typeof ratios.ag_ratio === "number" ? ratios.ag_ratio : undefined;
-    }
+        typeof ratios.ag_ratio === "number"
+          ? ratios.ag_ratio
+          : typeof ratios.android_gynoid_ratio === "number"
+            ? ratios.android_gynoid_ratio
+            : undefined;
 
-    // Update android/gynoid regions with %Fat if available
-    if (agRatios && typeof agRatios === "object") {
-      const ratios = agRatios as Record<string, unknown>;
       if (typeof ratios.android_tissue_percent_fat === "number") {
         const androidRegion = regions.find((r) => r.region === "android");
-        if (androidRegion) {
+        if (androidRegion)
           androidRegion.bodyFatPercent = ratios.android_tissue_percent_fat;
-        }
       }
       if (typeof ratios.gynoid_tissue_percent_fat === "number") {
         const gynoidRegion = regions.find((r) => r.region === "gynoid");
-        if (gynoidRegion) {
+        if (gynoidRegion)
           gynoidRegion.bodyFatPercent = ratios.gynoid_tissue_percent_fat;
-        }
       }
     }
 
@@ -379,8 +390,10 @@ Use null for any field whose value is not explicitly present in the report.`,
         }
       }
 
-      // Try flat structure
-      if (typeof bmdObj.total_body_bmd_g_cm2 === "number") {
+      // Try flat structure (AI may use total_bmd or total_body_bmd_g_cm2)
+      if (typeof bmdObj.total_bmd === "number") {
+        bmd = bmdObj.total_bmd;
+      } else if (typeof bmdObj.total_body_bmd_g_cm2 === "number") {
         bmd = bmdObj.total_body_bmd_g_cm2;
       }
       if (typeof bmdObj.t_score === "number") {

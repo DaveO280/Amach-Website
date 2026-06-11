@@ -214,6 +214,12 @@ export interface GutHealthSpeciesEntry {
   classification: "beneficial" | "variable" | "unfriendly" | "unknown";
 }
 
+export interface GutHealthFocusArea {
+  category: string;
+  metric: string;
+  value?: number;
+}
+
 export interface GutHealthReportData {
   type: "gut-health";
   source?: string;
@@ -234,6 +240,8 @@ export interface GutHealthReportData {
   category_statuses: GutHealthCategoryStatuses;
   metrics: GutHealthMetrics;
   species: GutHealthSpeciesEntry[];
+  recommendations?: string[];
+  top_focus_areas?: GutHealthFocusArea[];
   rawText: string;
   confidence: number;
 }

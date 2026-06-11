@@ -28,6 +28,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { parseGutHealthReport } from "@/utils/reportParsers/gutHealthParser";
+import { extractGutHealthWithLlm } from "@/utils/reportParsers/gutHealthLlmExtractor";
 import { getStorjReportService } from "@/storage/StorjReportService";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 
@@ -70,8 +71,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Parse
-    const report = parseGutHealthReport(text);
+    // Parse — regex first (fast), then LLM fallback for low-confidence results
+    let report = parseGutHealthReport(text);
+    const usedLlm = !report || report.confidence < 0.6;
+
+    if (usedLlm) {
+      console.log(
+        `[gut-health/upload] Regex confidence ${report?.confidence ?? 0} — using LLM extractor`,
+      );
+      const llmReport = await extractGutHealthWithLlm(text);
+      if (llmReport) {
+        report = llmReport;
+      }
+    }
+
     if (!report) {
       return NextResponse.json(
         {
@@ -125,6 +138,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         reportId: layer1.reportId,
         confidence: report.confidence,
         duplicate: layer1.duplicate ?? false,
+        extractionMethod: usedLlm ? "llm" : "regex",
       },
       { headers: CORS },
     );

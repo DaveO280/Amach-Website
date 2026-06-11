@@ -25,8 +25,15 @@ export async function extractTextFromPdfBuffer(
   // Listed in serverExternalPackages so Next.js doesn't try to bundle it.
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-  // Disable web worker — not available in Node.js without extra setup
-  pdfjs.GlobalWorkerOptions.workerSrc = "";
+  // pdfjs-dist v4 requires a real worker URL; empty string no longer works.
+  // Provide the worker file path so Node.js can spin up a WorkerThread.
+  const { pathToFileURL } = await import("url");
+  const { resolve } = await import("path");
+  const workerPath = resolve(
+    process.cwd(),
+    "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+  );
+  pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).toString();
 
   const data = buffer instanceof Buffer ? new Uint8Array(buffer) : buffer;
 

@@ -1,0 +1,123 @@
+
+🧪 LLM Parser Reliability Test
+   Runs per report type: 20
+   Concurrency: 4
+   Numeric tolerance: ±0.5
+   Venice model: zai-org-glm-4.7 (default)
+   Date: 2026-06-11T16:01:05.019Z
+
+📄 Extracting gut health PDF text...
+   ✓ Extracted 72,563 chars from 66 pages
+
+🔬 Running gut health extractor 20× ...
+
+   Schema compliance: 20/20 runs returned non-null result
+
+══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  GUT HEALTH — tiny_health_report_GCF795 (1).pdf
+══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Field                                     | Consistent  | Null rate   | Notes
+──────────────────────────────────────────+────────────+────────────+──────────────────────────────
+summary.microbiome_score                  | ✓ 20/20     | 0%          | 61
+summary.gut_type                          | ✓ 0/20      | 100%        | all null
+summary.beneficial_pct                    | ✓ 0/20      | 100%        | all null
+summary.variable_pct                      | ✓ 0/20      | 100%        | all null
+summary.unfriendly_pct                    | ✓ 0/20      | 100%        | all null
+summary.unknown_pct                       | ✓ 0/20      | 100%        | all null
+cs.beneficial_microbes                    | ✓ 20/20     | 0%          | needs_support
+cs.disruptive_microbes                    | ✓ 20/20     | 0%          | needs_support
+cs.gut_barrier_inflammation               | ✓ 20/20     | 0%          | needs_support
+cs.short_chain_fatty_acids                | ✓ 20/20     | 0%          | okay
+cs.digestive_capacity                     | ✓ 20/20     | 0%          | improving
+cs.diversity_resilience                   | ✓ 20/20     | 0%          | needs_support
+cs.microbial_enzymes_metabolites          | ✓ 20/20     | 0%          | improving
+bm.bifidobacterium                        | ✓ 20/20     | 0%          | 0.081
+bm.akkermansia                            | ✓ 20/20     | 0%          | minor float drift ±0.003
+bm.faecalibacterium                       | ✗ 9/20      | 55%         | range 2.668–7.524 (Δ4.856)
+bm.lactobacillaceae                       | ✓ 20/20     | 0%          | 0.074
+dm.enterobacteriaceae                     | ✓ 20/20     | 0%          | 8.014
+dm.h_pylori                               | ✓ 3/20      | 85%         | ⚠️ HALLUCINATION RISK — expected null, got values in 3 runs. minor float drift ±0.003
+dm.candida                                | ✓ 3/20      | 85%         | ⚠️ HALLUCINATION RISK — expected null, got values in 3 runs. minor float drift ±0.250
+dm.antibiotic_resistance_abundance_idx    | ✓ 20/20     | 0%          | 0.18
+dm.methane_production_capacity            | ✓ 20/20     | 0%          | 0
+gb.hexa_lps_index                         | ✓ 20/20     | 0%          | 97
+gb.mucus_degradation_index                | ✓ 20/20     | 0%          | 66
+gb.hydrogen_sulfide_index                 | ✓ 20/20     | 0%          | 94
+gb.host_dna                               | ✓ 0/20      | 100%        | all null
+sc.butyrate                               | ✓ 0/20      | 100%        | all null
+sc.propionate                             | ✓ 0/20      | 100%        | all null
+sc.acetate                                | ✓ 0/20      | 100%        | all null
+dc.cellulose                              | ✓ 20/20     | 0%          | 507
+dc.resistant_starch                       | ✓ 0/20      | 100%        | all null
+dc.butyrate_producers                     | ✓ 0/20      | 100%        | all null
+dc.vitamin_b12                            | ✓ 0/20      | 100%        | all null
+dr.shannon_diversity                      | ✓ 0/20      | 100%        | all null
+dr.species_richness                       | ✓ 0/20      | 100%        | all null
+dr.microbiome_age                         | ✓ 20/20     | 0%          | 54
+dr.gut_resilience_score                   | ✓ 0/20      | 100%        | all null
+dr.bacteroidota                           | ✓ 0/20      | 100%        | all null
+dr.firmicutes                             | ✓ 0/20      | 100%        | all null
+dr.proteobacteria                         | ✓ 0/20      | 100%        | all null
+dr.firmicutes_bacteroidota_ratio          | ✓ 0/20      | 100%        | all null
+dr.bacteroides                            | ✓ 0/20      | 100%        | all null
+dr.prevotella                             | ✓ 0/20      | 100%        | all null
+em.histamine_index                        | ✓ 0/20      | 100%        | all null
+em.beta_glucuronidase                     | ✓ 0/20      | 100%        | all null
+em.gaba_production                        | ✓ 0/20      | 100%        | all null
+em.secondary_bile_acids                   | ✓ 20/20     | 0%          | 8.8
+species.count                             | ✗ 20/20     | 0%          | range 58.000–66.000 (Δ8.000)
+recommendations.count                     | ✗ 20/20     | 0%          | range 23.000–24.000 (Δ1.000)
+confidence                                | ✓ 20/20     | 0%          | 0.5
+──────────────────────────────────────────+────────────+────────────+──────────────────────────────
+
+📊 Coverage: 26/50 fields populated (52%)
+📊 Consistency: 23/26 populated fields consistent (88%)
+
+
+📄 Extracting DEXA PDF text...
+   ✓ Extracted 12,062 chars from 9 pages
+
+🔬 Running DEXA extractor 20× ...
+
+   Schema compliance: 20/20 runs returned non-null result
+
+══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  DEXA — DXA O'Gara, David.pdf
+══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Field                                     | Consistent  | Null rate   | Notes
+──────────────────────────────────────────+────────────+────────────+──────────────────────────────
+scanDate                                  | ✓ 20/20     | 0%          | 02/12/2025
+totalBodyFatPercent                       | ✓ 20/20     | 0%          | 23.4
+totalLeanMassKg                           | ✓ 20/20     | 0%          | 53.750652
+visceralFatRating                         | ✓ 20/20     | 0%          | 1.13
+visceralFatAreaCm2                        | ✓ 20/20     | 0%          | 58.068
+visceralFatVolumeCm3                      | ✓ 20/20     | 0%          | 543.8845299999999
+androidGynoidRatio                        | ✓ 0/20      | 100%        | all null
+bmd.total                                 | ✓ 0/20      | 100%        | all null
+bmd.tScore                                | ✓ 20/20     | 0%          | 3
+bmd.zScore                                | ✓ 20/20     | 0%          | 3.2
+regions.count                             | ✓ 20/20     | 0%          | 6
+arms.bodyFatPct                           | ✓ 0/20      | 100%        | all null
+arms.leanMassKg                           | ✓ 0/20      | 100%        | all null
+legs.bodyFatPct                           | ✓ 0/20      | 100%        | all null
+legs.leanMassKg                           | ✓ 0/20      | 100%        | all null
+trunk.bodyFatPct                          | ✓ 0/20      | 100%        | all null
+total.bodyFatPct                          | ✓ 20/20     | 0%          | 23.4
+total.boneDensityGPerCm2                  | ✓ 20/20     | 0%          | 1.5
+total.tScore                              | ✓ 0/20      | 100%        | all null
+confidence                                | ✓ 20/20     | 0%          | 1
+──────────────────────────────────────────+────────────+────────────+──────────────────────────────
+
+📊 Coverage: 12/20 fields populated (60%)
+📊 Consistency: 12/12 populated fields consistent (100%)
+
+
+⏱  Total time: 11.2 min
+
+📋 FINAL VERDICT
+────────────────────────────────────────────────────────────
+⚠️  Gut health: 3 inconsistent field(s):
+     bm.faecalibacterium: range 2.668–7.524 (Δ4.856)
+     species.count: range 58.000–66.000 (Δ8.000)
+     recommendations.count: range 23.000–24.000 (Δ1.000)
+✅ DEXA: STABLE — all fields consistent, no null results

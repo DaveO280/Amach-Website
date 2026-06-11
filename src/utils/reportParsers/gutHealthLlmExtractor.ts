@@ -375,8 +375,16 @@ export async function extractGutHealthWithLlm(
   rawText: string,
 ): Promise<GutHealthReportData | null> {
   try {
-    // Collapse runs of whitespace left by the PDF text stream
-    const text = rawText.replace(/[ \t]{2,}/g, " ").trim();
+    // Collapse whitespace and truncate — Tiny Health PDFs run 60-70 pages;
+    // the key data (scores, metrics, species) is in the first ~25 pages.
+    // Sending 70K+ chars would exceed the Venice context budget.
+    const cleaned = rawText.replace(/[ \t]{2,}/g, " ").trim();
+    // 40K chars ≈ 10K input tokens.  Leaves headroom for the 8K output budget.
+    // Captures ~30 of 66 pages — enough for scores, metrics, and most species.
+    const text =
+      cleaned.length > 40000
+        ? cleaned.substring(0, 40000) + "\n... (truncated)"
+        : cleaned;
 
     const raw = await callLlmExtractor(SYSTEM_PROMPT, buildPrompt(text), {
       maxTokens: 8000,

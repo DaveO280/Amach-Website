@@ -1,3 +1,30 @@
+/**
+ * Universal health report parser.
+ *
+ * Architecture
+ * ─────────────
+ * All report types flow through one entry point: parseHealthReport().
+ * Each type has two layers:
+ *
+ *   1. Regex / heuristic (fast, offline) — catches high-confidence structured
+ *      formats.  Used first for DEXA and bloodwork.
+ *   2. Venice LLM (accurate, async) — handles every format that regex misses
+ *      and is the primary path for gut health and medical records.
+ *
+ * Gut-health is LLM-primary: the Tiny Health PDF uses a multi-column visual
+ * layout where status indicators are not text-adjacent to metric values, and
+ * the microbiome score is rendered as a gauge chart (invisible to text
+ * extraction).  extractGutHealthWithLlm() understands the semantic structure
+ * regardless of visual layout.
+ *
+ * Vision path (future)
+ * ─────────────────────
+ * When a vision-capable Venice model is available (VENICE_VISION_MODEL_NAME),
+ * PDF pages can be rendered to images via serverPdfExtractor and sent as
+ * multimodal input — capturing chart/gauge values text extraction misses.
+ * See parseConfig.ts for model constants.
+ */
+
 import { parseDexaReport, looksLikeDexaReport } from "./dexaParser";
 import {
   parseBloodworkReport,
@@ -13,6 +40,7 @@ import {
   parseGutHealthReport,
   looksLikeGutHealthReport,
 } from "./gutHealthParser";
+import { extractGutHealthWithLlm } from "./gutHealthLlmExtractor";
 import type {
   ParsedReportSummary,
   ParsedHealthReport,
@@ -42,7 +70,23 @@ export async function parseHealthReport(
     (options.inferredType === undefined && looksLikeGutHealthReport(rawText));
 
   if (isGutHealth) {
-    const gut = parseGutHealthReport(rawText);
+    let gut = parseGutHealthReport(rawText);
+
+    // Regex confidence on gut-health PDFs is typically low (<0.6) because
+    // Tiny Health uses a multi-column layout and gauge charts.  Always fall
+    // through to the LLM extractor when confidence is insufficient.
+    if (!gut || gut.confidence < 0.6) {
+      console.log(
+        `[ReportParser] 🤖 Gut health regex confidence ${gut?.confidence ?? 0} — using LLM extractor...`,
+      );
+      try {
+        const llmGut = await extractGutHealthWithLlm(rawText);
+        if (llmGut) gut = llmGut;
+      } catch (err) {
+        console.error("[ReportParser] ❌ LLM gut health extractor error:", err);
+      }
+    }
+
     if (gut) {
       if (options.sourceName && !gut.source) gut.source = options.sourceName;
       reports.push(gut);
@@ -353,3 +397,6 @@ export * from "./dexaParser";
 export * from "./bloodworkParser";
 export * from "./aiMedicalRecordParser";
 export * from "./gutHealthParser";
+export * from "./gutHealthLlmExtractor";
+export * from "./parseConfig";
+export * from "./veniceModels";

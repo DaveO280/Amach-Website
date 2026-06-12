@@ -47,9 +47,26 @@ import type {
   DexaReportData,
   BloodworkReportData,
 } from "../src/types/reportData";
-import { extractGutHealthWithLlm } from "../src/utils/reportParsers/gutHealthLlmExtractor";
-import { parseDexaReportWithAI } from "../src/utils/reportParsers/aiDexaParser";
-import { parseBloodworkReportWithAI } from "../src/utils/reportParsers/aiBloodworkParser";
+import { parseHealthReport } from "../src/utils/reportParsers";
+
+async function parseGutHealth(
+  text: string,
+): Promise<GutHealthReportData | null> {
+  const results = await parseHealthReport(text, { inferredType: "gut-health" });
+  return (results[0]?.report as GutHealthReportData) ?? null;
+}
+
+async function parseDexa(text: string): Promise<DexaReportData | null> {
+  const results = await parseHealthReport(text, { inferredType: "dexa" });
+  return (results[0]?.report as DexaReportData) ?? null;
+}
+
+async function parseBloodwork(
+  text: string,
+): Promise<BloodworkReportData | null> {
+  const results = await parseHealthReport(text, { inferredType: "bloodwork" });
+  return (results[0]?.report as BloodworkReportData) ?? null;
+}
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
@@ -529,7 +546,7 @@ async function main() {
 
   log(`🔬 Running gut health extractor ${RUNS}× ...`);
   const gutResults = await runBatched(
-    () => extractGutHealthWithLlm(gutText),
+    () => parseGutHealth(gutText),
     RUNS,
     CONCURRENCY,
     "gut-health",
@@ -579,7 +596,7 @@ async function main() {
 
   log(`🔬 Running DEXA extractor ${RUNS}× ...`);
   const dexaResults = await runBatched(
-    () => parseDexaReportWithAI(dexaText),
+    () => parseDexa(dexaText),
     RUNS,
     CONCURRENCY,
     "dexa",
@@ -620,7 +637,7 @@ async function main() {
 
   log(`🔬 Running bloodwork extractor ${RUNS}× ...`);
   const bloodResults = await runBatched(
-    () => parseBloodworkReportWithAI(bloodText),
+    () => parseBloodwork(bloodText),
     RUNS,
     CONCURRENCY,
     "bloodwork",

@@ -33,6 +33,8 @@ export interface LlmPipelineOptions {
   model?: string;
   /** Tag used in log messages (e.g. "gutHealthLlmExtractor"). */
   logTag?: string;
+  /** Disable the JSON-parse-failure retry (used to avoid recursive retries). */
+  skipRetry?: boolean;
 }
 
 /**
@@ -74,18 +76,64 @@ export async function callLlmExtractor(
     try {
       return JSON.parse(content) as Record<string, unknown>;
     } catch {
-      // Strip markdown fences if the model ignored instructions
-      const stripped =
-        content.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1] ??
-        content.match(/(\{[\s\S]*\})/)?.[0];
-      if (!stripped) {
-        console.warn(`[${tag}] Could not extract JSON from response`);
-        return null;
+      // Step 1: strip markdown fences
+      let candidate =
+        content.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1] ?? content;
+
+      // Step 2: extract the outermost {...} by finding first { and last }
+      const firstBrace = candidate.indexOf("{");
+      const lastBrace = candidate.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        candidate = candidate.slice(firstBrace, lastBrace + 1);
       }
+
       try {
-        return JSON.parse(stripped) as Record<string, unknown>;
+        return JSON.parse(candidate) as Record<string, unknown>;
       } catch {
-        console.warn(`[${tag}] JSON parse failed even after fence strip`);
+        // Step 3: ask Venice to re-return just the JSON
+        if (!options.skipRetry) {
+          console.warn(
+            `[${tag}] JSON parse failed — retrying with JSON-only instruction`,
+          );
+          const retryResponse = (await callVenice({
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+              {
+                role: "user",
+                content:
+                  "Your previous response could not be parsed as JSON. Return ONLY the raw JSON object. Start with { and end with }. No markdown, no explanation.",
+              },
+            ],
+            max_tokens: options.maxTokens ?? 8000,
+            temperature: 0,
+            model: options.model ?? VENICE_PARSE_TEXT_MODEL,
+            response_format: { type: "json_object" },
+            venice_parameters: {
+              disable_thinking: true,
+              strip_thinking_response: true,
+              include_venice_system_prompt: false,
+            },
+          })) as { choices?: Array<{ message?: { content?: string } }> };
+
+          const retryContent =
+            retryResponse?.choices?.[0]?.message?.content?.trim();
+          if (retryContent) {
+            const rf = retryContent.indexOf("{");
+            const rl = retryContent.lastIndexOf("}");
+            const retryCandidate =
+              rf !== -1 && rl > rf
+                ? retryContent.slice(rf, rl + 1)
+                : retryContent;
+            try {
+              return JSON.parse(retryCandidate) as Record<string, unknown>;
+            } catch {
+              /* fall through */
+            }
+          }
+        }
+
+        console.warn(`[${tag}] JSON parse failed even after retry`);
         return null;
       }
     }

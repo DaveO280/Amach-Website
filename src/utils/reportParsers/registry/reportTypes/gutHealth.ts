@@ -1,13 +1,9 @@
 /**
- * LLM-based gut health report extractor.
+ * Gut health report type definition for the ReportParserRegistry.
  *
- * Primary parser for Tiny Health gut microbiome reports.  Regex is not viable
- * for this format: Tiny Health uses a multi-column visual layout where status
- * indicators are not text-adjacent to metric values, and the microbiome score
- * is a gauge chart absent from text extraction entirely.
- *
- * Uses callLlmExtractor (shared Venice pipeline) with an explicit
- * ANTI_HALLUCINATION_RULES block and post-parse validation.
+ * Tiny Health gut microbiome reports use a two-pass LLM strategy:
+ *   Pass 1 (chars 0-40k)  — summary scores, category statuses, metric values, disease markers.
+ *   Pass 2 (chars 40k-80k) — full species list, pathway metrics, recommendations.
  */
 
 import type {
@@ -17,11 +13,13 @@ import type {
   GutHealthSpeciesEntry,
   GutHealthStatus,
 } from "@/types/reportData";
-import { callLlmExtractor, ANTI_HALLUCINATION_RULES } from "./llmPipeline";
 import {
   validateExtractedValues,
   GUT_HEALTH_VALIDATION_RULES,
-} from "./hallucinationGuard";
+} from "../../hallucinationGuard";
+import { ANTI_HALLUCINATION_RULES } from "../../llmPipeline";
+import { looksLikeGutHealthReport } from "../../gutHealthParser";
+import type { ReportTypeDefinition, ParserPass } from "../types";
 
 // ── Internal LLM response shape ────────────────────────────────────────────
 
@@ -195,7 +193,6 @@ function classifySpecies(c: string): GutHealthSpeciesEntry["classification"] {
   return "unknown";
 }
 
-/** Flatten nested LlmResult to a path→value map for the hallucination guard. */
 function flattenForValidation(
   p: LlmResult,
 ): Record<string, number | undefined | null> {
@@ -224,11 +221,6 @@ function flattenForValidation(
 
 // ── Disease marker sanitizer ───────────────────────────────────────────────
 
-/**
- * Disease markers (h_pylori, candida, etc.) should be null unless the text
- * contains explicit positive-detection language with a quantified abundance.
- * This is a post-parse hard guard — any value not confirmed positive is zeroed.
- */
 function sanitizeDiseaseMarkers(
   dm: NonNullable<LlmResult["metrics"]>["disruptive_microbes"],
   rawText: string,
@@ -245,45 +237,51 @@ function sanitizeDiseaseMarkers(
   ] as const;
 
   const lowerText = rawText.toLowerCase();
-
   for (const marker of DISEASE_MARKERS) {
     const field = dm[marker];
     if (!field || field.value == null) continue;
-
     const displayName = marker.replace(/_/g, " ");
     const idx = lowerText.indexOf(displayName);
     if (idx === -1) {
-      // Marker not even mentioned — definitely hallucinated
       dm[marker] = null;
-      console.warn(
-        `[gutHealthLlmExtractor] ⚠️ Nulled ${marker} — not mentioned in text`,
-      );
+      console.warn(`[gutHealth] ⚠️ Nulled ${marker} — not mentioned in text`);
       continue;
     }
-
-    // Check the ±300 chars around the marker for positive-detection language
     const context = lowerText.slice(Math.max(0, idx - 50), idx + 300);
     const notDetected =
       /not detected|negative|absent|0\.00\s*%|0%|<\s*0\.0/.test(context);
     const positiveDetection =
       /detected|present|\d+\.\d+\s*%|\d+\s*rpkm/.test(context) && !notDetected;
-
     if (!positiveDetection || notDetected) {
       dm[marker] = null;
       console.warn(
-        `[gutHealthLlmExtractor] ⚠️ Nulled ${marker} — no positive detection in text (context: "${context.slice(0, 80).replace(/\n/g, " ")}")`,
+        `[gutHealth] ⚠️ Nulled ${marker} — no positive detection in context`,
       );
     }
   }
 }
 
-// ── Merge helper ──────────────────────────────────────────────────────────
+// ── Pathway normalizer ─────────────────────────────────────────────────────
 
-/** Deep-merge pass2 into pass1: pass1 wins unless its value is null/undefined. */
+/**
+ * Safety net: if a pathway metric value is > 100 it is almost certainly a raw
+ * RPKM count.  Convert it using a log10 scale and update unit to "index".
+ */
+function normalizeIndexMetric(
+  m: GutHealthMetric | undefined,
+): GutHealthMetric | undefined {
+  if (!m || m.value == null || m.value <= 100) return m;
+  const idx = Math.min(
+    100,
+    Math.max(0, (Math.log10(Math.max(1, m.value)) / 7) * 100),
+  );
+  return { ...m, value: Math.round(idx * 10) / 10, unit: "index" };
+}
+
+// ── Multi-pass merge ────────────────────────────────────────────────────────
+
 function mergeLlmResults(pass1: LlmResult, pass2: LlmResult): LlmResult {
   const merged: LlmResult = { ...pass1 };
-
-  // Top-level scalar fields: fill from pass2 if pass1 is null
   const scalars: Array<keyof LlmResult> = [
     "gut_type",
     "beneficial_pct",
@@ -303,12 +301,10 @@ function mergeLlmResults(pass1: LlmResult, pass2: LlmResult): LlmResult {
     }
   }
 
-  // Species: take the longer list (pass 2 covers later pages)
   if ((pass2.species?.length ?? 0) > (pass1.species?.length ?? 0)) {
     merged.species = pass2.species;
   }
 
-  // Recommendations: concatenate, deduplicate
   if ((pass2.recommendations?.length ?? 0) > 0) {
     const combined = [
       ...(pass1.recommendations ?? []),
@@ -317,14 +313,12 @@ function mergeLlmResults(pass1: LlmResult, pass2: LlmResult): LlmResult {
     merged.recommendations = [...new Set(combined)];
   }
 
-  // top_focus_areas: take the longer list
   if (
     (pass2.top_focus_areas?.length ?? 0) > (pass1.top_focus_areas?.length ?? 0)
   ) {
     merged.top_focus_areas = pass2.top_focus_areas;
   }
 
-  // Category statuses: fill missing from pass2
   if (pass2.category_statuses) {
     merged.category_statuses = merged.category_statuses ?? {};
     for (const [k, v] of Object.entries(pass2.category_statuses)) {
@@ -335,7 +329,6 @@ function mergeLlmResults(pass1: LlmResult, pass2: LlmResult): LlmResult {
     }
   }
 
-  // Metrics: merge category by category, field by field
   if (pass2.metrics) {
     merged.metrics = merged.metrics ?? {};
     for (const [cat, catData] of Object.entries(pass2.metrics)) {
@@ -362,7 +355,7 @@ function mergeLlmResults(pass1: LlmResult, pass2: LlmResult): LlmResult {
   return merged;
 }
 
-// ── Prompt ─────────────────────────────────────────────────────────────────
+// ── Prompts ────────────────────────────────────────────────────────────────
 
 const DISEASE_MARKER_RULES = `
 DISEASE MARKER RULES — CRITICAL PATIENT SAFETY:
@@ -374,6 +367,22 @@ NEVER return a non-null value for a disease marker based on:
   - mention in a reference range or comparison table
   - educational background text about the organism
   - "not detected" or absence from the sample`.trim();
+
+const PATHWAY_UNIT_RULES = `
+PATHWAY METRIC UNITS — CRITICAL:
+For SCFA, digestive capacity, and microbial enzyme/metabolite metrics:
+  - DO NOT return raw RPKM counts. These vary 1,000× between sequencing runs and are not comparable.
+  - Return a 0-100 production capacity INDEX where:
+      0  = absent / not detected
+      25 = low production
+      50 = typical population median
+      75 = moderately high
+      100 = very high production
+  - Use the bar chart or colored indicator in the report to determine this index position.
+  - If only a status label is visible (great/okay/needs_support) and no bar chart position:
+      return null for value, and set status from the label.
+  - Species abundance_pct: return as a percentage of total microbiome (0-100 scale, NOT rpkm).
+  - All percentage fields: return 0-100 (not 0-1).`.trim();
 
 const SYSTEM_PROMPT = [
   "You are a precise data extraction assistant. Return ONLY valid JSON with no markdown, code blocks, or explanation.",
@@ -392,14 +401,15 @@ EXTRACTION RULES:
 - gut_type: the dominant microbiome type (e.g. "Bacteroides", "Prevotella", "Lachnospiraceae")
 - Metric values with unit "%" are species/group percentages (0-100 scale)
 - SCFA and pathway values: return as a 0-100 production capacity index, NOT raw RPKM counts
-- Inflammation indices (hexa_lps_index, mucus_degradation_index, hydrogen_sulfide_index): 0–100 scale, unit ""
+- Inflammation indices (hexa_lps_index, mucus_degradation_index, hydrogen_sulfide_index): 0-100 scale, unit ""
 - Status values must be exactly one of: "great", "okay", "improving", "needs_support"
 - Species classification must be: "beneficial", "variable", "unfriendly", or "unknown"
 - recommendations: the "Clinical indication examples" action items for each category
-- top_focus_areas: the top 3–5 metrics listed as priority focus areas with their values
+- top_focus_areas: the top 3-5 metrics listed as priority focus areas with their values
 - If a value is not explicitly stated in the text, return null — do NOT estimate or fill typical values
 
 RETURN THIS EXACT JSON SCHEMA (use null for missing values, empty arrays for no items):
+{
   "collection_date": string|null,
   "report_date": string|null,
   "patient_sex": string|null,
@@ -445,7 +455,7 @@ RETURN THIS EXACT JSON SCHEMA (use null for missing values, empty arrays for no 
       "entamoeba_histolytica": {"value":number,"unit":"%","status":string}|null,
       "candida": {"value":number,"unit":"%","status":string}|null,
       "aspergillus": {"value":number,"unit":"%","status":string}|null,
-      "methane_production_capacity": {"value":number,"unit":"rpkm","status":string}|null,
+      "methane_production_capacity": {"value":number,"unit":"index","status":string}|null,
       "methanobrevibacter_smithii": {"value":number,"unit":"%","status":string}|null
     },
     "gut_barrier_inflammation": {
@@ -519,22 +529,6 @@ RETURN THIS EXACT JSON SCHEMA (use null for missing values, empty arrays for no 
 PASS 1 TEXT (first portion of report):
 ${text}`;
 }
-
-const PATHWAY_UNIT_RULES = `
-PATHWAY METRIC UNITS — CRITICAL:
-For SCFA, digestive capacity, and microbial enzyme/metabolite metrics:
-  - DO NOT return raw RPKM counts. These vary 1,000× between sequencing runs and are not comparable.
-  - Return a 0-100 production capacity INDEX where:
-      0  = absent / not detected
-      25 = low production
-      50 = typical population median
-      75 = moderately high
-      100 = very high production
-  - Use the bar chart or colored indicator in the report to determine this index position.
-  - If only a status label is visible (great/okay/needs_support) and no bar chart position:
-      return null for value, and set status from the label.
-  - Species abundance_pct: return as a percentage of total microbiome (0-100 scale, NOT rpkm).
-  - All percentage fields: return 0-100 (not 0-1).`.trim();
 
 function buildPass2Prompt(text: string): string {
   return `Extract structured data from PASS 2 of this Tiny Health gut microbiome report.
@@ -644,298 +638,280 @@ PASS 2 TEXT (continuation of report):
 ${text}`;
 }
 
-// ── Pathway normalizer ─────────────────────────────────────────────────────
-
-/**
- * Safety net: if a pathway metric value is > 100 it is almost certainly a raw
- * RPKM count (the prompt asks for a 0-100 index). Convert it using a log10
- * scale (10^7 RPKM ≈ 100 on this scale) and update the unit to "index".
- */
-function normalizeIndexMetric(
-  m: GutHealthMetric | undefined,
-): GutHealthMetric | undefined {
-  if (!m || m.value == null || m.value <= 100) return m;
-  const idx = Math.min(
-    100,
-    Math.max(0, (Math.log10(Math.max(1, m.value)) / 7) * 100),
-  );
-  return { ...m, value: Math.round(idx * 10) / 10, unit: "index" };
-}
-
-// ── Main export ────────────────────────────────────────────────────────────
+// ── Pass definitions ────────────────────────────────────────────────────────
 
 const PASS_SIZE = 40000; // chars per pass ≈ 10K input tokens
 
-export async function extractGutHealthWithLlm(
+const pass1: ParserPass = {
+  label: "summary",
+  charRange: [0, PASS_SIZE],
+  systemPrompt: SYSTEM_PROMPT,
+  buildPrompt: buildPass1Prompt,
+  maxTokens: 8000,
+  temperature: 0.1,
+};
+
+const pass2: ParserPass = {
+  label: "species",
+  charRange: [PASS_SIZE, PASS_SIZE * 2],
+  systemPrompt: SYSTEM_PROMPT,
+  buildPrompt: buildPass2Prompt,
+  maxTokens: 8000,
+  temperature: 0.1,
+  retryInstruction:
+    "Return ONLY the raw JSON object — no prose, no explanation. Start your response with { and end with }.",
+};
+
+// ── Validate + map ─────────────────────────────────────────────────────────
+
+function mapToGutHealthReportData(
+  parsed: LlmResult,
   rawText: string,
-): Promise<GutHealthReportData | null> {
-  try {
-    const cleaned = rawText.replace(/[ \t]{2,}/g, " ").trim();
+): GutHealthReportData {
+  sanitizeDiseaseMarkers(
+    parsed.metrics?.disruptive_microbes,
+    rawText.substring(0, PASS_SIZE),
+  );
 
-    // Pass 1: first 40K chars — summary, category statuses, metric values, disease markers
-    const pass1Text = cleaned.substring(0, PASS_SIZE);
-    console.log(
-      `[gutHealthLlmExtractor] Pass 1: ${pass1Text.length} chars (of ${cleaned.length} total)`,
-    );
+  const { confidencePenalty } = validateExtractedValues(
+    flattenForValidation(parsed),
+    GUT_HEALTH_VALIDATION_RULES,
+    "gutHealth",
+  );
 
-    const raw1 = await callLlmExtractor(
-      SYSTEM_PROMPT,
-      buildPass1Prompt(pass1Text),
-      { maxTokens: 8000, temperature: 0.1, logTag: "gutHealthLlmExtractor/p1" },
-    );
-    if (!raw1) return null;
+  const m = parsed.metrics ?? {};
+  const bm = m.beneficial_microbes ?? {};
+  const dm = m.disruptive_microbes ?? {};
+  const gb = m.gut_barrier_inflammation ?? {};
+  const sc = m.short_chain_fatty_acids ?? {};
+  const dc = m.digestive_capacity ?? {};
+  const dr = m.diversity_resilience ?? {};
+  const em = m.microbial_enzymes_metabolites ?? {};
+  const cs = parsed.category_statuses ?? {};
 
-    let parsed = raw1 as LlmResult;
-
-    // Apply disease-marker sanitizer to pass 1 (disruptive_microbes section)
-    sanitizeDiseaseMarkers(parsed.metrics?.disruptive_microbes, pass1Text);
-
-    // Pass 2: chars 40K–80K — species list, pathways, diversity, recommendations
-    if (cleaned.length > PASS_SIZE) {
-      const pass2Text = cleaned.substring(PASS_SIZE, PASS_SIZE * 2);
-      console.log(
-        `[gutHealthLlmExtractor] Pass 2: chars ${PASS_SIZE}–${PASS_SIZE + pass2Text.length}`,
-      );
-      try {
-        const raw2 = await callLlmExtractor(
-          SYSTEM_PROMPT,
-          buildPass2Prompt(pass2Text),
-          {
-            maxTokens: 8000,
-            temperature: 0.1,
-            logTag: "gutHealthLlmExtractor/p2",
-          },
-        );
-        if (raw2) {
-          parsed = mergeLlmResults(parsed, raw2 as LlmResult);
-          console.log(
-            `[gutHealthLlmExtractor] Merged: ${parsed.species?.length ?? 0} species total`,
-          );
-        }
-      } catch (err) {
-        console.warn(
-          "[gutHealthLlmExtractor] Pass 2 failed, continuing with pass 1 only:",
-          err,
-        );
-      }
-    }
-
-    // ── Post-parse validation ──────────────────────────────────────────────
-    const { confidencePenalty } = validateExtractedValues(
-      flattenForValidation(parsed),
-      GUT_HEALTH_VALIDATION_RULES,
-      "gutHealthLlmExtractor",
-    );
-
-    // ── Map to GutHealthReportData ─────────────────────────────────────────
-
-    const m = parsed.metrics ?? {};
-    const bm = m.beneficial_microbes ?? {};
-    const dm = m.disruptive_microbes ?? {};
-    const gb = m.gut_barrier_inflammation ?? {};
-    const sc = m.short_chain_fatty_acids ?? {};
-    const dc = m.digestive_capacity ?? {};
-    const dr = m.diversity_resilience ?? {};
-    const em = m.microbial_enzymes_metabolites ?? {};
-    const cs = parsed.category_statuses ?? {};
-
-    const speciesArr: GutHealthSpeciesEntry[] = (parsed.species ?? [])
-      .filter((s) => s?.name && typeof s.abundance_pct === "number")
-      .map((s) => ({
-        name: String(s.name),
-        abundance_pct: Number(s.abundance_pct),
-        classification: classifySpecies(s.classification),
-      }));
-
-    const topFocusAreas: GutHealthFocusArea[] = (
-      parsed.top_focus_areas ?? []
-    ).map((f) => ({
-      category: String(f.category),
-      metric: String(f.metric),
-      value: f.value ?? undefined,
+  const speciesArr: GutHealthSpeciesEntry[] = (parsed.species ?? [])
+    .filter((s) => s?.name && typeof s.abundance_pct === "number")
+    .map((s) => ({
+      name: String(s.name),
+      abundance_pct: Number(s.abundance_pct),
+      classification: classifySpecies(s.classification),
     }));
 
-    // Confidence: count extracted key fields, subtract hallucination penalty
-    let hits = 0;
-    if (parsed.microbiome_score != null) hits++;
-    if (parsed.gut_type) hits++;
-    if (parsed.beneficial_pct != null) hits++;
-    if (cs.beneficial_microbes) hits++;
-    if (bm.bifidobacterium?.value != null) hits++;
-    if (sc.butyrate?.value != null) hits++;
-    if (dr.shannon_diversity?.value != null) hits++;
-    if (speciesArr.length > 0) hits++;
-    const confidence = Math.min(1, Math.max(0.3, hits / 8 - confidencePenalty));
+  const topFocusAreas: GutHealthFocusArea[] = (
+    parsed.top_focus_areas ?? []
+  ).map((f) => ({
+    category: String(f.category),
+    metric: String(f.metric),
+    value: f.value ?? undefined,
+  }));
 
-    return {
-      type: "gut-health",
-      provider: "tiny_health",
-      kit_id: parsed.kit_id ?? undefined,
-      collection_date: parsed.collection_date ?? undefined,
-      report_date: parsed.report_date ?? undefined,
-      patient_sex: parsed.patient_sex ?? undefined,
-      report_version: parsed.report_version ?? undefined,
-      summary: {
-        microbiome_score: parsed.microbiome_score ?? undefined,
-        gut_type: parsed.gut_type ?? undefined,
-        beneficial_pct: parsed.beneficial_pct ?? undefined,
-        variable_pct: parsed.variable_pct ?? undefined,
-        unfriendly_pct: parsed.unfriendly_pct ?? undefined,
-        unknown_pct: parsed.unknown_pct ?? undefined,
+  let hits = 0;
+  if (parsed.microbiome_score != null) hits++;
+  if (parsed.gut_type) hits++;
+  if (parsed.beneficial_pct != null) hits++;
+  if (cs.beneficial_microbes) hits++;
+  if (bm.bifidobacterium?.value != null) hits++;
+  if (sc.butyrate?.value != null) hits++;
+  if (dr.shannon_diversity?.value != null) hits++;
+  if (speciesArr.length > 0) hits++;
+  const confidence = Math.min(1, Math.max(0.3, hits / 8 - confidencePenalty));
+
+  return {
+    type: "gut-health",
+    provider: "tiny_health",
+    kit_id: parsed.kit_id ?? undefined,
+    collection_date: parsed.collection_date ?? undefined,
+    report_date: parsed.report_date ?? undefined,
+    patient_sex: parsed.patient_sex ?? undefined,
+    report_version: parsed.report_version ?? undefined,
+    summary: {
+      microbiome_score: parsed.microbiome_score ?? undefined,
+      gut_type: parsed.gut_type ?? undefined,
+      beneficial_pct: parsed.beneficial_pct ?? undefined,
+      variable_pct: parsed.variable_pct ?? undefined,
+      unfriendly_pct: parsed.unfriendly_pct ?? undefined,
+      unknown_pct: parsed.unknown_pct ?? undefined,
+    },
+    category_statuses: {
+      beneficial_microbes: normalizeStatus(cs.beneficial_microbes ?? undefined),
+      disruptive_microbes: normalizeStatus(cs.disruptive_microbes ?? undefined),
+      gut_barrier_inflammation: normalizeStatus(
+        cs.gut_barrier_inflammation ?? undefined,
+      ),
+      short_chain_fatty_acids: normalizeStatus(
+        cs.short_chain_fatty_acids ?? undefined,
+      ),
+      digestive_capacity: normalizeStatus(cs.digestive_capacity ?? undefined),
+      diversity_resilience: normalizeStatus(
+        cs.diversity_resilience ?? undefined,
+      ),
+      microbial_enzymes_metabolites: normalizeStatus(
+        cs.microbial_enzymes_metabolites ?? undefined,
+      ),
+    },
+    metrics: {
+      beneficial_microbes: {
+        bifidobacterium: toMetric(bm.bifidobacterium),
+        akkermansia: toMetric(bm.akkermansia),
+        faecalibacterium: toMetric(bm.faecalibacterium),
+        lactobacillaceae: toMetric(bm.lactobacillaceae),
+        l_rhamnosus: toMetric(bm.l_rhamnosus),
+        l_paracasei: toMetric(bm.l_paracasei),
+        l_acidophilus: toMetric(bm.l_acidophilus),
+        b_animalis: toMetric(bm.b_animalis),
+        s_thermophilus: toMetric(bm.s_thermophilus),
       },
-      category_statuses: {
-        beneficial_microbes: normalizeStatus(
-          cs.beneficial_microbes ?? undefined,
+      disruptive_microbes: {
+        antibiotic_resistance_abundance_index: toMetric(
+          dm.antibiotic_resistance_abundance_index,
         ),
-        disruptive_microbes: normalizeStatus(
-          cs.disruptive_microbes ?? undefined,
+        antibiotic_resistance_richness_index: toMetric(
+          dm.antibiotic_resistance_richness_index,
         ),
-        gut_barrier_inflammation: normalizeStatus(
-          cs.gut_barrier_inflammation ?? undefined,
+        enterobacteriaceae: toMetric(dm.enterobacteriaceae),
+        e_coli: toMetric(dm.e_coli),
+        e_flexneri: toMetric(dm.e_flexneri),
+        e_dysenteriae: toMetric(dm.e_dysenteriae),
+        h_pylori: toMetric(dm.h_pylori),
+        blastocystis: toMetric(dm.blastocystis),
+        cryptosporidium: toMetric(dm.cryptosporidium),
+        giardia: toMetric(dm.giardia),
+        entamoeba_histolytica: toMetric(dm.entamoeba_histolytica),
+        candida: toMetric(dm.candida),
+        aspergillus: toMetric(dm.aspergillus),
+        methane_production_capacity: toMetric(dm.methane_production_capacity),
+        methanobrevibacter_smithii: toMetric(dm.methanobrevibacter_smithii),
+      },
+      gut_barrier_inflammation: {
+        hexa_lps_index: toMetric(gb.hexa_lps_index),
+        mucus_degradation_index: toMetric(gb.mucus_degradation_index),
+        hydrogen_sulfide_index: toMetric(gb.hydrogen_sulfide_index),
+        host_dna: toMetric(gb.host_dna),
+        oxygen_exposure_index: toMetric(gb.oxygen_exposure_index),
+      },
+      short_chain_fatty_acids: {
+        butyrate: normalizeIndexMetric(toMetric(sc.butyrate)),
+        propionate: normalizeIndexMetric(toMetric(sc.propionate)),
+        acetate: normalizeIndexMetric(toMetric(sc.acetate)),
+      },
+      digestive_capacity: {
+        cellulose: normalizeIndexMetric(toMetric(dc.cellulose)),
+        resistant_starch: normalizeIndexMetric(toMetric(dc.resistant_starch)),
+        chitin: normalizeIndexMetric(toMetric(dc.chitin)),
+        pectin: normalizeIndexMetric(toMetric(dc.pectin)),
+        fructooligosaccharides: normalizeIndexMetric(
+          toMetric(dc.fructooligosaccharides),
         ),
-        short_chain_fatty_acids: normalizeStatus(
-          cs.short_chain_fatty_acids ?? undefined,
+        galactooligosaccharides: normalizeIndexMetric(
+          toMetric(dc.galactooligosaccharides),
         ),
-        digestive_capacity: normalizeStatus(cs.digestive_capacity ?? undefined),
-        diversity_resilience: normalizeStatus(
-          cs.diversity_resilience ?? undefined,
+        xylooligosaccharides: normalizeIndexMetric(
+          toMetric(dc.xylooligosaccharides),
         ),
-        microbial_enzymes_metabolites: normalizeStatus(
-          cs.microbial_enzymes_metabolites ?? undefined,
+        isomaltooligosaccharides: normalizeIndexMetric(
+          toMetric(dc.isomaltooligosaccharides),
+        ),
+        protein_breakdown: normalizeIndexMetric(toMetric(dc.protein_breakdown)),
+        trimethylamine: normalizeIndexMetric(toMetric(dc.trimethylamine)),
+        ammonia: normalizeIndexMetric(toMetric(dc.ammonia)),
+        branched_chain_amino_acids: normalizeIndexMetric(
+          toMetric(dc.branched_chain_amino_acids),
+        ),
+        p_cresol: normalizeIndexMetric(toMetric(dc.p_cresol)),
+        indole_3_propionic_acid: normalizeIndexMetric(
+          toMetric(dc.indole_3_propionic_acid),
+        ),
+        vitamin_b2: normalizeIndexMetric(toMetric(dc.vitamin_b2)),
+        vitamin_b7: normalizeIndexMetric(toMetric(dc.vitamin_b7)),
+        vitamin_b9: normalizeIndexMetric(toMetric(dc.vitamin_b9)),
+        vitamin_b12: normalizeIndexMetric(toMetric(dc.vitamin_b12)),
+        vitamin_k: normalizeIndexMetric(toMetric(dc.vitamin_k)),
+      },
+      diversity_resilience: {
+        shannon_diversity: toMetric(dr.shannon_diversity),
+        species_richness: toMetric(dr.species_richness),
+        microbiome_age: toMetric(dr.microbiome_age),
+        gut_resilience_score: toMetric(dr.gut_resilience_score),
+        oral_microbes: toMetric(dr.oral_microbes),
+        bacteroidota: toMetric(dr.bacteroidota),
+        firmicutes: toMetric(dr.firmicutes),
+        actinobacteriota: toMetric(dr.actinobacteriota),
+        proteobacteria: toMetric(dr.proteobacteria),
+        firmicutes_bacteroidota_ratio: toMetric(
+          dr.firmicutes_bacteroidota_ratio,
+        ),
+        proteobacteria_actinobacteriota_ratio: toMetric(
+          dr.proteobacteria_actinobacteriota_ratio,
+        ),
+        prevotella_bacteroides_ratio: toMetric(dr.prevotella_bacteroides_ratio),
+        bacteroides: toMetric(dr.bacteroides),
+        prevotella: toMetric(dr.prevotella),
+        ruminococcus: toMetric(dr.ruminococcus),
+        blautia: toMetric(dr.blautia),
+        roseburia: toMetric(dr.roseburia),
+        phocaeicola_dorei: toMetric(dr.phocaeicola_dorei),
+      },
+      microbial_enzymes_metabolites: {
+        histamine_index: normalizeIndexMetric(toMetric(em.histamine_index)),
+        beta_glucuronidase_capacity: normalizeIndexMetric(
+          toMetric(em.beta_glucuronidase_capacity),
+        ),
+        gaba_production: normalizeIndexMetric(toMetric(em.gaba_production)),
+        gaba_breakdown: normalizeIndexMetric(toMetric(em.gaba_breakdown)),
+        unconjugated_bile_acids: normalizeIndexMetric(
+          toMetric(em.unconjugated_bile_acids),
+        ),
+        secondary_bile_acids: normalizeIndexMetric(
+          toMetric(em.secondary_bile_acids),
+        ),
+        urolithin_producing_species: normalizeIndexMetric(
+          toMetric(em.urolithin_producing_species),
         ),
       },
-      metrics: {
-        beneficial_microbes: {
-          bifidobacterium: toMetric(bm.bifidobacterium),
-          akkermansia: toMetric(bm.akkermansia),
-          faecalibacterium: toMetric(bm.faecalibacterium),
-          lactobacillaceae: toMetric(bm.lactobacillaceae),
-          l_rhamnosus: toMetric(bm.l_rhamnosus),
-          l_paracasei: toMetric(bm.l_paracasei),
-          l_acidophilus: toMetric(bm.l_acidophilus),
-          b_animalis: toMetric(bm.b_animalis),
-          s_thermophilus: toMetric(bm.s_thermophilus),
-        },
-        disruptive_microbes: {
-          antibiotic_resistance_abundance_index: toMetric(
-            dm.antibiotic_resistance_abundance_index,
-          ),
-          antibiotic_resistance_richness_index: toMetric(
-            dm.antibiotic_resistance_richness_index,
-          ),
-          enterobacteriaceae: toMetric(dm.enterobacteriaceae),
-          e_coli: toMetric(dm.e_coli),
-          e_flexneri: toMetric(dm.e_flexneri),
-          e_dysenteriae: toMetric(dm.e_dysenteriae),
-          h_pylori: toMetric(dm.h_pylori),
-          blastocystis: toMetric(dm.blastocystis),
-          cryptosporidium: toMetric(dm.cryptosporidium),
-          giardia: toMetric(dm.giardia),
-          entamoeba_histolytica: toMetric(dm.entamoeba_histolytica),
-          candida: toMetric(dm.candida),
-          aspergillus: toMetric(dm.aspergillus),
-          methane_production_capacity: toMetric(dm.methane_production_capacity),
-          methanobrevibacter_smithii: toMetric(dm.methanobrevibacter_smithii),
-        },
-        gut_barrier_inflammation: {
-          hexa_lps_index: toMetric(gb.hexa_lps_index),
-          mucus_degradation_index: toMetric(gb.mucus_degradation_index),
-          hydrogen_sulfide_index: toMetric(gb.hydrogen_sulfide_index),
-          host_dna: toMetric(gb.host_dna),
-          oxygen_exposure_index: toMetric(gb.oxygen_exposure_index),
-        },
-        short_chain_fatty_acids: {
-          butyrate: normalizeIndexMetric(toMetric(sc.butyrate)),
-          propionate: normalizeIndexMetric(toMetric(sc.propionate)),
-          acetate: normalizeIndexMetric(toMetric(sc.acetate)),
-        },
-        digestive_capacity: {
-          cellulose: normalizeIndexMetric(toMetric(dc.cellulose)),
-          resistant_starch: normalizeIndexMetric(toMetric(dc.resistant_starch)),
-          chitin: normalizeIndexMetric(toMetric(dc.chitin)),
-          pectin: normalizeIndexMetric(toMetric(dc.pectin)),
-          fructooligosaccharides: normalizeIndexMetric(
-            toMetric(dc.fructooligosaccharides),
-          ),
-          galactooligosaccharides: normalizeIndexMetric(
-            toMetric(dc.galactooligosaccharides),
-          ),
-          xylooligosaccharides: normalizeIndexMetric(
-            toMetric(dc.xylooligosaccharides),
-          ),
-          isomaltooligosaccharides: normalizeIndexMetric(
-            toMetric(dc.isomaltooligosaccharides),
-          ),
-          protein_breakdown: normalizeIndexMetric(
-            toMetric(dc.protein_breakdown),
-          ),
-          trimethylamine: normalizeIndexMetric(toMetric(dc.trimethylamine)),
-          ammonia: normalizeIndexMetric(toMetric(dc.ammonia)),
-          branched_chain_amino_acids: normalizeIndexMetric(
-            toMetric(dc.branched_chain_amino_acids),
-          ),
-          p_cresol: normalizeIndexMetric(toMetric(dc.p_cresol)),
-          indole_3_propionic_acid: normalizeIndexMetric(
-            toMetric(dc.indole_3_propionic_acid),
-          ),
-          vitamin_b2: normalizeIndexMetric(toMetric(dc.vitamin_b2)),
-          vitamin_b7: normalizeIndexMetric(toMetric(dc.vitamin_b7)),
-          vitamin_b9: normalizeIndexMetric(toMetric(dc.vitamin_b9)),
-          vitamin_b12: normalizeIndexMetric(toMetric(dc.vitamin_b12)),
-          vitamin_k: normalizeIndexMetric(toMetric(dc.vitamin_k)),
-        },
-        diversity_resilience: {
-          shannon_diversity: toMetric(dr.shannon_diversity),
-          species_richness: toMetric(dr.species_richness),
-          microbiome_age: toMetric(dr.microbiome_age),
-          gut_resilience_score: toMetric(dr.gut_resilience_score),
-          oral_microbes: toMetric(dr.oral_microbes),
-          bacteroidota: toMetric(dr.bacteroidota),
-          firmicutes: toMetric(dr.firmicutes),
-          actinobacteriota: toMetric(dr.actinobacteriota),
-          proteobacteria: toMetric(dr.proteobacteria),
-          firmicutes_bacteroidota_ratio: toMetric(
-            dr.firmicutes_bacteroidota_ratio,
-          ),
-          proteobacteria_actinobacteriota_ratio: toMetric(
-            dr.proteobacteria_actinobacteriota_ratio,
-          ),
-          prevotella_bacteroides_ratio: toMetric(
-            dr.prevotella_bacteroides_ratio,
-          ),
-          bacteroides: toMetric(dr.bacteroides),
-          prevotella: toMetric(dr.prevotella),
-          ruminococcus: toMetric(dr.ruminococcus),
-          blautia: toMetric(dr.blautia),
-          roseburia: toMetric(dr.roseburia),
-          phocaeicola_dorei: toMetric(dr.phocaeicola_dorei),
-        },
-        microbial_enzymes_metabolites: {
-          histamine_index: normalizeIndexMetric(toMetric(em.histamine_index)),
-          beta_glucuronidase_capacity: normalizeIndexMetric(
-            toMetric(em.beta_glucuronidase_capacity),
-          ),
-          gaba_production: normalizeIndexMetric(toMetric(em.gaba_production)),
-          gaba_breakdown: normalizeIndexMetric(toMetric(em.gaba_breakdown)),
-          unconjugated_bile_acids: normalizeIndexMetric(
-            toMetric(em.unconjugated_bile_acids),
-          ),
-          secondary_bile_acids: normalizeIndexMetric(
-            toMetric(em.secondary_bile_acids),
-          ),
-          urolithin_producing_species: normalizeIndexMetric(
-            toMetric(em.urolithin_producing_species),
-          ),
-        },
-      },
-      species: speciesArr,
-      recommendations: parsed.recommendations ?? [],
-      top_focus_areas: topFocusAreas,
-      rawText,
-      confidence,
-    };
-  } catch (error) {
-    console.error("[gutHealthLlmExtractor] Extraction failed:", error);
-    return null;
-  }
+    },
+    species: speciesArr,
+    recommendations: parsed.recommendations ?? [],
+    top_focus_areas: topFocusAreas,
+    rawText,
+    confidence,
+  };
 }
+
+// ── Type definition ────────────────────────────────────────────────────────
+
+export const gutHealthDefinition: ReportTypeDefinition<GutHealthReportData> = {
+  id: "gut-health-report",
+  displayName: "Gut Health (Tiny Health)",
+  storageDataType: "gut-health-report",
+
+  detect: looksLikeGutHealthReport,
+
+  passes: [pass1, pass2],
+
+  mergePasses(results) {
+    const [r1, r2] = results;
+    if (!r1 && !r2) return {};
+    if (!r2) return r1 ?? {};
+    if (!r1) return r2 ?? {};
+    return mergeLlmResults(r1 as LlmResult, r2 as LlmResult) as Record<
+      string,
+      unknown
+    >;
+  },
+
+  validate(merged, rawText) {
+    const parsed = merged as LlmResult;
+    // Require at least one meaningful field to avoid returning empty objects
+    const hasData =
+      parsed.microbiome_score != null ||
+      parsed.gut_type != null ||
+      parsed.beneficial_pct != null ||
+      (parsed.species?.length ?? 0) > 0;
+    if (!hasData) return null;
+    try {
+      return mapToGutHealthReportData(parsed, rawText);
+    } catch {
+      return null;
+    }
+  },
+};

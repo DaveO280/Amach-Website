@@ -17,14 +17,21 @@ export interface ParserPass {
   label: string;
 
   /**
-   * Character range [start, end] to slice rawText for this pass.
+   * "text" (default) calls the Venice text-completion endpoint with rawText.
+   * "vision" renders PDF pages to PNG images and calls the Venice vision endpoint.
+   */
+  type?: "text" | "vision";
+
+  /**
+   * Character range [start, end] to slice rawText for this pass (text passes only).
    * If omitted the full rawText is used.
    */
   charRange?: [number, number];
 
   /**
    * Build the user-facing prompt from the text slice for this pass.
-   * Receives the sliced (or full) raw text.
+   * Receives the sliced (or full) raw text.  For vision passes the string
+   * argument is empty — use visionPrompt for the image prompt instead.
    */
   buildPrompt: (textSlice: string) => string;
 
@@ -46,6 +53,26 @@ export interface ParserPass {
    * temperature 0.  Leave undefined to skip retry.
    */
   retryInstruction?: string;
+
+  // ── Vision-only fields ──────────────────────────────────────────────────
+
+  /**
+   * 1-indexed page numbers to render and send as images (vision passes only).
+   * Pages are batched into a single API call.
+   */
+  visionPages?: number[];
+
+  /**
+   * User-facing text prompt to send alongside the rendered images.
+   * Replaces the buildPrompt output for vision passes.
+   */
+  visionPrompt?: string;
+
+  /**
+   * Venice vision model override.  Defaults to VENICE_PARSE_VISION_MODEL
+   * from parseConfig.ts.
+   */
+  visionModel?: string;
 }
 
 // ── Type definition ────────────────────────────────────────────────────────────

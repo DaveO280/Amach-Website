@@ -51,8 +51,12 @@ import { parseHealthReport } from "../src/utils/reportParsers";
 
 async function parseGutHealth(
   text: string,
+  pdfData?: Uint8Array,
 ): Promise<GutHealthReportData | null> {
-  const results = await parseHealthReport(text, { inferredType: "gut-health" });
+  const results = await parseHealthReport(text, {
+    inferredType: "gut-health",
+    pdfData,
+  });
   return (results[0]?.report as GutHealthReportData) ?? null;
 }
 
@@ -71,7 +75,7 @@ async function parseBloodwork(
 // ── Config ─────────────────────────────────────────────────────────────────
 
 const RUNS = 20;
-const CONCURRENCY = 4; // Venice calls in parallel
+const CONCURRENCY = 1; // Venice calls in parallel (serial to avoid rate-limit burst)
 const NUMERIC_TOLERANCE = 0.5; // values within ±0.5 count as "consistent"
 
 const GUT_PDF = "/Users/dave/Desktop/tiny_health_report_GCF795 (1).pdf";
@@ -117,6 +121,13 @@ async function extractPdfText(filePath: string): Promise<string> {
     } catch {
       fullText += `Page ${i}:\n[error reading page]\n\n`;
     }
+  }
+
+  // Cleanly terminate the pdfjs worker so renderPdfPages can spawn a fresh one.
+  try {
+    await pdf.destroy();
+  } catch {
+    /* ignore */
   }
 
   return fullText.trim();
@@ -534,7 +545,9 @@ async function main() {
 
   log("📄 Extracting gut health PDF text...");
   let gutText: string;
+  let gutPdfData: Uint8Array | undefined;
   try {
+    gutPdfData = new Uint8Array(readFileSync(GUT_PDF));
     gutText = await extractPdfText(GUT_PDF);
     log(
       `   ✓ Extracted ${gutText.length.toLocaleString()} chars from ${gutText.split("Page ").length - 1} pages\n`,
@@ -544,9 +557,9 @@ async function main() {
     process.exit(1);
   }
 
-  log(`🔬 Running gut health extractor ${RUNS}× ...`);
+  log(`🔬 Running gut health extractor ${RUNS}× (with vision pass) ...`);
   const gutResults = await runBatched(
-    () => parseGutHealth(gutText),
+    () => parseGutHealth(gutText, gutPdfData),
     RUNS,
     CONCURRENCY,
     "gut-health",

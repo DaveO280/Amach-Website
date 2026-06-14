@@ -27,6 +27,8 @@ const INFERRED_TYPE_TO_REGISTRY_ID: Record<string, string> = {
 export interface UniversalParseOptions {
   inferredType?: "dexa" | "bloodwork" | "medical-record" | "gut-health";
   sourceName?: string;
+  /** Raw PDF bytes for vision-pass gauge extraction. */
+  pdfData?: Uint8Array;
 }
 
 export async function parseHealthReportUniversal(
@@ -48,6 +50,7 @@ export async function parseHealthReportUniversal(
   const results = await parseReport(rawText, {
     typeId,
     sourceName: options.sourceName,
+    pdfData: options.pdfData,
   });
 
   if (results.length > 0) return results;

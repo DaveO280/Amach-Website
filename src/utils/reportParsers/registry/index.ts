@@ -12,7 +12,12 @@ import type {
   ParsedHealthReport,
   ParsedReportSummary,
 } from "@/types/reportData";
-import { callLlmExtractor, ANTI_HALLUCINATION_RULES } from "../llmPipeline";
+import {
+  callLlmExtractor,
+  runVisionExtractor,
+  ANTI_HALLUCINATION_RULES,
+} from "../llmPipeline";
+import { renderPdfPages } from "./pdfRenderer";
 import type { ReportTypeDefinition, ParserPass } from "./types";
 
 // ── Registry storage ──────────────────────────────────────────────────────────
@@ -68,8 +73,38 @@ async function runPass(
   def: AnyDef,
   pass: ParserPass,
   rawText: string,
+  pdfData?: Uint8Array,
   extraInstruction?: string,
 ): Promise<Record<string, unknown> | null> {
+  const logTag = `registry/${def.id}/${pass.label}`;
+
+  if (pass.type === "vision") {
+    if (!pdfData) {
+      console.warn(`[${logTag}] Vision pass skipped — no pdfData provided`);
+      return null;
+    }
+    const pages = pass.visionPages ?? [];
+    if (pages.length === 0) {
+      console.warn(`[${logTag}] Vision pass has no visionPages configured`);
+      return null;
+    }
+    const prompt = pass.visionPrompt ?? pass.buildPrompt("");
+    let images: string[];
+    try {
+      images = await renderPdfPages(pdfData, pages);
+    } catch (err) {
+      console.error(`[${logTag}] PDF rendering failed:`, err);
+      return null;
+    }
+    return runVisionExtractor(images, prompt, {
+      maxTokens: pass.maxTokens ?? 1000,
+      temperature: pass.temperature ?? 0,
+      logTag,
+      visionModel: pass.visionModel,
+    });
+  }
+
+  // Text pass (default)
   const textSlice =
     pass.charRange != null
       ? rawText.slice(pass.charRange[0], pass.charRange[1])
@@ -85,7 +120,7 @@ async function runPass(
     {
       maxTokens: pass.maxTokens ?? 8000,
       temperature: extraInstruction != null ? 0 : (pass.temperature ?? 0.1),
-      logTag: `registry/${def.id}/${pass.label}`,
+      logTag,
       skipRetry: extraInstruction != null,
     },
   );
@@ -98,6 +133,11 @@ export interface ParseReportOptions {
   typeId?: string;
   /** Attached to the returned report's source field if it is not already set. */
   sourceName?: string;
+  /**
+   * Raw PDF bytes — required for vision passes that render pages to images.
+   * When not provided, vision passes are silently skipped.
+   */
+  pdfData?: Uint8Array;
 }
 
 export async function parseReport(
@@ -132,7 +172,7 @@ export async function parseReport(
   // Run all passes
   const passResults: Array<Record<string, unknown> | null> = [];
   for (const pass of typeDef.passes) {
-    const result = await runPass(typeDef, pass, rawText);
+    const result = await runPass(typeDef, pass, rawText, options.pdfData);
     passResults.push(result);
     console.log(
       `[registry/${typeDef.id}/${pass.label}] Result: ${result ? "ok" : "null"}`,
@@ -158,6 +198,7 @@ export async function parseReport(
         typeDef,
         lastPass,
         rawText,
+        options.pdfData,
         lastPass.retryInstruction,
       );
       if (retryResult) {

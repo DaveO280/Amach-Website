@@ -355,6 +355,27 @@ function mergeLlmResults(pass1: LlmResult, pass2: LlmResult): LlmResult {
   return merged;
 }
 
+// For categories whose values live exclusively in gauge images, the vision
+// pass should REPLACE (not just fill) whatever the text passes guessed.
+// Text passes can see surrounding status labels but not the gauge pointer
+// positions, so they hallucinate wildly inconsistent index values.
+const VISION_OWNED_CATEGORIES: Array<keyof NonNullable<LlmResult["metrics"]>> =
+  ["short_chain_fatty_acids", "digestive_capacity"];
+
+function mergeVisionCategories(base: LlmResult, vision: LlmResult): LlmResult {
+  if (!vision.metrics) return base;
+  const result: LlmResult = { ...base };
+  result.metrics = { ...(base.metrics ?? {}) };
+  for (const cat of VISION_OWNED_CATEGORIES) {
+    const vCat = (vision.metrics as Record<string, unknown>)[cat];
+    if (vCat != null) {
+      // Replace the text-pass estimate entirely with the vision reading.
+      (result.metrics as Record<string, unknown>)[cat] = vCat;
+    }
+  }
+  return result;
+}
+
 // ── Prompts ────────────────────────────────────────────────────────────────
 
 const DISEASE_MARKER_RULES = `
@@ -662,6 +683,48 @@ const pass2: ParserPass = {
     "Return ONLY the raw JSON object — no prose, no explanation. Start your response with { and end with }.",
 };
 
+// Page 15: SCFA gauge charts (butyrate, propionate, acetate in rpkm)
+// Page 16: Digestive capacity charts (fiber fermentation metrics in rpkm)
+const VISION_PROMPT = `You are reading pages from a microbiome/gut health lab report (Tiny Health format).
+
+Look at ALL gauge charts, dial charts, and numeric indicators visible in these pages.
+
+Extract the following values and return ONLY a JSON object:
+
+{
+  "metrics": {
+    "short_chain_fatty_acids": {
+      "butyrate":    {"value": <number or null>, "unit": "rpkm", "status": <"okay"|"needs_support"|null>},
+      "propionate":  {"value": <number or null>, "unit": "rpkm", "status": <"okay"|"needs_support"|null>},
+      "acetate":     {"value": <number or null>, "unit": "rpkm", "status": <"okay"|"needs_support"|null>}
+    },
+    "digestive_capacity": {
+      "cellulose":              {"value": <number or null>, "unit": "rpkm", "status": <"okay"|"needs_support"|null>},
+      "resistant_starch":       {"value": <number or null>, "unit": "rpkm", "status": <"okay"|"needs_support"|null>},
+      "chitin":                 {"value": <number or null>, "unit": "rpkm", "status": <"okay"|"needs_support"|null>},
+      "pectin":                 {"value": <number or null>, "unit": "rpkm", "status": <"okay"|"needs_support"|null>},
+      "fructooligosaccharides": {"value": <number or null>, "unit": "rpkm", "status": <"okay"|"needs_support"|null>},
+      "protein_breakdown":      {"value": <number or null>, "unit": "rpkm", "status": <"okay"|"needs_support"|null>}
+    }
+  }
+}
+
+Rules:
+- Use ONLY values explicitly shown in gauges or charts — do NOT guess or infer.
+- If a metric is not visible, set value to null.
+- rpkm values are typically in the range 0–5000. Set value to null if you cannot read the number clearly.
+- Output ONLY valid JSON starting with { and ending with }.`;
+
+const pass3Vision: ParserPass = {
+  type: "vision",
+  label: "vision-gauges",
+  visionPages: [15, 16],
+  visionPrompt: VISION_PROMPT,
+  buildPrompt: () => VISION_PROMPT,
+  maxTokens: 800,
+  temperature: 0,
+};
+
 // ── Validate + map ─────────────────────────────────────────────────────────
 
 function mapToGutHealthReportData(
@@ -886,17 +949,28 @@ export const gutHealthDefinition: ReportTypeDefinition<GutHealthReportData> = {
 
   detect: looksLikeGutHealthReport,
 
-  passes: [pass1, pass2],
+  passes: [pass1, pass2, pass3Vision],
 
   mergePasses(results) {
-    const [r1, r2] = results;
-    if (!r1 && !r2) return {};
-    if (!r2) return r1 ?? {};
-    if (!r1) return r2 ?? {};
-    return mergeLlmResults(r1 as LlmResult, r2 as LlmResult) as Record<
-      string,
-      unknown
-    >;
+    const [r1, r2, r3] = results;
+    // Merge text passes first (earlier wins on conflict)
+    let merged: LlmResult;
+    if (!r1 && !r2) {
+      merged = {};
+    } else if (!r2) {
+      merged = (r1 ?? {}) as LlmResult;
+    } else if (!r1) {
+      merged = (r2 ?? {}) as LlmResult;
+    } else {
+      merged = mergeLlmResults(r1 as LlmResult, r2 as LlmResult);
+    }
+    // Overlay vision pass: vision REPLACES text-pass values for gauge-based
+    // categories (SCFA, digestive capacity) because text passes can only see
+    // status labels and hallucinate inconsistent index estimates.
+    if (r3) {
+      merged = mergeVisionCategories(merged, r3 as LlmResult);
+    }
+    return merged as Record<string, unknown>;
   },
 
   validate(merged, rawText) {

@@ -11,9 +11,9 @@ export const VENICE_PARSE_TEXT_MODEL: string =
       process.env.VENICE_MODEL_NAME)) ||
   "zai-org-glm-4.7";
 
-// When a vision-capable Venice model is configured, PDF pages can be rendered
-// to images and sent as multimodal input — capturing chart/gauge values that
-// text extraction misses (e.g. the microbiome score donut chart).
+// Vision model for PDF page rendering passes (gauge/chart extraction).
+// e2ee-qwen3-vl-30b-a3b-p is the default — available and responsive.
+// Override via VENICE_VISION_MODEL_NAME env var.
 export const VENICE_PARSE_VISION_MODEL: string =
   (typeof process !== "undefined" && process.env.VENICE_VISION_MODEL_NAME) ||
-  VENICE_PARSE_TEXT_MODEL;
+  "e2ee-qwen3-vl-30b-a3b-p";

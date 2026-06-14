@@ -17,6 +17,8 @@ import { parseHealthReportUniversal } from "./universalParser";
 export interface ReportParsingOptions {
   inferredType?: "dexa" | "bloodwork" | "medical-record" | "gut-health";
   sourceName?: string;
+  /** Raw PDF bytes — enables vision passes for gauge/chart extraction. */
+  pdfData?: Uint8Array;
   /** @deprecated AI is now the default for all types. This option is ignored. */
   useAI?: boolean;
 }

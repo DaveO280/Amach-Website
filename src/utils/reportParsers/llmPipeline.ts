@@ -8,7 +8,10 @@
  */
 
 import { callVenice } from "./veniceClient";
-import { VENICE_PARSE_TEXT_MODEL } from "./parseConfig";
+import {
+  VENICE_PARSE_TEXT_MODEL,
+  VENICE_PARSE_VISION_MODEL,
+} from "./parseConfig";
 
 // ── Shared anti-hallucination rules ─────────────────────────────────────────
 
@@ -139,6 +142,84 @@ export async function callLlmExtractor(
     }
   } catch (err) {
     console.error(`[${tag}] Pipeline error:`, err);
+    return null;
+  }
+}
+
+// ── Vision extraction ─────────────────────────────────────────────────────────
+
+/**
+ * Send pre-rendered PDF page images to a Venice vision model and return the
+ * parsed JSON result.  Each image should be a base64-encoded PNG string
+ * (no data URI prefix — this function adds it).
+ */
+export async function runVisionExtractor(
+  pageImagesB64: string[],
+  prompt: string,
+  options: LlmPipelineOptions & { visionModel?: string } = {},
+): Promise<Record<string, unknown> | null> {
+  const tag = options.logTag ?? "llmPipeline/vision";
+  const model = options.visionModel ?? VENICE_PARSE_VISION_MODEL;
+
+  if (pageImagesB64.length === 0) {
+    console.warn(`[${tag}] No images to send`);
+    return null;
+  }
+
+  try {
+    const imageBlocks = pageImagesB64.map((b64) => ({
+      type: "image_url" as const,
+      image_url: { url: `data:image/png;base64,${b64}` },
+    }));
+
+    const response = (await callVenice({
+      model,
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: prompt }, ...imageBlocks],
+        },
+      ],
+      max_tokens: options.maxTokens ?? 1000,
+      temperature: options.temperature ?? 0,
+      venice_parameters: {
+        disable_thinking: true,
+        strip_thinking_response: true,
+        include_venice_system_prompt: false,
+      },
+    })) as { choices?: Array<{ message?: { content?: string } }> };
+
+    const content = response?.choices?.[0]?.message?.content?.trim();
+    if (!content) {
+      console.warn(`[${tag}] Empty vision response`);
+      return null;
+    }
+
+    // Try direct parse, then fence strip, then brace extract
+    const tryParse = (s: string): Record<string, unknown> | null => {
+      try {
+        return JSON.parse(s) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    };
+
+    const direct = tryParse(content);
+    if (direct) return direct;
+
+    let candidate =
+      content.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1] ?? content;
+    const fb = candidate.indexOf("{");
+    const lb = candidate.lastIndexOf("}");
+    if (fb !== -1 && lb > fb) candidate = candidate.slice(fb, lb + 1);
+
+    const parsed = tryParse(candidate);
+    if (parsed) return parsed;
+
+    console.warn(`[${tag}] Could not parse vision response as JSON`);
+    return null;
+  } catch (err) {
+    console.error(`[${tag}] Vision pipeline error:`, err);
     return null;
   }
 }

@@ -24,7 +24,7 @@ export async function callVenice(
 
   if (apiKey) {
     // Server-side: call Venice API directly (mirrors route.ts logic)
-    const modelName = getModelName();
+    const modelName = (body.model as string | undefined) ?? getModelName();
 
     const requestBody: Record<string, unknown> = {
       messages: body.messages || [],

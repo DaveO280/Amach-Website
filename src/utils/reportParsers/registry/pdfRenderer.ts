@@ -71,7 +71,9 @@ export async function renderPdfPages(
   );
   GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).toString();
 
-  const canvasMod = await import("@napi-rs/canvas").catch(() => null);
+  const canvasMod = await import(
+    /* webpackIgnore: true */ "@napi-rs/canvas"
+  ).catch(() => null);
   if (!canvasMod) {
     throw new Error("[pdfRenderer] @napi-rs/canvas is not available");
   }

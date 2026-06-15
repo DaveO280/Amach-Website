@@ -74,7 +74,7 @@ async function parseBloodwork(
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
-const RUNS = 20;
+const RUNS = process.env.RUNS ? parseInt(process.env.RUNS) : 20;
 const CONCURRENCY = 1; // Venice calls in parallel (serial to avoid rate-limit burst)
 const NUMERIC_TOLERANCE = 0.5; // values within ±0.5 count as "consistent"
 

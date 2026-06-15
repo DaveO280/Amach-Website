@@ -146,9 +146,14 @@ interface LlmResult {
     };
   };
   species?: Array<{
-    name: string;
-    abundance_pct: number;
-    classification: string;
+    name?: string;
+    n?: string;
+    abundance_pct?: number;
+    pct?: number;
+    p?: number;
+    classification?: string;
+    status?: string;
+    s?: string;
   }>;
   recommendations?: string[];
   top_focus_areas?: Array<{
@@ -183,6 +188,22 @@ function normalizeStatus(s: string | undefined): GutHealthStatus | undefined {
   if (lower.includes("great")) return "great";
   if (lower.includes("okay") || lower === "ok") return "okay";
   return undefined;
+}
+
+function expandSpeciesCode(code: string | undefined): string | undefined {
+  if (!code) return undefined;
+  switch (code.toUpperCase()) {
+    case "B":
+      return "beneficial";
+    case "V":
+      return "variable";
+    case "U":
+      return "unfriendly";
+    case "X":
+      return "unknown";
+    default:
+      return code;
+  }
 }
 
 function classifySpecies(c: string): GutHealthSpeciesEntry["classification"] {
@@ -360,7 +381,11 @@ function mergeLlmResults(pass1: LlmResult, pass2: LlmResult): LlmResult {
 // Text passes can see surrounding status labels but not the gauge pointer
 // positions, so they hallucinate wildly inconsistent index values.
 const VISION_OWNED_CATEGORIES: Array<keyof NonNullable<LlmResult["metrics"]>> =
-  ["short_chain_fatty_acids", "digestive_capacity"];
+  [
+    "short_chain_fatty_acids",
+    "digestive_capacity",
+    "microbial_enzymes_metabolites",
+  ];
 
 function mergeVisionCategories(base: LlmResult, vision: LlmResult): LlmResult {
   if (!vision.metrics) return base;
@@ -388,22 +413,6 @@ NEVER return a non-null value for a disease marker based on:
   - mention in a reference range or comparison table
   - educational background text about the organism
   - "not detected" or absence from the sample`.trim();
-
-const PATHWAY_UNIT_RULES = `
-PATHWAY METRIC UNITS — CRITICAL:
-For SCFA, digestive capacity, and microbial enzyme/metabolite metrics:
-  - DO NOT return raw RPKM counts. These vary 1,000× between sequencing runs and are not comparable.
-  - Return a 0-100 production capacity INDEX where:
-      0  = absent / not detected
-      25 = low production
-      50 = typical population median
-      75 = moderately high
-      100 = very high production
-  - Use the bar chart or colored indicator in the report to determine this index position.
-  - If only a status label is visible (great/okay/needs_support) and no bar chart position:
-      return null for value, and set status from the label.
-  - Species abundance_pct: return as a percentage of total microbiome (0-100 scale, NOT rpkm).
-  - All percentage fields: return 0-100 (not 0-1).`.trim();
 
 const SYSTEM_PROMPT = [
   "You are a precise data extraction assistant. Return ONLY valid JSON with no markdown, code blocks, or explanation.",
@@ -552,110 +561,21 @@ ${text}`;
 }
 
 function buildPass2Prompt(text: string): string {
-  return `Extract structured data from PASS 2 of this Tiny Health gut microbiome report.
-This is the CONTINUATION of the report. Focus on:
-  - TOP 50 species by abundance_pct (do NOT list all species — only the 50 highest abundance ones)
-  - Diversity & resilience metrics (shannon_diversity, species_richness, bacteroidota, firmicutes, etc.)
-  - Short chain fatty acid pathways (butyrate, propionate, acetate as 0-100 production index)
-  - Digestive capacity pathways (cellulose, resistant_starch, vitamins as 0-100 capacity index)
-  - Microbial enzyme/metabolite pathways (histamine_index, secondary_bile_acids, etc. as 0-100 index)
-  - Recommendations text
+  return `Extract the top 30 species by abundance from this gut microbiome report section.
 
-${PATHWAY_UNIT_RULES}
+Output ONLY this compact JSON (no whitespace, no line breaks, no markdown):
+{"species":[{"n":"<name>","p":<pct>,"s":"<B|V|U|X>"}]}
 
-IMPORTANT: For "species", return ONLY the top 50 species by abundance_pct. Do NOT list every species.
+Field meanings:
+- "n" = species name (string)
+- "p" = abundance percentage 0-100 scale (e.g. 9.771, not 0.09771)
+- "s" = classification: B=beneficial, V=variable, U=unfriendly, X=unknown
 
-Return null for any field not explicitly present in this passage.
-Return empty arrays for species/recommendations if not present here.
+Return exactly 30 entries maximum, ordered by p descending.
+If no species found, return: {"species":[]}
+Start response with { and end with }. No other text.
 
-RETURN THIS EXACT JSON SCHEMA (use null for missing values, empty arrays for no items):
-{
-  "kit_id": null,
-  "collection_date": null,
-  "report_date": null,
-  "patient_sex": null,
-  "report_version": null,
-  "microbiome_score": null,
-  "gut_type": string|null,
-  "beneficial_pct": number|null,
-  "variable_pct": number|null,
-  "unfriendly_pct": number|null,
-  "unknown_pct": number|null,
-  "category_statuses": {
-    "beneficial_microbes": null,
-    "disruptive_microbes": null,
-    "gut_barrier_inflammation": null,
-    "short_chain_fatty_acids": string|null,
-    "digestive_capacity": null,
-    "diversity_resilience": string|null,
-    "microbial_enzymes_metabolites": string|null
-  },
-  "metrics": {
-    "beneficial_microbes": null,
-    "disruptive_microbes": null,
-    "gut_barrier_inflammation": null,
-    "short_chain_fatty_acids": {
-      "butyrate": {"value":number,"unit":"index","status":string}|null,
-      "propionate": {"value":number,"unit":"index","status":string}|null,
-      "acetate": {"value":number,"unit":"index","status":string}|null
-    },
-    "digestive_capacity": {
-      "cellulose": {"value":number,"unit":"index","status":string}|null,
-      "resistant_starch": {"value":number,"unit":"index","status":string}|null,
-      "chitin": {"value":number,"unit":"index","status":string}|null,
-      "pectin": {"value":number,"unit":"index","status":string}|null,
-      "fructooligosaccharides": {"value":number,"unit":"index","status":string}|null,
-      "galactooligosaccharides": {"value":number,"unit":"index","status":string}|null,
-      "xylooligosaccharides": {"value":number,"unit":"index","status":string}|null,
-      "isomaltooligosaccharides": {"value":number,"unit":"index","status":string}|null,
-      "protein_breakdown": {"value":number,"unit":"index","status":string}|null,
-      "trimethylamine": {"value":number,"unit":"index","status":string}|null,
-      "ammonia": {"value":number,"unit":"index","status":string}|null,
-      "branched_chain_amino_acids": {"value":number,"unit":"index","status":string}|null,
-      "p_cresol": {"value":number,"unit":"index","status":string}|null,
-      "indole_3_propionic_acid": {"value":number,"unit":"index","status":string}|null,
-      "vitamin_b2": {"value":number,"unit":"index","status":string}|null,
-      "vitamin_b7": {"value":number,"unit":"index","status":string}|null,
-      "vitamin_b9": {"value":number,"unit":"index","status":string}|null,
-      "vitamin_b12": {"value":number,"unit":"index","status":string}|null,
-      "vitamin_k": {"value":number,"unit":"index","status":string}|null
-    },
-    "diversity_resilience": {
-      "shannon_diversity": {"value":number,"unit":"","status":string}|null,
-      "species_richness": {"value":number,"unit":"","status":string}|null,
-      "microbiome_age": {"value":number,"unit":"years","status":string}|null,
-      "gut_resilience_score": {"value":number,"unit":"","status":string}|null,
-      "oral_microbes": {"value":number,"unit":"%","status":string}|null,
-      "bacteroidota": {"value":number,"unit":"%","status":string}|null,
-      "firmicutes": {"value":number,"unit":"%","status":string}|null,
-      "actinobacteriota": {"value":number,"unit":"%","status":string}|null,
-      "proteobacteria": {"value":number,"unit":"%","status":string}|null,
-      "firmicutes_bacteroidota_ratio": {"value":number,"unit":"","status":string}|null,
-      "proteobacteria_actinobacteriota_ratio": {"value":number,"unit":"","status":string}|null,
-      "prevotella_bacteroides_ratio": {"value":number,"unit":"","status":string}|null,
-      "bacteroides": {"value":number,"unit":"%","status":string}|null,
-      "prevotella": {"value":number,"unit":"%","status":string}|null,
-      "ruminococcus": {"value":number,"unit":"%","status":string}|null,
-      "blautia": {"value":number,"unit":"%","status":string}|null,
-      "roseburia": {"value":number,"unit":"%","status":string}|null,
-      "phocaeicola_dorei": {"value":number,"unit":"%","status":string}|null
-    },
-    "microbial_enzymes_metabolites": {
-      "histamine_index": {"value":number,"unit":"index","status":string}|null,
-      "beta_glucuronidase_capacity": {"value":number,"unit":"index","status":string}|null,
-      "gaba_production": {"value":number,"unit":"index","status":string}|null,
-      "gaba_breakdown": {"value":number,"unit":"index","status":string}|null,
-      "unconjugated_bile_acids": {"value":number,"unit":"index","status":string}|null,
-      "secondary_bile_acids": {"value":number,"unit":"index","status":string}|null,
-      "urolithin_producing_species": {"value":number,"unit":"index","status":string}|null
-    }
-  },
-  "species": [{"name":string,"abundance_pct":number,"classification":string}],
-  "recommendations": [string],
-  "top_focus_areas": [{"category":string,"metric":string,"value":number|null}]
-}
-
-PASS 2 TEXT (continuation of report):
+TEXT:
 ${text}`;
 }
 
@@ -674,13 +594,16 @@ const pass1: ParserPass = {
 
 const pass2: ParserPass = {
   label: "species",
-  charRange: [PASS_SIZE, PASS_SIZE * 2],
+  // Stop at char 65000 to exclude the bibliography section (starts ~char 65852).
+  // Species list ends well before the references; cutting here prevents the
+  // model from seeing DOI strings / citation brackets that corrupt the output.
+  charRange: [PASS_SIZE, 65000],
   systemPrompt: SYSTEM_PROMPT,
   buildPrompt: buildPass2Prompt,
-  maxTokens: 8000,
-  temperature: 0.1,
+  maxTokens: 6000,
+  temperature: 0,
   retryInstruction:
-    "Return ONLY the raw JSON object — no prose, no explanation. Start your response with { and end with }.",
+    "Return ONLY the raw JSON — no prose, no explanation. Start with { and end with }.",
 };
 
 // Page 15: SCFA gauge charts (butyrate, propionate, acetate in rpkm)
@@ -725,6 +648,46 @@ const pass3Vision: ParserPass = {
   temperature: 0,
 };
 
+// Page 20: Microbial enzymes & metabolites overview — Histamine Capacity gauge
+// Page 21: Beta-glucuronidase, GABA production/breakdown, bile acids, urolithin gauges
+const VISION_ENZYME_PROMPT = `You are reading pages from a microbiome/gut health lab report (Tiny Health format).
+
+Look at ALL gauge charts, dial charts, and numeric indicators visible in these pages.
+
+Extract the following values and return ONLY a JSON object:
+
+{
+  "metrics": {
+    "microbial_enzymes_metabolites": {
+      "histamine_index":            {"value": <number or null>, "unit": "rpkm", "status": <"great"|"okay"|"needs_support"|"improving"|null>},
+      "beta_glucuronidase_capacity":{"value": <number or null>, "unit": "rpkm", "status": <"great"|"okay"|"needs_support"|"improving"|null>},
+      "gaba_production":            {"value": <number or null>, "unit": "rpkm", "status": <"great"|"okay"|"needs_support"|"improving"|null>},
+      "gaba_breakdown":             {"value": <number or null>, "unit": "rpkm", "status": <"great"|"okay"|"needs_support"|"improving"|null>},
+      "unconjugated_bile_acids":    {"value": <number or null>, "unit": "rpkm", "status": <"great"|"okay"|"needs_support"|"improving"|null>},
+      "secondary_bile_acids":       {"value": <number or null>, "unit": "rpkm", "status": <"great"|"okay"|"needs_support"|"improving"|null>},
+      "urolithin_producing_species":{"value": <number or null>, "unit": "%",    "status": <"great"|"okay"|"needs_support"|"improving"|null>}
+    }
+  }
+}
+
+Rules:
+- Use ONLY values explicitly shown in gauges or charts — do NOT guess or infer.
+- For each metric, read the PATIENT's indicator/needle value from the gauge (not the reference range tick marks).
+- rpkm values are typically in the range 0–5000. Set value to null if you cannot read the number clearly.
+- urolithin_producing_species uses "%" units (typically 0–1% range).
+- Set status from the colored label shown next to the gauge (great/okay/needs_support/improving).
+- Output ONLY valid JSON starting with { and ending with }.`;
+
+const pass4Vision: ParserPass = {
+  type: "vision",
+  label: "vision-enzymes",
+  visionPages: [20, 21],
+  visionPrompt: VISION_ENZYME_PROMPT,
+  buildPrompt: () => VISION_ENZYME_PROMPT,
+  maxTokens: 600,
+  temperature: 0,
+};
+
 // ── Validate + map ─────────────────────────────────────────────────────────
 
 function mapToGutHealthReportData(
@@ -753,11 +716,17 @@ function mapToGutHealthReportData(
   const cs = parsed.category_statuses ?? {};
 
   const speciesArr: GutHealthSpeciesEntry[] = (parsed.species ?? [])
-    .filter((s) => s?.name && typeof s.abundance_pct === "number")
+    .filter(
+      (s) =>
+        (s?.n ?? s?.name) &&
+        typeof (s.p ?? s.pct ?? s.abundance_pct) === "number",
+    )
     .map((s) => ({
-      name: String(s.name),
-      abundance_pct: Number(s.abundance_pct),
-      classification: classifySpecies(s.classification),
+      name: String(s.n ?? s.name),
+      abundance_pct: Number(s.p ?? s.pct ?? s.abundance_pct),
+      classification: classifySpecies(
+        expandSpeciesCode(s.s) ?? s.status ?? s.classification ?? "",
+      ),
     }));
 
   const topFocusAreas: GutHealthFocusArea[] = (
@@ -949,10 +918,10 @@ export const gutHealthDefinition: ReportTypeDefinition<GutHealthReportData> = {
 
   detect: looksLikeGutHealthReport,
 
-  passes: [pass1, pass2, pass3Vision],
+  passes: [pass1, pass2, pass3Vision, pass4Vision],
 
   mergePasses(results) {
-    const [r1, r2, r3] = results;
+    const [r1, r2, r3, r4] = results;
     // Merge text passes first (earlier wins on conflict)
     let merged: LlmResult;
     if (!r1 && !r2) {
@@ -964,11 +933,14 @@ export const gutHealthDefinition: ReportTypeDefinition<GutHealthReportData> = {
     } else {
       merged = mergeLlmResults(r1 as LlmResult, r2 as LlmResult);
     }
-    // Overlay vision pass: vision REPLACES text-pass values for gauge-based
-    // categories (SCFA, digestive capacity) because text passes can only see
-    // status labels and hallucinate inconsistent index estimates.
+    // Vision passes REPLACE text-pass values for gauge-based categories.
+    // Text passes see status labels but not gauge pointer positions,
+    // so they hallucinate inconsistent index estimates.
     if (r3) {
       merged = mergeVisionCategories(merged, r3 as LlmResult);
+    }
+    if (r4) {
+      merged = mergeVisionCategories(merged, r4 as LlmResult);
     }
     return merged as Record<string, unknown>;
   },

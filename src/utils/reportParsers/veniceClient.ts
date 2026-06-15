@@ -66,6 +66,7 @@ export async function callVenice(
         Accept: "application/json",
       },
       body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(120_000),
     });
 
     if (!response.ok) {

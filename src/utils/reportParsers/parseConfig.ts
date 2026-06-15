@@ -12,9 +12,10 @@ export const VENICE_PARSE_TEXT_MODEL: string =
   "zai-org-glm-4.7";
 
 // Vision model for PDF page rendering passes (gauge/chart extraction).
-// openai-gpt-4o-mini: fast (~8s), reliable JSON output, supports multiple images.
-// kimi-k2-5 and e2ee-qwen3-vl-30b-a3b-p both fail on these PDF pages.
+// qwen3-vl-235b-a22b: Venice-native VL model, supportsMultipleImages=true (up to 10).
+// kimi-k2-5: burns all tokens on reasoning for complex PDF pages — empty content output.
+// e2ee-qwen3-vl-30b-a3b-p: only e2ee vision model but chronically overloaded (HTTP 429).
 // Override via VENICE_VISION_MODEL_NAME env var.
 export const VENICE_PARSE_VISION_MODEL: string =
   (typeof process !== "undefined" && process.env.VENICE_VISION_MODEL_NAME) ||
-  "openai-gpt-4o-mini-2024-07-18";
+  "qwen3-vl-235b-a22b";

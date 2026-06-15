@@ -58,25 +58,44 @@ export async function callVenice(
       requestBody.presence_penalty = body.presence_penalty;
     if (typeof body.seed === "number") requestBody.seed = body.seed;
 
-    const response = await fetch(VENICE_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(requestBody),
-      signal: AbortSignal.timeout(120_000),
-    });
+    // Retry on 429 with exponential backoff (5s, 15s). Each attempt gets its
+    // own 120s timeout so retries aren't charged against the first call's clock.
+    const MAX_RETRIES = 2;
+    const RETRY_DELAYS_MS = [5_000, 15_000];
+    let lastError: Error = new Error("Venice API: no attempts made");
 
-    if (!response.ok) {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const response = await fetch(VENICE_API_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(120_000),
+      });
+
+      if (response.ok) return response.json();
+
       const errorText = await response.text();
-      throw new Error(
+      lastError = new Error(
         `Venice API error: ${response.status} ${response.statusText} — ${errorText}`,
       );
+
+      if (response.status === 429 && attempt < MAX_RETRIES) {
+        const delay = RETRY_DELAYS_MS[attempt] ?? 15_000;
+        console.warn(
+          `[veniceClient] 429 on attempt ${attempt + 1}/${MAX_RETRIES + 1} — retrying in ${delay / 1000}s`,
+        );
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+
+      throw lastError;
     }
 
-    return response.json();
+    throw lastError;
   }
 
   // Client-side: proxy through Next.js route

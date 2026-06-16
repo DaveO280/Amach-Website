@@ -41,8 +41,8 @@ export async function extractTextFromPdfBuffer(
     data,
     verbosity: 0,
     useSystemFonts: true,
-    // Disable features that require native canvas
-    isEvalSupported: false,
+    // pdfjs-dist v5+ forces eval-disabled internally and removed the
+    // isEvalSupported option from DocumentInitParameters — nothing to set here.
   });
 
   const pdf = await loadingTask.promise;

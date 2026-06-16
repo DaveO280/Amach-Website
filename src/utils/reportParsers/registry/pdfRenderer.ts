@@ -50,7 +50,6 @@ export async function renderPdfPages(
       data: Uint8Array;
       useWorkerFetch?: boolean;
       useSystemFonts?: boolean;
-      isEvalSupported?: boolean;
     }) => {
       promise: Promise<{
         numPages: number;
@@ -85,7 +84,8 @@ export async function renderPdfPages(
     data: dataCopy,
     useWorkerFetch: false,
     useSystemFonts: true,
-    isEvalSupported: false,
+    // pdfjs-dist v5+ forces eval-disabled internally; isEvalSupported was
+    // removed from DocumentInitParameters, so there's nothing to set here.
   }).promise;
 
   const results: string[] = [];

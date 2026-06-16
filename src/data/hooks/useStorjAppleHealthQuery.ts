@@ -103,10 +103,26 @@ async function fetchAppleHealthFromStorj(
           if (payload?.dailySummaries) {
             const converted = convertStorjPayloadToHealthData(payload);
             Object.assign(merged, converted);
+            const dateKeys = Object.keys(payload.dailySummaries).sort();
+            const stepPoints =
+              converted["HKQuantityTypeIdentifierStepCount"] ?? [];
+            const exercisePoints =
+              converted["HKQuantityTypeIdentifierAppleExerciseTime"] ?? [];
+            const stepSum = stepPoints.reduce(
+              (s, p) => s + parseFloat(p.value),
+              0,
+            );
             console.log(
               "[useStorjAppleHealthQuery] Apple Health loaded from Storj:",
               {
-                datesCovered: Object.keys(payload.dailySummaries).length,
+                dateRange: `${dateKeys[0]} → ${dateKeys[dateKeys.length - 1]}`,
+                totalDays: dateKeys.length,
+                stepDays: stepPoints.length,
+                stepRawAvg:
+                  stepPoints.length > 0
+                    ? Math.round(stepSum / stepPoints.length)
+                    : 0,
+                exerciseDays: exercisePoints.length,
                 metricTypes: Object.keys(converted).length,
               },
             );

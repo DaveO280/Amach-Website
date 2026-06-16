@@ -208,6 +208,13 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   const [selectedStorjUris, setSelectedStorjUris] = useState<Set<string>>(
     () => new Set(),
   );
+  // Gut health species lists (Layer 2) are linked to their report (Layer 1)
+  // via metadata.reportid. Tracked separately since they aren't independently
+  // selectable in the Storj import list — only fetched to merge into the
+  // matching report on import.
+  const gutHealthSpeciesListRef = useRef<
+    Array<{ uri: string; metadata?: Record<string, string> }>
+  >([]);
   const [savingReportsToStorj, setSavingReportsToStorj] = useState(false);
   const [saveReportsError, setSaveReportsError] = useState<string>("");
   // Enable Storj save UI for all environments (was dev-only)
@@ -722,14 +729,19 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         );
       };
 
-      const [bloodwork, dexa] = await Promise.all([
+      const [bloodwork, dexa, gutHealth, gutHealthSpecies] = await Promise.all([
         fetchList("bloodwork-report-fhir"),
         fetchList("dexa-report-fhir"),
+        fetchList("gut-health-report"),
+        fetchList("gut-health-species"),
       ]);
+
+      gutHealthSpeciesListRef.current = gutHealthSpecies;
 
       const merged = [
         ...bloodwork.map((r) => ({ ...r, dataType: "bloodwork-report-fhir" })),
         ...dexa.map((r) => ({ ...r, dataType: "dexa-report-fhir" })),
+        ...gutHealth.map((r) => ({ ...r, dataType: "gut-health-report" })),
       ].sort((a, b) => {
         const aMs = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
         const bMs = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
@@ -785,7 +797,9 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           getMeta(selected?.metadata, "reporttype") ||
           (selected?.dataType === "bloodwork-report-fhir"
             ? "bloodwork"
-            : "dexa");
+            : selected?.dataType === "gut-health-report"
+              ? "gut-health"
+              : "dexa");
 
         const res = await fetch("/api/storj", {
           method: "POST",
@@ -811,9 +825,54 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           );
         }
 
-        const report = json.result as ParsedReportSummary["report"] | null;
+        let report = json.result as ParsedReportSummary["report"] | null;
         if (!report) {
           throw new Error("Storj returned no report data");
+        }
+
+        // Gut health reports are stored as two layers: the structured metrics
+        // (just retrieved) and the species list, stored separately and linked
+        // via metadata.reportid. Fetch and merge the species list back in so
+        // Luma gets the full report, not just the metrics.
+        if (reportType === "gut-health" && report.type === "gut-health") {
+          const reportId = getMeta(selected?.metadata, "reportid");
+          const speciesEntry = reportId
+            ? gutHealthSpeciesListRef.current.find(
+                (s) => getMeta(s.metadata, "reportid") === reportId,
+              )
+            : undefined;
+
+          let species: typeof report.species = [];
+          if (speciesEntry) {
+            try {
+              const speciesRes = await fetch("/api/storj", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  action: "report/retrieve",
+                  userAddress: address,
+                  encryptionKey,
+                  storjUri: speciesEntry.uri,
+                  reportType: "gut-health-species",
+                }),
+              });
+              const speciesJson = await speciesRes.json();
+              if (
+                speciesRes.ok &&
+                speciesJson?.success !== false &&
+                Array.isArray(speciesJson.result)
+              ) {
+                species = speciesJson.result;
+              }
+            } catch (speciesError) {
+              console.error(
+                "[CosaintChatUI] Failed to retrieve gut-health species list:",
+                speciesError,
+              );
+            }
+          }
+
+          report = { ...report, species, rawText: report.rawText ?? "" };
         }
 
         results.push({

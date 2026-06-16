@@ -550,6 +550,79 @@ export class StorjReportService {
   }
 
   /**
+   * Store a pre-generated clinical narrative (see ClinicalNarrativeService)
+   * alongside a report's structured data. Generic across every report type —
+   * the narrative is plain text, stored as `${reportType}-narrative` and
+   * linked back to its report via metadata.reportid. This is what lets Luma
+   * read rich clinical context for ANY report type without per-type
+   * system-prompt instructions: a new report type just reuses this method.
+   */
+  async storeReportNarrative(
+    narrative: string,
+    reportType: string,
+    reportId: string,
+    userAddress: string,
+    encryptionKey: WalletEncryptionKey,
+    options?: ReportStorageOptions,
+  ): Promise<ReportStorageResult> {
+    try {
+      const dataType = `${reportType}-narrative`;
+      console.log(`💾 Storing ${dataType} to Storj...`);
+
+      const stored = await this.storageService.storeHealthData<string>(
+        narrative,
+        userAddress,
+        encryptionKey,
+        {
+          dataType,
+          metadata: {
+            reportid: reportId,
+            reporttype: reportType,
+            ...options?.metadata,
+          },
+          onProgress: options?.onProgress,
+        },
+      );
+
+      console.log(`✅ ${dataType} stored: ${stored.storjUri}`);
+
+      return {
+        success: true,
+        storjUri: stored.storjUri,
+        contentHash: stored.contentHash,
+        reportId,
+      };
+    } catch (error) {
+      console.error(`❌ Failed to store ${reportType} narrative:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  /**
+   * Retrieve a pre-generated clinical narrative. Generic across every
+   * report type — narratives are plain text, not structured JSON.
+   */
+  async retrieveReportNarrative(
+    storjUri: string,
+    encryptionKey: WalletEncryptionKey,
+  ): Promise<string | null> {
+    try {
+      console.log(`📥 Retrieving report narrative from Storj: ${storjUri}`);
+      const retrieved = await this.storageService.retrieveHealthData<string>(
+        storjUri,
+        encryptionKey,
+      );
+      return retrieved.data ?? null;
+    } catch (error) {
+      console.error("❌ Failed to retrieve report narrative:", error);
+      return null;
+    }
+  }
+
+  /**
    * Store a parsed report summary (handles DEXA, Bloodwork, and Gut Health)
    *
    * @param reportSummary - Parsed report summary

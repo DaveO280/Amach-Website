@@ -18,6 +18,27 @@ import {
 } from "@/utils/gutHealthGlossary";
 
 /**
+ * Extract a display date for any parsed report type. Metadata selection
+ * only — no clinical interpretation — so it stays generic across report
+ * types without needing per-type system-prompt knowledge.
+ */
+export function getReportDateLabel(
+  report: ParsedReportSummary["report"],
+): string | undefined {
+  switch (report.type) {
+    case "dexa":
+      return report.scanDate;
+    case "bloodwork":
+    case "medical-record":
+      return report.reportDate;
+    case "gut-health":
+      return report.collection_date ?? report.report_date;
+    default:
+      return undefined;
+  }
+}
+
+/**
  * Format a DEXA report for AI consumption (structured metrics only)
  */
 function formatDexaReportForAI(report: DexaReportData): string {

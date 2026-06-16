@@ -24,7 +24,7 @@ import {
   updateAnalysisState,
 } from "@/utils/analysisState";
 import {
-  formatGutHealthReportForAI,
+  getReportDateLabel,
   getReportsSummary,
 } from "@/utils/reportFormatters";
 import {
@@ -80,8 +80,6 @@ Response style:
 - Focus on what you CAN help with (general guidance, profile-based advice, evidence-based recommendations)
 - If asked about specific metrics/lab results you don't have, suggest Deep mode for data analysis
 `;
-
-const GUT_HEALTH_PROMPT_GUIDE = `GUT HEALTH REPORT GUIDE: Gut microbiome reports (e.g., Tiny Health) score 0-100 overall, with sub-metrics reported as percent abundance (bacteria/species), 0-100 capacity/risk indices (inflammation markers, SCFA production, digestive capacity, vitamin production), or raw counts (species richness, microbiome age in years). Key terms: Hexa-LPS index / hydrogen sulfide index / mucus degradation index = inflammatory and gut-barrier-damage potential (higher = more concerning). Enterobacteriaceae, E. coli, E. flexneri, H. pylori = pathogenic/opportunistic bacteria (elevated % is flagged). Faecalibacterium, Akkermansia, Blautia, Roseburia, Bifidobacterium = beneficial SCFA producers and gut-lining supporters (higher % is favorable). Butyrate/propionate/acetate = short-chain fatty acids fueling colon health. Microbiome age = estimated biological age of the gut ecosystem; compare to the user's actual age to flag accelerated or favorable aging. Status labels: "needs support" (flagged), "improving", "okay", "great". Use the full gut health data provided above to give specific, evidence-informed analysis — reference exact values and species names rather than only the overall score.`;
 
 // Feature flag for tool use - set via environment variable
 const ENABLE_TOOL_USE = process.env.NEXT_PUBLIC_ENABLE_TOOL_USE === "true";
@@ -977,36 +975,18 @@ Please provide a helpful response as Luma, keeping in mind the user's health dat
       systemMessage += `\nLatest reports:\n${lines.join("\n")}`;
       systemMessage += `\nUse get_latest_report to retrieve specific DEXA or bloodwork fields when needed.`;
 
-      // Gut health reports have no tool-based retrieval path (get_latest_report
-      // only supports dexa/bloodwork), so include the full human-readable
-      // narrative directly here instead of just the one-line score above.
-      const gutHealthReports = reports.filter(
-        (r) => r.report.type === "gut-health",
-      );
-      if (gutHealthReports.length > 0) {
-        const mostRecentGutReport = gutHealthReports.slice().sort((a, b) => {
-          const aDate =
-            a.report.type === "gut-health" && a.report.collection_date
-              ? new Date(a.report.collection_date).getTime()
-              : 0;
-          const bDate =
-            b.report.type === "gut-health" && b.report.collection_date
-              ? new Date(b.report.collection_date).getTime()
-              : 0;
-          return bDate - aDate;
-        })[0].report;
-        if (mostRecentGutReport.type === "gut-health") {
-          const derivedAge =
-            userProfile?.age ??
-            calculateAgeFromBirthDate(userProfile?.birthDate ?? undefined);
-          systemMessage += `\n\n${formatGutHealthReportForAI(
-            mostRecentGutReport,
-            {
-              actualAgeYears:
-                derivedAge !== undefined ? Math.round(derivedAge) : undefined,
-            },
-          )}`;
-          systemMessage += `\n\n${GUT_HEALTH_PROMPT_GUIDE}`;
+      // Pre-generated clinical narratives (see ClinicalNarrativeService) —
+      // written once at upload time and cached on Storj alongside the
+      // structured data. Generic across every report type: Luma reads the
+      // narrative directly instead of traversing structured JSON, and no
+      // per-type instructions need to be added here for new report types.
+      const reportsWithNarrative = reports.filter((r) => Boolean(r.narrative));
+      if (reportsWithNarrative.length > 0) {
+        systemMessage +=
+          "\n\nYou have access to clinical report summaries written by a specialist reviewing the user's uploaded reports. When a summary is available below, reference its specific findings directly rather than only a headline score or number.";
+        for (const r of reportsWithNarrative) {
+          const dateLabel = getReportDateLabel(r.report);
+          systemMessage += `\n\n${r.report.type.toUpperCase()} REPORT SUMMARY${dateLabel ? ` (${dateLabel})` : ""}:\n${r.narrative}`;
         }
       }
     } else if (

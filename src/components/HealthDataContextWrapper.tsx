@@ -239,6 +239,18 @@ export default function HealthDataContextWrapper({
       }
     }
 
+    // Diagnostic: log step counts at each layer so divergence is visible in the browser console.
+    const STEP_KEY = "HKQuantityTypeIdentifierStepCount";
+    const EX_KEY = "HKQuantityTypeIdentifierAppleExerciseTime";
+    console.log("[HealthDataContextWrapper] metricData merge:", {
+      storjStepDays: (storjHealthData[STEP_KEY] ?? []).length,
+      dbStepDays: (indexedDbMetricData[STEP_KEY] ?? []).length,
+      mergedStepDays: (merged[STEP_KEY] ?? []).length,
+      storjExerciseDays: (storjHealthData[EX_KEY] ?? []).length,
+      dbExerciseDays: (indexedDbMetricData[EX_KEY] ?? []).length,
+      mergedExerciseDays: (merged[EX_KEY] ?? []).length,
+    });
+
     return merged;
   }, [indexedDbMetricData, storjHealthData]);
 
@@ -515,34 +527,61 @@ export default function HealthDataContextWrapper({
       metricData["HKQuantityTypeIdentifierActiveEnergyBurned"] || [],
     );
 
+    // Days with value=0 for cumulative metrics (steps, exercise) represent days
+    // with no recorded device activity — Apple Watch simply omits records for
+    // unworn days, so a 0 in the dataset signals missing data, not genuine rest.
+    // Including them inflates the denominator and depresses the displayed average.
+    const stepsActive = steps.filter((d) => (d.value ?? 0) > 0);
+    const exerciseActive = exercise.filter((d) => (d.value ?? 0) > 0);
+
+    console.log("[HealthDataContextWrapper] metrics computation:", {
+      stepDaysTotal: steps.length,
+      stepDaysActive: stepsActive.length,
+      stepRawAvgAllDays:
+        steps.length > 0
+          ? Math.round(
+              steps.reduce((s, d) => s + (d.value ?? 0), 0) / steps.length,
+            )
+          : 0,
+      stepAvgActiveDays:
+        stepsActive.length > 0
+          ? Math.round(
+              stepsActive.reduce((s, d) => s + (d.value ?? 0), 0) /
+                stepsActive.length,
+            )
+          : 0,
+      exerciseDaysTotal: exercise.length,
+      exerciseDaysActive: exerciseActive.length,
+    });
+
     // Calculate metrics from processed data
     const metrics = {
       steps: {
         average:
-          steps.length > 0
+          stepsActive.length > 0
             ? Math.round(
-                steps.reduce((sum, day) => sum + (day.value ?? 0), 0) /
-                  steps.length,
+                stepsActive.reduce((sum, day) => sum + (day.value ?? 0), 0) /
+                  stepsActive.length,
               )
             : 0,
         high: Math.max(...steps.map((day) => day.value ?? 0), 0),
         low:
-          steps.length > 0
-            ? Math.min(...steps.map((day) => day.value ?? 0))
+          stepsActive.length > 0
+            ? Math.min(...stepsActive.map((day) => day.value ?? 0))
             : 0,
       },
       exercise: {
         average:
-          exercise.length > 0
+          exerciseActive.length > 0
             ? Math.round(
-                exercise.reduce((sum, day) => sum + (day.value ?? 0), 0) /
-                  exercise.length,
+                exerciseActive.reduce((sum, day) => sum + (day.value ?? 0), 0) /
+                  exerciseActive.length,
               )
             : 0,
         high: Math.max(...exercise.map((day) => day.value ?? 0), 0),
         low:
-          exercise.length > 0
-            ? Math.min(...exercise.map((day) => day.value ?? 0))
+          exerciseActive.length > 0
+            ? Math.min(...exerciseActive.map((day) => day.value ?? 0))
             : 0,
       },
       heartRate: {

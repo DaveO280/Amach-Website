@@ -72,6 +72,15 @@ function buildSleepPoints(
   if (sleep.awake > 0)
     stages.push({ stage: "awake", durationMin: sleep.awake });
 
+  // If no sleep-stage breakdown is available but total > 0, synthesise a "core"
+  // record so processSleepData doesn't drop the session (sleepDurationMinutes=0).
+  const hasStageBreakdown = sleep.rem > 0 || sleep.core > 0 || sleep.deep > 0;
+  if (!hasStageBreakdown && sleep.total > 0) {
+    const syntheticCore = Math.max(0, sleep.total - (sleep.awake ?? 0));
+    if (syntheticCore > 0)
+      stages.push({ stage: "core", durationMin: syntheticCore });
+  }
+
   let cursor = wakeTimeMs;
   for (const { stage, durationMin } of stages) {
     const endMs = cursor;

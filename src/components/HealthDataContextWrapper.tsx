@@ -193,19 +193,52 @@ export default function HealthDataContextWrapper({
     isConnected ? (address ?? undefined) : undefined,
   );
 
-  // Merged metric data: IndexedDB wins for any metric type it has data for;
-  // Storj fills the gaps (primary case: iOS-only users whose IndexedDB is empty).
+  // Merged metric data: day-level merge so the full Storj history is preserved.
+  //
+  // IndexedDB raw data is trimmed to a 180-day retention window before saving
+  // (healthDataStore.trimRawToRecentWindow). A naïve per-metric-type override
+  // ("IndexedDB wins if it has any data") silently discards the older Storj
+  // history that IndexedDB never stored — causing averages to be computed over
+  // just ~6 months instead of the full 2-year dataset.
+  //
+  // Fix: merge at the day level. For each metric type, IndexedDB points take
+  // priority for the dates they cover; Storj supplies older dates that fell
+  // outside IndexedDB's retention window.
   const metricData = useMemo((): HealthDataByType => {
     if (!storjHealthData || Object.keys(storjHealthData).length === 0) {
       return indexedDbMetricData;
     }
-    // Start with Storj data, then overwrite with IndexedDB data where available
-    const merged: HealthDataByType = { ...storjHealthData };
-    for (const [key, points] of Object.entries(indexedDbMetricData)) {
-      if (Array.isArray(points) && points.length > 0) {
-        merged[key] = points;
+    if (!indexedDbMetricData || Object.keys(indexedDbMetricData).length === 0) {
+      return storjHealthData;
+    }
+
+    const allKeys = new Set([
+      ...Object.keys(storjHealthData),
+      ...Object.keys(indexedDbMetricData),
+    ]);
+    const merged: HealthDataByType = {};
+
+    for (const key of allKeys) {
+      const dbPoints = indexedDbMetricData[key] ?? [];
+      const storjPoints = storjHealthData[key] ?? [];
+
+      if (dbPoints.length === 0) {
+        merged[key] = storjPoints;
+      } else if (storjPoints.length === 0) {
+        merged[key] = dbPoints;
+      } else {
+        // IndexedDB wins for its dates; Storj fills in any older dates not
+        // present in IndexedDB (those were trimmed by the retention window).
+        const dbDates = new Set(dbPoints.map((p) => p.startDate.slice(0, 10)));
+        const gapFillers = storjPoints.filter(
+          (p) => !dbDates.has(p.startDate.slice(0, 10)),
+        );
+        merged[key] = [...gapFillers, ...dbPoints].sort((a, b) =>
+          a.startDate.localeCompare(b.startDate),
+        );
       }
     }
+
     return merged;
   }, [indexedDbMetricData, storjHealthData]);
 

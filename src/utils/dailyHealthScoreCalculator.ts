@@ -426,6 +426,10 @@ function calculateScoresForDay(
     // Base score on the ratio of actual range to expected range
     // Higher ratios (more responsive heart) get higher scores
     const expectedRange = rhr * 0.5 * ageFactor;
+    if (expectedRange === 0) {
+      // No resting HR data — can't compute variability ratio; return neutral score
+      return hrRange > 0 ? 75 : 0;
+    }
     const responsivenessRatio = hrRange / expectedRange;
 
     // Score based on responsiveness:

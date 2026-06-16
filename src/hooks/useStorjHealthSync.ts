@@ -107,9 +107,17 @@ function convertDailySummariesToHealthData(
 
         // Reconstruct per-stage records placed sequentially from 01:00 UTC
         // so that processSleepData can compute durations from endDate–startDate.
+        // If no stage breakdown is available but total > 0, synthesise a "core"
+        // record so processSleepData doesn't drop the session (sleepDurationMinutes=0).
+        const hasStageBreakdown =
+          (ss.core ?? 0) > 0 || (ss.deep ?? 0) > 0 || (ss.rem ?? 0) > 0;
+        const syntheticCore =
+          !hasStageBreakdown && (ss.total ?? 0) > 0
+            ? Math.max(0, (ss.total ?? 0) - (ss.awake ?? 0))
+            : 0;
         const stages: Array<[SleepStage, number]> = [
           ["inBed", ss.inBed ?? 0],
-          ["core", ss.core ?? 0],
+          ["core", hasStageBreakdown ? (ss.core ?? 0) : syntheticCore],
           ["deep", ss.deep ?? 0],
           ["rem", ss.rem ?? 0],
           ["awake", ss.awake ?? 0],

@@ -208,6 +208,20 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   const [selectedStorjUris, setSelectedStorjUris] = useState<Set<string>>(
     () => new Set(),
   );
+  // Gut health species lists (Layer 2) are linked to their report (Layer 1)
+  // via metadata.reportid. Tracked separately since they aren't independently
+  // selectable in the Storj import list — only fetched to merge into the
+  // matching report on import.
+  const gutHealthSpeciesListRef = useRef<
+    Array<{ uri: string; metadata?: Record<string, string> }>
+  >([]);
+  // Pre-generated clinical narratives ("${reportType}-narrative") are linked
+  // to their report via metadata.reportid, same as the species list above.
+  // Generic across every report type — narratives for dexa/bloodwork/gut
+  // health all flow through this one list.
+  const narrativeListRef = useRef<
+    Array<{ uri: string; metadata?: Record<string, string> }>
+  >([]);
   const [savingReportsToStorj, setSavingReportsToStorj] = useState(false);
   const [saveReportsError, setSaveReportsError] = useState<string>("");
   // Enable Storj save UI for all environments (was dev-only)
@@ -722,14 +736,35 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         );
       };
 
-      const [bloodwork, dexa] = await Promise.all([
+      const [
+        bloodwork,
+        dexa,
+        gutHealth,
+        gutHealthSpecies,
+        dexaNarratives,
+        bloodworkNarratives,
+        gutHealthNarratives,
+      ] = await Promise.all([
         fetchList("bloodwork-report-fhir"),
         fetchList("dexa-report-fhir"),
+        fetchList("gut-health-report"),
+        fetchList("gut-health-species"),
+        fetchList("dexa-narrative"),
+        fetchList("bloodwork-narrative"),
+        fetchList("gut-health-narrative"),
       ]);
+
+      gutHealthSpeciesListRef.current = gutHealthSpecies;
+      narrativeListRef.current = [
+        ...dexaNarratives,
+        ...bloodworkNarratives,
+        ...gutHealthNarratives,
+      ];
 
       const merged = [
         ...bloodwork.map((r) => ({ ...r, dataType: "bloodwork-report-fhir" })),
         ...dexa.map((r) => ({ ...r, dataType: "dexa-report-fhir" })),
+        ...gutHealth.map((r) => ({ ...r, dataType: "gut-health-report" })),
       ].sort((a, b) => {
         const aMs = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
         const bMs = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
@@ -785,7 +820,9 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           getMeta(selected?.metadata, "reporttype") ||
           (selected?.dataType === "bloodwork-report-fhir"
             ? "bloodwork"
-            : "dexa");
+            : selected?.dataType === "gut-health-report"
+              ? "gut-health"
+              : "dexa");
 
         const res = await fetch("/api/storj", {
           method: "POST",
@@ -811,15 +848,105 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           );
         }
 
-        const report = json.result as ParsedReportSummary["report"] | null;
+        let report = json.result as ParsedReportSummary["report"] | null;
         if (!report) {
           throw new Error("Storj returned no report data");
+        }
+
+        const reportId = getMeta(selected?.metadata, "reportid");
+
+        // Gut health reports are stored as two layers: the structured metrics
+        // (just retrieved) and the species list, stored separately and linked
+        // via metadata.reportid. Fetch and merge the species list back in so
+        // Luma gets the full report, not just the metrics.
+        if (reportType === "gut-health" && report.type === "gut-health") {
+          const speciesEntry = reportId
+            ? gutHealthSpeciesListRef.current.find(
+                (s) => getMeta(s.metadata, "reportid") === reportId,
+              )
+            : undefined;
+
+          let species: typeof report.species = [];
+          if (speciesEntry) {
+            try {
+              const speciesRes = await fetch("/api/storj", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  action: "report/retrieve",
+                  userAddress: address,
+                  encryptionKey,
+                  storjUri: speciesEntry.uri,
+                  reportType: "gut-health-species",
+                }),
+              });
+              const speciesJson = await speciesRes.json();
+              if (
+                speciesRes.ok &&
+                speciesJson?.success !== false &&
+                Array.isArray(speciesJson.result)
+              ) {
+                species = speciesJson.result;
+              }
+            } catch (speciesError) {
+              console.error(
+                "[CosaintChatUI] Failed to retrieve gut-health species list:",
+                speciesError,
+              );
+            }
+          }
+
+          report = { ...report, species, rawText: report.rawText ?? "" };
+        }
+
+        // Pre-generated clinical narrative (see ClinicalNarrativeService) —
+        // generic across every report type, linked via the same
+        // metadata.reportid as the species list above.
+        const narrativeEntry = reportId
+          ? narrativeListRef.current.find(
+              (n) => getMeta(n.metadata, "reportid") === reportId,
+            )
+          : undefined;
+        let narrative: string | undefined;
+        let storjNarrativeUri: string | undefined;
+        if (narrativeEntry) {
+          try {
+            const narrativeReportType =
+              getMeta(narrativeEntry.metadata, "reporttype") || reportType;
+            const narrativeRes = await fetch("/api/storj", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "report/retrieve",
+                userAddress: address,
+                encryptionKey,
+                storjUri: narrativeEntry.uri,
+                reportType: `${narrativeReportType}-narrative`,
+              }),
+            });
+            const narrativeJson = await narrativeRes.json();
+            if (
+              narrativeRes.ok &&
+              narrativeJson?.success !== false &&
+              typeof narrativeJson.result === "string"
+            ) {
+              narrative = narrativeJson.result;
+              storjNarrativeUri = narrativeEntry.uri;
+            }
+          } catch (narrativeError) {
+            console.error(
+              "[CosaintChatUI] Failed to retrieve report narrative:",
+              narrativeError,
+            );
+          }
         }
 
         results.push({
           report,
           extractedAt: new Date().toISOString(),
           storjUri,
+          storjNarrativeUri,
+          narrative,
           savedToStorjAt: selected?.uploadedAt || new Date().toISOString(),
         });
       }
@@ -1021,6 +1148,10 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             }
             storjUri = gutPayload.storjUri as string;
             storjSpeciesUri = gutPayload.storjSpeciesUri as string | undefined;
+            const storjNarrativeUri = gutPayload.storjNarrativeUri as
+              | string
+              | undefined;
+            const narrative = gutPayload.narrative as string | undefined;
             contentHash = (gutPayload.contentHash as string | undefined) || "";
             if (!contentHash) {
               throw new Error(
@@ -1038,6 +1169,8 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               updateReport(reportIdx, {
                 storjUri,
                 storjSpeciesUri,
+                storjNarrativeUri,
+                narrative,
                 savedToStorjAt: new Date().toISOString(),
               });
             }
@@ -1064,6 +1197,20 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                     size: 0,
                     uploadedAt: Date.now(),
                     dataType: "gut-health-species",
+                    metadata: {
+                      reportType: "gut-health",
+                      uploadedAt: new Date().toISOString(),
+                      source: "chat-ui",
+                    },
+                  });
+                }
+                if (storjNarrativeUri) {
+                  await storjItemsCache.cacheItem(address, {
+                    uri: storjNarrativeUri,
+                    contentHash: "",
+                    size: 0,
+                    uploadedAt: Date.now(),
+                    dataType: "gut-health-narrative",
                     metadata: {
                       reportType: "gut-health",
                       uploadedAt: new Date().toISOString(),
@@ -1123,9 +1270,16 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
               reportType: r.report.type,
             });
 
+            const storjNarrativeUri = result.storjNarrativeUri as
+              | string
+              | undefined;
+            const narrative = result.narrative as string | undefined;
+
             if (reportIdx >= 0) {
               updateReport(reportIdx, {
                 storjUri,
+                storjNarrativeUri,
+                narrative,
                 savedToStorjAt: new Date().toISOString(),
               });
             }
@@ -1148,6 +1302,20 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                     source: "chat-ui",
                   },
                 });
+                if (storjNarrativeUri) {
+                  await storjItemsCache.cacheItem(address, {
+                    uri: storjNarrativeUri,
+                    contentHash: "",
+                    size: 0,
+                    uploadedAt: Date.now(),
+                    dataType: `${r.report.type}-narrative`,
+                    metadata: {
+                      reportType: r.report.type,
+                      uploadedAt: new Date().toISOString(),
+                      source: "chat-ui",
+                    },
+                  });
+                }
               } catch (error) {
                 console.error(
                   "[CosaintChatUI] Failed to cache item to IndexedDB:",

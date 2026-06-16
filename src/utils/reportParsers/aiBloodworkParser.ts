@@ -9,6 +9,7 @@ import type {
   BloodworkFlag,
 } from "@/types/reportData";
 import { callVenice as callVeniceClient } from "./veniceClient";
+import { ANTI_HALLUCINATION_RULES } from "./llmPipeline";
 
 const JUNK_METRIC_NAMES = new Set([
   "name",
@@ -513,7 +514,10 @@ export async function parseBloodworkReportWithAI(
 
   const textToParse = buildTextToParse(rawText);
 
-  const systemPrompt = `Extract structured bloodwork/lab test data and output ONLY valid JSON.
+  const systemPrompt = [
+    ANTI_HALLUCINATION_RULES,
+    "",
+    `Extract structured bloodwork/lab test data and output ONLY valid JSON.
 No narrative, explanations, markdown, or reasoning.
 
 Return ONLY a JSON object in this format:
@@ -537,7 +541,8 @@ Rules:
 - If a value is "<X" or ">X", set value = X
 - If a test has no numeric value, set value to null
 - Output ONLY valid JSON starting with { and ending with }.
-- Do not include any phrases like "I will", "let's", "wait", or other planning/thinking text anywhere in any field.`;
+- Do not include any phrases like "I will", "let's", "wait", or other planning/thinking text anywhere in any field.`,
+  ].join("\n");
 
   const userPrompt = `Extract all bloodwork/lab test metrics from this report and output ONLY valid JSON:
 
@@ -573,6 +578,11 @@ ${textToParse}`;
         model: modelName,
         stream: false,
         response_format: { type: "json_object" },
+        venice_parameters: {
+          disable_thinking: true,
+          strip_thinking_response: true,
+          include_venice_system_prompt: false,
+        },
       })) as Record<string, unknown>;
 
       const choices = data?.choices as

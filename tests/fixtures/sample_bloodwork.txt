@@ -1,0 +1,132 @@
+QUEST DIAGNOSTICS
+Patient: O'Gara, David
+Date of Birth: 03/15/1980
+Specimen ID: Q2025-04-17-88271
+Collection Date: 04/17/2025
+Report Date: 04/19/2025
+Ordering Physician: Dr. Sarah Connolly, MD
+Lab Director: Jonathan Park, MD
+
+───────────────────────────────────────────────────────────────
+COMPLETE BLOOD COUNT (CBC) WITH DIFFERENTIAL
+───────────────────────────────────────────────────────────────
+Test                        Result      Units      Reference Range   Flag
+White Blood Cell Count      6.1         K/uL       3.8 – 10.8
+Red Blood Cell Count        4.92        M/uL       4.20 – 5.80
+Hemoglobin                  14.8        g/dL       13.2 – 17.1
+Hematocrit                  44.1        %          38.5 – 50.0
+MCV                         89.6        fL         80.0 – 100.0
+MCH                         30.1        pg         27.0 – 33.0
+MCHC                        33.6        g/dL       32.0 – 36.0
+RDW                         13.2        %          11.0 – 15.0
+Platelet Count              218         K/uL       140 – 400
+MPV                         10.4        fL         7.5 – 12.5
+
+Differential:
+Neutrophils (Auto)          58.4        %          40.0 – 74.0
+Lymphocytes (Auto)          31.2        %          20.0 – 40.0
+Monocytes (Auto)            7.8         %          2.0 – 13.0
+Eosinophils (Auto)          1.9         %          0.0 – 7.0
+Basophils (Auto)            0.7         %          0.0 – 1.5
+Absolute Neutrophils        3.56        K/uL       1.80 – 7.70
+Absolute Lymphocytes        1.90        K/uL       1.10 – 3.50
+Absolute Monocytes          0.48        K/uL       0.10 – 0.95
+
+───────────────────────────────────────────────────────────────
+COMPREHENSIVE METABOLIC PANEL
+───────────────────────────────────────────────────────────────
+Test                        Result      Units      Reference Range   Flag
+Glucose                     94          mg/dL      65 – 99
+BUN (Urea Nitrogen)         16          mg/dL      7 – 25
+Creatinine                  1.02        mg/dL      0.76 – 1.27
+BUN/Creatinine Ratio        16          ratio      9 – 23
+eGFR                        91          mL/min/1.73m²  >60
+Sodium                      140         mEq/L      134 – 144
+Potassium                   4.2         mEq/L      3.5 – 5.2
+Chloride                    102         mEq/L      96 – 106
+Carbon Dioxide              26          mEq/L      18 – 29
+Calcium                     9.6         mg/dL      8.6 – 10.3
+Total Protein               7.3         g/dL       6.1 – 8.1
+Albumin                     4.4         g/dL       3.6 – 5.1
+Total Bilirubin             0.7         mg/dL      0.2 – 1.2
+Alkaline Phosphatase        68          U/L        40 – 115
+AST (SGOT)                  24          U/L        0 – 40
+ALT (SGPT)                  22          U/L        0 – 44
+
+───────────────────────────────────────────────────────────────
+LIPID PANEL
+───────────────────────────────────────────────────────────────
+Test                        Result      Units      Reference Range   Flag
+Total Cholesterol           187         mg/dL      <200              Normal
+HDL Cholesterol             58          mg/dL      >39               Normal
+LDL Cholesterol (calc)      112         mg/dL      <100              High
+Triglycerides               84          mg/dL      <150              Normal
+VLDL Cholesterol            17          mg/dL      5 – 40
+Non-HDL Cholesterol         129         mg/dL      <130
+Cholesterol/HDL Ratio       3.2         ratio      <4.5
+LDL/HDL Ratio               1.9         ratio      <2.5
+
+Note: LDL slightly above optimal (<100 mg/dL). Recommend dietary review.
+
+───────────────────────────────────────────────────────────────
+HEMOGLOBIN A1c (HbA1c)
+───────────────────────────────────────────────────────────────
+Test                        Result      Units      Reference Range   Flag
+HbA1c                       5.3         %          <5.7              Normal
+Estimated Average Glucose   105         mg/dL      --
+
+───────────────────────────────────────────────────────────────
+THYROID PANEL
+───────────────────────────────────────────────────────────────
+Test                        Result      Units      Reference Range   Flag
+TSH                         1.84        uIU/mL     0.450 – 4.500     Normal
+Free T4                     1.12        ng/dL      0.82 – 1.77       Normal
+Free T3                     3.4         pg/mL      2.0 – 4.4         Normal
+
+───────────────────────────────────────────────────────────────
+VITAMIN & MINERAL PANEL
+───────────────────────────────────────────────────────────────
+Test                        Result      Units      Reference Range   Flag
+Vitamin D, 25-OH Total      38          ng/mL      30 – 100          Normal
+Vitamin B12                 512         pg/mL      200 – 1100        Normal
+Folate (Folic Acid)         14.2        ng/mL      >5.4              Normal
+Ferritin                    87          ng/mL      30 – 400          Normal
+Iron                        92          ug/dL      60 – 170          Normal
+TIBC                        308         ug/dL      250 – 370         Normal
+Iron Saturation             30          %          20 – 55           Normal
+Magnesium                   2.1         mg/dL      1.6 – 2.6         Normal
+Zinc                        82          ug/dL      60 – 120          Normal
+
+───────────────────────────────────────────────────────────────
+INFLAMMATORY MARKERS
+───────────────────────────────────────────────────────────────
+Test                        Result      Units      Reference Range   Flag
+hsCRP                       0.6         mg/L       <1.0              Normal
+Homocysteine                9.2         umol/L     <10.4             Normal
+
+───────────────────────────────────────────────────────────────
+HORMONE PANEL
+───────────────────────────────────────────────────────────────
+Test                        Result      Units      Reference Range   Flag
+Testosterone, Total         612         ng/dL      264 – 916         Normal
+Testosterone, Free          14.8        pg/mL      8.7 – 25.1        Normal
+SHBG                        38          nmol/L     16.5 – 55.9       Normal
+DHEA-S                      248         ug/dL      80 – 560          Normal
+Cortisol (AM)               16.4        ug/dL      6.2 – 19.4        Normal
+IGF-1                       172         ng/mL      101 – 267         Normal
+
+───────────────────────────────────────────────────────────────
+URIC ACID
+───────────────────────────────────────────────────────────────
+Test                        Result      Units      Reference Range   Flag
+Uric Acid                   5.6         mg/dL      3.7 – 8.0         Normal
+
+───────────────────────────────────────────────────────────────
+COMMENTS
+───────────────────────────────────────────────────────────────
+All values within acceptable ranges except LDL slightly elevated.
+Recommend repeat lipid panel in 6 months with dietary intervention.
+No acute clinical findings. Results reviewed and released by lab director.
+
+Quest Diagnostics – Certified Clinical Laboratory
+CLIA # 34D0655533

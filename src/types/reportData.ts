@@ -214,6 +214,12 @@ export interface GutHealthSpeciesEntry {
   classification: "beneficial" | "variable" | "unfriendly" | "unknown";
 }
 
+export interface GutHealthFocusArea {
+  category: string;
+  metric: string;
+  value?: number;
+}
+
 export interface GutHealthReportData {
   type: "gut-health";
   source?: string;
@@ -234,6 +240,8 @@ export interface GutHealthReportData {
   category_statuses: GutHealthCategoryStatuses;
   metrics: GutHealthMetrics;
   species: GutHealthSpeciesEntry[];
+  recommendations?: string[];
+  top_focus_areas?: GutHealthFocusArea[];
   rawText: string;
   confidence: number;
 }
@@ -249,5 +257,12 @@ export interface ParsedReportSummary {
   extractedAt: string;
   storjUri?: string; // Storj URI if report has been saved to Storj
   storjSpeciesUri?: string; // Storj URI for the species list (gut-health only)
+  storjNarrativeUri?: string; // Storj URI for the pre-generated clinical narrative
+  // Pre-generated plain-language clinical narrative (see
+  // ClinicalNarrativeService), cached once at upload time. Generic across
+  // every report type — this is what Luma reads at chat time instead of
+  // traversing structured JSON or relying on per-type system-prompt
+  // instructions.
+  narrative?: string;
   savedToStorjAt?: string; // ISO timestamp when saved to Storj
 }

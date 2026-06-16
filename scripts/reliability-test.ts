@@ -104,7 +104,6 @@ async function extractPdfText(filePath: string): Promise<string> {
     data,
     verbosity: 0,
     useSystemFonts: true,
-    isEvalSupported: false,
   });
 
   const pdf = await loadingTask.promise;
@@ -124,8 +123,9 @@ async function extractPdfText(filePath: string): Promise<string> {
   }
 
   // Cleanly terminate the pdfjs worker so renderPdfPages can spawn a fresh one.
+  // pdfjs-dist v6 moved destroy() from PDFDocumentProxy to the loadingTask.
   try {
-    await pdf.destroy();
+    await loadingTask.destroy();
   } catch {
     /* ignore */
   }

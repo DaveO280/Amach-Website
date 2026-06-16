@@ -14,8 +14,17 @@
  * proxy that `VeniceApiService` uses).
  */
 
+import { shouldDisableVeniceThinking } from "@/utils/veniceThinking";
+
 const VENICE_API_BASE = "https://api.venice.ai/api/v1";
 const MIN_NARRATIVE_LENGTH = 50;
+// GLM-4.7 is a "thinking" model: when thinking isn't disabled, it can spend
+// the entire max_tokens budget on internal <think> reasoning and never reach
+// the actual narrative, leaving an empty `content` after stripping (same
+// failure mode documented in LumaAiService's quick-mode token comments).
+// disable_thinking avoids burning the budget on reasoning in the first
+// place; the generous max_tokens is a safety margin on top of that.
+const NARRATIVE_MAX_TOKENS = 2200;
 
 const NARRATIVE_SYSTEM_PROMPT = `You are a clinical analyst briefing an AI health assistant (Luma) on a patient's health report. You will be given the report type and its structured data as JSON.
 
@@ -78,12 +87,15 @@ Write the clinical narrative now.`;
           { role: "system", content: NARRATIVE_SYSTEM_PROMPT },
           { role: "user", content: userPrompt },
         ],
-        max_tokens: 1400,
+        max_tokens: NARRATIVE_MAX_TOKENS,
         temperature: 0.4,
         stream: false,
         venice_parameters: {
           strip_thinking_response: true,
           include_venice_system_prompt: false,
+          ...(shouldDisableVeniceThinking("analysis")
+            ? { disable_thinking: true }
+            : {}),
         },
       }),
     });
@@ -97,7 +109,8 @@ Write the clinical narrative now.`;
     }
 
     const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
+    const message = data?.choices?.[0]?.message;
+    const content = message?.content;
     if (typeof content !== "string") {
       console.error(
         `[ClinicalNarrativeService] No narrative content in response for ${reportType}`,
@@ -109,6 +122,13 @@ Write the clinical narrative now.`;
     if (narrative.length < MIN_NARRATIVE_LENGTH) {
       console.error(
         `[ClinicalNarrativeService] Narrative too short for ${reportType} (${narrative.length} chars); treating as failed generation`,
+        {
+          finishReason: data?.choices?.[0]?.finish_reason,
+          reasoningContentLength:
+            typeof message?.reasoning_content === "string"
+              ? message.reasoning_content.length
+              : undefined,
+        },
       );
       return null;
     }

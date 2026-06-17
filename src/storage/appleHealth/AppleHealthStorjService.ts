@@ -404,7 +404,27 @@ export class AppleHealthStorjService {
   }
 
   /**
-   * Build daily summaries from all metrics data
+   * Build daily summaries from all metrics data.
+   *
+   * DEDUPLICATION RESPONSIBILITY:
+   * This method does not deduplicate Watch vs. iPhone records for quantitative
+   * metrics — it groups by calendar date and aggregates all values naively.
+   * The caller must provide pre-deduplicated data:
+   *
+   * • Web upload path (HealthDataSelector.tsx): deduplicateData() is applied
+   *   to allMetricsData before this method is called, so Watch-priority /
+   *   iPhone-fallback logic is already in effect.
+   *
+   * • iOS upload path: the iOS app queries HealthKit directly via its own
+   *   Swift service (not this TypeScript class). HKStatisticsQuery with
+   *   .cumulativeSum merges overlapping Watch + iPhone intervals at the OS
+   *   level, so iOS-sourced data arrives already deduplicated. If the iOS app
+   *   ever switches to HKSampleQuery without source filtering, dedup would
+   *   need to be added in the Swift layer before uploading.
+   *
+   * Sleep is the exception: aggregateSleepData() uses interval merging
+   * (mergeMinutes) and handles Watch + iPhone overlap correctly regardless
+   * of what the caller passes.
    */
   buildDailySummaries(
     allMetricsData: Record<string, HealthDataPoint[]>,

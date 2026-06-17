@@ -13,6 +13,7 @@
  */
 
 import type { MetricSample } from "@/agents/types";
+import { isCumulativeMetric } from "@/storage/appleHealth/metricAggregationStrategies";
 
 export interface TieredAggregationConfig {
   dailyDays: number; // Days with daily resolution (default: 30)
@@ -37,19 +38,10 @@ const DEFAULT_CONFIG: TieredAggregationConfig = {
 };
 
 /**
- * Determines if a metric type should be summed (cumulative) or averaged
+ * Determines if a metric type should be summed (cumulative) or averaged.
+ * Delegates to metricAggregationStrategies (authoritative, 43+ metrics).
  */
-export function isCumulativeMetric(metricType: string): boolean {
-  const cumulativeTypes = [
-    "HKQuantityTypeIdentifierStepCount",
-    "HKQuantityTypeIdentifierActiveEnergyBurned",
-    "HKQuantityTypeIdentifierAppleExerciseTime",
-    "HKQuantityTypeIdentifierDistanceWalkingRunning",
-    "HKQuantityTypeIdentifierFlightsClimbed",
-  ];
-
-  return cumulativeTypes.includes(metricType);
-}
+export { isCumulativeMetric } from "@/storage/appleHealth/metricAggregationStrategies";
 
 /**
  * Groups samples by day

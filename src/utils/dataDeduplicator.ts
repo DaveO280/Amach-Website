@@ -1,5 +1,6 @@
 import { HealthDataPoint } from "../types/healthData";
 import { processSleepData } from "./sleepDataProcessor";
+import { isCumulativeMetric } from "@/storage/appleHealth/metricAggregationStrategies";
 
 /**
  * List of metrics that should be deduplicated based on date and value
@@ -16,14 +17,6 @@ const DEDUPLICATABLE_METRICS = new Set([
   "HKQuantityTypeIdentifierVO2Max",
   "HKCategoryTypeIdentifierSleepAnalysis",
 ]);
-
-// Define which metrics are cumulative
-const CUMULATIVE_METRICS = [
-  "HKQuantityTypeIdentifierStepCount",
-  "HKQuantityTypeIdentifierDistanceWalkingRunning",
-  "HKQuantityTypeIdentifierActiveEnergyBurned",
-  "HKQuantityTypeIdentifierAppleExerciseTime", // Added this line
-];
 
 /**
  * Extracts just the date part (YYYY-MM-DD) from a date string
@@ -108,11 +101,10 @@ export const isSleepData = (metricId: string): boolean => {
 };
 
 /**
- * Check if the metric is a cumulative metric that should sum values
+ * Check if the metric is a cumulative metric that should sum values.
+ * Re-exported from metricAggregationStrategies (authoritative, 43+ metrics).
  */
-export const isCumulativeMetric = (metricId: string): boolean => {
-  return CUMULATIVE_METRICS.includes(metricId);
-};
+export { isCumulativeMetric };
 
 /**
  * Deduplicates cumulative metrics (steps, energy, distance, etc.)

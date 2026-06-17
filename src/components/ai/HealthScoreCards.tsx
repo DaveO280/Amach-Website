@@ -4,7 +4,11 @@ import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { useStorjHealthScores } from "@/data/hooks/useStorjHealthScores";
 import { useWalletService } from "@/hooks/useWalletService";
 import type { HealthScore } from "@/types/HealthContext";
-import type { ScoreTrends } from "@/utils/dailyHealthScoreCalculator";
+import {
+  calculateDailyHealthScoresFromByType,
+  calculateScoreTrends,
+  type ScoreTrends,
+} from "@/utils/dailyHealthScoreCalculator";
 import {
   Activity,
   Heart,
@@ -16,19 +20,29 @@ import {
   TrendingUp,
   Zap,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const cardClass =
   "rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)]";
 
 export function HealthScoreCards(): JSX.Element {
-  const { healthScores } = useHealthDataContext();
+  const { healthScores, metricData } = useHealthDataContext();
   const { isConnected, address } = useWalletService();
   const {
     dailyScores,
     scoreTrends,
     isLoading: loadingTrends,
   } = useStorjHealthScores(isConnected ? (address ?? undefined) : undefined);
+
+  const clientSideTrends = useMemo(() => {
+    if (scoreTrends || loadingTrends || Object.keys(metricData).length === 0) {
+      return null;
+    }
+    const daily = calculateDailyHealthScoresFromByType(metricData);
+    return daily.length > 0 ? calculateScoreTrends(daily) : null;
+  }, [scoreTrends, loadingTrends, metricData]);
+
+  const effectiveTrends = scoreTrends ?? clientSideTrends;
 
   // Derive current health scores from Storj daily scores when available,
   // falling back to context scores (computed client-side from Storj metricData).
@@ -141,7 +155,7 @@ export function HealthScoreCards(): JSX.Element {
   }: {
     scoreType: string;
   }): JSX.Element | null => {
-    if (!scoreTrends || loadingTrends) {
+    if (!effectiveTrends || loadingTrends) {
       return (
         <div className="text-xs text-[#6B8C7A] mt-2">
           {loadingTrends ? "Loading trends..." : "No trend data"}
@@ -149,7 +163,7 @@ export function HealthScoreCards(): JSX.Element {
       );
     }
 
-    const trends = scoreTrends[scoreType as keyof ScoreTrends];
+    const trends = effectiveTrends[scoreType as keyof ScoreTrends];
     if (!trends) return null;
 
     const getTrendIcon = (trend: number): JSX.Element => {

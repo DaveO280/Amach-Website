@@ -314,7 +314,10 @@ export default function HealthDataContextWrapper({
     const sleepData = metricData["HKCategoryTypeIdentifierSleepAnalysis"] || [];
     const processedSleepData = processSleepData(sleepData);
 
-    // Helper: process numeric data for cumulative metrics (sum daily totals)
+    // Helper: process numeric data for cumulative metrics (sum daily totals).
+    // For Storj-native metricData (one pre-summed point per day at T12:00 UTC),
+    // the sum loop is a no-op (single-point days), but remains correct for
+    // IndexedDB raw records which may have many intraday entries per day.
     const processCumulativeData = (
       data: { startDate: string; value: string }[],
     ): Array<{
@@ -356,7 +359,9 @@ export default function HealthDataContextWrapper({
         .sort((a, b) => a.date.getTime() - b.date.getTime());
     };
 
-    // Helper: process heart rate data (average daily values)
+    // Helper: process heart rate data (average daily values).
+    // For Storj-native metricData, storjAppleHealthConverter.extractNumericValue
+    // passes avg only (not min/max), so min/max will equal avg for Storj days.
     const processHeartRateData = (
       data: { startDate: string; value: string }[],
     ): Array<{
@@ -611,7 +616,11 @@ export default function HealthDataContextWrapper({
                 ) / processedSleepData.length,
               ),
               high: Math.max(
-                ...processedSleepData.map((day) => day.sleepDuration),
+                // Cap at 900 min (15h) — values above this are double-counted uploads
+                // from multiple devices. Upload path now deduplicates; cap guards old data.
+                ...processedSleepData
+                  .filter((day) => day.sleepDuration <= 900)
+                  .map((day) => day.sleepDuration),
                 0,
               ),
               low:

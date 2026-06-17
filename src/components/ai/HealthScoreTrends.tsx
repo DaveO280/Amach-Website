@@ -1,8 +1,14 @@
 "use client";
 
+import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { useStorjHealthScores } from "@/data/hooks/useStorjHealthScores";
 import { useWalletService } from "@/hooks/useWalletService";
+import {
+  calculateDailyHealthScoresFromByType,
+  calculateScoreTrends,
+} from "@/utils/dailyHealthScoreCalculator";
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
+import { useMemo } from "react";
 
 interface HealthScoreTrendsProps {
   className?: string;
@@ -18,6 +24,17 @@ export function HealthScoreTrends({
   const { scoreTrends, isLoading: loadingTrends } = useStorjHealthScores(
     isConnected ? (address ?? undefined) : undefined,
   );
+  const { metricData } = useHealthDataContext();
+
+  const clientSideTrends = useMemo(() => {
+    if (scoreTrends || loadingTrends || Object.keys(metricData).length === 0) {
+      return null;
+    }
+    const dailyScores = calculateDailyHealthScoresFromByType(metricData);
+    return dailyScores.length > 0 ? calculateScoreTrends(dailyScores) : null;
+  }, [scoreTrends, loadingTrends, metricData]);
+
+  const effectiveTrends = scoreTrends ?? clientSideTrends;
 
   const getTrendIcon = (current: number, trend: number): JSX.Element => {
     if (trend === 0) return <Minus className="h-3 w-3 text-[#6B8C7A]" />;
@@ -45,7 +62,7 @@ export function HealthScoreTrends({
     );
   }
 
-  if (!scoreTrends) {
+  if (!effectiveTrends) {
     return (
       <div className={`${cardClass} ${className} p-5`}>
         <h3 className="text-lg font-medium text-emerald-800 dark:text-[#4ade80] mb-4">
@@ -81,7 +98,7 @@ export function HealthScoreTrends({
       </h3>
       <div className="space-y-4">
         {scoreTypes.map(({ key, label, color }) => {
-          const trends = scoreTrends[key];
+          const trends = effectiveTrends[key];
           if (!trends) return null;
 
           return (

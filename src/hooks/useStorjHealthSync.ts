@@ -3,12 +3,15 @@
 /**
  * useStorjHealthSync
  *
- * When a wallet connects and local IndexedDB has no health data, this hook
- * fetches the user's most recent `apple-health-full-export` payload from Storj,
- * converts its daily-summary format back to a HealthDataResults object, and
- * saves it to IndexedDB.  The React Query cache is then invalidated so
- * HealthDataContextWrapper's `metricData` (and therefore Luma's context) picks
- * up the Storj-sourced wearable data automatically.
+ * PRIMARY PURPOSE: Cache the wallet encryption key via getCachedWalletEncryptionKey
+ * so that useStorjAppleHealthQuery (which checks the same cache) can start fetching
+ * the full Storj history without prompting a second wallet signature.
+ *
+ * SECONDARY PURPOSE: Seed IndexedDB with converted daily summaries from Storj.
+ * As of PR #83, HealthDataContextWrapper uses metricData = storjHealthData directly
+ * (Storj-native), so IndexedDB is no longer the source of truth for dashboard metrics.
+ * The IndexedDB write here still serves HealthDataProcessor (used by AI agents) and
+ * acts as a fallback when the Storj query is unavailable.
  *
  * Sync is attempted once per wallet address per page session.
  */
@@ -105,37 +108,56 @@ function convertDailySummariesToHealthData(
         const HK_SLEEP = "HKCategoryTypeIdentifierSleepAnalysis";
         if (!result[HK_SLEEP]) result[HK_SLEEP] = [];
 
-        // Reconstruct per-stage records placed sequentially from 01:00 UTC
-        // so that processSleepData can compute durations from endDate–startDate.
-        // If no stage breakdown is available but total > 0, synthesise a "core"
-        // record so processSleepData doesn't drop the session (sleepDurationMinutes=0).
+        // Reconstruct per-stage records placed BACKWARD from 07:00 UTC (wake time),
+        // matching storjAppleHealthConverter.buildSleepPoints so processSleepData
+        // computes the same durations from endDate–startDate in both paths.
+        // Stages: rem, core, deep, awake placed sequentially ending at 07:00 UTC;
+        // inBed spans the entire window as a separate record.
         const hasStageBreakdown =
           (ss.core ?? 0) > 0 || (ss.deep ?? 0) > 0 || (ss.rem ?? 0) > 0;
         const syntheticCore =
           !hasStageBreakdown && (ss.total ?? 0) > 0
             ? Math.max(0, (ss.total ?? 0) - (ss.awake ?? 0))
             : 0;
-        const stages: Array<[SleepStage, number]> = [
-          ["inBed", ss.inBed ?? 0],
-          ["core", hasStageBreakdown ? (ss.core ?? 0) : syntheticCore],
-          ["deep", ss.deep ?? 0],
-          ["rem", ss.rem ?? 0],
+
+        const wakeMs = new Date(`${dateKey}T07:00:00.000Z`).getTime();
+
+        // Place stages backward from wake time (rem → core → deep → awake)
+        const sleepStages: Array<[SleepStage, number]> = [
           ["awake", ss.awake ?? 0],
+          ["deep", ss.deep ?? 0],
+          ["core", hasStageBreakdown ? (ss.core ?? 0) : syntheticCore],
+          ["rem", ss.rem ?? 0],
         ];
 
-        let offsetMs = new Date(`${dateKey}T01:00:00.000Z`).getTime();
-        for (const [stage, durationMin] of stages) {
+        let endMs = wakeMs;
+        for (const [stage, durationMin] of sleepStages) {
           if (durationMin <= 0) continue;
           const durationMs = durationMin * 60_000;
+          const startMs = endMs - durationMs;
           result[HK_SLEEP].push({
             type: HK_SLEEP,
-            startDate: new Date(offsetMs).toISOString(),
-            endDate: new Date(offsetMs + durationMs).toISOString(),
+            startDate: new Date(startMs).toISOString(),
+            endDate: new Date(endMs).toISOString(),
             value: stage,
             unit: "hr",
             source: "other",
           } as unknown as HealthMetric);
-          offsetMs += durationMs;
+          endMs = startMs;
+        }
+
+        // inBed spans the full window
+        const inBedMin = ss.inBed ?? 0;
+        if (inBedMin > 0) {
+          const inBedMs = inBedMin * 60_000;
+          result[HK_SLEEP].push({
+            type: HK_SLEEP,
+            startDate: new Date(wakeMs - inBedMs).toISOString(),
+            endDate: new Date(wakeMs).toISOString(),
+            value: "inBed" as SleepStage,
+            unit: "hr",
+            source: "other",
+          } as unknown as HealthMetric);
         }
         continue;
       }

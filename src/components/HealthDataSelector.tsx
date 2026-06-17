@@ -21,6 +21,8 @@ import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
 import { AlertCircle, CheckCircle, Upload } from "lucide-react";
 import Papa from "papaparse";
 import React, { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { storjItemsCache } from "@/data/store/storjItemsCache";
 import { createPublicClient, http } from "viem";
 import { coreMetrics, timeFrameOptions } from "../core/metricDefinitions";
 import {
@@ -66,6 +68,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
   const { mutate: saveHealthData } = useSaveHealthDataMutation();
   const { mutate: clearHealthDataMutation } = useClearHealthDataMutation();
+  const queryClient = useQueryClient();
 
   // Wallet integration for Storj save and attestation
   const { isConnected, address, signMessage, getWalletClient } =
@@ -313,6 +316,27 @@ const HealthDataSelector: () => React.ReactElement = () => {
         // Clear the pending data after successful save
         setAllMetricsForStorj(null);
 
+        // Invalidate React Query so the dashboard picks up fresh Storj health data
+        void queryClient.invalidateQueries({
+          queryKey: ["storj-apple-health"],
+        });
+
+        // Update the IndexedDB Storj items cache so the wallet page shows the
+        // correct upload date without requiring a manual "Refresh" click.
+        if (result.storjUri && address) {
+          void storjItemsCache
+            .cacheItem(address, {
+              uri: result.storjUri,
+              contentHash: result.contentHash ?? "",
+              size: 0,
+              uploadedAt: Date.now(),
+              dataType: "apple-health-full-export",
+            })
+            .catch(() => {
+              /* non-fatal */
+            });
+        }
+
         // Auto-clear status after 10 seconds
         setTimeout(() => setStorjSaveStatus(null), 10000);
       } else if (result.success) {
@@ -325,6 +349,27 @@ const HealthDataSelector: () => React.ReactElement = () => {
           storjUri: result.storjUri,
         });
         setAllMetricsForStorj(null);
+
+        // Invalidate React Query so the dashboard picks up fresh Storj health data
+        void queryClient.invalidateQueries({
+          queryKey: ["storj-apple-health"],
+        });
+
+        // Update the IndexedDB Storj items cache
+        if (result.storjUri && address) {
+          void storjItemsCache
+            .cacheItem(address, {
+              uri: result.storjUri,
+              contentHash: result.contentHash ?? "",
+              size: 0,
+              uploadedAt: Date.now(),
+              dataType: "apple-health-full-export",
+            })
+            .catch(() => {
+              /* non-fatal */
+            });
+        }
+
         setTimeout(() => setStorjSaveStatus(null), 10000);
       } else {
         setStorjSaveStatus({

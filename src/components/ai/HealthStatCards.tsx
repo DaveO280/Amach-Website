@@ -50,12 +50,20 @@ function windowedAvg(
   // summed per calendar day before averaging. Apple Health may store them as many small
   // intraday records; averaging raw records directly gives heavily deflated results for
   // older data. This mirrors processCumulativeData() in HealthDataContextWrapper.
+  //
+  // Date key: substring(0,10) handles both ISO "YYYY-MM-DDT..." format (Storj/modern)
+  // and Apple Health XML space-separated "YYYY-MM-DD ..." format (legacy IndexedDB
+  // records). split("T")[0] silently breaks for space-separated dates, producing a
+  // unique key per record and inflating totals.length to the record count rather than
+  // the day count — causing the 180d average to collapse by a factor of ~6.
   if (isCumulativeMetric(hkKey)) {
     const dailyTotals: Record<string, number> = {};
     for (const p of inWindow) {
-      const dayKey = p.startDate.split("T")[0];
+      const dayKey = p.startDate.substring(0, 10);
       const v = parseFloat(p.value);
-      // Zero means no-wear day — exclude from both the sum and the day count.
+      // Exclude zero/missing-wear days from both the sum and the day count so
+      // they don't pull the average down when the window extends past the coverage
+      // of the Storj archive.
       if (!isNaN(v) && v > 0) {
         dailyTotals[dayKey] = (dailyTotals[dayKey] ?? 0) + v;
       }
@@ -65,11 +73,24 @@ function windowedAvg(
     return Math.round(totals.reduce((a, b) => a + b, 0) / totals.length);
   }
 
-  const values = inWindow
-    .map((p) => parseFloat(p.value))
-    .filter((v) => !isNaN(v));
-  if (values.length === 0) return 0;
-  return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+  // Non-cumulative metrics: average over days with actual readings only.
+  // Group by calendar day (same substring fix), collect values per day, then
+  // average the per-day means. Days with no record — or only zero-value
+  // placeholder records — are excluded from the denominator.
+  const dailyValues: Record<string, number[]> = {};
+  for (const p of inWindow) {
+    const dayKey = p.startDate.substring(0, 10);
+    const v = parseFloat(p.value);
+    if (!isNaN(v) && v > 0) {
+      if (!dailyValues[dayKey]) dailyValues[dayKey] = [];
+      dailyValues[dayKey].push(v);
+    }
+  }
+  const dayMeans = Object.values(dailyValues).map(
+    (vs) => vs.reduce((a, b) => a + b, 0) / vs.length,
+  );
+  if (dayMeans.length === 0) return 0;
+  return Math.round(dayMeans.reduce((a, b) => a + b, 0) / dayMeans.length);
 }
 
 interface WindowedAverages {

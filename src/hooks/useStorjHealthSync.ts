@@ -309,7 +309,49 @@ export function useStorjHealthSync(): void {
           return;
         }
 
-        await healthDataStore.saveHealthData(healthData);
+        // Deduplicate by calendar day before writing to IndexedDB.
+        //
+        // saveHealthData deduplicates by exact startDate string. Storj daily
+        // summaries use T12:00:00.000Z while raw intraday records use local-time
+        // offsets — different strings, same calendar day. Without day-level
+        // dedup, both would land in IndexedDB and processCumulativeData would
+        // sum them, doubling the count for the IndexedDB fallback path.
+        //
+        // Strategy: if IndexedDB already has ANY record for a calendar day for
+        // a given metric, skip the Storj daily summary for that day. Existing
+        // data wins; Storj only fills truly missing days.
+        const existingData = (await healthDataStore.getHealthData()) ?? {};
+        const deduped: HealthDataResults = {};
+        for (const [metricId, records] of Object.entries(healthData)) {
+          const existing = (existingData[metricId] ?? []) as Array<{
+            startDate: string;
+          }>;
+          if (existing.length === 0) {
+            // No existing data for this metric — write everything from Storj
+            deduped[metricId] = records as HealthDataResults[typeof metricId];
+            continue;
+          }
+          const existingCalendarDays = new Set(
+            existing.map((r) => r.startDate.slice(0, 10)),
+          );
+          const newRecords = records.filter(
+            (r) => !existingCalendarDays.has(r.startDate.slice(0, 10)),
+          );
+          if (newRecords.length > 0) {
+            deduped[metricId] =
+              newRecords as HealthDataResults[typeof metricId];
+          }
+        }
+
+        const dedupedMetricCount = Object.keys(deduped).length;
+        if (dedupedMetricCount === 0) {
+          console.log(
+            "[StorjHealthSync] All Storj days already covered in IndexedDB — skipping write",
+          );
+          return;
+        }
+
+        await healthDataStore.saveHealthData(deduped);
 
         // Invalidate React Query so HealthDataContextWrapper picks up new data
         await queryClient.invalidateQueries({ queryKey: ["healthData"] });

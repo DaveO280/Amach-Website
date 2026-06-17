@@ -8,7 +8,6 @@ import {
   getMetricUnit,
 } from "@/components/metricDisplayUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { isCumulativeMetric } from "@/storage/appleHealth/metricAggregationStrategies";
 import type { HealthDataByType } from "@/types/healthData";
 import React, { useMemo } from "react";
 
@@ -33,6 +32,15 @@ const HK_KEY: Record<MetricKey, string> = {
   sleep: "HKCategoryTypeIdentifierSleepAnalysis",
 };
 
+// Metrics stored as many intraday records that must be summed per day before averaging.
+// Averaging raw records directly produces severely deflated results when older data
+// contains many small increments (e.g. 100-step chunks) vs. newer daily-total records.
+const CUMULATIVE_METRICS: Set<MetricKey> = new Set([
+  "steps",
+  "exercise",
+  "activeEnergy",
+]);
+
 function windowedAvg(
   metricData: HealthDataByType,
   key: MetricKey,
@@ -46,16 +54,14 @@ function windowedAvg(
     return !isNaN(t) && t >= cutoff;
   });
 
-  // Cumulative metrics (aggregationType:"sum" in metricAggregationStrategies) must be
-  // summed per calendar day before averaging. Apple Health may store them as many small
-  // intraday records; averaging raw records directly gives heavily deflated results for
-  // older data. This mirrors processCumulativeData() in HealthDataContextWrapper.
-  if (isCumulativeMetric(hkKey)) {
+  if (CUMULATIVE_METRICS.has(key)) {
+    // Sum all intraday records into daily totals, then average those totals.
+    // Zero-value records are skipped — a 0 in cumulative data means no activity
+    // (device not worn), not a genuine rest day.
     const dailyTotals: Record<string, number> = {};
     for (const p of inWindow) {
       const dayKey = p.startDate.split("T")[0];
       const v = parseFloat(p.value);
-      // Zero means no-wear day — exclude from both the sum and the day count.
       if (!isNaN(v) && v > 0) {
         dailyTotals[dayKey] = (dailyTotals[dayKey] ?? 0) + v;
       }

@@ -193,98 +193,17 @@ export default function HealthDataContextWrapper({
     isConnected ? (address ?? undefined) : undefined,
   );
 
-  // Merged metric data: IndexedDB is the single source of truth for the dates
-  // it covers; Storj fills only genuinely older dates outside IndexedDB's
-  // retention window (~180 days).
-  //
-  // How the previous approach broke:
-  //   The old per-metric dbDates filter compared each Storj point's
-  //   startDate.slice(0,10) against the set of dates present in IndexedDB for
-  //   that metric. Sleep records from buildSleepPoints are placed BACKWARDS from
-  //   wake-time (07:00 UTC on dateKey), so early stages land on the *previous*
-  //   calendar day. Those records have a different date prefix than the IndexedDB
-  //   copies (placed forward from 01:00 on dateKey by useStorjHealthSync), so
-  //   they slipped through the filter → every sleep night counted twice → 12-17h
-  //   durations and "2 sessions" per night.
-  //
-  // Fix: compute the global minimum date across ALL IndexedDB data once.
-  //   That date is the start of the retention window. Storj records whose
-  //   startDate precedes that boundary are genuinely old data not held in
-  //   IndexedDB; anything on or after the boundary is already covered by IndexedDB
-  //   and must be excluded from Storj.
-  //   Sleep uses a 1-day tighter cutoff to absorb the cross-midnight shift.
+  // Storj is the canonical full history (2+ years from iOS uploads).
+  // Stat card averages and agent context come directly from storjHealthData —
+  // no merging with IndexedDB. Double-counting is eliminated because there is
+  // exactly one data source for the numbers shown on screen.
+  // Falls back to IndexedDB while Storj is still loading or for manual-import
+  // users who have never synced via iOS.
   const metricData = useMemo((): HealthDataByType => {
-    if (!storjHealthData || Object.keys(storjHealthData).length === 0) {
-      return indexedDbMetricData;
-    }
-    if (!indexedDbMetricData || Object.keys(indexedDbMetricData).length === 0) {
+    if (storjHealthData && Object.keys(storjHealthData).length > 0) {
       return storjHealthData;
     }
-
-    // Global minimum date across all IndexedDB metrics
-    let minDbDate: string | null = null;
-    for (const points of Object.values(indexedDbMetricData)) {
-      for (const p of points) {
-        const d = extractDatePart(p.startDate);
-        if (!minDbDate || d < minDbDate) minDbDate = d;
-      }
-    }
-
-    // Sleep stages can have startDate 1 calendar day before their dateKey
-    // (backward placement from wake time). Tighten the cutoff by 1 day so the
-    // boundary sleep night isn't included from both sources.
-    const SLEEP_KEY = "HKCategoryTypeIdentifierSleepAnalysis";
-    const sleepCutoff = minDbDate
-      ? (() => {
-          const d = new Date(minDbDate + "T12:00:00Z");
-          d.setUTCDate(d.getUTCDate() - 1);
-          return d.toISOString().slice(0, 10);
-        })()
-      : null;
-
-    const allKeys = new Set([
-      ...Object.keys(storjHealthData),
-      ...Object.keys(indexedDbMetricData),
-    ]);
-    const merged: HealthDataByType = {};
-
-    for (const key of allKeys) {
-      const dbPoints = indexedDbMetricData[key] ?? [];
-      const storjPoints = storjHealthData[key] ?? [];
-
-      if (dbPoints.length === 0) {
-        merged[key] = storjPoints;
-      } else if (storjPoints.length === 0) {
-        merged[key] = dbPoints;
-      } else {
-        // Accept Storj records only for dates strictly before the IndexedDB window.
-        const cutoff = key === SLEEP_KEY ? sleepCutoff : minDbDate;
-        const gapFillers = cutoff
-          ? storjPoints.filter((p) => extractDatePart(p.startDate) < cutoff)
-          : storjPoints;
-        merged[key] = [...gapFillers, ...dbPoints].sort((a, b) =>
-          a.startDate.localeCompare(b.startDate),
-        );
-      }
-    }
-
-    const STEP_KEY = "HKQuantityTypeIdentifierStepCount";
-    const EX_KEY = "HKQuantityTypeIdentifierAppleExerciseTime";
-    console.log("[HealthDataContextWrapper] metricData merge:", {
-      minDbDate,
-      sleepCutoff,
-      storjStepDays: (storjHealthData[STEP_KEY] ?? []).length,
-      dbStepDays: (indexedDbMetricData[STEP_KEY] ?? []).length,
-      mergedStepDays: (merged[STEP_KEY] ?? []).length,
-      storjExerciseDays: (storjHealthData[EX_KEY] ?? []).length,
-      dbExerciseDays: (indexedDbMetricData[EX_KEY] ?? []).length,
-      mergedExerciseDays: (merged[EX_KEY] ?? []).length,
-      storjSleepSegs: (storjHealthData[SLEEP_KEY] ?? []).length,
-      dbSleepSegs: (indexedDbMetricData[SLEEP_KEY] ?? []).length,
-      mergedSleepSegs: (merged[SLEEP_KEY] ?? []).length,
-    });
-
-    return merged;
+    return indexedDbMetricData;
   }, [indexedDbMetricData, storjHealthData]);
 
   // Load long-range processed aggregates on startup (enables fast charts / tool-use without reprocessing raw data).

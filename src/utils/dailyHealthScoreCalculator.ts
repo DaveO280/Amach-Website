@@ -1,4 +1,8 @@
-import type { HealthDataResults } from "@/data/types/healthMetrics";
+import type {
+  HealthDataResults,
+  DataSource,
+  HealthMetric,
+} from "@/data/types/healthMetrics";
 import type { HealthScore } from "@/types/HealthContext";
 import { healthDataStore } from "../data/store/healthDataStore";
 import { extractDatePart } from "./dataDeduplicator";
@@ -9,6 +13,7 @@ import {
   calculateAgeFromBirthDate,
   type NormalizedUserProfile,
 } from "./userProfileUtils";
+import type { HealthDataByType } from "@/types/healthData";
 
 export interface DailyHealthScores {
   date: string;
@@ -200,8 +205,51 @@ export function calculateDailyHealthScores(
 }
 
 /**
+ * Normalize an arbitrary source string to a valid DataSource.
+ * HealthDataByType.source is optional/string; HealthMetric.source is required DataSource.
+ */
+function normalizeDataSource(source?: string): DataSource {
+  if (source === "watch" || source === "phone" || source === "pillow") {
+    return source;
+  }
+  return "other";
+}
+
+/**
+ * Adapter: calculate daily health scores directly from HealthDataByType (Storj metricData).
+ *
+ * HealthDataByType (from storjAppleHealthConverter) has source?: string and no required type
+ * field, while calculateDailyHealthScores expects HealthDataResults with source: DataSource.
+ * This adapter normalizes the source field and sets type from the metric key so we pass a
+ * structurally valid HealthDataResults without widening to unknown[].
+ */
+export function calculateDailyHealthScoresFromByType(
+  metricData: HealthDataByType,
+  userProfile: NormalizedUserProfile = {},
+): DailyHealthScores[] {
+  if (Object.keys(metricData).length === 0) return [];
+
+  const healthDataResults: HealthDataResults = {};
+  for (const [metricType, dataPoints] of Object.entries(metricData)) {
+    healthDataResults[metricType] = dataPoints.map((point) => ({
+      ...point,
+      type: metricType,
+      unit: point.unit ?? "",
+      source: normalizeDataSource(point.source),
+    })) as unknown as HealthMetric[];
+  }
+
+  return calculateDailyHealthScores(healthDataResults, userProfile);
+}
+
+/**
  * Calculate daily health scores from processed daily aggregates + processed sleep.
  * This avoids "missing category" days caused by raw trimming or sparse raw samples.
+ *
+ * NOTE: Takes ProcessedDailyInputs from HealthDataProcessor, which reads from IndexedDB
+ * (not Storj-native metricData). Cannot be used in the Storj-native client-side fallback
+ * because HealthDataProcessor is not wired to the in-memory HealthDataByType flow.
+ * TODO: wire HealthDataProcessor to accept HealthDataByType directly if IndexedDB is phased out.
  */
 export function calculateDailyHealthScoresFromProcessed(
   processed: ProcessedDailyInputs,

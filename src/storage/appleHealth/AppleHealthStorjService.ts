@@ -404,7 +404,27 @@ export class AppleHealthStorjService {
   }
 
   /**
-   * Build daily summaries from all metrics data
+   * Build daily summaries from all metrics data.
+   *
+   * DEDUPLICATION RESPONSIBILITY:
+   * This method does not deduplicate Watch vs. iPhone records for quantitative
+   * metrics — it groups by calendar date and aggregates all values naively.
+   * The caller must provide pre-deduplicated data:
+   *
+   * • Web upload path (HealthDataSelector.tsx): deduplicateData() is applied
+   *   to allMetricsData before this method is called, so Watch-priority /
+   *   iPhone-fallback logic is already in effect.
+   *
+   * • iOS upload path: the iOS app queries HealthKit directly via its own
+   *   Swift service (not this TypeScript class). HKStatisticsQuery with
+   *   .cumulativeSum merges overlapping Watch + iPhone intervals at the OS
+   *   level, so iOS-sourced data arrives already deduplicated. If the iOS app
+   *   ever switches to HKSampleQuery without source filtering, dedup would
+   *   need to be added in the Swift layer before uploading.
+   *
+   * Sleep is the exception: aggregateSleepData() uses interval merging
+   * (mergeMinutes) and handles Watch + iPhone overlap correctly regardless
+   * of what the caller passes.
    */
   buildDailySummaries(
     allMetricsData: Record<string, HealthDataPoint[]>,
@@ -538,57 +558,71 @@ export class AppleHealthStorjService {
         dailySummaries[dateKey] = {};
       }
 
-      const sleepSummary: SleepSummary = {
-        total: 0,
-        inBed: 0,
-        awake: 0,
-        core: 0,
-        deep: 0,
-        rem: 0,
+      // Collect intervals per stage — merge overlapping ones before summing
+      // to prevent double-counting when Apple Watch and iPhone both report the same period.
+      const intervals: Record<string, { s: number; e: number }[]> = {
+        inBed: [],
+        awake: [],
+        core: [],
+        deep: [],
+        rem: [],
       };
 
       for (const point of points) {
-        // Calculate duration in minutes
-        const start = new Date(point.startDate).getTime();
-        const end = new Date(point.endDate).getTime();
-        const durationMin = (end - start) / (1000 * 60);
+        const s = new Date(point.startDate).getTime();
+        const e = new Date(point.endDate).getTime();
+        if (e <= s) continue;
 
-        // The value field contains the sleep stage
         const stage = point.value.toLowerCase();
-
         if (stage.includes("inbed") || stage === "0") {
-          sleepSummary.inBed += durationMin;
+          intervals.inBed.push({ s, e });
         } else if (stage.includes("awake") || stage === "2") {
-          sleepSummary.awake += durationMin;
+          intervals.awake.push({ s, e });
         } else if (stage.includes("core") || stage === "3") {
-          sleepSummary.core += durationMin;
-          sleepSummary.total += durationMin;
+          intervals.core.push({ s, e });
         } else if (stage.includes("deep") || stage === "4") {
-          sleepSummary.deep += durationMin;
-          sleepSummary.total += durationMin;
+          intervals.deep.push({ s, e });
         } else if (stage.includes("rem") || stage === "5") {
-          sleepSummary.rem += durationMin;
-          sleepSummary.total += durationMin;
+          intervals.rem.push({ s, e });
         } else if (stage.includes("asleep") || stage === "1") {
-          // Generic "asleep" goes to core
-          sleepSummary.core += durationMin;
-          sleepSummary.total += durationMin;
+          intervals.core.push({ s, e });
         }
       }
+
+      const mergeMinutes = (ivs: { s: number; e: number }[]): number => {
+        if (ivs.length === 0) return 0;
+        const sorted = [...ivs].sort((a, b) => a.s - b.s);
+        let total = 0;
+        let cur = { ...sorted[0] };
+        for (let i = 1; i < sorted.length; i++) {
+          const r = sorted[i];
+          if (r.s < cur.e) {
+            cur.e = Math.max(cur.e, r.e);
+          } else {
+            total += cur.e - cur.s;
+            cur = { ...r };
+          }
+        }
+        total += cur.e - cur.s;
+        return Math.round(total / 60000);
+      };
+
+      const sleepSummary: SleepSummary = {
+        inBed: mergeMinutes(intervals.inBed),
+        awake: mergeMinutes(intervals.awake),
+        core: mergeMinutes(intervals.core),
+        deep: mergeMinutes(intervals.deep),
+        rem: mergeMinutes(intervals.rem),
+        total: 0,
+      };
+      sleepSummary.total =
+        sleepSummary.core + sleepSummary.deep + sleepSummary.rem;
 
       // Calculate efficiency
       if (sleepSummary.inBed > 0) {
         sleepSummary.efficiency =
           Math.round((sleepSummary.total / sleepSummary.inBed) * 100) / 100;
       }
-
-      // Round all values
-      sleepSummary.total = Math.round(sleepSummary.total);
-      sleepSummary.inBed = Math.round(sleepSummary.inBed);
-      sleepSummary.awake = Math.round(sleepSummary.awake);
-      sleepSummary.core = Math.round(sleepSummary.core);
-      sleepSummary.deep = Math.round(sleepSummary.deep);
-      sleepSummary.rem = Math.round(sleepSummary.rem);
 
       dailySummaries[dateKey]["sleep"] = sleepSummary;
     }

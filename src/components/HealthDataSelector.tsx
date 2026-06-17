@@ -631,13 +631,24 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
         const results = await parser.parseFile(uploadedFile);
 
-        // Store ALL metrics data for potential Storj save
+        // Store ALL metrics data for potential Storj save.
+        // Deduplicate first using the same Watch-priority / iPhone-fallback
+        // hourly-block algorithm applied to the IndexedDB path below (line 650).
+        // Without this, raw XML records from both Apple Watch and iPhone flow
+        // into buildDailySummaries(), which sums them naively and produces
+        // inflated daily totals (e.g. 14K steps when HealthKit shows 12K).
         if (parser.hasStorjData()) {
           const allData = parser.getAllMetricsData();
-          setAllMetricsForStorj(allData);
+          const dedupedForStorj: Record<string, HealthDataPoint[]> = {};
+          for (const [metricType, points] of Object.entries(allData)) {
+            dedupedForStorj[metricType] = deduplicateData(points, metricType);
+          }
+          setAllMetricsForStorj(dedupedForStorj);
           console.log(
-            `📦 [Storj] Captured ${Object.keys(allData).length} metric types for potential Storj backup:`,
-            Object.entries(allData).map(([k, v]) => `${k}: ${v.length}`),
+            `📦 [Storj] Captured ${Object.keys(dedupedForStorj).length} metric types for potential Storj backup:`,
+            Object.entries(dedupedForStorj).map(
+              ([k, v]) => `${k}: ${v.length}`,
+            ),
           );
         }
 

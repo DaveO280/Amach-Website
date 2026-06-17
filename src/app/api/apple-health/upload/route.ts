@@ -210,17 +210,44 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       `[apple-health/upload] Stored Apple Health payload: ${storeResult.storjUri}`,
     );
 
-    // Compute and store daily health scores (non-fatal if it fails)
+    // Compute and store daily health scores (non-fatal, time-bounded).
+    //
+    // TIMEOUT GUARD: score computation fetches an existing Storj object,
+    // computes scores for the full history, and stores a new object. On large
+    // datasets this can take 30–90 seconds. Without a deadline it can consume
+    // the entire maxDuration (120 s) and prevent the HTTP response from being
+    // sent — the caller (e.g. iOS app) then receives a 504 Gateway Timeout and
+    // marks the upload as failed even though the Storj write above succeeded.
+    //
+    // We race against an 80-second wall clock. If scores win, great. If the
+    // timeout fires first we log a warning and still return a successful
+    // response — the iOS app records the upload as complete and the scores
+    // will be recomputed on the next upload.
+    const SCORE_DEADLINE_MS = 80_000;
     let scoresUri: string | undefined;
+    const scoreStart = Date.now();
     try {
-      scoresUri = await computeAndStoreScores(
-        payload,
-        walletAddress,
-        encryptionKey,
-        userProfile,
-      );
+      const scoreResult = await Promise.race([
+        computeAndStoreScores(
+          payload,
+          walletAddress,
+          encryptionKey,
+          userProfile,
+        ),
+        new Promise<undefined>((resolve) =>
+          setTimeout(() => {
+            console.warn(
+              `[apple-health/upload] Score computation timed out after ${SCORE_DEADLINE_MS / 1000}s — skipping`,
+            );
+            resolve(undefined);
+          }, SCORE_DEADLINE_MS),
+        ),
+      ]);
+      scoresUri = scoreResult;
       if (scoresUri) {
-        console.log(`[apple-health/upload] Stored health scores: ${scoresUri}`);
+        console.log(
+          `[apple-health/upload] Stored health scores: ${scoresUri} (${Date.now() - scoreStart}ms)`,
+        );
       }
     } catch (scoreErr) {
       console.error(

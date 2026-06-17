@@ -1,11 +1,10 @@
 "use client";
 
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
+import { useStorjHealthScores } from "@/data/hooks/useStorjHealthScores";
+import { useWalletService } from "@/hooks/useWalletService";
 import type { HealthScore } from "@/types/HealthContext";
-import {
-  getScoreTrends,
-  type ScoreTrends,
-} from "@/utils/dailyHealthScoreCalculator";
+import type { ScoreTrends } from "@/utils/dailyHealthScoreCalculator";
 import {
   Activity,
   Heart,
@@ -24,37 +23,49 @@ const cardClass =
 
 export function HealthScoreCards(): JSX.Element {
   const { healthScores } = useHealthDataContext();
-  const [scoreTrends, setScoreTrends] = useState<ScoreTrends | null>(null);
-  const [loadingTrends, setLoadingTrends] = useState(false);
+  const { isConnected, address } = useWalletService();
+  const {
+    dailyScores,
+    scoreTrends,
+    isLoading: loadingTrends,
+  } = useStorjHealthScores(isConnected ? (address ?? undefined) : undefined);
 
-  const healthScoresObj = healthScores?.reduce(
-    (acc: Record<string, number>, s: HealthScore) => {
-      acc[s.type] = s.value;
-      return acc;
-    },
-    {} as Record<string, number>,
-  );
+  // Derive current health scores from Storj daily scores when available,
+  // falling back to context scores (computed client-side from Storj metricData).
+  const storjHealthScoresObj =
+    dailyScores.length > 0
+      ? (() => {
+          const metrics = ["overall", "activity", "sleep", "heart", "energy"];
+          const obj: Record<string, number> = {};
+          for (const metric of metrics) {
+            const values = dailyScores
+              .map((d) => d.scores.find((s) => s.type === metric)?.value)
+              .filter(
+                (v): v is number => typeof v === "number" && !isNaN(v) && v > 0,
+              );
+            obj[metric] =
+              values.length > 0
+                ? Math.round(values.reduce((a, b) => a + b, 0) / values.length)
+                : 0;
+          }
+          return obj;
+        })()
+      : null;
+
+  const healthScoresObj =
+    storjHealthScoresObj ??
+    healthScores?.reduce(
+      (acc: Record<string, number>, s: HealthScore) => {
+        acc[s.type] = s.value;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
   const [showTooltip, setShowTooltip] = useState(false);
   const hoverTimeout = useRef<NodeJS.Timeout>();
   const tooltipRef = useRef<HTMLDivElement>(null);
-
-  // Fetch trend data when component mounts
-  useEffect(() => {
-    const fetchTrends = async (): Promise<void> => {
-      setLoadingTrends(true);
-      try {
-        const trends = await getScoreTrends();
-        setScoreTrends(trends);
-      } catch (error) {
-        console.error("Failed to fetch score trends:", error);
-      } finally {
-        setLoadingTrends(false);
-      }
-    };
-
-    fetchTrends();
-  }, []);
 
   const getScoreIcon = (scoreType: string): JSX.Element => {
     switch (scoreType) {

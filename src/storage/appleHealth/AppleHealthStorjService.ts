@@ -153,17 +153,17 @@ export class AppleHealthStorjService {
       // 7. Calculate content hash before encryption
       const contentHash = await this.computeContentHash(payload);
 
-      // 8. Save/update to Storj via API route
+      // 8. Upload via the dedicated apple-health/upload route, which stores the
+      //    payload AND computes + caches daily health scores server-side.
       const isUpdate = !!existing?.storjUri;
-      const response = await fetch("/api/storj", {
+      const response = await fetch("/api/apple-health/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: isUpdate ? "storage/update" : "storage/store",
-          userAddress: walletKey.walletAddress,
+          walletAddress: walletKey.walletAddress,
           encryptionKey: walletKey,
-          data: payload,
-          dataType: "apple-health-full-export",
+          payload,
+          isUpdate,
           ...(isUpdate && { oldStorjUri: existing.storjUri }),
           options: {
             metadata: {

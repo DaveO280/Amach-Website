@@ -239,20 +239,24 @@ export function useStorjHealthSync(): void {
 
     void (async (): Promise<void> => {
       try {
-        // Skip if local IndexedDB already has health data
+        // Always fetch from Storj on login, even if IndexedDB has data.
+        //
+        // The old "skip if local data exists" guard prevented the encryption
+        // key from ever being cached when IndexedDB was already seeded.
+        // useStorjAppleHealthQuery (which provides the full history for the
+        // in-memory merge in HealthDataContextWrapper) checks that same key
+        // cache before enabling itself — so the skip caused storjHealthData
+        // to always be null, meaning the day-level merge never ran and the
+        // dashboard was stuck on the 180-day IndexedDB window.
+        //
+        // We still use attemptedForRef so this only runs once per session /
+        // address, not on every re-render. saveHealthData already does a
+        // day-level merge (existing IndexedDB dates win) and then trims to
+        // 180 days, so manual imports are never overwritten.
         await healthDataStore.initialize();
-        const localData = await healthDataStore.getHealthData();
-        const hasLocal =
-          localData && Object.values(localData).some((arr) => arr.length > 0);
-        if (hasLocal) {
-          console.log(
-            "[StorjHealthSync] Local health data found — skipping Storj fetch",
-          );
-          return;
-        }
 
         console.log(
-          "[StorjHealthSync] No local health data — fetching from Storj…",
+          "[StorjHealthSync] Fetching from Storj to cache key and refresh history…",
         );
 
         // Get (or re-use cached) encryption key — may prompt wallet signature

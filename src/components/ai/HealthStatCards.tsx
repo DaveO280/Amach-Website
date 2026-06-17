@@ -8,10 +8,94 @@ import {
   getMetricUnit,
 } from "@/components/metricDisplayUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import React from "react";
+import type { HealthDataByType } from "@/types/healthData";
+import React, { useMemo } from "react";
+
+type MetricKey =
+  | "steps"
+  | "exercise"
+  | "heartRate"
+  | "hrv"
+  | "restingHR"
+  | "respiratory"
+  | "activeEnergy"
+  | "sleep";
+
+const HK_KEY: Record<MetricKey, string> = {
+  steps: "HKQuantityTypeIdentifierStepCount",
+  exercise: "HKQuantityTypeIdentifierAppleExerciseTime",
+  heartRate: "HKQuantityTypeIdentifierHeartRate",
+  hrv: "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+  restingHR: "HKQuantityTypeIdentifierRestingHeartRate",
+  respiratory: "HKQuantityTypeIdentifierRespiratoryRate",
+  activeEnergy: "HKQuantityTypeIdentifierActiveEnergyBurned",
+  sleep: "HKCategoryTypeIdentifierSleepAnalysis",
+};
+
+// Metrics where 0 means "not worn that day" and should be excluded from averages
+const ZERO_MEANS_NO_DATA: Set<MetricKey> = new Set([
+  "steps",
+  "exercise",
+  "activeEnergy",
+]);
+
+function windowedAvg(
+  metricData: HealthDataByType,
+  key: MetricKey,
+  days: number,
+): number {
+  const hkKey = HK_KEY[key];
+  const points = metricData[hkKey] ?? [];
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const inWindow = points.filter((p) => {
+    const t = new Date(p.startDate).getTime();
+    return !isNaN(t) && t >= cutoff;
+  });
+  const excludeZero = ZERO_MEANS_NO_DATA.has(key);
+  const values = inWindow
+    .map((p) => parseFloat(p.value))
+    .filter((v) => !isNaN(v) && (!excludeZero || v > 0));
+  if (values.length === 0) return 0;
+  return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+}
+
+interface WindowedAverages {
+  last7: number;
+  last30: number;
+  last90: number;
+  last180: number;
+}
+
+function useMetricWindows(
+  metricData: HealthDataByType,
+): Record<MetricKey, WindowedAverages> {
+  return useMemo(() => {
+    const keys: MetricKey[] = [
+      "steps",
+      "exercise",
+      "heartRate",
+      "hrv",
+      "restingHR",
+      "respiratory",
+      "activeEnergy",
+      "sleep",
+    ];
+    return Object.fromEntries(
+      keys.map((k) => [
+        k,
+        {
+          last7: windowedAvg(metricData, k, 7),
+          last30: windowedAvg(metricData, k, 30),
+          last90: windowedAvg(metricData, k, 90),
+          last180: windowedAvg(metricData, k, 180),
+        },
+      ]),
+    ) as Record<MetricKey, WindowedAverages>;
+  }, [metricData]);
+}
 
 interface StatCardProps {
-  keyName: import("@/components/metricDisplayUtils").MetricKey;
+  keyName: MetricKey;
   title: string;
   icon: React.ReactNode;
   average: number;
@@ -20,6 +104,7 @@ interface StatCardProps {
   efficiency?: number;
   high?: number | string;
   low?: number | string;
+  windows: WindowedAverages;
 }
 
 const StatCard: React.FC<StatCardProps> = ({
@@ -32,7 +117,18 @@ const StatCard: React.FC<StatCardProps> = ({
   efficiency,
   high,
   low,
+  windows,
 }): JSX.Element => {
+  const isSleep = title === getMetricLabel("sleep");
+
+  const fmtWindow = (v: number): string => {
+    if (isSleep) return formatMetricValue("sleep", v);
+    return formatMetricValue(
+      keyName as import("@/components/metricDisplayUtils").MetricKey,
+      v,
+    );
+  };
+
   return (
     <Card className="bg-white/60 backdrop-blur-sm border-amber-100">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -42,7 +138,7 @@ const StatCard: React.FC<StatCardProps> = ({
         {icon}
       </CardHeader>
       <CardContent>
-        {title === getMetricLabel("sleep") ? (
+        {isSleep ? (
           <>
             <div className="text-2xl font-bold text-emerald-900 font-mono">
               {unit}
@@ -70,7 +166,10 @@ const StatCard: React.FC<StatCardProps> = ({
         ) : (
           <>
             <div className="text-2xl font-bold text-emerald-900 font-mono">
-              {formatMetricValue(keyName, average)}
+              {formatMetricValue(
+                keyName as import("@/components/metricDisplayUtils").MetricKey,
+                average,
+              )}
               <span className="text-sm text-emerald-600 ml-1">{unit}</span>
             </div>
             {total !== undefined && (
@@ -100,13 +199,57 @@ const StatCard: React.FC<StatCardProps> = ({
             )}
           </>
         )}
+        {/* Windowed averages from full Storj dataset */}
+        {(windows.last7 > 0 ||
+          windows.last30 > 0 ||
+          windows.last90 > 0 ||
+          windows.last180 > 0) && (
+          <div className="mt-2 pt-2 border-t border-emerald-100">
+            <div className="grid grid-cols-4 gap-1 text-xs text-emerald-600">
+              {windows.last7 > 0 && (
+                <div className="text-center">
+                  <div className="font-medium text-emerald-800">
+                    {fmtWindow(windows.last7)}
+                  </div>
+                  <div className="text-[10px]">7d</div>
+                </div>
+              )}
+              {windows.last30 > 0 && (
+                <div className="text-center">
+                  <div className="font-medium text-emerald-800">
+                    {fmtWindow(windows.last30)}
+                  </div>
+                  <div className="text-[10px]">30d</div>
+                </div>
+              )}
+              {windows.last90 > 0 && (
+                <div className="text-center">
+                  <div className="font-medium text-emerald-800">
+                    {fmtWindow(windows.last90)}
+                  </div>
+                  <div className="text-[10px]">90d</div>
+                </div>
+              )}
+              {windows.last180 > 0 && (
+                <div className="text-center">
+                  <div className="font-medium text-emerald-800">
+                    {fmtWindow(windows.last180)}
+                  </div>
+                  <div className="text-[10px]">180d</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 };
 
 const HealthStatCards: React.FC = React.memo((): React.ReactNode => {
-  const { metrics } = useHealthDataContext();
+  const { metrics, metricData } = useHealthDataContext();
+  const windows = useMetricWindows(metricData);
+
   if (!metrics) return null;
 
   return (
@@ -124,10 +267,8 @@ const HealthStatCards: React.FC = React.memo((): React.ReactNode => {
         ] as const
       ).map((key) => {
         const metric = metrics[key];
-        // Only SleepMetricsSummary has efficiency
         const efficiency =
           "efficiency" in metric ? metric.efficiency : undefined;
-        // Only some metrics have total
         const total = "total" in metric ? metric.total : undefined;
         return (
           <StatCard
@@ -153,6 +294,7 @@ const HealthStatCards: React.FC = React.memo((): React.ReactNode => {
             }
             efficiency={efficiency as number | undefined}
             total={total as number | undefined}
+            windows={windows[key]}
           />
         );
       })}

@@ -1,11 +1,8 @@
 "use client";
 
-import {
-  getScoreTrends,
-  type ScoreTrends,
-} from "@/utils/dailyHealthScoreCalculator";
+import { useStorjHealthScores } from "@/data/hooks/useStorjHealthScores";
+import { useWalletService } from "@/hooks/useWalletService";
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
-import { useEffect, useState } from "react";
 
 interface HealthScoreTrendsProps {
   className?: string;
@@ -17,24 +14,10 @@ const cardClass =
 export function HealthScoreTrends({
   className = "",
 }: HealthScoreTrendsProps): JSX.Element {
-  const [scoreTrends, setScoreTrends] = useState<ScoreTrends | null>(null);
-  const [loadingTrends, setLoadingTrends] = useState(false);
-
-  useEffect(() => {
-    const fetchTrends = async (): Promise<void> => {
-      setLoadingTrends(true);
-      try {
-        const trends = await getScoreTrends();
-        setScoreTrends(trends);
-      } catch (error) {
-        console.error("Failed to fetch score trends:", error);
-      } finally {
-        setLoadingTrends(false);
-      }
-    };
-
-    fetchTrends();
-  }, []);
+  const { isConnected, address } = useWalletService();
+  const { scoreTrends, isLoading: loadingTrends } = useStorjHealthScores(
+    isConnected ? (address ?? undefined) : undefined,
+  );
 
   const getTrendIcon = (current: number, trend: number): JSX.Element => {
     if (trend === 0) return <Minus className="h-3 w-3 text-[#6B8C7A]" />;

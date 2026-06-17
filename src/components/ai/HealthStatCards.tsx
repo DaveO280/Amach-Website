@@ -60,6 +60,7 @@ function windowedAvg(
 }
 
 interface WindowedAverages {
+  last7: number;
   last30: number;
   last90: number;
   last180: number;
@@ -83,6 +84,7 @@ function useMetricWindows(
       keys.map((k) => [
         k,
         {
+          last7: windowedAvg(metricData, k, 7),
           last30: windowedAvg(metricData, k, 30),
           last90: windowedAvg(metricData, k, 90),
           last180: windowedAvg(metricData, k, 180),
@@ -198,15 +200,24 @@ const StatCard: React.FC<StatCardProps> = ({
           </>
         )}
         {/* Windowed averages from full Storj dataset */}
-        {(windows.last30 > 0 || windows.last90 > 0 || windows.last180 > 0) && (
+        {(windows.last7 > 0 ||
+          windows.last30 > 0 ||
+          windows.last90 > 0 ||
+          windows.last180 > 0) && (
           <div className="mt-2 pt-2 border-t border-emerald-100">
-            <div className="grid grid-cols-3 gap-1 text-xs text-emerald-600">
+            <div className="grid grid-cols-4 gap-1 text-xs text-emerald-600">
+              {windows.last7 > 0 && (
+                <div className="text-center">
+                  <div className="font-medium text-emerald-800">
+                    {fmtWindow(windows.last7)}
+                  </div>
+                  <div className="text-[10px]">7d</div>
+                </div>
+              )}
               {windows.last30 > 0 && (
                 <div className="text-center">
                   <div className="font-medium text-emerald-800">
-                    {isSleep
-                      ? fmtWindow(windows.last30)
-                      : fmtWindow(windows.last30)}
+                    {fmtWindow(windows.last30)}
                   </div>
                   <div className="text-[10px]">30d</div>
                 </div>

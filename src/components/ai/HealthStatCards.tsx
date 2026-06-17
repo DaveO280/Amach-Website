@@ -32,8 +32,10 @@ const HK_KEY: Record<MetricKey, string> = {
   sleep: "HKCategoryTypeIdentifierSleepAnalysis",
 };
 
-// Metrics where 0 means "not worn that day" and should be excluded from averages
-const ZERO_MEANS_NO_DATA: Set<MetricKey> = new Set([
+// Metrics stored as many intraday records that must be summed per day before averaging.
+// Averaging raw records directly produces severely deflated results when older data
+// contains many small increments (e.g. 100-step chunks) vs. newer daily-total records.
+const CUMULATIVE_METRICS: Set<MetricKey> = new Set([
   "steps",
   "exercise",
   "activeEnergy",
@@ -51,10 +53,27 @@ function windowedAvg(
     const t = new Date(p.startDate).getTime();
     return !isNaN(t) && t >= cutoff;
   });
-  const excludeZero = ZERO_MEANS_NO_DATA.has(key);
+
+  if (CUMULATIVE_METRICS.has(key)) {
+    // Sum all intraday records into daily totals, then average those totals.
+    // Zero-value records are skipped — a 0 in cumulative data means no activity
+    // (device not worn), not a genuine rest day.
+    const dailyTotals: Record<string, number> = {};
+    for (const p of inWindow) {
+      const dayKey = p.startDate.split("T")[0];
+      const v = parseFloat(p.value);
+      if (!isNaN(v) && v > 0) {
+        dailyTotals[dayKey] = (dailyTotals[dayKey] ?? 0) + v;
+      }
+    }
+    const totals = Object.values(dailyTotals);
+    if (totals.length === 0) return 0;
+    return Math.round(totals.reduce((a, b) => a + b, 0) / totals.length);
+  }
+
   const values = inWindow
     .map((p) => parseFloat(p.value))
-    .filter((v) => !isNaN(v) && (!excludeZero || v > 0));
+    .filter((v) => !isNaN(v));
   if (values.length === 0) return 0;
   return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
 }

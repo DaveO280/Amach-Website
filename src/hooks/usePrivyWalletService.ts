@@ -855,6 +855,18 @@ export function usePrivyWalletService(): PrivyWalletServiceReturn {
         weightSource: "blockchain",
       });
 
+      // Detect "no profile" case: blockchain returns a zeroed struct when
+      // the user has never created a profile. All encrypted fields will be
+      // empty strings, so nonce will be missing too — but this is not an
+      // error, just an unregistered user.
+      const hasProfileData =
+        !!encryptedProfile.encryptedBirthDate ||
+        !!encryptedProfile.encryptedSex ||
+        !!encryptedProfile.encryptedHeight;
+      if (!hasProfileData) {
+        return { success: false, error: "Profile does not exist" };
+      }
+
       // Validate nonce before setting state
       if (!encryptedProfile.nonce || encryptedProfile.nonce.trim() === "") {
         console.error(

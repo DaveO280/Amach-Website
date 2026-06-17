@@ -8,6 +8,7 @@ import {
   getMetricUnit,
 } from "@/components/metricDisplayUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { isCumulativeMetric } from "@/storage/appleHealth/metricAggregationStrategies";
 import type { HealthDataByType } from "@/types/healthData";
 import React, { useMemo } from "react";
 
@@ -32,13 +33,6 @@ const HK_KEY: Record<MetricKey, string> = {
   sleep: "HKCategoryTypeIdentifierSleepAnalysis",
 };
 
-// Metrics where 0 means "not worn that day" and should be excluded from averages
-const ZERO_MEANS_NO_DATA: Set<MetricKey> = new Set([
-  "steps",
-  "exercise",
-  "activeEnergy",
-]);
-
 function windowedAvg(
   metricData: HealthDataByType,
   key: MetricKey,
@@ -51,10 +45,29 @@ function windowedAvg(
     const t = new Date(p.startDate).getTime();
     return !isNaN(t) && t >= cutoff;
   });
-  const excludeZero = ZERO_MEANS_NO_DATA.has(key);
+
+  // Cumulative metrics (aggregationType:"sum" in metricAggregationStrategies) must be
+  // summed per calendar day before averaging. Apple Health may store them as many small
+  // intraday records; averaging raw records directly gives heavily deflated results for
+  // older data. This mirrors processCumulativeData() in HealthDataContextWrapper.
+  if (isCumulativeMetric(hkKey)) {
+    const dailyTotals: Record<string, number> = {};
+    for (const p of inWindow) {
+      const dayKey = p.startDate.split("T")[0];
+      const v = parseFloat(p.value);
+      // Zero means no-wear day — exclude from both the sum and the day count.
+      if (!isNaN(v) && v > 0) {
+        dailyTotals[dayKey] = (dailyTotals[dayKey] ?? 0) + v;
+      }
+    }
+    const totals = Object.values(dailyTotals);
+    if (totals.length === 0) return 0;
+    return Math.round(totals.reduce((a, b) => a + b, 0) / totals.length);
+  }
+
   const values = inWindow
     .map((p) => parseFloat(p.value))
-    .filter((v) => !isNaN(v) && (!excludeZero || v > 0));
+    .filter((v) => !isNaN(v));
   if (values.length === 0) return 0;
   return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
 }

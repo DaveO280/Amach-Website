@@ -1,27 +1,32 @@
 /**
  * POST /api/apple-health/upload
  *
- * Stores an Apple Health full-export payload to Storj, then computes and
- * caches daily health scores as a separate Storj artifact (health-scores).
+ * Receives NEW daily summaries from the client, fetches the existing
+ * apple-health-full-export payload from Storj server-side, merges the two,
+ * builds the manifest, stores the merged payload, then computes and caches
+ * daily health scores as a separate Storj artifact.
  *
- * Same pattern as /api/gut-health/upload: upload → compute artifact → store.
+ * Why server-side merge?
+ * The old approach had the client download the full existing payload (~2–5 MB),
+ * merge in the browser, then re-upload the merged payload. As the health history
+ * grows this exceeds Vercel's 4.5 MB request body limit and the Vercel 120-second
+ * function budget. Server-to-Storj is fast (datacenter bandwidth); keeping the
+ * POST body small (new data only) is the key fix.
  *
  * Request body:
  *   {
- *     walletAddress:  string
- *     encryptionKey:  WalletEncryptionKey
- *     payload:        AppleHealthStorjPayload  — manifest + dailySummaries
- *     isUpdate:       boolean                 — true when overwriting existing object
- *     oldStorjUri?:   string                  — required when isUpdate=true
- *     options?:       { metadata?: Record<string,string> }
- *     userProfile?:   NormalizedUserProfile
+ *     walletAddress:    string
+ *     encryptionKey:    WalletEncryptionKey
+ *     newDailySummaries: Record<string, DailySummary>  — only new/updated days
+ *     sourceSummary:    SourceSummary  — pre-computed source counts & metric keys
+ *     userProfile?:     NormalizedUserProfile
  *   }
  *
  * Response:
  *   {
  *     success:    boolean
  *     result:     { storjUri, contentHash }
- *     scoresUri?: string   — Storj URI of stored health-scores artifact
+ *     scoresUri?: string
  *     manifest?:  AppleHealthManifest
  *   }
  */
@@ -29,7 +34,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStorageService } from "@/storage";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
-import type { AppleHealthStorjPayload } from "@/storage/appleHealth/AppleHealthStorjService";
+import {
+  AppleHealthStorjService,
+  type AppleHealthStorjPayload,
+  type DailySummary,
+  type SourceSummary,
+} from "@/storage/appleHealth/AppleHealthStorjService";
 import { convertStorjPayloadToHealthData } from "@/utils/storjAppleHealthConverter";
 import {
   calculateDailyHealthScores,
@@ -64,8 +74,6 @@ async function computeAndStoreScores(
 ): Promise<string | undefined> {
   const storageService = getStorageService();
 
-  // Convert Storj daily summaries to the same HealthDataResults format the
-  // client-side calculator uses (one synthetic data point per metric per day).
   const healthData = convertStorjPayloadToHealthData(payload);
   const healthDataResults = Object.entries(healthData).reduce(
     (acc: Record<string, unknown[]>, [key, points]) => {
@@ -89,7 +97,6 @@ async function computeAndStoreScores(
     `[apple-health/upload] Computed ${newScores.length} daily scores`,
   );
 
-  // Fetch existing health-scores from Storj and merge (new days win).
   let existingScores: Record<string, DailyHealthScores> = {};
   let existingUri: string | undefined;
 
@@ -122,7 +129,6 @@ async function computeAndStoreScores(
     );
   }
 
-  // Merge: new computation wins per date
   const merged: Record<string, DailyHealthScores> = { ...existingScores };
   for (const dayScore of newScores) {
     merged[dayScore.date] = dayScore;
@@ -160,49 +166,127 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const {
       walletAddress,
       encryptionKey,
-      payload,
-      isUpdate,
-      oldStorjUri,
-      options,
+      newDailySummaries,
+      sourceSummary,
       userProfile = {},
     } = body as {
       walletAddress: string;
       encryptionKey: WalletEncryptionKey;
-      payload: AppleHealthStorjPayload;
-      isUpdate: boolean;
-      oldStorjUri?: string;
-      options?: { metadata?: Record<string, string> };
+      newDailySummaries: Record<string, DailySummary>;
+      sourceSummary: SourceSummary;
       userProfile?: NormalizedUserProfile;
     };
 
-    if (!walletAddress || !encryptionKey || !payload) {
+    if (
+      !walletAddress ||
+      !encryptionKey ||
+      !newDailySummaries ||
+      !sourceSummary
+    ) {
       return NextResponse.json(
         {
           success: false,
-          error: "walletAddress, encryptionKey, and payload are required",
+          error:
+            "walletAddress, encryptionKey, newDailySummaries, and sourceSummary are required",
         },
         { status: 400, headers: CORS },
       );
     }
 
     const storageService = getStorageService();
+    const storjService = new AppleHealthStorjService();
 
-    // Store or update the Apple Health payload in Storj
+    // Fetch existing apple-health payload from Storj (server-to-Storj is fast).
+    // If fetch fails we still proceed — new data is stored without history merge.
+    let existingPayload: AppleHealthStorjPayload | null = null;
+    let existingUri: string | undefined;
+
+    try {
+      const refs: StorageReference[] = await storageService.listUserData(
+        walletAddress,
+        encryptionKey,
+        "apple-health-full-export",
+      );
+
+      if (refs.length > 0) {
+        const latest = refs.reduce((a, b) =>
+          (a.uploadedAt ?? 0) > (b.uploadedAt ?? 0) ? a : b,
+        );
+        existingUri = latest.uri;
+
+        const retrieved =
+          await storageService.retrieveHealthData<AppleHealthStorjPayload>(
+            latest.uri,
+            encryptionKey,
+          );
+        if (retrieved.data?.dailySummaries) {
+          existingPayload = retrieved.data;
+        }
+      }
+    } catch (fetchErr) {
+      console.warn(
+        "[apple-health/upload] Could not fetch existing payload, will create new:",
+        fetchErr,
+      );
+    }
+
+    // Merge: new summaries win per day+metric over the existing history
+    const mergedSummaries: Record<string, DailySummary> = existingPayload
+      ? storjService.mergeDailySummaries(
+          existingPayload.dailySummaries,
+          newDailySummaries,
+        )
+      : { ...newDailySummaries };
+
+    // Build manifest server-side (has access to merged summaries + existing manifest)
+    const manifest = storjService.buildManifestFromSummaries(
+      sourceSummary,
+      mergedSummaries,
+      existingPayload?.manifest,
+    );
+
+    const payload: AppleHealthStorjPayload = {
+      manifest,
+      dailySummaries: mergedSummaries,
+    };
+
+    // Compute content hash (SHA-256 of JSON payload before encryption)
+    const payloadJson = JSON.stringify(payload);
+    const hashBuffer = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(payloadJson),
+    );
+    const contentHash = `0x${Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")}`;
+
+    // Store or update in Storj
+    const storeOptions = {
+      dataType: "apple-health-full-export",
+      metadata: {
+        version: "1",
+        dateRange: `${manifest.dateRange.start}_${manifest.dateRange.end}`,
+        metricsCount: String(manifest.metricsPresent.length),
+        completenessScore: String(manifest.completeness.score),
+        tier: manifest.completeness.tier,
+      },
+    };
+
     let storeResult;
-    if (isUpdate && oldStorjUri) {
+    if (existingUri) {
       storeResult = await storageService.updateHealthData(
-        oldStorjUri,
+        existingUri,
         payload,
         walletAddress,
         encryptionKey,
-        { dataType: "apple-health-full-export", ...options },
+        storeOptions,
       );
     } else {
       storeResult = await storageService.storeHealthData(
         payload,
         walletAddress,
         encryptionKey,
-        { dataType: "apple-health-full-export", ...options },
+        storeOptions,
       );
     }
 
@@ -210,20 +294,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       `[apple-health/upload] Stored Apple Health payload: ${storeResult.storjUri}`,
     );
 
-    // Compute and store daily health scores (non-fatal, time-bounded).
+    // Score computation with a tight deadline.
     //
-    // TIMEOUT GUARD: score computation fetches an existing Storj object,
-    // computes scores for the full history, and stores a new object. On large
-    // datasets this can take 30–90 seconds. Without a deadline it can consume
-    // the entire maxDuration (120 s) and prevent the HTTP response from being
-    // sent — the caller (e.g. iOS app) then receives a 504 Gateway Timeout and
-    // marks the upload as failed even though the Storj write above succeeded.
+    // Budget breakdown (120 s function limit):
+    //   - Receive body + parse:              ~2 s
+    //   - Fetch existing payload from Storj: ~5–20 s
+    //   - Merge + manifest + hash:           ~1 s
+    //   - Store merged payload to Storj:     ~10–30 s
+    //   Total before scores:                 ~18–53 s  (budget: 53 s remaining)
     //
-    // We race against an 80-second wall clock. If scores win, great. If the
-    // timeout fires first we log a warning and still return a successful
-    // response — the iOS app records the upload as complete and the scores
-    // will be recomputed on the next upload.
-    const SCORE_DEADLINE_MS = 80_000;
+    // We cap score computation at 45 s so the response is returned even if
+    // Storj is slow. Scores will be recomputed on the next upload.
+    const SCORE_DEADLINE_MS = 45_000;
     let scoresUri: string | undefined;
     const scoreStart = Date.now();
     try {
@@ -261,10 +343,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         success: true,
         result: {
           storjUri: storeResult.storjUri,
-          contentHash: storeResult.contentHash,
+          contentHash,
         },
         scoresUri,
-        manifest: payload.manifest,
+        manifest,
       },
       { headers: CORS },
     );

@@ -25,6 +25,19 @@ import {
 // TYPES
 // ============================================
 
+/**
+ * Pre-computed source metadata extracted from raw HealthDataPoint arrays.
+ * Sent to the upload route instead of the raw records to keep the POST body small.
+ */
+export interface SourceSummary {
+  watchCount: number;
+  phoneCount: number;
+  otherCount: number;
+  totalRecords: number;
+  /** Raw HK identifiers (e.g. "HKQuantityTypeIdentifierStepCount") with at least one record */
+  rawMetricKeys: string[];
+}
+
 export interface DailySummaryValue {
   // For sum/count metrics
   total?: number;
@@ -99,9 +112,11 @@ export class AppleHealthStorjService {
   /**
    * Main entry point: Process health data and save to Storj (incremental).
    *
-   * On successive uploads the service fetches the existing Storj payload,
-   * merges new daily summaries into it (new data wins for the same day),
-   * and overwrites the previous object so only one copy exists.
+   * The route (/api/apple-health/upload) handles fetching the existing payload,
+   * merging it with new summaries, building the manifest, and storing the result.
+   * This keeps the POST body small (new data only, not full history) and avoids
+   * large downloads in the browser — critical for users with 2+ years of history
+   * where the merged payload can exceed Vercel's 4.5 MB request body limit.
    */
   async saveToStorj(
     allMetricsData: Record<string, HealthDataPoint[]>,
@@ -109,71 +124,30 @@ export class AppleHealthStorjService {
     onProgress?: (progress: number, message: string) => void,
   ): Promise<AppleHealthStorjResult> {
     try {
-      onProgress?.(5, "Checking for existing Storj data...");
+      onProgress?.(10, "Aggregating daily summaries...");
 
-      // 1. Look for a previous apple-health export on Storj
-      const existing = await this.fetchExistingPayload(walletKey);
-
-      onProgress?.(15, "Aggregating daily summaries...");
-
-      // 2. Build daily summaries from the new upload
+      // 1. Build daily summaries from the new upload only
       const newDailySummaries = this.buildDailySummaries(allMetricsData);
 
-      // 3. Merge with existing summaries (new data wins per day+metric)
-      const mergedSummaries = existing
-        ? this.mergeDailySummaries(
-            existing.payload.dailySummaries,
-            newDailySummaries,
-          )
-        : newDailySummaries;
+      onProgress?.(40, "Preparing upload...");
 
-      onProgress?.(40, "De-identifying data...");
+      // 2. Extract source counts and metric keys — server uses these to build
+      //    the manifest without needing the full raw HealthDataPoint arrays.
+      const sourceSummary = this.extractSourceSummary(allMetricsData);
 
-      // 4. De-identify (already done during aggregation - no device names)
+      onProgress?.(60, "Uploading to Storj...");
 
-      onProgress?.(55, "Calculating completeness...");
-
-      // 5. Build manifest over the full merged dataset
-      const manifest = this.buildManifestFromSummaries(
-        allMetricsData,
-        mergedSummaries,
-        existing?.payload.manifest,
-      );
-
-      onProgress?.(65, "Preparing payload...");
-
-      // 6. Create payload
-      const payload: AppleHealthStorjPayload = {
-        manifest,
-        dailySummaries: mergedSummaries,
-      };
-
-      onProgress?.(75, "Encrypting and uploading...");
-
-      // 7. Calculate content hash before encryption
-      const contentHash = await this.computeContentHash(payload);
-
-      // 8. Upload via the dedicated apple-health/upload route, which stores the
-      //    payload AND computes + caches daily health scores server-side.
-      const isUpdate = !!existing?.storjUri;
+      // 3. POST only new summaries to the route. The server fetches the existing
+      //    payload, merges, builds the manifest, computes the hash, and stores —
+      //    all with server-to-Storj bandwidth (much faster than browser → server).
       const response = await fetch("/api/apple-health/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           walletAddress: walletKey.walletAddress,
           encryptionKey: walletKey,
-          payload,
-          isUpdate,
-          ...(isUpdate && { oldStorjUri: existing.storjUri }),
-          options: {
-            metadata: {
-              version: "1",
-              dateRange: `${manifest.dateRange.start}_${manifest.dateRange.end}`,
-              metricsCount: String(manifest.metricsPresent.length),
-              completenessScore: String(manifest.completeness.score),
-              tier: manifest.completeness.tier,
-            },
-          },
+          newDailySummaries,
+          sourceSummary,
         }),
       });
 
@@ -198,8 +172,8 @@ export class AppleHealthStorjService {
       return {
         success: true,
         storjUri: apiResult.result.storjUri,
-        contentHash,
-        manifest,
+        contentHash: apiResult.result.contentHash,
+        manifest: apiResult.manifest,
       };
     } catch (error) {
       console.error("[AppleHealthStorjService] Error saving to Storj:", error);
@@ -211,75 +185,37 @@ export class AppleHealthStorjService {
   }
 
   /**
-   * Fetch the most recent apple-health-full-export from Storj (if any).
-   * Returns the payload and its URI so we can merge and update in-place.
+   * Extract source counts and metric keys from raw HealthDataPoint arrays.
+   * These are sent to the upload route to build the manifest server-side,
+   * avoiding the need to transmit the full raw records.
    */
-  private async fetchExistingPayload(walletKey: WalletEncryptionKey): Promise<{
-    payload: AppleHealthStorjPayload;
-    storjUri: string;
-  } | null> {
-    try {
-      // List all apple-health exports for this user
-      const listResponse = await fetch("/api/storj", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "storage/list",
-          userAddress: walletKey.walletAddress,
-          encryptionKey: walletKey,
-          dataType: "apple-health-full-export",
-        }),
-      });
+  private extractSourceSummary(
+    allMetricsData: Record<string, HealthDataPoint[]>,
+  ): SourceSummary {
+    let totalRecords = 0;
+    let watchCount = 0;
+    let phoneCount = 0;
+    let otherCount = 0;
 
-      if (!listResponse.ok) return null;
-
-      const listResult = await listResponse.json();
-      const items = listResult?.result as
-        | Array<{ uri: string; uploadedAt: number }>
-        | undefined;
-
-      if (!items || items.length === 0) return null;
-
-      // Pick the most recent export
-      const latest = items.reduce((a, b) =>
-        (a.uploadedAt || 0) > (b.uploadedAt || 0) ? a : b,
-      );
-
-      // Retrieve and decrypt it
-      const retrieveResponse = await fetch("/api/storj", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "storage/retrieve",
-          userAddress: walletKey.walletAddress,
-          encryptionKey: walletKey,
-          storjUri: latest.uri,
-        }),
-      });
-
-      if (!retrieveResponse.ok) return null;
-
-      const retrieveResult = await retrieveResponse.json();
-      const payload = retrieveResult?.result?.data as
-        | AppleHealthStorjPayload
-        | undefined;
-
-      if (
-        !payload ||
-        !payload.dailySummaries ||
-        typeof payload.dailySummaries !== "object"
-      ) {
-        return null;
+    for (const dataPoints of Object.values(allMetricsData)) {
+      for (const point of dataPoints) {
+        totalRecords++;
+        const src = (point.source || point.device || "").toLowerCase();
+        if (src.includes("watch")) watchCount++;
+        else if (src.includes("iphone") || src.includes("phone")) phoneCount++;
+        else otherCount++;
       }
-
-      return { payload, storjUri: latest.uri };
-    } catch (error) {
-      console.warn(
-        "[AppleHealthStorjService] Could not fetch existing Storj data, will create new:",
-        error,
-      );
-      return null;
     }
+
+    return {
+      watchCount,
+      phoneCount,
+      otherCount,
+      totalRecords,
+      rawMetricKeys: Object.keys(allMetricsData).filter(
+        (k) => (allMetricsData[k]?.length ?? 0) > 0,
+      ),
+    };
   }
 
   /**
@@ -313,15 +249,15 @@ export class AppleHealthStorjService {
   }
 
   /**
-   * Build manifest that accounts for both new raw data and merged summaries.
-   * Extends date range and metrics list from a previous manifest if available.
+   * Build manifest over merged summaries using pre-computed source metadata.
+   * Public so the upload route can call it after server-side merge.
    */
-  private buildManifestFromSummaries(
-    newMetricsData: Record<string, HealthDataPoint[]>,
+  buildManifestFromSummaries(
+    sourceSummary: SourceSummary,
     mergedSummaries: Record<string, DailySummary>,
     previousManifest?: AppleHealthManifest,
   ): AppleHealthManifest {
-    // Get metrics present across merged summaries
+    // Collect normalized metric keys across merged summaries
     const metricsInSummaries = new Set<string>();
     for (const summary of Object.values(mergedSummaries)) {
       for (const key of Object.keys(summary)) {
@@ -329,12 +265,9 @@ export class AppleHealthStorjService {
       }
     }
 
-    // Also include raw metric keys from the new upload
-    const rawMetricKeys = Object.keys(newMetricsData)
-      .filter((k) => newMetricsData[k]?.length > 0)
-      .map(normalizeMetricKey);
-    for (const k of rawMetricKeys) {
-      metricsInSummaries.add(k);
+    // Include normalized keys from the new upload's raw metrics
+    for (const hkKey of sourceSummary.rawMetricKeys) {
+      metricsInSummaries.add(normalizeMetricKey(hkKey));
     }
 
     // Preserve any metrics from the previous manifest
@@ -350,30 +283,10 @@ export class AppleHealthStorjService {
     const endDate =
       dateKeys[dateKeys.length - 1] || new Date().toISOString().split("T")[0];
 
-    // Count sources from the new data
-    let totalRecords = 0;
-    let watchCount = 0;
-    let phoneCount = 0;
-    let otherCount = 0;
-
-    for (const dataPoints of Object.values(newMetricsData)) {
-      for (const point of dataPoints) {
-        totalRecords++;
-        const source = (point.source || point.device || "").toLowerCase();
-        if (source.includes("watch")) {
-          watchCount++;
-        } else if (source.includes("iphone") || source.includes("phone")) {
-          phoneCount++;
-        } else {
-          otherCount++;
-        }
-      }
-    }
-
-    // Use previous source ratios if no new data (shouldn't happen, but safe)
+    const { watchCount, phoneCount, otherCount, totalRecords } = sourceSummary;
     const total = watchCount + phoneCount + otherCount || 1;
 
-    // Calculate completeness over the merged date range
+    // Calculate completeness over the full merged date range
     const completeness = calculateAppleHealthCompleteness(
       Array.from(metricsInSummaries),
       new Date(startDate),
@@ -636,25 +549,5 @@ export class AppleHealthStorjService {
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
-  }
-
-  /**
-   * Compute SHA256 hash of payload using Web Crypto API
-   */
-  private async computeContentHash(
-    payload: AppleHealthStorjPayload,
-  ): Promise<string> {
-    const json = JSON.stringify(payload);
-    const encoder = new TextEncoder();
-    const data = encoder.encode(json);
-
-    // Use Web Crypto API for browser compatibility
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-
-    return `0x${hashHex}`;
   }
 }

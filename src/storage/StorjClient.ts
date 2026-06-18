@@ -400,6 +400,7 @@ export class StorjClient {
       Bucket: bucketName,
       Key: key,
       Body: encryptedData,
+      ContentLength: encryptedData.byteLength,
       ContentType: "application/octet-stream",
       Metadata: {
         ...options.metadata,
@@ -461,6 +462,7 @@ export class StorjClient {
       Bucket: bucket,
       Key: key, // Use the SAME key from existing URI
       Body: encryptedData,
+      ContentLength: encryptedData.byteLength,
       ContentType: "application/octet-stream",
       Metadata: {
         ...options.metadata,

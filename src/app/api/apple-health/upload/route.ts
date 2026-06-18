@@ -198,6 +198,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Fetch existing apple-health payload from Storj (server-to-Storj is fast).
     // If fetch fails we still proceed — new data is stored without history merge.
+    //
+    // Error-handling split: keep list and retrieve in separate try/catch blocks.
+    // A list failure (network/auth) → existingUri stays undefined → new file created.
+    // A retrieve/decrypt failure (corrupted/0-byte prior write) → existingUri is
+    // still set so we overwrite the bad file rather than accumulating a second one,
+    // but existingPayload remains null so we merge against the new summaries only.
     let existingPayload: AppleHealthStorjPayload | null = null;
     let existingUri: string | undefined;
 
@@ -214,18 +220,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         );
         existingUri = latest.uri;
 
-        const retrieved =
-          await storageService.retrieveHealthData<AppleHealthStorjPayload>(
-            latest.uri,
-            encryptionKey,
+        try {
+          const retrieved =
+            await storageService.retrieveHealthData<AppleHealthStorjPayload>(
+              latest.uri,
+              encryptionKey,
+            );
+          if (retrieved.data?.dailySummaries) {
+            existingPayload = retrieved.data;
+          }
+        } catch (retrieveErr) {
+          // Corrupted or 0-byte file — existingUri stays set so we overwrite it,
+          // but we proceed with newDailySummaries only (no merge with history).
+          console.warn(
+            "[apple-health/upload] Could not decrypt existing payload at",
+            existingUri,
+            "— will overwrite with new data:",
+            retrieveErr instanceof Error ? retrieveErr.message : retrieveErr,
           );
-        if (retrieved.data?.dailySummaries) {
-          existingPayload = retrieved.data;
         }
       }
     } catch (fetchErr) {
       console.warn(
-        "[apple-health/upload] Could not fetch existing payload, will create new:",
+        "[apple-health/upload] Could not list existing payloads, will create new:",
         fetchErr,
       );
     }
@@ -344,6 +361,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         result: {
           storjUri: storeResult.storjUri,
           contentHash,
+          size: storeResult.size,
         },
         scoresUri,
         manifest,

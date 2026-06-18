@@ -192,24 +192,33 @@ export function calculateAppleHealthCompleteness(
   startDate: Date,
   endDate: Date,
 ): DatasetCompleteness {
-  const presentSet = new Set(presentMetrics.map((m) => m.toLowerCase()));
+  // Strip "HKQuantityTypeIdentifier" / "HKCategoryTypeIdentifier" prefix so that
+  // both raw HealthKit keys ("HKQuantityTypeIdentifierHeartRate") and the normalized
+  // short-form keys stored in manifest.metricsPresent ("heartRate") match equally.
+  const stripHK = (m: string): string =>
+    m
+      .replace("HKQuantityTypeIdentifier", "")
+      .replace("HKCategoryTypeIdentifier", "")
+      .toLowerCase();
+
+  const presentSet = new Set(presentMetrics.map(stripHK));
 
   // Check core metrics
   const missingCore = APPLE_HEALTH_CORE_METRICS.filter(
-    (m) => !presentSet.has(m.toLowerCase()),
+    (m) => !presentSet.has(stripHK(m)),
   );
   const coreComplete = missingCore.length === 0;
 
   // Check recommended metrics
   const missingRecommended = APPLE_HEALTH_RECOMMENDED_METRICS.filter(
-    (m) => !presentSet.has(m.toLowerCase()),
+    (m) => !presentSet.has(stripHK(m)),
   );
 
   // Calculate category scores
   const categoryScores: Record<string, number> = {};
   for (const [category, metrics] of Object.entries(APPLE_HEALTH_METRICS)) {
     const categoryPresent = metrics.filter((m) =>
-      presentSet.has(m.toLowerCase()),
+      presentSet.has(stripHK(m)),
     ).length;
     categoryScores[category] = Math.round(
       (categoryPresent / metrics.length) * 100,
@@ -229,14 +238,10 @@ export function calculateAppleHealthCompleteness(
       APPLE_HEALTH_RECOMMENDED_METRICS.length) *
     30;
   const allMetrics = getAllAppleHealthMetrics();
+  const coreSet = new Set(APPLE_HEALTH_CORE_METRICS.map(stripHK));
+  const recommendedSet = new Set(APPLE_HEALTH_RECOMMENDED_METRICS.map(stripHK));
   const otherPresent = presentMetrics.filter(
-    (m) =>
-      !APPLE_HEALTH_CORE_METRICS.includes(
-        m as (typeof APPLE_HEALTH_CORE_METRICS)[number],
-      ) &&
-      !APPLE_HEALTH_RECOMMENDED_METRICS.includes(
-        m as (typeof APPLE_HEALTH_RECOMMENDED_METRICS)[number],
-      ),
+    (m) => !coreSet.has(stripHK(m)) && !recommendedSet.has(stripHK(m)),
   ).length;
   const otherTotal =
     allMetrics.length -

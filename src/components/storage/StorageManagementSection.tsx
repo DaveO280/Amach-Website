@@ -1082,13 +1082,7 @@ export function StorageManagementSection({
 
   const handleClearAppleHealthStorj = async (): Promise<void> => {
     if (!encryptionKey) return;
-    const targets = healthDataItems.filter(
-      (i) => i.dataType === "apple-health-full-export",
-    );
-    if (targets.length === 0) {
-      setClearHealthDataMessage("No apple-health-full-export items found.");
-      return;
-    }
+
     const confirmed = confirm(
       "This will permanently delete your Apple Health data from Storj. A fresh upload will be required.",
     );
@@ -1097,6 +1091,36 @@ export function StorageManagementSection({
     setClearHealthDataLoading(true);
     setClearHealthDataMessage("");
     try {
+      // Fetch fresh list directly from Storj — do NOT rely on healthDataItems state
+      // (which may be stale or unpopulated) and do NOT filter by metadata dataType
+      // (old files may have dataType:"unknown" in their metadata even though the
+      // object key already places them under the apple-health-full-export/ prefix).
+      const listResp = await fetch("/api/storj", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "storage/list",
+          userAddress,
+          encryptionKey,
+          dataType: "apple-health-full-export",
+        }),
+      });
+      const listPayload = (await listResp.json()) as {
+        success?: boolean;
+        result?: { uri: string }[];
+        error?: string;
+      };
+      if (!listResp.ok || listPayload?.success === false) {
+        throw new Error(listPayload?.error ?? "Failed to list Storj items");
+      }
+      const targets = listPayload.result ?? [];
+      if (targets.length === 0) {
+        setClearHealthDataMessage(
+          "No apple-health-full-export items found in Storj.",
+        );
+        return;
+      }
+
       for (const item of targets) {
         const resp = await fetch("/api/storj", {
           method: "POST",
@@ -1113,7 +1137,7 @@ export function StorageManagementSection({
           error?: string;
         };
         if (!resp.ok || payload?.success === false) {
-          throw new Error(payload?.error ?? "Failed to delete Storj item");
+          throw new Error(payload?.error ?? `Failed to delete ${item.uri}`);
         }
       }
 
@@ -1130,7 +1154,7 @@ export function StorageManagementSection({
         prev.filter((i) => i.dataType !== "apple-health-full-export"),
       );
       setClearHealthDataMessage(
-        `Cleared ${targets.length} apple-health-full-export item(s).`,
+        `Cleared ${targets.length} apple-health-full-export item(s) from Storj.`,
       );
     } catch (e) {
       setClearHealthDataMessage(

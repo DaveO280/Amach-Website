@@ -206,6 +206,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // but existingPayload remains null so we merge against the new summaries only.
     let existingPayload: AppleHealthStorjPayload | null = null;
     let existingUri: string | undefined;
+    let allExistingRefs: StorageReference[] = [];
 
     try {
       const refs: StorageReference[] = await storageService.listUserData(
@@ -213,6 +214,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         encryptionKey,
         "apple-health-full-export",
       );
+      allExistingRefs = refs;
 
       if (refs.length > 0) {
         const latest = refs.reduce((a, b) =>
@@ -310,6 +312,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.log(
       `[apple-health/upload] Stored Apple Health payload: ${storeResult.storjUri}`,
     );
+
+    // Prune any old apple-health-full-export files that aren't the one we just wrote.
+    // Each upload overwrites only the latest file — older files accumulate otherwise.
+    const staleRefs = allExistingRefs.filter(
+      (r) => r.uri !== storeResult.storjUri,
+    );
+    if (staleRefs.length > 0) {
+      console.log(
+        `[apple-health/upload] Pruning ${staleRefs.length} stale apple-health-full-export file(s)`,
+      );
+      await Promise.allSettled(
+        staleRefs.map((r) =>
+          storageService
+            .deleteHealthData(r.uri, walletAddress, encryptionKey)
+            .catch((err: unknown) =>
+              console.warn(
+                "[apple-health/upload] Could not prune stale file:",
+                r.uri,
+                err instanceof Error ? err.message : err,
+              ),
+            ),
+        ),
+      );
+    }
 
     // Score computation with a tight deadline.
     //

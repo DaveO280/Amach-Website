@@ -328,7 +328,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
             .cacheItem(address, {
               uri: result.storjUri,
               contentHash: result.contentHash ?? "",
-              size: 0,
+              size: result.size ?? 0,
               uploadedAt: Date.now(),
               dataType: "apple-health-full-export",
             })
@@ -361,7 +361,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
             .cacheItem(address, {
               uri: result.storjUri,
               contentHash: result.contentHash ?? "",
-              size: 0,
+              size: result.size ?? 0,
               uploadedAt: Date.now(),
               dataType: "apple-health-full-export",
             })

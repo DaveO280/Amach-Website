@@ -96,6 +96,8 @@ export interface AppleHealthStorjResult {
   success: boolean;
   storjUri?: string;
   contentHash?: string;
+  /** Encrypted payload size in bytes as reported by the upload route */
+  size?: number;
   manifest?: AppleHealthManifest;
   error?: string;
 }
@@ -173,6 +175,7 @@ export class AppleHealthStorjService {
         success: true,
         storjUri: apiResult.result.storjUri,
         contentHash: apiResult.result.contentHash,
+        size: apiResult.result.size as number | undefined,
         manifest: apiResult.manifest,
       };
     } catch (error) {

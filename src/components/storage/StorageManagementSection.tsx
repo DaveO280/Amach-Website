@@ -196,6 +196,10 @@ export function StorageManagementSection({
   const [attestLoading, setAttestLoading] = useState(false);
   const [attestStatus, setAttestStatus] = useState<string>("");
 
+  const [clearHealthDataLoading, setClearHealthDataLoading] = useState(false);
+  const [clearHealthDataMessage, setClearHealthDataMessage] =
+    useState<string>("");
+
   // Initialize encryption key - only once per address change
   useEffect(() => {
     if (!userAddress || encryptionKey || keyRequestAttemptedRef.current) return;
@@ -1076,6 +1080,67 @@ export function StorageManagementSection({
     }
   };
 
+  const handleClearAppleHealthStorj = async (): Promise<void> => {
+    if (!encryptionKey) return;
+    const targets = healthDataItems.filter(
+      (i) => i.dataType === "apple-health-full-export",
+    );
+    if (targets.length === 0) {
+      setClearHealthDataMessage("No apple-health-full-export items found.");
+      return;
+    }
+    const confirmed = confirm(
+      "This will permanently delete your Apple Health data from Storj. A fresh upload will be required.",
+    );
+    if (!confirmed) return;
+
+    setClearHealthDataLoading(true);
+    setClearHealthDataMessage("");
+    try {
+      for (const item of targets) {
+        const resp = await fetch("/api/storj", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "storage/delete",
+            userAddress,
+            encryptionKey,
+            storjUri: item.uri,
+          }),
+        });
+        const payload = (await resp.json()) as {
+          success?: boolean;
+          error?: string;
+        };
+        if (!resp.ok || payload?.success === false) {
+          throw new Error(payload?.error ?? "Failed to delete Storj item");
+        }
+      }
+
+      await storjItemsCache.initialize();
+      const cached = await storjItemsCache.getCachedItems(
+        userAddress,
+        "apple-health-full-export",
+      );
+      for (const c of cached) {
+        await storjItemsCache.removeItem(c.uri);
+      }
+
+      setHealthDataItems((prev) =>
+        prev.filter((i) => i.dataType !== "apple-health-full-export"),
+      );
+      setClearHealthDataMessage(
+        `Cleared ${targets.length} apple-health-full-export item(s).`,
+      );
+    } catch (e) {
+      setClearHealthDataMessage(
+        `Error: ${e instanceof Error ? e.message : "Unknown error"}`,
+      );
+    } finally {
+      setClearHealthDataLoading(false);
+    }
+  };
+
   /**
    * Create on-chain attestation for a stored report
    */
@@ -1870,15 +1935,37 @@ export function StorageManagementSection({
                 <div className="text-xs font-medium text-gray-700">
                   Health data ({healthDataItems.length})
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleRefreshHealthData}
-                  disabled={healthDataLoading}
-                >
-                  {healthDataLoading ? "Loading..." : "Refresh"}
-                </Button>
+                <div className="flex items-center gap-2">
+                  {process.env.NEXT_PUBLIC_DEV_SEED_ENABLED === "true" && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => void handleClearAppleHealthStorj()}
+                      disabled={clearHealthDataLoading || !encryptionKey}
+                    >
+                      {clearHealthDataLoading
+                        ? "Clearing..."
+                        : "Clear Storj Health Data"}
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleRefreshHealthData}
+                    disabled={healthDataLoading}
+                  >
+                    {healthDataLoading ? "Loading..." : "Refresh"}
+                  </Button>
+                </div>
               </div>
+              {clearHealthDataMessage && (
+                <div className="flex items-center gap-2 p-3 bg-[rgba(59,130,246,0.08)] border border-[rgba(59,130,246,0.25)] rounded-lg">
+                  <Info className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                  <p className="text-sm text-blue-900">
+                    {clearHealthDataMessage}
+                  </p>
+                </div>
+              )}
               {healthDataError && (
                 <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />

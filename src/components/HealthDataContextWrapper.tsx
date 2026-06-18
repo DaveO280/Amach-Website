@@ -10,7 +10,11 @@ import {
   HealthScore,
   UploadedFileSummary,
 } from "@/types/HealthContext";
-import { HealthDataByType, ProcessingState } from "@/types/healthData";
+import {
+  HealthDataByType,
+  HealthDataPoint,
+  ProcessingState,
+} from "@/types/healthData";
 import { calculateDailyHealthScores } from "@/utils/dailyHealthScoreCalculator";
 import { extractDatePart } from "@/utils/dataDeduplicator";
 import { processSleepData } from "@/utils/sleepDataProcessor";
@@ -192,11 +196,48 @@ export default function HealthDataContextWrapper({
   // exactly one data source for the numbers shown on screen.
   // Falls back to IndexedDB while Storj is still loading or for manual-import
   // users who have never synced via iOS.
+  //
+  // Dirty-data guard: old Storj uploads (before the per-source dedup fix) can
+  // contain doubled cumulative totals (Watch + iPhone both summed into daily
+  // summaries). We detect this by comparing the 7-day step average from Storj
+  // against IndexedDB. If Storj is >1.5x IDB the upload is pre-dedup and we
+  // fall back to IndexedDB until a clean upload runs (PR #88 + fresh import).
   const metricData = useMemo((): HealthDataByType => {
-    if (storjHealthData && Object.keys(storjHealthData).length > 0) {
-      return storjHealthData;
+    if (!storjHealthData || Object.keys(storjHealthData).length === 0) {
+      return indexedDbMetricData;
     }
-    return indexedDbMetricData;
+
+    if (Object.keys(indexedDbMetricData).length > 0) {
+      const STEP_KEY = "HKQuantityTypeIdentifierStepCount";
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+      const recentDailyAvg = (points: HealthDataPoint[]): number => {
+        const byDay: Record<string, number> = {};
+        for (const p of points) {
+          const t = new Date(p.startDate).getTime();
+          if (isNaN(t) || t < sevenDaysAgo) continue;
+          const day = p.startDate.substring(0, 10);
+          const v = parseFloat(p.value);
+          if (!isNaN(v) && v > 0) byDay[day] = (byDay[day] ?? 0) + v;
+        }
+        const vals = Object.values(byDay);
+        return vals.length > 0
+          ? vals.reduce((a, b) => a + b, 0) / vals.length
+          : 0;
+      };
+
+      const storjAvg = recentDailyAvg(storjHealthData[STEP_KEY] ?? []);
+      const idbAvg = recentDailyAvg(indexedDbMetricData[STEP_KEY] ?? []);
+
+      if (storjAvg > 0 && idbAvg > 0 && storjAvg > idbAvg * 1.5) {
+        console.warn(
+          `[HealthDataContext] Storj 7d step avg (${Math.round(storjAvg)}) is >1.5× IDB avg (${Math.round(idbAvg)}) — Storj data appears doubled (pre-dedup upload). Falling back to IndexedDB until a clean Storj upload runs.`,
+        );
+        return indexedDbMetricData;
+      }
+    }
+
+    return storjHealthData;
   }, [indexedDbMetricData, storjHealthData]);
 
   // Load long-range processed aggregates on startup (enables fast charts / tool-use without reprocessing raw data).

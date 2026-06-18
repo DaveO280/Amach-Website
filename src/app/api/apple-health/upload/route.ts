@@ -206,6 +206,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // but existingPayload remains null so we merge against the new summaries only.
     let existingPayload: AppleHealthStorjPayload | null = null;
     let existingUri: string | undefined;
+    let allExistingRefs: StorageReference[] = [];
 
     try {
       const refs: StorageReference[] = await storageService.listUserData(
@@ -213,30 +214,49 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         encryptionKey,
         "apple-health-full-export",
       );
+      allExistingRefs = refs;
 
       if (refs.length > 0) {
-        const latest = refs.reduce((a, b) =>
-          (a.uploadedAt ?? 0) > (b.uploadedAt ?? 0) ? a : b,
+        // Sort newest-first so we try the most recent healthy file first.
+        // With accumulated files, the absolute-newest may be 0-byte / corrupted
+        // (pre-fix uploads). Iterating gives us the best chance of finding a
+        // valid payload to merge against, while still setting existingUri to
+        // whichever file we'll overwrite.
+        const sorted = [...refs].sort(
+          (a, b) => (b.uploadedAt ?? 0) - (a.uploadedAt ?? 0),
         );
-        existingUri = latest.uri;
 
-        try {
-          const retrieved =
-            await storageService.retrieveHealthData<AppleHealthStorjPayload>(
-              latest.uri,
-              encryptionKey,
+        // Default existingUri to the newest file (will be overwritten regardless).
+        existingUri = sorted[0].uri;
+
+        for (const ref of sorted) {
+          try {
+            const retrieved =
+              await storageService.retrieveHealthData<AppleHealthStorjPayload>(
+                ref.uri,
+                encryptionKey,
+              );
+            if (retrieved.data?.dailySummaries) {
+              existingPayload = retrieved.data;
+              existingUri = ref.uri; // overwrite the healthy file
+              console.log(
+                `[apple-health/upload] Using existing payload from ${ref.uri} (tried ${sorted.indexOf(ref) + 1}/${sorted.length})`,
+              );
+              break;
+            }
+          } catch (retrieveErr) {
+            console.warn(
+              "[apple-health/upload] Could not decrypt",
+              ref.uri,
+              "— trying next:",
+              retrieveErr instanceof Error ? retrieveErr.message : retrieveErr,
             );
-          if (retrieved.data?.dailySummaries) {
-            existingPayload = retrieved.data;
           }
-        } catch (retrieveErr) {
-          // Corrupted or 0-byte file — existingUri stays set so we overwrite it,
-          // but we proceed with newDailySummaries only (no merge with history).
+        }
+
+        if (!existingPayload) {
           console.warn(
-            "[apple-health/upload] Could not decrypt existing payload at",
-            existingUri,
-            "— will overwrite with new data:",
-            retrieveErr instanceof Error ? retrieveErr.message : retrieveErr,
+            `[apple-health/upload] All ${sorted.length} existing ref(s) failed to decrypt — uploading new data only`,
           );
         }
       }
@@ -310,6 +330,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.log(
       `[apple-health/upload] Stored Apple Health payload: ${storeResult.storjUri}`,
     );
+
+    // Prune any old apple-health-full-export files that aren't the one we just wrote.
+    // Each upload overwrites only the latest file — older files accumulate otherwise.
+    const staleRefs = allExistingRefs.filter(
+      (r) => r.uri !== storeResult.storjUri,
+    );
+    if (staleRefs.length > 0) {
+      console.log(
+        `[apple-health/upload] Pruning ${staleRefs.length} stale apple-health-full-export file(s)`,
+      );
+      await Promise.allSettled(
+        staleRefs.map((r) =>
+          storageService
+            .deleteHealthData(r.uri, walletAddress, encryptionKey)
+            .catch((err: unknown) =>
+              console.warn(
+                "[apple-health/upload] Could not prune stale file:",
+                r.uri,
+                err instanceof Error ? err.message : err,
+              ),
+            ),
+        ),
+      );
+    }
 
     // Score computation with a tight deadline.
     //

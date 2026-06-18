@@ -247,9 +247,17 @@ export function calculateAppleHealthCompleteness(
     allMetrics.length -
     APPLE_HEALTH_CORE_METRICS.length -
     APPLE_HEALTH_RECOMMENDED_METRICS.length;
-  const otherScore = (otherPresent / Math.max(otherTotal, 1)) * 20;
+  // Cap otherScore at its full weight (20) so a full XML export with more
+  // metrics than the reference set doesn't push the total above 100%.
+  const otherScore = Math.min(
+    (otherPresent / Math.max(otherTotal, 1)) * 20,
+    20,
+  );
 
-  const score = Math.round(coreScore + recommendedScore + otherScore);
+  const score = Math.min(
+    Math.round(coreScore + recommendedScore + otherScore),
+    100,
+  );
 
   // Calculate days covered
   const daysCovered = Math.ceil(

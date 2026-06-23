@@ -446,34 +446,43 @@ export default function HealthDataContextWrapper({
       metricData["HKQuantityTypeIdentifierActiveEnergyBurned"] || [],
     );
 
+    // Days with value=0 for cumulative metrics (steps, exercise) represent days
+    // with no recorded device activity — Apple Watch simply omits records for
+    // unworn days, so a 0 in the dataset signals missing data, not genuine rest.
+    // Including them inflates the denominator and depresses the displayed average.
+    // metric.average and metric.low must NEVER include these zero-wear days;
+    // metric.high still uses all days so the all-time peak is correct.
+    const stepsActive = steps.filter((d) => (d.value ?? 0) > 0);
+    const exerciseActive = exercise.filter((d) => (d.value ?? 0) > 0);
+
     // Calculate metrics from processed data
     const metrics = {
       steps: {
         average:
-          steps.length > 0
+          stepsActive.length > 0
             ? Math.round(
-                steps.reduce((sum, day) => sum + (day.value ?? 0), 0) /
-                  steps.length,
+                stepsActive.reduce((sum, day) => sum + (day.value ?? 0), 0) /
+                  stepsActive.length,
               )
             : 0,
         high: Math.max(...steps.map((day) => day.value ?? 0), 0),
         low:
-          steps.length > 0
-            ? Math.min(...steps.map((day) => day.value ?? 0))
+          stepsActive.length > 0
+            ? Math.min(...stepsActive.map((day) => day.value ?? 0))
             : 0,
       },
       exercise: {
         average:
-          exercise.length > 0
+          exerciseActive.length > 0
             ? Math.round(
-                exercise.reduce((sum, day) => sum + (day.value ?? 0), 0) /
-                  exercise.length,
+                exerciseActive.reduce((sum, day) => sum + (day.value ?? 0), 0) /
+                  exerciseActive.length,
               )
             : 0,
         high: Math.max(...exercise.map((day) => day.value ?? 0), 0),
         low:
-          exercise.length > 0
-            ? Math.min(...exercise.map((day) => day.value ?? 0))
+          exerciseActive.length > 0
+            ? Math.min(...exerciseActive.map((day) => day.value ?? 0))
             : 0,
       },
       heartRate: {

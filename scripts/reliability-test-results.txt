@@ -1,0 +1,186 @@
+
+🧪 LLM Parser Reliability Test
+   Runs per report type: 5
+   Concurrency: 1
+   Numeric tolerance: ±0.5
+   Venice model: zai-org-glm-4.7 (default)
+   Date: 2026-06-15T21:04:07.918Z
+
+📄 Extracting gut health PDF text...
+   ✓ Extracted 72,563 chars from 66 pages
+
+🔬 Running gut health extractor 5× (with vision pass) ...
+
+   Schema compliance: 5/5 runs returned non-null result
+
+══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  GUT HEALTH — tiny_health_report_GCF795 (1).pdf
+══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Field                                     | Consistent  | Null rate   | Notes
+──────────────────────────────────────────+────────────+────────────+──────────────────────────────
+summary.microbiome_score                  | ✓ 5/5       | 0%          | 61
+summary.gut_type                          | ✓ 5/5       | 0%          | Lachnospiraceae
+summary.beneficial_pct                    | ✓ 0/5       | 100%        | all null
+summary.variable_pct                      | ✓ 0/5       | 100%        | all null
+summary.unfriendly_pct                    | ✓ 0/5       | 100%        | all null
+summary.unknown_pct                       | ✓ 0/5       | 100%        | all null
+cs.beneficial_microbes                    | ✓ 5/5       | 0%          | needs_support
+cs.disruptive_microbes                    | ✓ 5/5       | 0%          | needs_support
+cs.gut_barrier_inflammation               | ✓ 5/5       | 0%          | needs_support
+cs.short_chain_fatty_acids                | ✓ 5/5       | 0%          | okay
+cs.digestive_capacity                     | ✓ 5/5       | 0%          | improving
+cs.diversity_resilience                   | ✓ 5/5       | 0%          | needs_support
+cs.microbial_enzymes_metabolites          | ✓ 5/5       | 0%          | improving
+bm.bifidobacterium                        | ✓ 5/5       | 0%          | 0.081
+bm.akkermansia                            | ✓ 5/5       | 0%          | 0.005
+bm.faecalibacterium                       | ✓ 5/5       | 0%          | minor float drift ±0.014
+bm.lactobacillaceae                       | ✓ 5/5       | 0%          | 0.074
+dm.enterobacteriaceae                     | ✓ 5/5       | 0%          | 8.014
+dm.h_pylori                               | ✓ 0/5       | 100%        | all null
+dm.candida                                | ✓ 0/5       | 100%        | all null
+dm.antibiotic_resistance_abundance_idx    | ✓ 5/5       | 0%          | 0.18
+dm.methane_production_capacity            | ✓ 4/5       | 20%         | 0.44
+gb.hexa_lps_index                         | ✓ 5/5       | 0%          | 97
+gb.mucus_degradation_index                | ✓ 5/5       | 0%          | 66
+gb.hydrogen_sulfide_index                 | ✗ 5/5       | 0%          | range 94.000–94.800 (Δ0.800)
+gb.host_dna                               | ✓ 5/5       | 0%          | 0.824
+sc.butyrate                               | ✓ 5/5       | 0%          | 37.6
+sc.propionate                             | ✓ 5/5       | 0%          | 34.4
+sc.acetate                                | ✓ 5/5       | 0%          | 36.1
+dc.cellulose                              | ✓ 5/5       | 0%          | 38.7
+dc.resistant_starch                       | ✓ 5/5       | 0%          | 45.2
+dc.butyrate_producers                     | ✓ 0/5       | 100%        | all null
+dc.vitamin_b12                            | ✓ 0/5       | 100%        | all null
+dr.shannon_diversity                      | ✓ 5/5       | 0%          | minor float drift ±0.150
+dr.species_richness                       | ✓ 5/5       | 0%          | 235
+dr.microbiome_age                         | ✓ 5/5       | 0%          | 55
+dr.gut_resilience_score                   | ✓ 5/5       | 0%          | minor float drift ±0.055
+dr.bacteroidota                           | ✓ 5/5       | 0%          | 27.418
+dr.firmicutes                             | ✓ 5/5       | 0%          | 61.204
+dr.proteobacteria                         | ✓ 5/5       | 0%          | 9.077
+dr.firmicutes_bacteroidota_ratio          | ✓ 5/5       | 0%          | 2.2
+dr.bacteroides                            | ✓ 5/5       | 0%          | 7.898
+dr.prevotella                             | ✓ 5/5       | 0%          | 0.032
+em.histamine_index                        | ✗ 5/5       | 0%          | range 53.000–70.000 (Δ17.000)
+em.beta_glucuronidase                     | ✗ 5/5       | 0%          | range 44.900–99.000 (Δ54.100)
+em.gaba_production                        | ✗ 5/5       | 0%          | range 37.000–94.000 (Δ57.000)
+em.secondary_bile_acids                   | ✗ 5/5       | 0%          | range 8.800–15.000 (Δ6.200)
+species.count                             | ✗ 5/5       | 0%          | range 29.000–60.000 (Δ31.000)
+recommendations.count                     | ✗ 5/5       | 0%          | range 23.000–24.000 (Δ1.000)
+confidence                                | ✓ 5/5       | 0%          | 0.835
+──────────────────────────────────────────+────────────+────────────+──────────────────────────────
+
+📊 Coverage: 42/50 fields populated (84%)
+📊 Consistency: 35/42 populated fields consistent (83%)
+
+
+📄 Extracting DEXA PDF text...
+   ✓ Extracted 12,062 chars from 9 pages
+
+🔬 Running DEXA extractor 5× ...
+
+   Schema compliance: 5/5 runs returned non-null result
+
+══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  DEXA — DXA O'Gara, David.pdf
+══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Field                                     | Consistent  | Null rate   | Notes
+──────────────────────────────────────────+────────────+────────────+──────────────────────────────
+scanDate                                  | ✓ 5/5       | 0%          | 02/12/2025
+totalBodyFatPercent                       | ✓ 5/5       | 0%          | 23.4
+totalLeanMassKg                           | ✓ 5/5       | 0%          | 53.750652
+visceralFatRating                         | ✓ 5/5       | 0%          | 2
+visceralFatAreaCm2                        | ✓ 5/5       | 0%          | 12.904
+visceralFatVolumeCm3                      | ✓ 5/5       | 0%          | 543.8845299999999
+androidGynoidRatio                        | ✓ 5/5       | 0%          | 1.02
+bmd.total                                 | ✓ 5/5       | 0%          | 1.5
+bmd.tScore                                | ✓ 5/5       | 0%          | 3
+bmd.zScore                                | ✓ 5/5       | 0%          | 3.2
+regions.count                             | ✓ 5/5       | 0%          | 6
+arms.bodyFatPct                           | ✓ 5/5       | 0%          | 20.930232558139537
+arms.leanMassKg                           | ✓ 5/5       | 0%          | 7.711064
+legs.bodyFatPct                           | ✓ 5/5       | 0%          | 23.903508771929825
+legs.leanMassKg                           | ✓ 5/5       | 0%          | 15.739642400000001
+trunk.bodyFatPct                          | ✓ 5/5       | 0%          | 24.155844155844157
+total.bodyFatPct                          | ✓ 5/5       | 0%          | 23.4
+total.boneDensityGPerCm2                  | ✓ 5/5       | 0%          | 1.5
+total.tScore                              | ✓ 5/5       | 0%          | 3
+confidence                                | ✓ 5/5       | 0%          | 1
+──────────────────────────────────────────+────────────+────────────+──────────────────────────────
+
+📊 Coverage: 20/20 fields populated (100%)
+📊 Consistency: 20/20 populated fields consistent (100%)
+
+
+📄 Loading bloodwork text fixture...
+   ✓ Loaded 7,089 chars
+
+🔬 Running bloodwork extractor 5× ...
+
+   Schema compliance: 5/5 runs returned non-null result
+
+══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  BLOODWORK — sample_bloodwork.txt
+══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+Field                                     | Consistent  | Null rate   | Notes
+──────────────────────────────────────────+────────────+────────────+──────────────────────────────
+reportDate                                | ✓ 5/5       | 0%          | 04/19/2025
+laboratory                                | ✓ 5/5       | 0%          | QUEST DIAGNOSTICS
+metricCount                               | ✓ 5/5       | 0%          | 65
+confidence                                | ✓ 5/5       | 0%          | 1
+cbc.wbc                                   | ✓ 5/5       | 0%          | 6.1
+cbc.rbc                                   | ✓ 5/5       | 0%          | 4.92
+cbc.hemoglobin                            | ✓ 5/5       | 0%          | 14.8
+cbc.hematocrit                            | ✓ 5/5       | 0%          | 44.1
+cbc.platelets                             | ✓ 5/5       | 0%          | 218
+cbc.mcv                                   | ✓ 5/5       | 0%          | 89.6
+cbc.neutrophils_pct                       | ✓ 5/5       | 0%          | 58.4
+cbc.lymphocytes_pct                       | ✓ 5/5       | 0%          | 31.2
+met.glucose                               | ✓ 5/5       | 0%          | 94
+met.creatinine                            | ✓ 5/5       | 0%          | 1.02
+met.egfr                                  | ✓ 5/5       | 0%          | 91
+met.sodium                                | ✓ 5/5       | 0%          | 140
+met.potassium                             | ✓ 5/5       | 0%          | 4.2
+met.alt                                   | ✓ 5/5       | 0%          | 22
+met.ast                                   | ✓ 5/5       | 0%          | 24
+met.alk_phos                              | ✓ 5/5       | 0%          | 68
+lipid.total_chol                          | ✓ 5/5       | 0%          | 187
+lipid.hdl                                 | ✓ 5/5       | 0%          | 58
+lipid.ldl                                 | ✓ 5/5       | 0%          | 112
+lipid.triglycerides                       | ✓ 5/5       | 0%          | 84
+lipid.ldl_flag                            | ✓ 5/5       | 0%          | high
+hba1c                                     | ✓ 5/5       | 0%          | 5.3
+thyroid.tsh                               | ✓ 5/5       | 0%          | 1.84
+thyroid.free_t4                           | ✓ 5/5       | 0%          | 1.12
+vit.d                                     | ✓ 5/5       | 0%          | 38
+vit.b12                                   | ✓ 5/5       | 0%          | 512
+vit.ferritin                              | ✓ 5/5       | 0%          | 87
+vit.magnesium                             | ✓ 5/5       | 0%          | 2.1
+inflam.hscrp                              | ✓ 5/5       | 0%          | 0.6
+inflam.homocysteine                       | ✓ 5/5       | 0%          | 9.2
+hormone.testosterone_total                | ✓ 5/5       | 0%          | 612
+hormone.testosterone_free                 | ✓ 5/5       | 0%          | 14.8
+hormone.dheas                             | ✓ 5/5       | 0%          | 248
+hormone.cortisol                          | ✓ 5/5       | 0%          | 16.4
+hormone.igf1                              | ✓ 5/5       | 0%          | 172
+uric_acid                                 | ✓ 5/5       | 0%          | 5.6
+──────────────────────────────────────────+────────────+────────────+──────────────────────────────
+
+📊 Coverage: 40/40 fields populated (100%)
+📊 Consistency: 40/40 populated fields consistent (100%)
+
+
+⏱  Total time: 11.3 min
+
+📋 FINAL VERDICT
+────────────────────────────────────────────────────────────
+⚠️  Gut health: 7 inconsistent field(s):
+     gb.hydrogen_sulfide_index: range 94.000–94.800 (Δ0.800)
+     em.histamine_index: range 53.000–70.000 (Δ17.000)
+     em.beta_glucuronidase: range 44.900–99.000 (Δ54.100)
+     em.gaba_production: range 37.000–94.000 (Δ57.000)
+     em.secondary_bile_acids: range 8.800–15.000 (Δ6.200)
+     species.count: range 29.000–60.000 (Δ31.000)
+     recommendations.count: range 23.000–24.000 (Δ1.000)
+✅ DEXA: STABLE — all fields consistent, no null results
+✅ Bloodwork: STABLE — all fields consistent, no null results

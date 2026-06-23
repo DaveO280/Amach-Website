@@ -16,6 +16,9 @@ const nextConfig = {
     "thread-stream",
     // AWS SDK must be external to prevent webpack from breaking credential signing
     "@aws-sdk/client-s3",
+    // pdfjs-dist server-side: keep as external so Next.js doesn't bundle the
+    // legacy build (which contains dynamic require() calls that confuse webpack)
+    "pdfjs-dist",
   ],
   // Empty turbopack config to silence Next.js 16 warning
   // We're using webpack via --webpack flag, but need this to prevent the error

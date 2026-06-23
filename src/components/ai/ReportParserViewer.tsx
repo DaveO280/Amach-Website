@@ -8,8 +8,9 @@ import {
 } from "@/storage/AttestationService";
 import type {
   BloodworkReportData,
-  DexaReportData,
+  GutHealthReportData,
   MedicalRecordData,
+  ParsedHealthReport,
   ParsedReportSummary,
 } from "@/types/reportData";
 import { formatReportsForAI } from "@/utils/reportFormatters";
@@ -119,7 +120,7 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
   const recordReportUploadOnChain = async (params: {
     storjUri: string;
     contentHash: string;
-    reportType: "dexa" | "bloodwork" | "medical-record";
+    reportType: "dexa" | "bloodwork" | "medical-record" | "gut-health";
   }): Promise<{
     created: boolean;
     eventId: number | null;
@@ -205,7 +206,7 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
 
   const verifyDecryptFromStorj = async (params: {
     storjUri: string;
-    reportType: "dexa" | "bloodwork" | "medical-record";
+    reportType: "dexa" | "bloodwork" | "medical-record" | "gut-health";
     encryptionKey: unknown;
   }): Promise<boolean> => {
     if (!address) return false;
@@ -230,7 +231,7 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
    * Create on-chain attestation for a stored report
    */
   const createReportAttestation = async (params: {
-    report: DexaReportData | BloodworkReportData | MedicalRecordData;
+    report: ParsedHealthReport;
     contentHash: string;
   }): Promise<{ success: boolean; tier?: string; error?: string }> => {
     if (!address) return { success: false, error: "No wallet connected" };
@@ -524,11 +525,16 @@ export const ReportParserViewer: React.FC<ReportParserViewerProps> = ({
                   ? "DEXA"
                   : report.report.type === "bloodwork"
                     ? "Bloodwork"
-                    : "Medical Record";
+                    : report.report.type === "gut-health"
+                      ? "Gut Health"
+                      : "Medical Record";
               const reportDate =
                 report.report.type === "dexa"
                   ? report.report.scanDate
-                  : report.report.reportDate;
+                  : report.report.type === "gut-health"
+                    ? report.report.collection_date
+                    : (report.report as BloodworkReportData | MedicalRecordData)
+                        .reportDate;
               const isSelected = selectedReportIndex === index;
 
               const isSaved = report.storjUri !== undefined;
@@ -1125,9 +1131,64 @@ const StructuredView: React.FC<{ report: ParsedReportSummary }> = ({
         )}
       </div>
     );
+  } else if (report.report.type === "gut-health") {
+    const gut = report.report as GutHealthReportData;
+    return (
+      <div className="space-y-4">
+        <div className="bg-teal-50 p-4 rounded-lg border border-teal-200">
+          <h4 className="font-semibold text-teal-900 mb-2">
+            Gut Microbiome Report
+          </h4>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {gut.summary.microbiome_score !== undefined && (
+              <div>
+                <span className="font-medium text-gray-700">
+                  Microbiome Score:
+                </span>{" "}
+                <span className="text-gray-900">
+                  {gut.summary.microbiome_score}/100
+                </span>
+              </div>
+            )}
+            {gut.summary.gut_type && (
+              <div>
+                <span className="font-medium text-gray-700">Gut Type:</span>{" "}
+                <span className="text-gray-900">{gut.summary.gut_type}</span>
+              </div>
+            )}
+            {gut.collection_date && (
+              <div>
+                <span className="font-medium text-gray-700">Collected:</span>{" "}
+                <span className="text-gray-900">{gut.collection_date}</span>
+              </div>
+            )}
+            {gut.provider && (
+              <div>
+                <span className="font-medium text-gray-700">Provider:</span>{" "}
+                <span className="text-gray-900">{gut.provider}</span>
+              </div>
+            )}
+            <div>
+              <span className="font-medium text-gray-700">Confidence:</span>{" "}
+              <span className="text-gray-900">
+                {Math.round(gut.confidence * 100)}%
+              </span>
+            </div>
+            {gut.species.length > 0 && (
+              <div>
+                <span className="font-medium text-gray-700">
+                  Species detected:
+                </span>{" "}
+                <span className="text-gray-900">{gut.species.length}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   } else {
     // Medical Record
-    const record = report.report;
+    const record = report.report as MedicalRecordData;
     return (
       <div className="space-y-4">
         <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">

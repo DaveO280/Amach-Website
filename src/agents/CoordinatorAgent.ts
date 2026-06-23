@@ -14,6 +14,7 @@ import { BaseHealthAgent } from "./BaseHealthAgent";
 import { BloodworkAgent } from "./BloodworkAgent";
 import { CardiovascularAgent } from "./CardiovascularAgent";
 import { DexaAgent } from "./DexaAgent";
+import { GutHealthAgent } from "./GutHealthAgent";
 import { RecoveryStressAgent } from "./RecoveryStressAgent";
 import { SleepAgent } from "./SleepAgent";
 import type {
@@ -51,6 +52,8 @@ const DEFAULT_AGENT_QUERIES: Record<string, string> = {
   dexa: "Interpret DEXA scan data for body composition, visceral fat, and bone density insights.",
   bloodwork:
     "Summarize notable laboratory findings, prioritizing abnormal biomarkers and panel-level themes.",
+  gut_health:
+    "Interpret the gut microbiome report — inflammation markers, pathogenic and beneficial bacteria, SCFA production, digestive capacity, and diversity — prioritizing flagged findings.",
 };
 
 const SUMMARY_SYSTEM_PROMPT = `You are Luma's integrative health analyst. Synthesize specialist agent findings into a cohesive analysis.
@@ -68,6 +71,7 @@ Guidelines:
 - Reference actual numbers. Use profile (age/BMI/sex) for context.
 - Bloodwork: one bullet per panel with flagged markers + context (only if data is available).
 - DEXA: integrate total fat %, visceral fat, bone density, regional highlights (only if data is available).
+- Gut health: highlight microbiome score, flagged inflammation/pathogen findings, and standout beneficial findings (only if data is available).
 - If metadata flags show guidelines met, focus on refinement not increases.
 - Priority actions: show cross-system benefits (e.g., "flatten sleep swings to stabilize HRV").
 - Use conversationHistory to infer user focus.
@@ -85,6 +89,7 @@ export class CoordinatorAgent {
       new RecoveryStressAgent(veniceService),
       new DexaAgent(veniceService),
       new BloodworkAgent(veniceService),
+      new GutHealthAgent(veniceService),
     ];
   }
 
@@ -378,6 +383,7 @@ export class CoordinatorAgent {
               !lower.includes("missing") &&
               !lower.includes("no dexa") &&
               !lower.includes("no bloodwork") &&
+              !lower.includes("no gut") &&
               !lower.includes("no structured") &&
               !lower.includes("not available") &&
               !lower.includes("unavailable")
@@ -454,9 +460,11 @@ export class CoordinatorAgent {
             return (
               !lower.includes("missing dexa") &&
               !lower.includes("missing bloodwork") &&
+              !lower.includes("missing gut") &&
               !lower.includes("missing structured") &&
               !lower.includes("no dexa") &&
               !lower.includes("no bloodwork") &&
+              !lower.includes("no gut") &&
               !lower.includes("not available") &&
               !lower.includes("unavailable") &&
               !lower.includes("data logging inconsistencies") &&
@@ -505,6 +513,7 @@ export class CoordinatorAgent {
     const recoveryMeta = agentInsights.recovery_stress?.metadata ?? {};
     const dexaMeta = agentInsights.dexa?.metadata ?? {};
     const bloodworkMeta = agentInsights.bloodwork?.metadata ?? {};
+    const gutHealthMeta = agentInsights.gut_health?.metadata ?? {};
 
     const crossSignals: Record<string, unknown> = {};
 
@@ -569,6 +578,16 @@ export class CoordinatorAgent {
       crossSignals.boneDensityLabContext = {
         tScore: dexaMeta.dexaBoneDensityTScore,
         flaggedLabs: bloodworkMeta.bloodworkFlaggedMetrics,
+      };
+    }
+
+    if (
+      typeof gutHealthMeta.gutInflammationFlag === "boolean" &&
+      typeof bloodworkMeta.bloodworkFlaggedMetrics === "number"
+    ) {
+      crossSignals.gutBloodworkInflammation = {
+        gutInflammationFlag: gutHealthMeta.gutInflammationFlag,
+        bloodworkFlaggedMetrics: bloodworkMeta.bloodworkFlaggedMetrics,
       };
     }
 

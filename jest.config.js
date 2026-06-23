@@ -7,6 +7,7 @@ module.exports = {
     "^@/(.*)$": "<rootDir>/src/$1",
   },
   testMatch: ["**/__tests__/**/*.test.ts"],
+  testPathIgnorePatterns: ["/node_modules/", "/.claude/", "/src 2/"],
   transform: {
     "^.+\\.tsx?$": "ts-jest",
   },
@@ -26,6 +27,7 @@ module.exports = {
         "!**/utils/reportParsers/__tests__/**",
         "!**/data/parsers/__tests__/**",
       ],
+      testPathIgnorePatterns: ["/node_modules/", "/.claude/", "/src 2/"],
       moduleNameMapper: {
         "^@/(.*)$": "<rootDir>/src/$1",
       },
@@ -41,6 +43,7 @@ module.exports = {
         "**/utils/reportParsers/__tests__/**/*.test.ts",
         "**/data/parsers/__tests__/**/*.test.ts",
       ],
+      testPathIgnorePatterns: ["/node_modules/", "/.claude/", "/src 2/"],
       moduleNameMapper: {
         "^@/(.*)$": "<rootDir>/src/$1",
       },
@@ -53,6 +56,7 @@ module.exports = {
       preset: "ts-jest",
       testEnvironment: "node", // Use node for storage tests
       testMatch: ["**/storage/__tests__/**/*.test.ts"],
+      testPathIgnorePatterns: ["/node_modules/", "/.claude/", "/src 2/"],
       moduleNameMapper: {
         "^@/(.*)$": "<rootDir>/src/$1",
       },

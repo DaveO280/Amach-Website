@@ -1,9 +1,12 @@
 "use client";
 
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
+import { useStorjHealthScores } from "@/data/hooks/useStorjHealthScores";
+import { useWalletService } from "@/hooks/useWalletService";
 import type { HealthScore } from "@/types/HealthContext";
 import {
-  getScoreTrends,
+  calculateDailyHealthScoresFromByType,
+  calculateScoreTrends,
   type ScoreTrends,
 } from "@/utils/dailyHealthScoreCalculator";
 import {
@@ -17,44 +20,66 @@ import {
   TrendingUp,
   Zap,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const cardClass =
   "rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)]";
 
 export function HealthScoreCards(): JSX.Element {
-  const { healthScores } = useHealthDataContext();
-  const [scoreTrends, setScoreTrends] = useState<ScoreTrends | null>(null);
-  const [loadingTrends, setLoadingTrends] = useState(false);
+  const { healthScores, metricData } = useHealthDataContext();
+  const { isConnected, address } = useWalletService();
+  const {
+    dailyScores,
+    scoreTrends,
+    isLoading: loadingTrends,
+  } = useStorjHealthScores(isConnected ? (address ?? undefined) : undefined);
 
-  const healthScoresObj = healthScores?.reduce(
-    (acc: Record<string, number>, s: HealthScore) => {
-      acc[s.type] = s.value;
-      return acc;
-    },
-    {} as Record<string, number>,
-  );
+  const clientSideTrends = useMemo(() => {
+    if (scoreTrends || loadingTrends || Object.keys(metricData).length === 0) {
+      return null;
+    }
+    const daily = calculateDailyHealthScoresFromByType(metricData);
+    return daily.length > 0 ? calculateScoreTrends(daily) : null;
+  }, [scoreTrends, loadingTrends, metricData]);
+
+  const effectiveTrends = scoreTrends ?? clientSideTrends;
+
+  // Derive current health scores from Storj daily scores when available,
+  // falling back to context scores (computed client-side from Storj metricData).
+  const storjHealthScoresObj =
+    dailyScores.length > 0
+      ? (() => {
+          const metrics = ["overall", "activity", "sleep", "heart", "energy"];
+          const obj: Record<string, number> = {};
+          for (const metric of metrics) {
+            const values = dailyScores
+              .map((d) => d.scores.find((s) => s.type === metric)?.value)
+              .filter(
+                (v): v is number => typeof v === "number" && !isNaN(v) && v > 0,
+              );
+            obj[metric] =
+              values.length > 0
+                ? Math.round(values.reduce((a, b) => a + b, 0) / values.length)
+                : 0;
+          }
+          return obj;
+        })()
+      : null;
+
+  const healthScoresObj =
+    storjHealthScoresObj ??
+    healthScores?.reduce(
+      (acc: Record<string, number>, s: HealthScore) => {
+        acc[s.type] = s.value;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
   const [showTooltip, setShowTooltip] = useState(false);
   const hoverTimeout = useRef<NodeJS.Timeout>();
   const tooltipRef = useRef<HTMLDivElement>(null);
-
-  // Fetch trend data when component mounts
-  useEffect(() => {
-    const fetchTrends = async (): Promise<void> => {
-      setLoadingTrends(true);
-      try {
-        const trends = await getScoreTrends();
-        setScoreTrends(trends);
-      } catch (error) {
-        console.error("Failed to fetch score trends:", error);
-      } finally {
-        setLoadingTrends(false);
-      }
-    };
-
-    fetchTrends();
-  }, []);
 
   const getScoreIcon = (scoreType: string): JSX.Element => {
     switch (scoreType) {
@@ -130,7 +155,7 @@ export function HealthScoreCards(): JSX.Element {
   }: {
     scoreType: string;
   }): JSX.Element | null => {
-    if (!scoreTrends || loadingTrends) {
+    if (!effectiveTrends || loadingTrends) {
       return (
         <div className="text-xs text-[#6B8C7A] mt-2">
           {loadingTrends ? "Loading trends..." : "No trend data"}
@@ -138,7 +163,7 @@ export function HealthScoreCards(): JSX.Element {
       );
     }
 
-    const trends = scoreTrends[scoreType as keyof ScoreTrends];
+    const trends = effectiveTrends[scoreType as keyof ScoreTrends];
     if (!trends) return null;
 
     const getTrendIcon = (trend: number): JSX.Element => {

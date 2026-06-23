@@ -164,7 +164,9 @@ export async function parsePDF(file: File): Promise<PDFParseResult> {
                 ),
             });
 
-            // Combine text items from the page
+            // Combine text items from the page.
+            // pdfjs-dist includes space items in the stream, so joining with ""
+            // preserves the natural spacing without adding extra gaps.
             const pageText = textContent.items
               .map((item: { str?: string; [key: string]: unknown }) => {
                 if ("str" in item) {
@@ -172,7 +174,7 @@ export async function parsePDF(file: File): Promise<PDFParseResult> {
                 }
                 return "";
               })
-              .join(" ");
+              .join("");
 
             fullText += `Page ${pageNum}:\n${pageText}\n\n`;
           } catch (pageError) {

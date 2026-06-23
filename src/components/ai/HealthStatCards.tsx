@@ -10,7 +10,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { isCumulativeMetric } from "@/storage/appleHealth/metricAggregationStrategies";
 import type { HealthDataByType } from "@/types/healthData";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 
 type MetricKey =
   | "steps"
@@ -98,6 +98,7 @@ interface WindowedAverages {
   last30: number;
   last90: number;
   last180: number;
+  last730: number;
 }
 
 function useMetricWindows(
@@ -122,10 +123,36 @@ function useMetricWindows(
           last30: windowedAvg(metricData, k, 30),
           last90: windowedAvg(metricData, k, 90),
           last180: windowedAvg(metricData, k, 180),
+          last730: windowedAvg(metricData, k, 730),
         },
       ]),
     ) as Record<MetricKey, WindowedAverages>;
   }, [metricData]);
+}
+
+const WINDOW_OPTIONS = [
+  { days: 7, label: "7d" },
+  { days: 30, label: "30d" },
+  { days: 90, label: "90d" },
+  { days: 180, label: "180d" },
+  { days: 730, label: "2yr" },
+] as const;
+
+type WindowDays = (typeof WINDOW_OPTIONS)[number]["days"];
+
+function getWindowValue(windows: WindowedAverages, days: WindowDays): number {
+  switch (days) {
+    case 7:
+      return windows.last7;
+    case 30:
+      return windows.last30;
+    case 90:
+      return windows.last90;
+    case 180:
+      return windows.last180;
+    case 730:
+      return windows.last730;
+  }
 }
 
 interface StatCardProps {
@@ -154,6 +181,7 @@ const StatCard: React.FC<StatCardProps> = ({
   windows,
 }): JSX.Element => {
   const isSleep = title === getMetricLabel("sleep");
+  const [selectedDays, setSelectedDays] = useState<WindowDays>(90);
 
   const fmtWindow = (v: number): string => {
     if (isSleep) return formatMetricValue("sleep", v);
@@ -162,6 +190,14 @@ const StatCard: React.FC<StatCardProps> = ({
       v,
     );
   };
+
+  const selectedWindowValue = getWindowValue(windows, selectedDays);
+  const hasAnyWindow =
+    windows.last7 > 0 ||
+    windows.last30 > 0 ||
+    windows.last90 > 0 ||
+    windows.last180 > 0 ||
+    windows.last730 > 0;
 
   return (
     <Card className="bg-white/60 backdrop-blur-sm border-amber-100">
@@ -174,6 +210,7 @@ const StatCard: React.FC<StatCardProps> = ({
       <CardContent>
         {isSleep ? (
           <>
+            {/* Main value: all-time average — never changes with window selector */}
             <div className="text-2xl font-bold text-emerald-900 font-mono">
               {unit}
             </div>
@@ -182,6 +219,7 @@ const StatCard: React.FC<StatCardProps> = ({
                 Efficiency: {efficiency.toFixed(1)}%
               </p>
             )}
+            {/* All-time high/low — never changes with window selector */}
             {(high !== undefined || low !== undefined) && (
               <div className="flex justify-between text-xs text-emerald-600 mt-1">
                 {low !== undefined && (
@@ -199,6 +237,7 @@ const StatCard: React.FC<StatCardProps> = ({
           </>
         ) : (
           <>
+            {/* Main value: all-time average — never changes with window selector */}
             <div className="text-2xl font-bold text-emerald-900 font-mono">
               {formatMetricValue(
                 keyName as import("@/components/metricDisplayUtils").MetricKey,
@@ -211,6 +250,7 @@ const StatCard: React.FC<StatCardProps> = ({
                 Total: {total.toFixed(0)} {unit}
               </p>
             )}
+            {/* All-time high/low — never changes with window selector */}
             {(high !== undefined || low !== undefined) && (
               <div className="flex justify-between text-xs text-emerald-600 mt-1">
                 {low !== undefined && (
@@ -233,46 +273,33 @@ const StatCard: React.FC<StatCardProps> = ({
             )}
           </>
         )}
-        {/* Windowed averages from full Storj dataset */}
-        {(windows.last7 > 0 ||
-          windows.last30 > 0 ||
-          windows.last90 > 0 ||
-          windows.last180 > 0) && (
+
+        {/* Window selector — only this sub-section responds to time window changes */}
+        {hasAnyWindow && (
           <div className="mt-2 pt-2 border-t border-emerald-100">
-            <div className="grid grid-cols-4 gap-1 text-xs text-emerald-600">
-              {windows.last7 > 0 && (
-                <div className="text-center">
-                  <div className="font-medium text-emerald-800">
-                    {fmtWindow(windows.last7)}
-                  </div>
-                  <div className="text-[10px]">7d</div>
-                </div>
-              )}
-              {windows.last30 > 0 && (
-                <div className="text-center">
-                  <div className="font-medium text-emerald-800">
-                    {fmtWindow(windows.last30)}
-                  </div>
-                  <div className="text-[10px]">30d</div>
-                </div>
-              )}
-              {windows.last90 > 0 && (
-                <div className="text-center">
-                  <div className="font-medium text-emerald-800">
-                    {fmtWindow(windows.last90)}
-                  </div>
-                  <div className="text-[10px]">90d</div>
-                </div>
-              )}
-              {windows.last180 > 0 && (
-                <div className="text-center">
-                  <div className="font-medium text-emerald-800">
-                    {fmtWindow(windows.last180)}
-                  </div>
-                  <div className="text-[10px]">180d</div>
-                </div>
-              )}
+            <div className="flex gap-0.5 mb-1.5">
+              {WINDOW_OPTIONS.map((opt) => (
+                <button
+                  key={opt.days}
+                  onClick={() => setSelectedDays(opt.days)}
+                  className={`flex-1 text-[10px] py-0.5 rounded transition-colors ${
+                    selectedDays === opt.days
+                      ? "bg-emerald-600 text-white font-medium"
+                      : "text-emerald-500 hover:bg-emerald-50"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
+            {selectedWindowValue > 0 && (
+              <div className="text-center text-xs text-emerald-600">
+                <span className="font-medium text-emerald-800">
+                  {fmtWindow(selectedWindowValue)}
+                </span>
+                <span className="ml-1 text-[10px]">avg</span>
+              </div>
+            )}
           </div>
         )}
       </CardContent>

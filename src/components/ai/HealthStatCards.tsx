@@ -161,6 +161,9 @@ const StatCard: React.FC<StatCardProps> = ({
     );
   };
 
+  const hasAnyWindow =
+    windows.last7 > 0 || windows.last30 > 0 || windows.last90 > 0;
+
   return (
     <Card className="bg-white/60 backdrop-blur-sm border-amber-100">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -172,6 +175,7 @@ const StatCard: React.FC<StatCardProps> = ({
       <CardContent>
         {isSleep ? (
           <>
+            {/* Main value: all-time average — never changes with window values */}
             <div className="text-2xl font-bold text-emerald-900 font-mono">
               {unit}
             </div>
@@ -180,6 +184,7 @@ const StatCard: React.FC<StatCardProps> = ({
                 Efficiency: {efficiency.toFixed(1)}%
               </p>
             )}
+            {/* All-time high/low — never changes with window values */}
             {(high !== undefined || low !== undefined) && (
               <div className="flex justify-between text-xs text-emerald-600 mt-1">
                 {low !== undefined && (
@@ -197,6 +202,7 @@ const StatCard: React.FC<StatCardProps> = ({
           </>
         ) : (
           <>
+            {/* Main value: all-time average — never changes with window values */}
             <div className="text-2xl font-bold text-emerald-900 font-mono">
               {formatMetricValue(
                 keyName as import("@/components/metricDisplayUtils").MetricKey,
@@ -209,6 +215,7 @@ const StatCard: React.FC<StatCardProps> = ({
                 Total: {total.toFixed(0)} {unit}
               </p>
             )}
+            {/* All-time high/low — never changes with window values */}
             {(high !== undefined || low !== undefined) && (
               <div className="flex justify-between text-xs text-emerald-600 mt-1">
                 {low !== undefined && (
@@ -231,11 +238,10 @@ const StatCard: React.FC<StatCardProps> = ({
             )}
           </>
         )}
-        {/* Windowed averages (7d/30d/90d) from full Storj dataset —
-            static 3-column grid, all visible simultaneously. */}
-        {(windows.last7 > 0 || windows.last30 > 0 || windows.last90 > 0) && (
+        {/* Static 3-column window averages — all visible simultaneously */}
+        {hasAnyWindow && (
           <div className="mt-2 pt-2 border-t border-emerald-100">
-            <div className="grid grid-cols-3 gap-1 text-xs text-emerald-600">
+            <div className="grid grid-cols-3 gap-1 text-center">
               {(
                 [
                   { label: "7d", value: windows.last7 },
@@ -243,11 +249,11 @@ const StatCard: React.FC<StatCardProps> = ({
                   { label: "90d", value: windows.last90 },
                 ] as const
               ).map(({ label, value }) => (
-                <div key={label} className="text-center">
-                  <div className="font-medium text-emerald-800">
+                <div key={label}>
+                  <div className="text-[10px] text-emerald-500">{label}</div>
+                  <div className="text-xs font-medium text-emerald-800">
                     {value > 0 ? fmtWindow(value) : "—"}
                   </div>
-                  <div className="text-[10px]">{label}</div>
                 </div>
               ))}
             </div>

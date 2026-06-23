@@ -522,6 +522,8 @@ export default function HealthDataContextWrapper({
     // with no recorded device activity — Apple Watch simply omits records for
     // unworn days, so a 0 in the dataset signals missing data, not genuine rest.
     // Including them inflates the denominator and depresses the displayed average.
+    // metric.average and metric.low must NEVER include these zero-wear days;
+    // metric.high still uses all days so the all-time peak is correct.
     const stepsActive = steps.filter((d) => (d.value ?? 0) > 0);
     const exerciseActive = exercise.filter((d) => (d.value ?? 0) > 0);
 
@@ -544,7 +546,6 @@ export default function HealthDataContextWrapper({
       exerciseDaysTotal: exercise.length,
       exerciseDaysActive: exerciseActive.length,
     });
-
     // Calculate metrics from processed data
     const metrics = {
       steps: {

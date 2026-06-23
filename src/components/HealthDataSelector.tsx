@@ -682,10 +682,30 @@ const HealthDataSelector: () => React.ReactElement = () => {
         // Without this, raw XML records from both Apple Watch and iPhone flow
         // into buildDailySummaries(), which sums them naively and produces
         // inflated daily totals (e.g. 14K steps when HealthKit shows 12K).
+        //
+        // The parser's overlap prevention skips XML records whose startDate is
+        // within the IndexedDB history (to avoid re-importing data the user
+        // already has locally). This is correct for the UI/IndexedDB path, but
+        // it means allMetricsData is missing those records for the Storj path.
+        // Fix: supplement allMetricsData with existingData so the Storj backup
+        // always contains the complete dataset regardless of what is already in
+        // IndexedDB. The deduplication step below handles any overlap.
         if (parser.hasStorjData()) {
           const allData = parser.getAllMetricsData();
+          const mergedForStorj: Record<string, HealthDataPoint[]> = {
+            ...allData,
+          };
+          if (existingData) {
+            for (const [metric, points] of Object.entries(existingData)) {
+              if (mergedForStorj[metric]) {
+                mergedForStorj[metric] = [...mergedForStorj[metric], ...points];
+              } else {
+                mergedForStorj[metric] = [...points];
+              }
+            }
+          }
           const dedupedForStorj: Record<string, HealthDataPoint[]> = {};
-          for (const [metricType, points] of Object.entries(allData)) {
+          for (const [metricType, points] of Object.entries(mergedForStorj)) {
             dedupedForStorj[metricType] = deduplicateData(points, metricType);
           }
           setAllMetricsForStorj(dedupedForStorj);

@@ -380,6 +380,31 @@ export function StorageManagementSection({
     );
     storjItems.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
 
+    // Evict stale cache entries: items cached locally that no longer exist on Storj.
+    // Only evict within the requested dataType scope so a filtered refresh doesn't
+    // accidentally delete cached items belonging to other data types.
+    const liveUris = new Set(storjItems.map((item) => item.uri));
+    const staleItems = cachedItems.filter(
+      (c) => (!dataType || c.dataType === dataType) && !liveUris.has(c.uri),
+    );
+    if (staleItems.length > 0) {
+      console.log(
+        `[StorageManagement] Evicting ${staleItems.length} stale cache entries not found on Storj`,
+      );
+      await Promise.all(
+        staleItems.map((c) =>
+          storjItemsCache
+            .removeItem(c.uri)
+            .catch((err) =>
+              console.warn(
+                `[StorageManagement] Failed to evict stale item ${c.uri}:`,
+                err,
+              ),
+            ),
+        ),
+      );
+    }
+
     // Find new items (exist in Storj but not in cache)
     const newItems = storjItems.filter((item) => !cachedUris.has(item.uri));
 
@@ -1142,12 +1167,15 @@ export function StorageManagementSection({
       }
 
       await storjItemsCache.initialize();
-      const cached = await storjItemsCache.getCachedItems(
-        userAddress,
-        "apple-health-full-export",
-      );
-      for (const c of cached) {
-        await storjItemsCache.removeItem(c.uri);
+      for (const item of targets) {
+        await storjItemsCache
+          .removeItem(item.uri)
+          .catch((err) =>
+            console.warn(
+              `[StorageManagement] Failed to evict deleted item ${item.uri}:`,
+              err,
+            ),
+          );
       }
 
       setHealthDataItems((prev) =>

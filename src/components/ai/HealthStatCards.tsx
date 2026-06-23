@@ -12,7 +12,7 @@ import { isCumulativeMetric } from "@/storage/appleHealth/metricAggregationStrat
 import type { HealthDataByType } from "@/types/healthData";
 import React, { useMemo } from "react";
 
-type StatMetricKey =
+type MetricKey =
   | "steps"
   | "exercise"
   | "heartRate"
@@ -22,7 +22,7 @@ type StatMetricKey =
   | "activeEnergy"
   | "sleep";
 
-const HK_KEY: Record<StatMetricKey, string> = {
+const HK_KEY: Record<MetricKey, string> = {
   steps: "HKQuantityTypeIdentifierStepCount",
   exercise: "HKQuantityTypeIdentifierAppleExerciseTime",
   heartRate: "HKQuantityTypeIdentifierHeartRate",
@@ -35,7 +35,7 @@ const HK_KEY: Record<StatMetricKey, string> = {
 
 function windowedAvg(
   metricData: HealthDataByType,
-  key: StatMetricKey,
+  key: MetricKey,
   days: number,
 ): number {
   const hkKey = HK_KEY[key];
@@ -46,14 +46,24 @@ function windowedAvg(
     return !isNaN(t) && t >= cutoff;
   });
 
-  // Cumulative metrics must be summed per calendar day before averaging.
-  // substring(0,10) handles both ISO "YYYY-MM-DDT..." and space-separated
-  // "YYYY-MM-DD ..." Apple Health XML dates; split("T")[0] breaks the latter.
+  // Cumulative metrics (aggregationType:"sum" in metricAggregationStrategies) must be
+  // summed per calendar day before averaging. Apple Health may store them as many small
+  // intraday records; averaging raw records directly gives heavily deflated results for
+  // older data. This mirrors processCumulativeData() in HealthDataContextWrapper.
+  //
+  // Date key: substring(0,10) handles both ISO "YYYY-MM-DDT..." format (Storj/modern)
+  // and Apple Health XML space-separated "YYYY-MM-DD ..." format (legacy IndexedDB
+  // records). split("T")[0] silently breaks for space-separated dates, producing a
+  // unique key per record and inflating totals.length to the record count rather than
+  // the day count.
   if (isCumulativeMetric(hkKey)) {
     const dailyTotals: Record<string, number> = {};
     for (const p of inWindow) {
       const dayKey = p.startDate.substring(0, 10);
       const v = parseFloat(p.value);
+      // Exclude zero/missing-wear days from both the sum and the day count so
+      // they don't pull the average down when the window extends past the coverage
+      // of the Storj archive.
       if (!isNaN(v) && v > 0) {
         dailyTotals[dayKey] = (dailyTotals[dayKey] ?? 0) + v;
       }
@@ -63,6 +73,10 @@ function windowedAvg(
     return Math.round(totals.reduce((a, b) => a + b, 0) / totals.length);
   }
 
+  // Non-cumulative metrics: average over days with actual readings only.
+  // Group by calendar day (same substring fix), collect values per day, then
+  // average the per-day means. Days with no record — or only zero-value
+  // placeholder records — are excluded from the denominator.
   const dailyValues: Record<string, number[]> = {};
   for (const p of inWindow) {
     const dayKey = p.startDate.substring(0, 10);
@@ -87,9 +101,9 @@ interface WindowedAverages {
 
 function useMetricWindows(
   metricData: HealthDataByType,
-): Record<StatMetricKey, WindowedAverages> {
+): Record<MetricKey, WindowedAverages> {
   return useMemo(() => {
-    const keys: StatMetricKey[] = [
+    const keys: MetricKey[] = [
       "steps",
       "exercise",
       "heartRate",
@@ -108,12 +122,12 @@ function useMetricWindows(
           last90: windowedAvg(metricData, k, 90),
         },
       ]),
-    ) as Record<StatMetricKey, WindowedAverages>;
+    ) as Record<MetricKey, WindowedAverages>;
   }, [metricData]);
 }
 
 interface StatCardProps {
-  keyName: import("@/components/metricDisplayUtils").MetricKey;
+  keyName: MetricKey;
   title: string;
   icon: React.ReactNode;
   average: number;
@@ -161,7 +175,7 @@ const StatCard: React.FC<StatCardProps> = ({
       <CardContent>
         {isSleep ? (
           <>
-            {/* Main value: all-time average */}
+            {/* Main value: all-time average — never changes with window values */}
             <div className="text-2xl font-bold text-emerald-900 font-mono">
               {unit}
             </div>
@@ -170,7 +184,7 @@ const StatCard: React.FC<StatCardProps> = ({
                 Efficiency: {efficiency.toFixed(1)}%
               </p>
             )}
-            {/* All-time high/low */}
+            {/* All-time high/low — never changes with window values */}
             {(high !== undefined || low !== undefined) && (
               <div className="flex justify-between text-xs text-emerald-600 mt-1">
                 {low !== undefined && (
@@ -188,7 +202,7 @@ const StatCard: React.FC<StatCardProps> = ({
           </>
         ) : (
           <>
-            {/* Main value: all-time average */}
+            {/* Main value: all-time average — never changes with window values */}
             <div className="text-2xl font-bold text-emerald-900 font-mono">
               {formatMetricValue(
                 keyName as import("@/components/metricDisplayUtils").MetricKey,
@@ -201,7 +215,7 @@ const StatCard: React.FC<StatCardProps> = ({
                 Total: {total.toFixed(0)} {unit}
               </p>
             )}
-            {/* All-time high/low */}
+            {/* All-time high/low — never changes with window values */}
             {(high !== undefined || low !== undefined) && (
               <div className="flex justify-between text-xs text-emerald-600 mt-1">
                 {low !== undefined && (

@@ -26,8 +26,8 @@ import {
   applyTieredAggregation,
   aggregateSamplesByDay,
   aggregateDailyValues,
-  isCumulativeMetric,
 } from "@/utils/tieredDataAggregation";
+import { isCumulativeMetric } from "@/storage/appleHealth/metricAggregationStrategies";
 
 /**
  * Extract date key (YYYY-MM-DD) from a Date or timestamp

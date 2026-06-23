@@ -21,6 +21,8 @@ import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
 import { AlertCircle, CheckCircle, Upload } from "lucide-react";
 import Papa from "papaparse";
 import React, { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { storjItemsCache } from "@/data/store/storjItemsCache";
 import { createPublicClient, http } from "viem";
 import { coreMetrics, timeFrameOptions } from "../core/metricDefinitions";
 import {
@@ -66,6 +68,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
   const { mutate: saveHealthData } = useSaveHealthDataMutation();
   const { mutate: clearHealthDataMutation } = useClearHealthDataMutation();
+  const queryClient = useQueryClient();
 
   // Wallet integration for Storj save and attestation
   const { isConnected, address, signMessage, getWalletClient } =
@@ -313,6 +316,27 @@ const HealthDataSelector: () => React.ReactElement = () => {
         // Clear the pending data after successful save
         setAllMetricsForStorj(null);
 
+        // Invalidate React Query so the dashboard picks up fresh Storj health data
+        void queryClient.invalidateQueries({
+          queryKey: ["storj-apple-health"],
+        });
+
+        // Update the IndexedDB Storj items cache so the wallet page shows the
+        // correct upload date without requiring a manual "Refresh" click.
+        if (result.storjUri && address) {
+          void storjItemsCache
+            .cacheItem(address, {
+              uri: result.storjUri,
+              contentHash: result.contentHash ?? "",
+              size: result.size ?? 0,
+              uploadedAt: Date.now(),
+              dataType: "apple-health-full-export",
+            })
+            .catch(() => {
+              /* non-fatal */
+            });
+        }
+
         // Auto-clear status after 10 seconds
         setTimeout(() => setStorjSaveStatus(null), 10000);
       } else if (result.success) {
@@ -325,6 +349,27 @@ const HealthDataSelector: () => React.ReactElement = () => {
           storjUri: result.storjUri,
         });
         setAllMetricsForStorj(null);
+
+        // Invalidate React Query so the dashboard picks up fresh Storj health data
+        void queryClient.invalidateQueries({
+          queryKey: ["storj-apple-health"],
+        });
+
+        // Update the IndexedDB Storj items cache
+        if (result.storjUri && address) {
+          void storjItemsCache
+            .cacheItem(address, {
+              uri: result.storjUri,
+              contentHash: result.contentHash ?? "",
+              size: result.size ?? 0,
+              uploadedAt: Date.now(),
+              dataType: "apple-health-full-export",
+            })
+            .catch(() => {
+              /* non-fatal */
+            });
+        }
+
         setTimeout(() => setStorjSaveStatus(null), 10000);
       } else {
         setStorjSaveStatus({
@@ -631,13 +676,44 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
         const results = await parser.parseFile(uploadedFile);
 
-        // Store ALL metrics data for potential Storj save
+        // Store ALL metrics data for potential Storj save.
+        // Deduplicate first using the same Watch-priority / iPhone-fallback
+        // hourly-block algorithm applied to the IndexedDB path below (line 650).
+        // Without this, raw XML records from both Apple Watch and iPhone flow
+        // into buildDailySummaries(), which sums them naively and produces
+        // inflated daily totals (e.g. 14K steps when HealthKit shows 12K).
+        //
+        // The parser's overlap prevention skips XML records whose startDate is
+        // within the IndexedDB history (to avoid re-importing data the user
+        // already has locally). This is correct for the UI/IndexedDB path, but
+        // it means allMetricsData is missing those records for the Storj path.
+        // Fix: supplement allMetricsData with existingData so the Storj backup
+        // always contains the complete dataset regardless of what is already in
+        // IndexedDB. The deduplication step below handles any overlap.
         if (parser.hasStorjData()) {
           const allData = parser.getAllMetricsData();
-          setAllMetricsForStorj(allData);
+          const mergedForStorj: Record<string, HealthDataPoint[]> = {
+            ...allData,
+          };
+          if (existingData) {
+            for (const [metric, points] of Object.entries(existingData)) {
+              if (mergedForStorj[metric]) {
+                mergedForStorj[metric] = [...mergedForStorj[metric], ...points];
+              } else {
+                mergedForStorj[metric] = [...points];
+              }
+            }
+          }
+          const dedupedForStorj: Record<string, HealthDataPoint[]> = {};
+          for (const [metricType, points] of Object.entries(mergedForStorj)) {
+            dedupedForStorj[metricType] = deduplicateData(points, metricType);
+          }
+          setAllMetricsForStorj(dedupedForStorj);
           console.log(
-            `📦 [Storj] Captured ${Object.keys(allData).length} metric types for potential Storj backup:`,
-            Object.entries(allData).map(([k, v]) => `${k}: ${v.length}`),
+            `📦 [Storj] Captured ${Object.keys(dedupedForStorj).length} metric types for potential Storj backup:`,
+            Object.entries(dedupedForStorj).map(
+              ([k, v]) => `${k}: ${v.length}`,
+            ),
           );
         }
 

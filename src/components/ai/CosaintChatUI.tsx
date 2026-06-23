@@ -208,6 +208,20 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   const [selectedStorjUris, setSelectedStorjUris] = useState<Set<string>>(
     () => new Set(),
   );
+  // Gut health species lists (Layer 2) are linked to their report (Layer 1)
+  // via metadata.reportid. Tracked separately since they aren't independently
+  // selectable in the Storj import list — only fetched to merge into the
+  // matching report on import.
+  const gutHealthSpeciesListRef = useRef<
+    Array<{ uri: string; metadata?: Record<string, string> }>
+  >([]);
+  // Pre-generated clinical narratives ("${reportType}-narrative") are linked
+  // to their report via metadata.reportid, same as the species list above.
+  // Generic across every report type — narratives for dexa/bloodwork/gut
+  // health all flow through this one list.
+  const narrativeListRef = useRef<
+    Array<{ uri: string; metadata?: Record<string, string> }>
+  >([]);
   const [savingReportsToStorj, setSavingReportsToStorj] = useState(false);
   const [saveReportsError, setSaveReportsError] = useState<string>("");
   // Enable Storj save UI for all environments (was dev-only)
@@ -620,7 +634,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
 
   const inferReportType = (
     fileName: string,
-  ): "dexa" | "bloodwork" | undefined => {
+  ): "dexa" | "bloodwork" | "gut-health" | undefined => {
     const lower = fileName.toLowerCase();
     if (lower.includes("dexa") || lower.includes("dxa")) {
       return "dexa";
@@ -633,6 +647,16 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
       lower.includes("hormone")
     ) {
       return "bloodwork";
+    }
+    if (
+      lower.includes("gut") ||
+      lower.includes("microbiome") ||
+      lower.includes("tinyhealth") ||
+      lower.includes("tiny-health") ||
+      lower.includes("viome") ||
+      lower.includes("thryve")
+    ) {
+      return "gut-health";
     }
     return undefined;
   };
@@ -712,14 +736,35 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
         );
       };
 
-      const [bloodwork, dexa] = await Promise.all([
+      const [
+        bloodwork,
+        dexa,
+        gutHealth,
+        gutHealthSpecies,
+        dexaNarratives,
+        bloodworkNarratives,
+        gutHealthNarratives,
+      ] = await Promise.all([
         fetchList("bloodwork-report-fhir"),
         fetchList("dexa-report-fhir"),
+        fetchList("gut-health-report"),
+        fetchList("gut-health-species"),
+        fetchList("dexa-narrative"),
+        fetchList("bloodwork-narrative"),
+        fetchList("gut-health-narrative"),
       ]);
+
+      gutHealthSpeciesListRef.current = gutHealthSpecies;
+      narrativeListRef.current = [
+        ...dexaNarratives,
+        ...bloodworkNarratives,
+        ...gutHealthNarratives,
+      ];
 
       const merged = [
         ...bloodwork.map((r) => ({ ...r, dataType: "bloodwork-report-fhir" })),
         ...dexa.map((r) => ({ ...r, dataType: "dexa-report-fhir" })),
+        ...gutHealth.map((r) => ({ ...r, dataType: "gut-health-report" })),
       ].sort((a, b) => {
         const aMs = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
         const bMs = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
@@ -775,7 +820,9 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           getMeta(selected?.metadata, "reporttype") ||
           (selected?.dataType === "bloodwork-report-fhir"
             ? "bloodwork"
-            : "dexa");
+            : selected?.dataType === "gut-health-report"
+              ? "gut-health"
+              : "dexa");
 
         const res = await fetch("/api/storj", {
           method: "POST",
@@ -801,15 +848,105 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           );
         }
 
-        const report = json.result as ParsedReportSummary["report"] | null;
+        let report = json.result as ParsedReportSummary["report"] | null;
         if (!report) {
           throw new Error("Storj returned no report data");
+        }
+
+        const reportId = getMeta(selected?.metadata, "reportid");
+
+        // Gut health reports are stored as two layers: the structured metrics
+        // (just retrieved) and the species list, stored separately and linked
+        // via metadata.reportid. Fetch and merge the species list back in so
+        // Luma gets the full report, not just the metrics.
+        if (reportType === "gut-health" && report.type === "gut-health") {
+          const speciesEntry = reportId
+            ? gutHealthSpeciesListRef.current.find(
+                (s) => getMeta(s.metadata, "reportid") === reportId,
+              )
+            : undefined;
+
+          let species: typeof report.species = [];
+          if (speciesEntry) {
+            try {
+              const speciesRes = await fetch("/api/storj", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  action: "report/retrieve",
+                  userAddress: address,
+                  encryptionKey,
+                  storjUri: speciesEntry.uri,
+                  reportType: "gut-health-species",
+                }),
+              });
+              const speciesJson = await speciesRes.json();
+              if (
+                speciesRes.ok &&
+                speciesJson?.success !== false &&
+                Array.isArray(speciesJson.result)
+              ) {
+                species = speciesJson.result;
+              }
+            } catch (speciesError) {
+              console.error(
+                "[CosaintChatUI] Failed to retrieve gut-health species list:",
+                speciesError,
+              );
+            }
+          }
+
+          report = { ...report, species, rawText: report.rawText ?? "" };
+        }
+
+        // Pre-generated clinical narrative (see ClinicalNarrativeService) —
+        // generic across every report type, linked via the same
+        // metadata.reportid as the species list above.
+        const narrativeEntry = reportId
+          ? narrativeListRef.current.find(
+              (n) => getMeta(n.metadata, "reportid") === reportId,
+            )
+          : undefined;
+        let narrative: string | undefined;
+        let storjNarrativeUri: string | undefined;
+        if (narrativeEntry) {
+          try {
+            const narrativeReportType =
+              getMeta(narrativeEntry.metadata, "reporttype") || reportType;
+            const narrativeRes = await fetch("/api/storj", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "report/retrieve",
+                userAddress: address,
+                encryptionKey,
+                storjUri: narrativeEntry.uri,
+                reportType: `${narrativeReportType}-narrative`,
+              }),
+            });
+            const narrativeJson = await narrativeRes.json();
+            if (
+              narrativeRes.ok &&
+              narrativeJson?.success !== false &&
+              typeof narrativeJson.result === "string"
+            ) {
+              narrative = narrativeJson.result;
+              storjNarrativeUri = narrativeEntry.uri;
+            }
+          } catch (narrativeError) {
+            console.error(
+              "[CosaintChatUI] Failed to retrieve report narrative:",
+              narrativeError,
+            );
+          }
         }
 
         results.push({
           report,
           extractedAt: new Date().toISOString(),
           storjUri,
+          storjNarrativeUri,
+          narrative,
           savedToStorjAt: selected?.uploadedAt || new Date().toISOString(),
         });
       }
@@ -833,7 +970,9 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             ? r.report.reportDate
             : r.report.type === "medical-record"
               ? r.report.reportDate
-              : r.report.scanDate;
+              : r.report.type === "gut-health"
+                ? r.report.collection_date
+                : r.report.scanDate;
         const source = r.report.source ? String(r.report.source) : "";
 
         addUploadedFile({
@@ -875,7 +1014,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
   const recordReportUploadOnChain = async (params: {
     storjUri: string;
     contentHash: string;
-    reportType: "dexa" | "bloodwork" | "medical-record";
+    reportType: "dexa" | "bloodwork" | "medical-record" | "gut-health";
   }): Promise<void> => {
     if (!address) throw new Error("Wallet not connected");
     const walletClient = await walletService.getWalletClient();
@@ -986,29 +1125,136 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
           );
           const idx = reportIdx >= 0 ? reportIdx : originalIdx;
 
-          const resp = await fetch("/api/storj", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "report/store",
-              userAddress: address,
-              encryptionKey,
-              data: r,
-              options: {
-                metadata: {
-                  uploadedAt: new Date().toISOString(),
-                  source: "chat-ui",
+          let storjUri: string;
+          let storjSpeciesUri: string | undefined;
+          let contentHash: string;
+
+          if (r.report.type === "gut-health") {
+            // Gut health uses its own dedicated endpoint (parse+store in one call)
+            const gutResp = await fetch("/api/gut-health/upload", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text: r.report.rawText,
+                walletAddress: address,
+                encryptionKey,
+              }),
+            });
+            const gutPayload = await gutResp.json();
+            if (!gutResp.ok || !gutPayload?.success) {
+              throw new Error(
+                gutPayload?.error || "Failed to save gut health report",
+              );
+            }
+            storjUri = gutPayload.storjUri as string;
+            storjSpeciesUri = gutPayload.storjSpeciesUri as string | undefined;
+            const storjNarrativeUri = gutPayload.storjNarrativeUri as
+              | string
+              | undefined;
+            const narrative = gutPayload.narrative as string | undefined;
+            contentHash = (gutPayload.contentHash as string | undefined) || "";
+            if (!contentHash) {
+              throw new Error(
+                "Gut health save succeeded but no contentHash returned; cannot record on-chain marker.",
+              );
+            }
+
+            await recordReportUploadOnChain({
+              storjUri,
+              contentHash,
+              reportType: "gut-health",
+            });
+
+            if (reportIdx >= 0) {
+              updateReport(reportIdx, {
+                storjUri,
+                storjSpeciesUri,
+                storjNarrativeUri,
+                narrative,
+                savedToStorjAt: new Date().toISOString(),
+              });
+            }
+
+            if (address) {
+              try {
+                await storjItemsCache.initialize();
+                await storjItemsCache.cacheItem(address, {
+                  uri: storjUri,
+                  contentHash,
+                  size: 0,
+                  uploadedAt: Date.now(),
+                  dataType: "gut-health-report",
+                  metadata: {
+                    reportType: "gut-health",
+                    uploadedAt: new Date().toISOString(),
+                    source: "chat-ui",
+                  },
+                });
+                if (storjSpeciesUri) {
+                  await storjItemsCache.cacheItem(address, {
+                    uri: storjSpeciesUri,
+                    contentHash: "",
+                    size: 0,
+                    uploadedAt: Date.now(),
+                    dataType: "gut-health-species",
+                    metadata: {
+                      reportType: "gut-health",
+                      uploadedAt: new Date().toISOString(),
+                      source: "chat-ui",
+                    },
+                  });
+                }
+                if (storjNarrativeUri) {
+                  await storjItemsCache.cacheItem(address, {
+                    uri: storjNarrativeUri,
+                    contentHash: "",
+                    size: 0,
+                    uploadedAt: Date.now(),
+                    dataType: "gut-health-narrative",
+                    metadata: {
+                      reportType: "gut-health",
+                      uploadedAt: new Date().toISOString(),
+                      source: "chat-ui",
+                    },
+                  });
+                }
+              } catch (error) {
+                console.error(
+                  "[CosaintChatUI] Failed to cache gut-health item to IndexedDB:",
+                  error,
+                );
+              }
+            }
+          } else {
+            const resp = await fetch("/api/storj", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "report/store",
+                userAddress: address,
+                encryptionKey,
+                data: r,
+                options: {
+                  metadata: {
+                    uploadedAt: new Date().toISOString(),
+                    source: "chat-ui",
+                  },
+                  skipVerification: true,
                 },
-                skipVerification: true, // Skip slow verification step
-              },
-            }),
-          });
+              }),
+            });
 
-          const payload = await resp.json();
-          const result = payload?.result;
+            const payload = await resp.json();
+            const result = payload?.result;
 
-          if (result?.success && result?.storjUri) {
-            const contentHash =
+            if (!(result?.success && result?.storjUri)) {
+              throw new Error(
+                result?.error || "Failed to save report to Storj",
+              );
+            }
+
+            storjUri = result.storjUri as string;
+            contentHash =
               (result?.contentHash as string | undefined) ||
               (result?.existingContentHash as string | undefined) ||
               "";
@@ -1019,25 +1265,30 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             }
 
             await recordReportUploadOnChain({
-              storjUri: result.storjUri,
+              storjUri,
               contentHash,
               reportType: r.report.type,
             });
 
-            // Update the report if it exists in the main reports array
+            const storjNarrativeUri = result.storjNarrativeUri as
+              | string
+              | undefined;
+            const narrative = result.narrative as string | undefined;
+
             if (reportIdx >= 0) {
               updateReport(reportIdx, {
-                storjUri: result.storjUri,
+                storjUri,
+                storjNarrativeUri,
+                narrative,
                 savedToStorjAt: new Date().toISOString(),
               });
             }
 
-            // Cache to IndexedDB for fast access in Storage Manager
             if (address) {
               try {
                 await storjItemsCache.initialize();
                 await storjItemsCache.cacheItem(address, {
-                  uri: result.storjUri,
+                  uri: storjUri,
                   contentHash,
                   size: result.size || 0,
                   uploadedAt: Date.now(),
@@ -1051,19 +1302,30 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                     source: "chat-ui",
                   },
                 });
+                if (storjNarrativeUri) {
+                  await storjItemsCache.cacheItem(address, {
+                    uri: storjNarrativeUri,
+                    contentHash: "",
+                    size: 0,
+                    uploadedAt: Date.now(),
+                    dataType: `${r.report.type}-narrative`,
+                    metadata: {
+                      reportType: r.report.type,
+                      uploadedAt: new Date().toISOString(),
+                      source: "chat-ui",
+                    },
+                  });
+                }
               } catch (error) {
                 console.error(
                   "[CosaintChatUI] Failed to cache item to IndexedDB:",
                   error,
                 );
-                // Don't throw - caching failure shouldn't break the save
               }
             }
-
-            results.push({ success: true, idx });
-          } else {
-            throw new Error(result?.error || "Failed to save report to Storj");
           }
+
+          results.push({ success: true, idx });
         } catch (error) {
           console.error(`❌ Failed to save report:`, error);
           const errorMessage = getAttestationErrorMessage(error);
@@ -1536,18 +1798,20 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
             return {
               type: r.report.type,
               hasMetrics: r.report.metrics?.length || 0,
-              hasRegions: "N/A",
             };
-          } else {
-            // Must be dexa
+          } else if (r.report.type === "dexa") {
             return {
               type: r.report.type,
-              hasMetrics: "N/A",
-              hasRegions:
-                r.report.type === "dexa"
-                  ? r.report.regions?.length || 0
-                  : "N/A",
+              hasRegions: r.report.regions?.length || 0,
             };
+          } else if (r.report.type === "gut-health") {
+            return {
+              type: r.report.type,
+              microbiomeScore: r.report.summary?.microbiome_score,
+              speciesCount: r.report.species?.length || 0,
+            };
+          } else {
+            return { type: r.report.type };
           }
         }),
       );

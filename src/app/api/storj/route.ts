@@ -3,6 +3,7 @@ import { getStorageService } from "@/storage";
 import { getStorjTimelineService } from "@/storage";
 import { getStorjConversationService } from "@/storage";
 import { getStorjReportService } from "@/storage/StorjReportService";
+import { generateClinicalNarrative } from "@/services/ClinicalNarrativeService";
 import type { WalletEncryptionKey } from "@/utils/walletEncryption";
 import { getKeyDerivationMessage } from "@/utils/walletEncryption";
 import { verifyMessage } from "viem";
@@ -511,6 +512,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
                   typedEncryptionKey,
                 ),
               );
+            } else if (reportType === "gut-health") {
+              verifiedDecrypt = Boolean(
+                await reportService.retrieveGutHealthReport(
+                  stored.storjUri,
+                  typedEncryptionKey,
+                ),
+              );
             } else {
               verifiedDecrypt = Boolean(
                 await reportService.retrieveDexaReport(
@@ -524,6 +532,45 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             verifiedDecrypt = stored?.success ?? false;
           }
           result = { ...stored, verifiedDecrypt };
+
+          // Generate and cache a clinical narrative (see
+          // ClinicalNarrativeService) so Luma can read rich context for
+          // this report without per-type system-prompt instructions.
+          // Skipped for duplicates — the original upload already has one.
+          if (stored?.success && stored?.reportId && !stored?.duplicate) {
+            const reportType = data?.report?.type ?? data?.type;
+            if (reportType) {
+              const narrative = await generateClinicalNarrative(
+                reportType,
+                data.report ?? data,
+              );
+              if (narrative) {
+                const narrativeResult =
+                  await reportService.storeReportNarrative(
+                    narrative,
+                    reportType,
+                    stored.reportId,
+                    userAddress,
+                    typedEncryptionKey,
+                  );
+                if (narrativeResult.success) {
+                  result = {
+                    ...result,
+                    narrative,
+                    storjNarrativeUri: narrativeResult.storjUri,
+                  };
+                } else {
+                  console.warn(
+                    `⚠️ Report stored but narrative failed to save: ${narrativeResult.error}`,
+                  );
+                }
+              } else {
+                console.warn(
+                  `⚠️ Clinical narrative generation failed for ${reportType} report; continuing without it.`,
+                );
+              }
+            }
+          }
         } catch (storeError) {
           console.error(`❌ report/store error:`, storeError);
           result = {
@@ -552,6 +599,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
               storjUri,
               typedEncryptionKey,
               body?.rawText,
+            );
+          } else if (reportType === "gut-health") {
+            result = await reportService.retrieveGutHealthReport(
+              storjUri,
+              typedEncryptionKey,
+            );
+          } else if (reportType === "gut-health-species") {
+            result = await reportService.retrieveGutHealthSpecies(
+              storjUri,
+              typedEncryptionKey,
+            );
+          } else if (reportType?.endsWith("-narrative")) {
+            result = await reportService.retrieveReportNarrative(
+              storjUri,
+              typedEncryptionKey,
             );
           } else {
             result = await reportService.retrieveDexaReport(

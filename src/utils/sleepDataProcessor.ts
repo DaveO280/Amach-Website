@@ -97,6 +97,29 @@ export interface DailyProcessedSleepData {
 }
 
 /**
+ * Merges overlapping time intervals and returns their total duration in minutes.
+ * Used to prevent double-counting when Apple Watch and iPhone both record the same
+ * sleep stages, which land in the same session group and would otherwise be summed.
+ */
+function mergeIntervalMinutes(intervals: { s: number; e: number }[]): number {
+  if (intervals.length === 0) return 0;
+  const sorted = [...intervals].sort((a, b) => a.s - b.s);
+  let total = 0;
+  let cur = { ...sorted[0] };
+  for (let i = 1; i < sorted.length; i++) {
+    const r = sorted[i];
+    if (r.s < cur.e) {
+      cur.e = Math.max(cur.e, r.e);
+    } else {
+      total += cur.e - cur.s;
+      cur = { ...r };
+    }
+  }
+  total += cur.e - cur.s;
+  return Math.round(total / 60000);
+}
+
+/**
  * Processes raw sleep data into structured daily sleep information with improved
  * handling of sleep sessions and accurate stage calculation
  */
@@ -186,10 +209,13 @@ export const processSleepData = (
 
       // Process sleep stages
       const segments: SleepSegment[] = [];
-      let coreSleepMinutes = 0;
-      let deepSleepMinutes = 0;
-      let remSleepMinutes = 0;
-      let awakeMinutes = 0;
+      // Collect time intervals per stage rather than summing durations directly.
+      // Merging overlapping intervals before summing prevents double-counting when
+      // Apple Watch and iPhone both record the same stage for the same period.
+      const coreIntervals: { s: number; e: number }[] = [];
+      const deepIntervals: { s: number; e: number }[] = [];
+      const remIntervals: { s: number; e: number }[] = [];
+      const awakeIntervals: { s: number; e: number }[] = [];
       let awakeningCount = 0;
       let lastAwakeEndTime: Date | null = null;
 
@@ -230,12 +256,13 @@ export const processSleepData = (
           return;
         }
 
-        // Add to the appropriate sleep stage counter and markers
+        // Add to the appropriate sleep stage interval list and markers
         const stage = record.value as string;
+        const interval = { s: startTime.getTime(), e: endTime.getTime() };
         switch (stage) {
           case SleepStage.Core:
           case "core":
-            coreSleepMinutes += durationMinutes;
+            coreIntervals.push(interval);
             stageMarkers.core.push({
               start: record.startDate,
               end: record.endDate as string,
@@ -243,7 +270,7 @@ export const processSleepData = (
             break;
           case SleepStage.Deep:
           case "deep":
-            deepSleepMinutes += durationMinutes;
+            deepIntervals.push(interval);
             stageMarkers.deep.push({
               start: record.startDate,
               end: record.endDate as string,
@@ -251,7 +278,7 @@ export const processSleepData = (
             break;
           case SleepStage.REM:
           case "rem":
-            remSleepMinutes += durationMinutes;
+            remIntervals.push(interval);
             stageMarkers.rem.push({
               start: record.startDate,
               end: record.endDate as string,
@@ -259,7 +286,7 @@ export const processSleepData = (
             break;
           case SleepStage.Awake:
           case "awake":
-            awakeMinutes += durationMinutes;
+            awakeIntervals.push(interval);
             stageMarkers.awake.push({
               start: record.startDate,
               end: record.endDate as string,
@@ -290,6 +317,14 @@ export const processSleepData = (
           durationMinutes,
         });
       });
+
+      // Merge overlapping intervals per stage to get deduplicated durations.
+      // This collapses any double-reported segments from multiple sources (e.g. Watch + iPhone)
+      // into the union of their time spans before summing.
+      const coreSleepMinutes = mergeIntervalMinutes(coreIntervals);
+      const deepSleepMinutes = mergeIntervalMinutes(deepIntervals);
+      const remSleepMinutes = mergeIntervalMinutes(remIntervals);
+      const awakeMinutes = mergeIntervalMinutes(awakeIntervals);
 
       // Calculate total sleep time (excluding awake time)
       const sleepDurationMinutes =

@@ -1,6 +1,7 @@
 "use client";
 
 import { useHealthDataQuery } from "@/data/hooks/useHealthDataQuery";
+import { useStorjAppleHealthQuery } from "@/data/hooks/useStorjAppleHealthQuery";
 import { HealthDataResults } from "@/data/types/healthMetrics";
 import {
   ChatMessage,
@@ -9,17 +10,21 @@ import {
   HealthScore,
   UploadedFileSummary,
 } from "@/types/HealthContext";
-import { HealthDataByType, ProcessingState } from "@/types/healthData";
 import {
-  calculateAndStoreDailyHealthScores,
-  calculateAndStoreDailyHealthScoresFromProcessed,
-  calculateDailyHealthScores,
-  getDailyHealthScores,
-  clearDailyHealthScores,
-} from "@/utils/dailyHealthScoreCalculator";
+  HealthDataByType,
+  HealthDataPoint,
+  ProcessingState,
+} from "@/types/healthData";
+import { calculateDailyHealthScores } from "@/utils/dailyHealthScoreCalculator";
 import { extractDatePart } from "@/utils/dataDeduplicator";
 import { processSleepData } from "@/utils/sleepDataProcessor";
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { healthDataProcessor } from "@/data/processors/HealthDataProcessor";
 import {
   normalizeUserProfile,
@@ -35,7 +40,7 @@ import type {
 } from "@/types/contextVault";
 import { buildContextVaultSnapshot } from "@/utils/contextVault";
 import { useWalletService } from "@/hooks/useWalletService";
-import { healthDataStore } from "@/data/store/healthDataStore";
+import { useStorjHealthSync } from "@/hooks/useStorjHealthSync";
 
 // Profile type
 interface ProfileData extends NormalizedUserProfile {}
@@ -151,8 +156,14 @@ export default function HealthDataContextWrapper({
   children: React.ReactNode;
 }): JSX.Element {
   const walletService = useWalletService();
-  // Health data state
-  const { data: metricData = {}, isPending, error } = useHealthDataQuery();
+  // Sync Apple Health data from Storj into IndexedDB when local data is absent
+  useStorjHealthSync();
+  // Health data state — IndexedDB is primary; Storj fills any gaps
+  const {
+    data: indexedDbMetricData = {},
+    isPending,
+    error,
+  } = useHealthDataQuery();
   const [processingState, setProcessingState] = useState<ProcessingState>(
     defaultProcessingState,
   );
@@ -172,6 +183,62 @@ export default function HealthDataContextWrapper({
     loadHealthProfileFromBlockchain,
     getDecryptedProfile,
   } = walletService;
+
+  // Fetch Apple Health + breathing sessions from Storj (background, non-blocking).
+  // Only fires when the wallet encryption key is already cached (no popup).
+  const { data: storjHealthData } = useStorjAppleHealthQuery(
+    isConnected ? (address ?? undefined) : undefined,
+  );
+
+  // Storj is the canonical full history (2+ years from iOS uploads).
+  // Stat card averages and agent context come directly from storjHealthData —
+  // no merging with IndexedDB. Double-counting is eliminated because there is
+  // exactly one data source for the numbers shown on screen.
+  // Falls back to IndexedDB while Storj is still loading or for manual-import
+  // users who have never synced via iOS.
+  //
+  // Dirty-data guard: old Storj uploads (before the per-source dedup fix) can
+  // contain doubled cumulative totals (Watch + iPhone both summed into daily
+  // summaries). We detect this by comparing the 7-day step average from Storj
+  // against IndexedDB. If Storj is >1.5x IDB the upload is pre-dedup and we
+  // fall back to IndexedDB until a clean upload runs (PR #88 + fresh import).
+  const metricData = useMemo((): HealthDataByType => {
+    if (!storjHealthData || Object.keys(storjHealthData).length === 0) {
+      return indexedDbMetricData;
+    }
+
+    if (Object.keys(indexedDbMetricData).length > 0) {
+      const STEP_KEY = "HKQuantityTypeIdentifierStepCount";
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+      const recentDailyAvg = (points: HealthDataPoint[]): number => {
+        const byDay: Record<string, number> = {};
+        for (const p of points) {
+          const t = new Date(p.startDate).getTime();
+          if (isNaN(t) || t < sevenDaysAgo) continue;
+          const day = p.startDate.substring(0, 10);
+          const v = parseFloat(p.value);
+          if (!isNaN(v) && v > 0) byDay[day] = (byDay[day] ?? 0) + v;
+        }
+        const vals = Object.values(byDay);
+        return vals.length > 0
+          ? vals.reduce((a, b) => a + b, 0) / vals.length
+          : 0;
+      };
+
+      const storjAvg = recentDailyAvg(storjHealthData[STEP_KEY] ?? []);
+      const idbAvg = recentDailyAvg(indexedDbMetricData[STEP_KEY] ?? []);
+
+      if (storjAvg > 0 && idbAvg > 0 && storjAvg > idbAvg * 1.5) {
+        console.warn(
+          `[HealthDataContext] Storj 7d step avg (${Math.round(storjAvg)}) is >1.5× IDB avg (${Math.round(idbAvg)}) — Storj data appears doubled (pre-dedup upload). Falling back to IndexedDB until a clean Storj upload runs.`,
+        );
+        return indexedDbMetricData;
+      }
+    }
+
+    return storjHealthData;
+  }, [indexedDbMetricData, storjHealthData]);
 
   // Load long-range processed aggregates on startup (enables fast charts / tool-use without reprocessing raw data).
   useEffect(() => {
@@ -288,7 +355,10 @@ export default function HealthDataContextWrapper({
     const sleepData = metricData["HKCategoryTypeIdentifierSleepAnalysis"] || [];
     const processedSleepData = processSleepData(sleepData);
 
-    // Helper: process numeric data for cumulative metrics (sum daily totals)
+    // Helper: process numeric data for cumulative metrics (sum daily totals).
+    // For Storj-native metricData (one pre-summed point per day at T12:00 UTC),
+    // the sum loop is a no-op (single-point days), but remains correct for
+    // IndexedDB raw records which may have many intraday entries per day.
     const processCumulativeData = (
       data: { startDate: string; value: string }[],
     ): Array<{
@@ -330,7 +400,9 @@ export default function HealthDataContextWrapper({
         .sort((a, b) => a.date.getTime() - b.date.getTime());
     };
 
-    // Helper: process heart rate data (average daily values)
+    // Helper: process heart rate data (average daily values).
+    // For Storj-native metricData, storjAppleHealthConverter.extractNumericValue
+    // passes avg only (not min/max), so min/max will equal avg for Storj days.
     const processHeartRateData = (
       data: { startDate: string; value: string }[],
     ): Array<{
@@ -446,34 +518,62 @@ export default function HealthDataContextWrapper({
       metricData["HKQuantityTypeIdentifierActiveEnergyBurned"] || [],
     );
 
+    // Days with value=0 for cumulative metrics (steps, exercise) represent days
+    // with no recorded device activity — Apple Watch simply omits records for
+    // unworn days, so a 0 in the dataset signals missing data, not genuine rest.
+    // Including them inflates the denominator and depresses the displayed average.
+    // metric.average and metric.low must NEVER include these zero-wear days;
+    // metric.high still uses all days so the all-time peak is correct.
+    const stepsActive = steps.filter((d) => (d.value ?? 0) > 0);
+    const exerciseActive = exercise.filter((d) => (d.value ?? 0) > 0);
+
+    console.log("[HealthDataContextWrapper] metrics computation:", {
+      stepDaysTotal: steps.length,
+      stepDaysActive: stepsActive.length,
+      stepRawAvgAllDays:
+        steps.length > 0
+          ? Math.round(
+              steps.reduce((s, d) => s + (d.value ?? 0), 0) / steps.length,
+            )
+          : 0,
+      stepAvgActiveDays:
+        stepsActive.length > 0
+          ? Math.round(
+              stepsActive.reduce((s, d) => s + (d.value ?? 0), 0) /
+                stepsActive.length,
+            )
+          : 0,
+      exerciseDaysTotal: exercise.length,
+      exerciseDaysActive: exerciseActive.length,
+    });
     // Calculate metrics from processed data
     const metrics = {
       steps: {
         average:
-          steps.length > 0
+          stepsActive.length > 0
             ? Math.round(
-                steps.reduce((sum, day) => sum + (day.value ?? 0), 0) /
-                  steps.length,
+                stepsActive.reduce((sum, day) => sum + (day.value ?? 0), 0) /
+                  stepsActive.length,
               )
             : 0,
         high: Math.max(...steps.map((day) => day.value ?? 0), 0),
         low:
-          steps.length > 0
-            ? Math.min(...steps.map((day) => day.value ?? 0))
+          stepsActive.length > 0
+            ? Math.min(...stepsActive.map((day) => day.value ?? 0))
             : 0,
       },
       exercise: {
         average:
-          exercise.length > 0
+          exerciseActive.length > 0
             ? Math.round(
-                exercise.reduce((sum, day) => sum + (day.value ?? 0), 0) /
-                  exercise.length,
+                exerciseActive.reduce((sum, day) => sum + (day.value ?? 0), 0) /
+                  exerciseActive.length,
               )
             : 0,
         high: Math.max(...exercise.map((day) => day.value ?? 0), 0),
         low:
-          exercise.length > 0
-            ? Math.min(...exercise.map((day) => day.value ?? 0))
+          exerciseActive.length > 0
+            ? Math.min(...exerciseActive.map((day) => day.value ?? 0))
             : 0,
       },
       heartRate: {
@@ -558,7 +658,11 @@ export default function HealthDataContextWrapper({
                 ) / processedSleepData.length,
               ),
               high: Math.max(
-                ...processedSleepData.map((day) => day.sleepDuration),
+                // Cap at 900 min (15h) — values above this are double-counted uploads
+                // from multiple devices. Upload path now deduplicates; cap guards old data.
+                ...processedSleepData
+                  .filter((day) => day.sleepDuration <= 900)
+                  .map((day) => day.sleepDuration),
                 0,
               ),
               low:
@@ -617,204 +721,63 @@ export default function HealthDataContextWrapper({
     setHealthContext((prev) => ({ ...prev, metrics, trends }));
   }, [metricData, healthContext.userProfile]);
 
-  // --- Compute healthScores as averages of daily scores for each metric ---
-  useEffect(() => {
-    async function updateHealthScoresFromDaily(): Promise<void> {
-      const dailyScores = await getDailyHealthScores();
-      if (!dailyScores || dailyScores.length === 0) {
-        // If no daily scores, calculate from current metric data
-        if (metricData && Object.keys(metricData).length > 0) {
-          try {
-            // Convert metricData to the format expected by calculateDailyHealthScores
-            const healthDataResults = Object.entries(metricData).reduce(
-              (acc, [metricType, dataPoints]) => {
-                acc[metricType] = dataPoints.map((point) => ({
-                  startDate: point.startDate,
-                  endDate: point.endDate,
-                  value: point.value,
-                  unit: point.unit,
-                  source: point.source,
-                  device: point.device,
-                  type: metricType,
-                }));
-                return acc;
-              },
-              {} as Record<string, unknown[]>,
-            );
-
-            // Get user profile
-            const profile = healthContext.userProfile || {};
-
-            // Calculate health scores directly from current data
-            const dailyScoresFromCurrent = calculateDailyHealthScores(
-              healthDataResults as HealthDataResults,
-              profile,
-            );
-
-            if (dailyScoresFromCurrent.length > 0) {
-              // Calculate averages from the daily scores
-              const metrics = [
-                "overall",
-                "activity",
-                "sleep",
-                "heart",
-                "energy",
-              ];
-              const averages: Record<string, number> = {};
-              for (const metric of metrics) {
-                const values = dailyScoresFromCurrent
-                  .map(
-                    (
-                      day: import("@/utils/dailyHealthScoreCalculator").DailyHealthScores,
-                    ) =>
-                      day.scores.find(
-                        (s: import("@/types/HealthContext").HealthScore) =>
-                          s.type === metric,
-                      )?.value,
-                  )
-                  .filter(
-                    (v: number | undefined): v is number =>
-                      typeof v === "number" && !isNaN(v) && v > 0, // ✅ Exclude days with no data (score = 0)
-                  );
-                averages[metric] =
-                  values.length > 0
-                    ? Math.round(
-                        values.reduce((a: number, b: number) => a + b, 0) /
-                          values.length,
-                      )
-                    : 0;
-              }
-              setHealthContext((prev) => ({
-                ...prev,
-                healthScores: metrics.map((type) => ({
-                  type,
-                  value: averages[type],
-                  date: new Date().toISOString(),
-                })),
-              }));
-              return;
-            }
-          } catch (error) {
-            console.error(
-              "❌ Failed to calculate health scores from current data:",
-              error,
-            );
-          }
-        }
-        setHealthContext((prev) => ({ ...prev, healthScores: [] }));
-        return;
-      }
-      // For each metric, collect all daily values
-      const metrics = ["overall", "activity", "sleep", "heart", "energy"];
-      const averages: Record<string, number> = {};
-      for (const metric of metrics) {
-        const values = dailyScores
-          .map(
-            (
-              day: import("@/utils/dailyHealthScoreCalculator").DailyHealthScores,
-            ) =>
-              day.scores.find(
-                (s: import("@/types/HealthContext").HealthScore) =>
-                  s.type === metric,
-              )?.value,
-          )
-          .filter(
-            (v: number | undefined): v is number =>
-              typeof v === "number" && !isNaN(v) && v > 0, // ✅ Exclude days with no data (score = 0)
-          );
-        averages[metric] =
-          values.length > 0
-            ? Math.round(
-                values.reduce((a: number, b: number) => a + b, 0) /
-                  values.length,
-              )
-            : 0;
-      }
-      setHealthContext((prev) => ({
-        ...prev,
-        healthScores: metrics.map((type) => ({
-          type,
-          value: averages[type],
-          date: new Date().toISOString(),
-        })),
-      }));
+  // --- Compute healthScores from Storj metricData (context fallback for components
+  //     that don't use useStorjHealthScores directly, e.g. HealthReport) ---
+  useEffect((): void => {
+    if (!metricData || Object.keys(metricData).length === 0) {
+      setHealthContext((prev) => ({ ...prev, healthScores: [] }));
+      return;
     }
-    updateHealthScoresFromDaily();
+
+    const healthDataResults = Object.entries(metricData).reduce(
+      (acc: Record<string, unknown[]>, [metricType, dataPoints]) => {
+        acc[metricType] = dataPoints.map((point) => ({
+          startDate: point.startDate,
+          endDate: point.endDate,
+          value: point.value,
+          unit: point.unit,
+          source: point.source,
+          device: point.device,
+          type: metricType,
+        }));
+        return acc;
+      },
+      {},
+    );
+
+    const dailyScores = calculateDailyHealthScores(
+      healthDataResults as HealthDataResults,
+      healthContext.userProfile || {},
+    );
+
+    if (dailyScores.length === 0) {
+      setHealthContext((prev) => ({ ...prev, healthScores: [] }));
+      return;
+    }
+
+    const scoreTypes = ["overall", "activity", "sleep", "heart", "energy"];
+    const averages: Record<string, number> = {};
+    for (const scoreType of scoreTypes) {
+      const values = dailyScores
+        .map((day) => day.scores.find((s) => s.type === scoreType)?.value)
+        .filter(
+          (v): v is number => typeof v === "number" && !isNaN(v) && v > 0,
+        );
+      averages[scoreType] =
+        values.length > 0
+          ? Math.round(values.reduce((a, b) => a + b, 0) / values.length)
+          : 0;
+    }
+
+    setHealthContext((prev) => ({
+      ...prev,
+      healthScores: scoreTypes.map((type) => ({
+        type,
+        value: averages[type],
+        date: new Date().toISOString(),
+      })),
+    }));
   }, [metricData, healthContext.userProfile]);
-
-  // Calculate and store daily health scores
-  useEffect(() => {
-    if (metricData && Object.keys(metricData).length > 0) {
-      try {
-        // Convert metricData to the format expected by calculateDailyHealthScores
-        const healthDataResults = Object.entries(metricData).reduce(
-          (acc, [metricType, dataPoints]) => {
-            acc[metricType] = dataPoints.map((point) => ({
-              startDate: point.startDate,
-              endDate: point.endDate,
-              value: point.value,
-              unit: point.unit,
-              source: point.source,
-              device: point.device,
-              type: metricType,
-            }));
-            return acc;
-          },
-          {} as Record<string, unknown[]>,
-        );
-
-        // Get user profile
-        const profile = healthContext.userProfile || {};
-
-        // Clear old daily scores first, then recalculate with new weights/logic
-        clearDailyHealthScores()
-          .then(() => {
-            console.log(
-              "🔄 [Daily Scores] Cleared old scores, recalculating...",
-            );
-            // Prefer processed aggregates if available (avoids missing-category days when raw is trimmed)
-            return healthDataStore.getProcessedData().then((processed) => {
-              if (processed) {
-                return calculateAndStoreDailyHealthScoresFromProcessed(
-                  {
-                    dailyAggregates:
-                      processed.dailyAggregates as unknown as Record<
-                        string,
-                        Map<string, import("@/agents/types").MetricSample>
-                      >,
-                    sleepData:
-                      processed.sleepData as import("@/utils/sleepDataProcessor").DailyProcessedSleepData[],
-                  },
-                  profile,
-                );
-              }
-              // Fallback: raw-based calculation
-              return calculateAndStoreDailyHealthScores(
-                healthDataResults as HealthDataResults,
-                profile,
-              );
-            });
-          })
-          .then((dailyScores: unknown[]) => {
-            console.log(
-              "✅ [Daily Scores] Daily health scores calculated and stored successfully:",
-              dailyScores.length,
-            );
-          })
-          .catch((error: Error) => {
-            console.error(
-              "❌ [Daily Scores] Failed to calculate and store daily health scores:",
-              error,
-            );
-          });
-      } catch (error) {
-        console.error(
-          "❌ [Daily Scores] Failed to prepare data for daily health scores:",
-          error,
-        );
-      }
-    }
-  }, [healthContext.userProfile, metricData]);
 
   const updateProcessingProgress = (progress: number, status: string): void => {
     setProcessingState((prev) => ({ ...prev, progress, status }));

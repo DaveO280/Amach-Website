@@ -196,6 +196,10 @@ export function StorageManagementSection({
   const [attestLoading, setAttestLoading] = useState(false);
   const [attestStatus, setAttestStatus] = useState<string>("");
 
+  const [clearHealthDataLoading, setClearHealthDataLoading] = useState(false);
+  const [clearHealthDataMessage, setClearHealthDataMessage] =
+    useState<string>("");
+
   // Initialize encryption key - only once per address change
   useEffect(() => {
     if (!userAddress || encryptionKey || keyRequestAttemptedRef.current) return;
@@ -279,7 +283,9 @@ export function StorageManagementSection({
           items.filter(
             (i) =>
               i.dataType === "bloodwork-report-fhir" ||
-              i.dataType === "dexa-report-fhir",
+              i.dataType === "dexa-report-fhir" ||
+              i.dataType === "gut-health-report" ||
+              i.dataType === "gut-health-species",
           ),
         );
       } catch (error) {
@@ -373,6 +379,31 @@ export function StorageManagementSection({
       `[StorageManagement] Fetched ${storjItems.length} items from Storj`,
     );
     storjItems.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+
+    // Evict stale cache entries: items cached locally that no longer exist on Storj.
+    // Only evict within the requested dataType scope so a filtered refresh doesn't
+    // accidentally delete cached items belonging to other data types.
+    const liveUris = new Set(storjItems.map((item) => item.uri));
+    const staleItems = cachedItems.filter(
+      (c) => (!dataType || c.dataType === dataType) && !liveUris.has(c.uri),
+    );
+    if (staleItems.length > 0) {
+      console.log(
+        `[StorageManagement] Evicting ${staleItems.length} stale cache entries not found on Storj`,
+      );
+      await Promise.all(
+        staleItems.map((c) =>
+          storjItemsCache
+            .removeItem(c.uri)
+            .catch((err) =>
+              console.warn(
+                `[StorageManagement] Failed to evict stale item ${c.uri}:`,
+                err,
+              ),
+            ),
+        ),
+      );
+    }
 
     // Find new items (exist in Storj but not in cache)
     const newItems = storjItems.filter((item) => !cachedUris.has(item.uri));
@@ -586,6 +617,8 @@ export function StorageManagementSection({
       const TEST_DATA_TYPES = new Set([
         "bloodwork-report-fhir",
         "dexa-report-fhir",
+        "gut-health-report",
+        "gut-health-species",
       ]);
       const list =
         testsDataType === "all"
@@ -657,6 +690,8 @@ export function StorageManagementSection({
       const TEST_DATA_TYPES = new Set([
         "bloodwork-report-fhir",
         "dexa-report-fhir",
+        "gut-health-report",
+        "gut-health-species",
       ]);
       const filteredLegacy =
         testsDataType === "all"
@@ -971,7 +1006,9 @@ export function StorageManagementSection({
       const legacyMode = testsBucketMode === "legacy";
       const isReport =
         item.dataType === "dexa-report-fhir" ||
-        item.dataType === "bloodwork-report-fhir";
+        item.dataType === "bloodwork-report-fhir" ||
+        item.dataType === "gut-health-report" ||
+        item.dataType === "gut-health-species";
 
       let action: string;
       let reportType: string | undefined;
@@ -988,7 +1025,11 @@ export function StorageManagementSection({
             ? "bloodwork"
             : item.dataType === "dexa-report-fhir"
               ? "dexa"
-              : undefined;
+              : item.dataType === "gut-health-report"
+                ? "gut-health"
+                : item.dataType === "gut-health-species"
+                  ? "gut-health-species"
+                  : undefined;
       }
 
       const resp = await fetch("/api/storj", {
@@ -1064,11 +1105,108 @@ export function StorageManagementSection({
     }
   };
 
+  const handleClearAppleHealthStorj = async (): Promise<void> => {
+    if (!encryptionKey) return;
+
+    const confirmed = confirm(
+      "This will permanently delete your Apple Health data from Storj. A fresh upload will be required.",
+    );
+    if (!confirmed) return;
+
+    setClearHealthDataLoading(true);
+    setClearHealthDataMessage("");
+    try {
+      // Fetch fresh list directly from Storj — do NOT rely on healthDataItems state
+      // (which may be stale or unpopulated) and do NOT filter by metadata dataType
+      // (old files may have dataType:"unknown" in their metadata even though the
+      // object key already places them under the apple-health-full-export/ prefix).
+      const listResp = await fetch("/api/storj", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "storage/list",
+          userAddress,
+          encryptionKey,
+          dataType: "apple-health-full-export",
+        }),
+      });
+      const listPayload = (await listResp.json()) as {
+        success?: boolean;
+        result?: { uri: string }[];
+        error?: string;
+      };
+      if (!listResp.ok || listPayload?.success === false) {
+        throw new Error(listPayload?.error ?? "Failed to list Storj items");
+      }
+      const targets = listPayload.result ?? [];
+      if (targets.length === 0) {
+        setClearHealthDataMessage(
+          "No apple-health-full-export items found in Storj.",
+        );
+        return;
+      }
+
+      for (const item of targets) {
+        const resp = await fetch("/api/storj", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "storage/delete",
+            userAddress,
+            encryptionKey,
+            storjUri: item.uri,
+          }),
+        });
+        const payload = (await resp.json()) as {
+          success?: boolean;
+          error?: string;
+        };
+        if (!resp.ok || payload?.success === false) {
+          throw new Error(payload?.error ?? `Failed to delete ${item.uri}`);
+        }
+      }
+
+      await storjItemsCache.initialize();
+      for (const item of targets) {
+        await storjItemsCache
+          .removeItem(item.uri)
+          .catch((err) =>
+            console.warn(
+              `[StorageManagement] Failed to evict deleted item ${item.uri}:`,
+              err,
+            ),
+          );
+      }
+
+      setHealthDataItems((prev) =>
+        prev.filter((i) => i.dataType !== "apple-health-full-export"),
+      );
+      setClearHealthDataMessage(
+        `Cleared ${targets.length} apple-health-full-export item(s) from Storj.`,
+      );
+    } catch (e) {
+      setClearHealthDataMessage(
+        `Error: ${e instanceof Error ? e.message : "Unknown error"}`,
+      );
+    } finally {
+      setClearHealthDataLoading(false);
+    }
+  };
+
   /**
    * Create on-chain attestation for a stored report
    */
   const handleAttestItem = async (item: StorjListItem): Promise<void> => {
     if (!encryptionKey) return;
+    if (
+      item.dataType === "gut-health-report" ||
+      item.dataType === "gut-health-species"
+    ) {
+      setAttestStatus(
+        "On-chain attestation for gut health reports is not yet supported.",
+      );
+      return;
+    }
 
     setAttestLoading(true);
     setAttestStatus("");
@@ -1849,15 +1987,37 @@ export function StorageManagementSection({
                 <div className="text-xs font-medium text-gray-700">
                   Health data ({healthDataItems.length})
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleRefreshHealthData}
-                  disabled={healthDataLoading}
-                >
-                  {healthDataLoading ? "Loading..." : "Refresh"}
-                </Button>
+                <div className="flex items-center gap-2">
+                  {process.env.NEXT_PUBLIC_DEV_SEED_ENABLED === "true" && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => void handleClearAppleHealthStorj()}
+                      disabled={clearHealthDataLoading || !encryptionKey}
+                    >
+                      {clearHealthDataLoading
+                        ? "Clearing..."
+                        : "Clear Storj Health Data"}
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleRefreshHealthData}
+                    disabled={healthDataLoading}
+                  >
+                    {healthDataLoading ? "Loading..." : "Refresh"}
+                  </Button>
+                </div>
               </div>
+              {clearHealthDataMessage && (
+                <div className="flex items-center gap-2 p-3 bg-[rgba(59,130,246,0.08)] border border-[rgba(59,130,246,0.25)] rounded-lg">
+                  <Info className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                  <p className="text-sm text-blue-900">
+                    {clearHealthDataMessage}
+                  </p>
+                </div>
+              )}
               {healthDataError && (
                 <div className="flex items-center gap-2 p-3 bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] rounded-lg">
                   <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
@@ -2031,9 +2191,13 @@ export function StorageManagementSection({
                     onChange={(e) => setTestsDataType(e.target.value)}
                   >
                     <option value="bloodwork-report-fhir">
-                      bloodwork-report-fhir
+                      Bloodwork Report
                     </option>
-                    <option value="dexa-report-fhir">dexa-report-fhir</option>
+                    <option value="dexa-report-fhir">DEXA Report</option>
+                    <option value="gut-health-report">Gut Health Report</option>
+                    <option value="gut-health-species">
+                      Gut Health Species
+                    </option>
                     <option value="all">all test reports</option>
                   </select>
                 </div>
@@ -2128,7 +2292,15 @@ export function StorageManagementSection({
                             }}
                           >
                             <div className="text-xs font-medium text-gray-900">
-                              {item.dataType}
+                              {item.dataType === "bloodwork-report-fhir"
+                                ? "Bloodwork Report"
+                                : item.dataType === "dexa-report-fhir"
+                                  ? "DEXA Report"
+                                  : item.dataType === "gut-health-report"
+                                    ? "Gut Health Report"
+                                    : item.dataType === "gut-health-species"
+                                      ? "Gut Health Species"
+                                      : item.dataType}
                             </div>
                             <div className="text-[11px] text-gray-600 mt-1 break-all">
                               {item.uri}

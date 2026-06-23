@@ -49,6 +49,8 @@ export default [
     ignores: [
       "**/node_modules/**",
       "**/.next/**",
+      "**/.claude/**",
+      "src 2/**",
       "**/out/**",
       "**/build/**",
       "**/dist/**",

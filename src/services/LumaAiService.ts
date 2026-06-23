@@ -23,7 +23,10 @@ import {
   getRecommendedAnalysisMode,
   updateAnalysisState,
 } from "@/utils/analysisState";
-import { getReportsSummary } from "@/utils/reportFormatters";
+import {
+  getReportDateLabel,
+  getReportsSummary,
+} from "@/utils/reportFormatters";
 import {
   buildTemporalContext,
   formatTemporalContext,
@@ -963,10 +966,29 @@ Please provide a helpful response as Luma, keeping in mind the user's health dat
         if (r.report.type === "medical-record") {
           return `- medical-record${r.report.reportDate ? ` (${r.report.reportDate})` : ""}${r.report.title ? ` — ${r.report.title}` : ""}`;
         }
+        if (r.report.type === "gut-health") {
+          const score = r.report.summary.microbiome_score;
+          return `- gut-health${r.report.collection_date ? ` (${r.report.collection_date})` : ""}${score !== undefined ? ` — score ${score}/100` : ""}`;
+        }
         return `- dexa${r.report.scanDate ? ` (${r.report.scanDate})` : ""}`;
       });
       systemMessage += `\nLatest reports:\n${lines.join("\n")}`;
-      systemMessage += `\nUse get_latest_report to retrieve specific fields when needed.`;
+      systemMessage += `\nUse get_latest_report to retrieve specific DEXA or bloodwork fields when needed.`;
+
+      // Pre-generated clinical narratives (see ClinicalNarrativeService) —
+      // written once at upload time and cached on Storj alongside the
+      // structured data. Generic across every report type: Luma reads the
+      // narrative directly instead of traversing structured JSON, and no
+      // per-type instructions need to be added here for new report types.
+      const reportsWithNarrative = reports.filter((r) => Boolean(r.narrative));
+      if (reportsWithNarrative.length > 0) {
+        systemMessage +=
+          "\n\nYou have access to clinical report summaries written by a specialist reviewing the user's uploaded reports. When a summary is available below, reference its specific findings directly rather than only a headline score or number.";
+        for (const r of reportsWithNarrative) {
+          const dateLabel = getReportDateLabel(r.report);
+          systemMessage += `\n\n${r.report.type.toUpperCase()} REPORT SUMMARY${dateLabel ? ` (${dateLabel})` : ""}:\n${r.narrative}`;
+        }
+      }
     } else if (
       includeHealthContext &&
       uploadedFiles &&

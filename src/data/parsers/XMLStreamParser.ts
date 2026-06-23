@@ -176,6 +176,17 @@ export class XMLStreamParser {
             return;
           }
 
+          // Overlap prevention: skip if startDate <= last endDate for this metric+device
+          const deviceKey = device || "unknown";
+          const lastEnd = this.lastEndDates[type]?.[deviceKey];
+          if (
+            this.options.existingData &&
+            lastEnd &&
+            new Date(startDate) <= lastEnd
+          ) {
+            return;
+          }
+
           // Create data point with standardized unit
           const dataPoint: HealthDataPoint = {
             startDate,
@@ -187,13 +198,14 @@ export class XMLStreamParser {
             type, // Add type to help with later processing
           };
 
-          // Capture ALL records for Storj BEFORE the overlap-prevention check.
-          // The IndexedDB overlap filter is intentional for the UI/IndexedDB path
-          // (don't re-import data already stored locally), but it must NOT apply
-          // to the Storj backup path — the server-side merge handles deduplication.
-          // Without this split, re-uploading after a local sync would produce a
-          // Storj payload that is missing all metrics already present in IndexedDB,
-          // causing a data regression on every subsequent upload.
+          // Add to selected metrics results (for UI)
+          if (isSelectedMetric) {
+            results[type].push(dataPoint);
+            this.metricCounts[type]++;
+            this.recordCount++;
+          }
+
+          // Add to allMetricsData for Storj (captures ALL metrics)
           if (captureForStorj) {
             if (!this.allMetricsData[type]) {
               this.allMetricsData[type] = [];
@@ -201,32 +213,6 @@ export class XMLStreamParser {
             }
             this.allMetricsData[type].push(dataPoint);
             this.allMetricsCounts[type]++;
-          }
-
-          // Overlap prevention: skip if startDate <= last endDate for this metric+device
-          // Only applies to the UI / IndexedDB result path below.
-          const deviceKey = device || "unknown";
-          const lastEnd = this.lastEndDates[type]?.[deviceKey];
-          if (
-            this.options.existingData &&
-            lastEnd &&
-            new Date(startDate) <= lastEnd
-          ) {
-            // Update lastEndDates even for skipped records so subsequent
-            // records within this run are correctly compared.
-            const endDateObj = new Date(endDate);
-            if (!this.lastEndDates[type]) this.lastEndDates[type] = {};
-            const cur = this.lastEndDates[type][deviceKey];
-            if (!cur || endDateObj > cur)
-              this.lastEndDates[type][deviceKey] = endDateObj;
-            return;
-          }
-
-          // Add to selected metrics results (for UI / IndexedDB)
-          if (isSelectedMetric) {
-            results[type].push(dataPoint);
-            this.metricCounts[type]++;
-            this.recordCount++;
           }
 
           // Update lastEndDates so subsequent records in this run can detect overlaps

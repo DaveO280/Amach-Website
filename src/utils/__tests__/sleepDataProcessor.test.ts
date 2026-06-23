@@ -46,7 +46,9 @@ describe("sleepDataProcessor - session splitting / naps", () => {
     ];
 
     const daily = processSleepData(data);
-    expect(daily.map((d) => d.date)).toEqual(["2024-01-09", "2024-01-10"]);
+    // Sessions are attributed to their WAKE date (when the session ends), so the
+    // two nights land on 01-10 and 01-11 respectively.
+    expect(daily.map((d) => d.date)).toEqual(["2024-01-10", "2024-01-11"]);
     expect(daily[0].sessions).toHaveLength(1);
     expect(daily[1].sessions).toHaveLength(1);
   });
@@ -74,12 +76,14 @@ describe("sleepDataProcessor - session splitting / naps", () => {
     ];
 
     const daily = processSleepData(data);
-    expect(daily.map((d) => d.date)).toEqual(["2024-01-09", "2024-08-07"]);
+    // Wake-date attribution: the 1/9→1/10 night lands on 01-10, the 8/7→8/8
+    // night on 08-08. The absurd multi-month InBed marker is ignored entirely.
+    expect(daily.map((d) => d.date)).toEqual(["2024-01-10", "2024-08-08"]);
     expect(daily[0].sessions).toHaveLength(1);
     expect(daily[1].sessions).toHaveLength(1);
   });
 
-  test("does NOT split when gap is ≥120min but an InBed marker overlaps the gap; attributes to start day", () => {
+  test("does NOT split when gap is ≥120min but an InBed marker overlaps the gap; attributes to wake day", () => {
     const data: HealthDataPoint[] = [
       rec(
         "2026-01-01T22:00:00.000Z",
@@ -106,37 +110,38 @@ describe("sleepDataProcessor - session splitting / naps", () => {
 
     const daily = processSleepData(data);
     expect(daily).toHaveLength(1);
-    expect(daily[0].date).toBe("2026-01-01");
+    // Attributed to the wake day (the session ends 01-02T07:00).
+    expect(daily[0].date).toBe("2026-01-02");
     expect(daily[0].sessions).toHaveLength(1);
     expect(daily[0].sessions[0].isOvernight).toBe(true);
     // End time should reflect latest end in the session (InBed extends to 07:00)
     expect(daily[0].sessions[0].endTime).toBe("2026-01-02T07:00:00.000Z");
   });
 
-  test("splits into separate sessions when gap is ≥120min and there are no InBed markers; overnight session belongs to start day", () => {
+  test("splits into separate sessions when gap is ≥120min and there are no InBed markers; overnight session belongs to wake day", () => {
     const data: HealthDataPoint[] = [
-      // Overnight session (no InBed markers)
+      // Overnight session (no InBed markers) — wakes on 01-04
       rec(
         "2026-01-03T23:00:00.000Z",
         "2026-01-04T06:00:00.000Z",
         SleepStage.Core,
       ),
-      // Nap the next day
+      // Nap two days later, clearly its own day
       rec(
-        "2026-01-04T14:00:00.000Z",
-        "2026-01-04T14:30:00.000Z",
+        "2026-01-05T14:00:00.000Z",
+        "2026-01-05T14:30:00.000Z",
         SleepStage.Core,
       ),
     ];
 
     const daily = processSleepData(data);
-    expect(daily.map((d) => d.date)).toEqual(["2026-01-03", "2026-01-04"]);
+    expect(daily.map((d) => d.date)).toEqual(["2026-01-04", "2026-01-05"]);
 
-    const overnightDay = daily.find((d) => d.date === "2026-01-03");
+    const overnightDay = daily.find((d) => d.date === "2026-01-04");
     expect(overnightDay?.sessions).toHaveLength(1);
     expect(overnightDay?.sessions[0].isOvernight).toBe(true);
 
-    const napDay = daily.find((d) => d.date === "2026-01-04");
+    const napDay = daily.find((d) => d.date === "2026-01-05");
     expect(napDay?.sessions).toHaveLength(1);
     expect(napDay?.sessions[0].isOvernight).toBe(false);
   });

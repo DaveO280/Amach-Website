@@ -55,7 +55,7 @@ function windowedAvg(
   // and Apple Health XML space-separated "YYYY-MM-DD ..." format (legacy IndexedDB
   // records). split("T")[0] silently breaks for space-separated dates, producing a
   // unique key per record and inflating totals.length to the record count rather than
-  // the day count.
+  // the day count — causing longer-window averages to collapse by a large factor.
   if (isCumulativeMetric(hkKey)) {
     const dailyTotals: Record<string, number> = {};
     for (const p of inWindow) {
@@ -238,7 +238,6 @@ const StatCard: React.FC<StatCardProps> = ({
             )}
           </>
         )}
-
         {/* Static 3-column window averages — all visible simultaneously */}
         {hasAnyWindow && (
           <div className="mt-2 pt-2 border-t border-emerald-100">

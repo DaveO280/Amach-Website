@@ -77,8 +77,24 @@ export interface ProcessedSleepSession {
   isOvernight: boolean; // Whether the session spans across midnight
 }
 
+/**
+ * Records a data-quality problem detected while aggregating a day's sleep.
+ * Surfaced (not silently dropped or capped) so the UI/agents can flag the day
+ * for review instead of presenting a corrupted value as fact.
+ */
+export interface SleepAnomaly {
+  type: "multi-night-collision" | "physiologically-implausible";
+  reason: string;
+  /** Number of sessions excluded from this day's reported total. */
+  excludedSessions: number;
+  /** Summed sleepDuration (minutes) of the excluded sessions. */
+  excludedMinutes: number;
+  /** What the naive sum-of-all-sessions would have reported (minutes). */
+  rawTotalMinutes: number;
+}
+
 export interface DailyProcessedSleepData {
-  date: string; // YYYY-MM-DD format
+  date: string; // YYYY-MM-DD format (the WAKE date — see determinePrimaryDay)
   totalDuration: number; // Total time in bed in minutes
   sleepDuration: number; // Total sleep time in minutes (excluding awake time)
   sessions: SleepSession[]; // Array of sleep sessions for this day
@@ -94,6 +110,13 @@ export interface DailyProcessedSleepData {
     remSleepPercentage: number; // Percentage (0-100)
     awakenings: number; // Total number of awakenings
   };
+  /**
+   * Set when this day's raw sessions were corrected during aggregation
+   * (e.g. two separate nights collided on one wake-date). `sleepDuration`
+   * and `stageData` reflect the corrected primary night; this field records
+   * what was excluded so the anomaly can be surfaced rather than hidden.
+   */
+  anomaly?: SleepAnomaly | null;
 }
 
 /**
@@ -118,6 +141,20 @@ function mergeIntervalMinutes(intervals: { s: number; e: number }[]): number {
   total += cur.e - cur.s;
   return Math.round(total / 60000);
 }
+
+/**
+ * Aggregation thresholds for separating one night's sleep from data artifacts.
+ */
+// A non-primary session sharing a wake-date is treated as part of the same day
+// (summed) if it is either a short nap OR temporally adjacent to the primary
+// night. A session that is BOTH full-night-sized AND far from the primary is a
+// SEPARATE night colliding on one calendar day — excluded from the total and
+// flagged rather than summed (which inflates) or capped (which hides).
+const NAP_MAX_MINUTES = 180; // ≤3h of sleep counts as a nap, always summed in
+const SAME_NIGHT_ADJACENCY_MS = 6 * 60 * 60 * 1000; // 6h gap to the primary night
+// Hard physiological ceiling: no single night of sleep can plausibly exceed
+// this. A computed total above it means the corrected value is still wrong.
+const PHYSIOLOGICAL_MAX_SLEEP_MINUTES = 16 * 60; // 16h
 
 /**
  * Processes raw sleep data into structured daily sleep information with improved
@@ -182,9 +219,6 @@ export const processSleepData = (
       const isOvernight =
         extractDatePart(sessionStart) !== extractDatePart(sessionEnd);
 
-      // Determine the primary day for this sleep session
-      const sessionDate = determinePrimaryDay(sessionStart, sessionEnd);
-
       // Calculate session duration in minutes
       const sessionDurationMs = endDate.getTime() - startDate.getTime();
       const sessionDurationMinutes = Math.round(
@@ -218,6 +252,11 @@ export const processSleepData = (
       const awakeIntervals: { s: number; e: number }[] = [];
       let awakeningCount = 0;
       let lastAwakeEndTime: Date | null = null;
+      // Latest end of an actual sleep/awake (non-InBed) record. The session's
+      // wake date is derived from this, not from the overall session end —
+      // a stray InBed marker belonging to the next night can otherwise drag the
+      // session boundary (and thus its date) a full day forward.
+      let lastStageEndMs: number | null = null;
 
       // Initialize stage markers
       const stageMarkers = {
@@ -309,6 +348,12 @@ export const processSleepData = (
           firstSleepTime = record.startDate;
         }
 
+        // Track the latest end across actual sleep/awake records (InBed records
+        // already returned above), used to derive the wake date.
+        if (lastStageEndMs === null || endTime.getTime() > lastStageEndMs) {
+          lastStageEndMs = endTime.getTime();
+        }
+
         // Add segment for visualization
         segments.push({
           stage: record.value as SleepStage,
@@ -363,6 +408,15 @@ export const processSleepData = (
         (a, b) =>
           new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
       );
+
+      // Attribute the session to its wake date — derived from the last actual
+      // sleep/awake record, falling back to the session end if (defensively)
+      // no stage record was tracked.
+      const sleepEndIso =
+        lastStageEndMs !== null
+          ? new Date(lastStageEndMs).toISOString()
+          : sessionEnd;
+      const sessionDate = determinePrimaryDay(sessionStart, sleepEndIso);
 
       // Create the sleep session object with all required properties
       const sleepSession: SleepSession = {
@@ -490,33 +544,120 @@ export const processSleepData = (
   const result: DailyProcessedSleepData[] = [];
 
   for (const [date, sessions] of Object.entries(deduplicatedByDate)) {
-    // Additional validation: if total sleep time exceeds 12 hours, log a warning
-    // and check for potential duplicates
-    const totalSleepTime = sessions.reduce(
+    // Sessions sharing a wake-date are normally one night (possibly fragmented
+    // into pieces by a long mid-night awake gap) plus the occasional nap. But a
+    // corrupt multi-day session can also land here alongside the real night.
+    //
+    // Determine which sessions genuinely belong to THIS night: the longest
+    // session is the primary night; any other session that is a short nap, or
+    // is temporally adjacent to the primary (a fragment of the same night), is
+    // summed in. A session that is BOTH full-night-sized AND far from the
+    // primary is a DIFFERENT night colliding on this wake-date — it is excluded
+    // from the total and recorded as an anomaly rather than silently summed
+    // (which inflates the value) or capped downstream (which hides the problem).
+    const rawTotalMinutes = sessions.reduce(
       (sum, s) => sum + s.sleepDuration,
       0,
     );
-    const totalTimeInBed = sessions.reduce((sum, s) => sum + s.timeInBed, 0);
 
-    // If total sleep exceeds 12 hours (720 minutes), it's likely a duplicate
-    if (totalSleepTime > 720) {
-      console.warn(
-        `[sleepDataProcessor] Suspicious sleep duration for ${date}: ${(totalSleepTime / 60).toFixed(1)}h. Sessions: ${sessions.length}. This may indicate duplicate data.`,
+    const byDurationDesc = [...sessions].sort(
+      (a, b) => b.sleepDuration - a.sleepDuration,
+    );
+    const primary = byDurationDesc[0];
+    const primaryStartMs = new Date(primary.startTime).getTime();
+    const primaryEndMs = new Date(primary.endTime).getTime();
+
+    const contributing: SleepSession[] = [];
+    const excluded: SleepSession[] = [];
+    for (const s of byDurationDesc) {
+      if (s === primary) {
+        contributing.push(s);
+        continue;
+      }
+      // Distance between this session's interval and the primary night's
+      // envelope (0 if they overlap). Overlapping near-duplicates are already
+      // removed by the dedup pass above; this catches same-night fragments
+      // separated by a long mid-sleep awake gap.
+      const sStartMs = new Date(s.startTime).getTime();
+      const sEndMs = new Date(s.endTime).getTime();
+      const gapToPrimary = Math.max(
+        0,
+        sStartMs - primaryEndMs,
+        primaryStartMs - sEndMs,
       );
-      // For now, we'll still include it but log the warning
-      // In the future, we could apply additional filtering here
+      const isSameNight =
+        s.sleepDuration <= NAP_MAX_MINUTES ||
+        gapToPrimary <= SAME_NIGHT_ADJACENCY_MS;
+      if (isSameNight) {
+        contributing.push(s);
+      } else {
+        excluded.push(s);
+      }
     }
 
-    const totalCore = sessions.reduce((sum, s) => sum + s.stageData.core, 0);
-    const totalDeep = sessions.reduce((sum, s) => sum + s.stageData.deep, 0);
-    const totalRem = sessions.reduce((sum, s) => sum + s.stageData.rem, 0);
-    const totalAwake = sessions.reduce((sum, s) => sum + s.stageData.awake, 0);
+    let anomaly: SleepAnomaly | null = null;
+    if (excluded.length > 0) {
+      anomaly = {
+        type: "multi-night-collision",
+        reason: `${excluded.length} sleep session(s) from a different night share the wake-date ${date}; excluded from the daily total to avoid summing separate nights.`,
+        excludedSessions: excluded.length,
+        excludedMinutes: excluded.reduce((sum, s) => sum + s.sleepDuration, 0),
+        rawTotalMinutes,
+      };
+    }
+
+    let finalSessions = contributing;
+    let totalSleepTime = contributing.reduce(
+      (sum, s) => sum + s.sleepDuration,
+      0,
+    );
+
+    // Last-resort guard: even after collision handling, a single computed night
+    // above the physiological ceiling is corrupt. Fall back to the primary night
+    // as the best estimate and flag the day — assess and correct the mistake
+    // rather than presenting an impossible value or silently capping it away.
+    if (totalSleepTime > PHYSIOLOGICAL_MAX_SLEEP_MINUTES) {
+      anomaly = {
+        type: "physiologically-implausible",
+        reason: `Summed sleep for ${date} (${(totalSleepTime / 60).toFixed(1)}h) exceeded the ${PHYSIOLOGICAL_MAX_SLEEP_MINUTES / 60}h plausibility ceiling — likely duplicate or malformed source data; falling back to the primary night.`,
+        excludedSessions: finalSessions.length - 1,
+        excludedMinutes: totalSleepTime - primary.sleepDuration,
+        rawTotalMinutes,
+      };
+      finalSessions = [primary];
+      totalSleepTime = primary.sleepDuration;
+    }
+
+    const totalTimeInBed = finalSessions.reduce(
+      (sum, s) => sum + s.timeInBed,
+      0,
+    );
+
+    if (anomaly) {
+      console.warn(
+        `[sleepDataProcessor] ${anomaly.type} for ${date}: reporting ${(totalSleepTime / 60).toFixed(1)}h (raw sum of all sessions was ${(rawTotalMinutes / 60).toFixed(1)}h across ${sessions.length} session(s)). ${anomaly.reason}`,
+      );
+    }
+
+    const totalCore = finalSessions.reduce(
+      (sum, s) => sum + s.stageData.core,
+      0,
+    );
+    const totalDeep = finalSessions.reduce(
+      (sum, s) => sum + s.stageData.deep,
+      0,
+    );
+    const totalRem = finalSessions.reduce((sum, s) => sum + s.stageData.rem, 0);
+    const totalAwake = finalSessions.reduce(
+      (sum, s) => sum + s.stageData.awake,
+      0,
+    );
 
     result.push({
       date,
       totalDuration: totalTimeInBed,
       sleepDuration: totalSleepTime,
-      sessions,
+      sessions: finalSessions,
       stageData: {
         core: totalCore,
         deep: totalDeep,
@@ -524,11 +665,24 @@ export const processSleepData = (
         awake: totalAwake,
       },
       metrics: {
-        sleepEfficiency: Math.round((totalSleepTime / totalTimeInBed) * 100),
-        deepSleepPercentage: Math.round((totalDeep / totalSleepTime) * 100),
-        remSleepPercentage: Math.round((totalRem / totalSleepTime) * 100),
-        awakenings: sessions.reduce((sum, s) => sum + s.metrics.awakenings, 0),
+        sleepEfficiency:
+          totalTimeInBed > 0
+            ? Math.round((totalSleepTime / totalTimeInBed) * 100)
+            : 0,
+        deepSleepPercentage:
+          totalSleepTime > 0
+            ? Math.round((totalDeep / totalSleepTime) * 100)
+            : 0,
+        remSleepPercentage:
+          totalSleepTime > 0
+            ? Math.round((totalRem / totalSleepTime) * 100)
+            : 0,
+        awakenings: finalSessions.reduce(
+          (sum, s) => sum + s.metrics.awakenings,
+          0,
+        ),
       },
+      anomaly,
     });
   }
 
@@ -552,11 +706,18 @@ export const extractDatePart = (dateString: string): string => {
   return datePart;
 };
 
-// Update the determinePrimaryDay function
-const determinePrimaryDay = (startTime: string, _endTime: string): string => {
-  // Attribute a sleep session to the day the user fell asleep.
-  // This also aligns naps (midday sessions) naturally to the day they occurred.
-  return extractDatePart(startTime);
+// Attribute a sleep session to the WAKE date (when the session ends).
+//
+// Previously this used the start date (the day you fell asleep). That collided
+// two genuinely separate nights onto one calendar day whenever sleep onset
+// straddled midnight in opposite directions — e.g. falling asleep at 00:14 one
+// night and at 23:58 the next both map to the same start-date, and the two
+// nights' durations were then summed (producing ~14-18h "nights"). Attributing
+// by wake date matches Apple Health's own convention and the Storj upload path
+// (AppleHealthStorjService.aggregateSleepData also groups by end date), so both
+// pipelines now agree.
+const determinePrimaryDay = (_startTime: string, endTime: string): string => {
+  return extractDatePart(endTime);
 };
 
 // Update the groupSleepSessions function

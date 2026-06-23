@@ -55,7 +55,7 @@ function windowedAvg(
   // and Apple Health XML space-separated "YYYY-MM-DD ..." format (legacy IndexedDB
   // records). split("T")[0] silently breaks for space-separated dates, producing a
   // unique key per record and inflating totals.length to the record count rather than
-  // the day count — causing the 180d average to collapse by a factor of ~6.
+  // the day count — causing longer-window averages to collapse by a large factor.
   if (isCumulativeMetric(hkKey)) {
     const dailyTotals: Record<string, number> = {};
     for (const p of inWindow) {
@@ -97,7 +97,6 @@ interface WindowedAverages {
   last7: number;
   last30: number;
   last90: number;
-  last180: number;
 }
 
 function useMetricWindows(
@@ -121,7 +120,6 @@ function useMetricWindows(
           last7: windowedAvg(metricData, k, 7),
           last30: windowedAvg(metricData, k, 30),
           last90: windowedAvg(metricData, k, 90),
-          last180: windowedAvg(metricData, k, 180),
         },
       ]),
     ) as Record<MetricKey, WindowedAverages>;
@@ -233,45 +231,25 @@ const StatCard: React.FC<StatCardProps> = ({
             )}
           </>
         )}
-        {/* Windowed averages from full Storj dataset */}
-        {(windows.last7 > 0 ||
-          windows.last30 > 0 ||
-          windows.last90 > 0 ||
-          windows.last180 > 0) && (
+        {/* Windowed averages (7d/30d/90d) from full Storj dataset —
+            static 3-column grid, all visible simultaneously. */}
+        {(windows.last7 > 0 || windows.last30 > 0 || windows.last90 > 0) && (
           <div className="mt-2 pt-2 border-t border-emerald-100">
-            <div className="grid grid-cols-4 gap-1 text-xs text-emerald-600">
-              {windows.last7 > 0 && (
-                <div className="text-center">
+            <div className="grid grid-cols-3 gap-1 text-xs text-emerald-600">
+              {(
+                [
+                  { label: "7d", value: windows.last7 },
+                  { label: "30d", value: windows.last30 },
+                  { label: "90d", value: windows.last90 },
+                ] as const
+              ).map(({ label, value }) => (
+                <div key={label} className="text-center">
                   <div className="font-medium text-emerald-800">
-                    {fmtWindow(windows.last7)}
+                    {value > 0 ? fmtWindow(value) : "—"}
                   </div>
-                  <div className="text-[10px]">7d</div>
+                  <div className="text-[10px]">{label}</div>
                 </div>
-              )}
-              {windows.last30 > 0 && (
-                <div className="text-center">
-                  <div className="font-medium text-emerald-800">
-                    {fmtWindow(windows.last30)}
-                  </div>
-                  <div className="text-[10px]">30d</div>
-                </div>
-              )}
-              {windows.last90 > 0 && (
-                <div className="text-center">
-                  <div className="font-medium text-emerald-800">
-                    {fmtWindow(windows.last90)}
-                  </div>
-                  <div className="text-[10px]">90d</div>
-                </div>
-              )}
-              {windows.last180 > 0 && (
-                <div className="text-center">
-                  <div className="font-medium text-emerald-800">
-                    {fmtWindow(windows.last180)}
-                  </div>
-                  <div className="text-[10px]">180d</div>
-                </div>
-              )}
+              ))}
             </div>
           </div>
         )}

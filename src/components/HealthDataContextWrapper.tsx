@@ -641,37 +641,42 @@ export default function HealthDataContextWrapper({
             ? Math.min(...activeEnergy.map((day) => day.value ?? 0))
             : 0,
       },
-      sleep:
-        processedSleepData.length > 0
-          ? {
-              average: Math.round(
-                processedSleepData.reduce(
-                  (sum, day) => sum + day.sleepDuration,
-                  0,
-                ) / processedSleepData.length,
-              ),
-              efficiency: Math.round(
-                processedSleepData.reduce(
-                  (sum, day) => sum + day.metrics.sleepEfficiency,
-                  0,
-                ) / processedSleepData.length,
-              ),
-              high: Math.max(
-                // Cap at 900 min (15h) — values above this are double-counted uploads
-                // from multiple devices. Upload path now deduplicates; cap guards old data.
-                ...processedSleepData
-                  .filter((day) => day.sleepDuration <= 900)
-                  .map((day) => day.sleepDuration),
-                0,
-              ),
-              low:
-                processedSleepData.length > 0
-                  ? Math.min(
-                      ...processedSleepData.map((day) => day.sleepDuration),
-                    )
-                  : 0,
-            }
-          : { average: 0, efficiency: 0, high: 0, low: 0 },
+      sleep: ((): {
+        average: number;
+        efficiency: number;
+        high: number;
+        low: number;
+      } => {
+        if (processedSleepData.length === 0) {
+          return { average: 0, efficiency: 0, high: 0, low: 0 };
+        }
+        // processSleepData now returns one corrected value per WAKE-date, with
+        // multi-night collisions excluded and flagged (day.anomaly set) rather
+        // than summed or capped. So these stats are computed directly from the
+        // corrected per-night durations — no <=900min cap masking bad data.
+        const flagged = processedSleepData.filter((d) => d.anomaly);
+        if (flagged.length > 0) {
+          console.warn(
+            `[HealthDataContext] ${flagged.length} of ${processedSleepData.length} sleep day(s) flagged as data-quality anomalies (corrected before display): ${flagged
+              .map((d) => `${d.date} (${d.anomaly?.type})`)
+              .join(", ")}`,
+          );
+        }
+        const durations = processedSleepData.map((d) => d.sleepDuration);
+        return {
+          average: Math.round(
+            durations.reduce((sum, v) => sum + v, 0) / durations.length,
+          ),
+          efficiency: Math.round(
+            processedSleepData.reduce(
+              (sum, day) => sum + day.metrics.sleepEfficiency,
+              0,
+            ) / processedSleepData.length,
+          ),
+          high: Math.max(...durations, 0),
+          low: Math.min(...durations),
+        };
+      })(),
     };
 
     // Compute trends for each metric

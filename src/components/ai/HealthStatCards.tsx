@@ -8,7 +8,109 @@ import {
   getMetricUnit,
 } from "@/components/metricDisplayUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import React from "react";
+import { isCumulativeMetric } from "@/storage/appleHealth/metricAggregationStrategies";
+import type { HealthDataByType } from "@/types/healthData";
+import React, { useMemo } from "react";
+
+type StatMetricKey =
+  | "steps"
+  | "exercise"
+  | "heartRate"
+  | "hrv"
+  | "restingHR"
+  | "respiratory"
+  | "activeEnergy"
+  | "sleep";
+
+const HK_KEY: Record<StatMetricKey, string> = {
+  steps: "HKQuantityTypeIdentifierStepCount",
+  exercise: "HKQuantityTypeIdentifierAppleExerciseTime",
+  heartRate: "HKQuantityTypeIdentifierHeartRate",
+  hrv: "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+  restingHR: "HKQuantityTypeIdentifierRestingHeartRate",
+  respiratory: "HKQuantityTypeIdentifierRespiratoryRate",
+  activeEnergy: "HKQuantityTypeIdentifierActiveEnergyBurned",
+  sleep: "HKCategoryTypeIdentifierSleepAnalysis",
+};
+
+function windowedAvg(
+  metricData: HealthDataByType,
+  key: StatMetricKey,
+  days: number,
+): number {
+  const hkKey = HK_KEY[key];
+  const points = metricData[hkKey] ?? [];
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const inWindow = points.filter((p) => {
+    const t = new Date(p.startDate).getTime();
+    return !isNaN(t) && t >= cutoff;
+  });
+
+  // Cumulative metrics must be summed per calendar day before averaging.
+  // substring(0,10) handles both ISO "YYYY-MM-DDT..." and space-separated
+  // "YYYY-MM-DD ..." Apple Health XML dates; split("T")[0] breaks the latter.
+  if (isCumulativeMetric(hkKey)) {
+    const dailyTotals: Record<string, number> = {};
+    for (const p of inWindow) {
+      const dayKey = p.startDate.substring(0, 10);
+      const v = parseFloat(p.value);
+      if (!isNaN(v) && v > 0) {
+        dailyTotals[dayKey] = (dailyTotals[dayKey] ?? 0) + v;
+      }
+    }
+    const totals = Object.values(dailyTotals);
+    if (totals.length === 0) return 0;
+    return Math.round(totals.reduce((a, b) => a + b, 0) / totals.length);
+  }
+
+  const dailyValues: Record<string, number[]> = {};
+  for (const p of inWindow) {
+    const dayKey = p.startDate.substring(0, 10);
+    const v = parseFloat(p.value);
+    if (!isNaN(v) && v > 0) {
+      if (!dailyValues[dayKey]) dailyValues[dayKey] = [];
+      dailyValues[dayKey].push(v);
+    }
+  }
+  const dayMeans = Object.values(dailyValues).map(
+    (vs) => vs.reduce((a, b) => a + b, 0) / vs.length,
+  );
+  if (dayMeans.length === 0) return 0;
+  return Math.round(dayMeans.reduce((a, b) => a + b, 0) / dayMeans.length);
+}
+
+interface WindowedAverages {
+  last7: number;
+  last30: number;
+  last90: number;
+}
+
+function useMetricWindows(
+  metricData: HealthDataByType,
+): Record<StatMetricKey, WindowedAverages> {
+  return useMemo(() => {
+    const keys: StatMetricKey[] = [
+      "steps",
+      "exercise",
+      "heartRate",
+      "hrv",
+      "restingHR",
+      "respiratory",
+      "activeEnergy",
+      "sleep",
+    ];
+    return Object.fromEntries(
+      keys.map((k) => [
+        k,
+        {
+          last7: windowedAvg(metricData, k, 7),
+          last30: windowedAvg(metricData, k, 30),
+          last90: windowedAvg(metricData, k, 90),
+        },
+      ]),
+    ) as Record<StatMetricKey, WindowedAverages>;
+  }, [metricData]);
+}
 
 interface StatCardProps {
   keyName: import("@/components/metricDisplayUtils").MetricKey;
@@ -20,6 +122,7 @@ interface StatCardProps {
   efficiency?: number;
   high?: number | string;
   low?: number | string;
+  windows: WindowedAverages;
 }
 
 const StatCard: React.FC<StatCardProps> = ({
@@ -32,7 +135,21 @@ const StatCard: React.FC<StatCardProps> = ({
   efficiency,
   high,
   low,
+  windows,
 }): JSX.Element => {
+  const isSleep = title === getMetricLabel("sleep");
+
+  const fmtWindow = (v: number): string => {
+    if (isSleep) return formatMetricValue("sleep", v);
+    return formatMetricValue(
+      keyName as import("@/components/metricDisplayUtils").MetricKey,
+      v,
+    );
+  };
+
+  const hasAnyWindow =
+    windows.last7 > 0 || windows.last30 > 0 || windows.last90 > 0;
+
   return (
     <Card className="bg-white/60 backdrop-blur-sm border-amber-100">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -42,8 +159,9 @@ const StatCard: React.FC<StatCardProps> = ({
         {icon}
       </CardHeader>
       <CardContent>
-        {title === getMetricLabel("sleep") ? (
+        {isSleep ? (
           <>
+            {/* Main value: all-time average */}
             <div className="text-2xl font-bold text-emerald-900 font-mono">
               {unit}
             </div>
@@ -52,6 +170,7 @@ const StatCard: React.FC<StatCardProps> = ({
                 Efficiency: {efficiency.toFixed(1)}%
               </p>
             )}
+            {/* All-time high/low */}
             {(high !== undefined || low !== undefined) && (
               <div className="flex justify-between text-xs text-emerald-600 mt-1">
                 {low !== undefined && (
@@ -69,8 +188,12 @@ const StatCard: React.FC<StatCardProps> = ({
           </>
         ) : (
           <>
+            {/* Main value: all-time average */}
             <div className="text-2xl font-bold text-emerald-900 font-mono">
-              {formatMetricValue(keyName, average)}
+              {formatMetricValue(
+                keyName as import("@/components/metricDisplayUtils").MetricKey,
+                average,
+              )}
               <span className="text-sm text-emerald-600 ml-1">{unit}</span>
             </div>
             {total !== undefined && (
@@ -78,6 +201,7 @@ const StatCard: React.FC<StatCardProps> = ({
                 Total: {total.toFixed(0)} {unit}
               </p>
             )}
+            {/* All-time high/low */}
             {(high !== undefined || low !== undefined) && (
               <div className="flex justify-between text-xs text-emerald-600 mt-1">
                 {low !== undefined && (
@@ -100,13 +224,37 @@ const StatCard: React.FC<StatCardProps> = ({
             )}
           </>
         )}
+
+        {/* Static 3-column window averages — all visible simultaneously */}
+        {hasAnyWindow && (
+          <div className="mt-2 pt-2 border-t border-emerald-100">
+            <div className="grid grid-cols-3 gap-1 text-center">
+              {(
+                [
+                  { label: "7d", value: windows.last7 },
+                  { label: "30d", value: windows.last30 },
+                  { label: "90d", value: windows.last90 },
+                ] as const
+              ).map(({ label, value }) => (
+                <div key={label}>
+                  <div className="text-[10px] text-emerald-500">{label}</div>
+                  <div className="text-xs font-medium text-emerald-800">
+                    {value > 0 ? fmtWindow(value) : "—"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 };
 
 const HealthStatCards: React.FC = React.memo((): React.ReactNode => {
-  const { metrics } = useHealthDataContext();
+  const { metrics, metricData } = useHealthDataContext();
+  const windows = useMetricWindows(metricData);
+
   if (!metrics) return null;
 
   return (
@@ -124,10 +272,8 @@ const HealthStatCards: React.FC = React.memo((): React.ReactNode => {
         ] as const
       ).map((key) => {
         const metric = metrics[key];
-        // Only SleepMetricsSummary has efficiency
         const efficiency =
           "efficiency" in metric ? metric.efficiency : undefined;
-        // Only some metrics have total
         const total = "total" in metric ? metric.total : undefined;
         return (
           <StatCard
@@ -153,6 +299,7 @@ const HealthStatCards: React.FC = React.memo((): React.ReactNode => {
             }
             efficiency={efficiency as number | undefined}
             total={total as number | undefined}
+            windows={windows[key]}
           />
         );
       })}

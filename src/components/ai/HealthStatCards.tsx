@@ -10,7 +10,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { isCumulativeMetric } from "@/storage/appleHealth/metricAggregationStrategies";
 import type { HealthDataByType } from "@/types/healthData";
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 
 type MetricKey =
   | "steps"
@@ -55,7 +55,7 @@ function windowedAvg(
   // and Apple Health XML space-separated "YYYY-MM-DD ..." format (legacy IndexedDB
   // records). split("T")[0] silently breaks for space-separated dates, producing a
   // unique key per record and inflating totals.length to the record count rather than
-  // the day count — causing the 180d average to collapse by a factor of ~6.
+  // the day count.
   if (isCumulativeMetric(hkKey)) {
     const dailyTotals: Record<string, number> = {};
     for (const p of inWindow) {
@@ -97,8 +97,6 @@ interface WindowedAverages {
   last7: number;
   last30: number;
   last90: number;
-  last180: number;
-  last730: number;
 }
 
 function useMetricWindows(
@@ -122,37 +120,10 @@ function useMetricWindows(
           last7: windowedAvg(metricData, k, 7),
           last30: windowedAvg(metricData, k, 30),
           last90: windowedAvg(metricData, k, 90),
-          last180: windowedAvg(metricData, k, 180),
-          last730: windowedAvg(metricData, k, 730),
         },
       ]),
     ) as Record<MetricKey, WindowedAverages>;
   }, [metricData]);
-}
-
-const WINDOW_OPTIONS = [
-  { days: 7, label: "7d" },
-  { days: 30, label: "30d" },
-  { days: 90, label: "90d" },
-  { days: 180, label: "180d" },
-  { days: 730, label: "2yr" },
-] as const;
-
-type WindowDays = (typeof WINDOW_OPTIONS)[number]["days"];
-
-function getWindowValue(windows: WindowedAverages, days: WindowDays): number {
-  switch (days) {
-    case 7:
-      return windows.last7;
-    case 30:
-      return windows.last30;
-    case 90:
-      return windows.last90;
-    case 180:
-      return windows.last180;
-    case 730:
-      return windows.last730;
-  }
 }
 
 interface StatCardProps {
@@ -181,7 +152,6 @@ const StatCard: React.FC<StatCardProps> = ({
   windows,
 }): JSX.Element => {
   const isSleep = title === getMetricLabel("sleep");
-  const [selectedDays, setSelectedDays] = useState<WindowDays>(90);
 
   const fmtWindow = (v: number): string => {
     if (isSleep) return formatMetricValue("sleep", v);
@@ -191,13 +161,8 @@ const StatCard: React.FC<StatCardProps> = ({
     );
   };
 
-  const selectedWindowValue = getWindowValue(windows, selectedDays);
   const hasAnyWindow =
-    windows.last7 > 0 ||
-    windows.last30 > 0 ||
-    windows.last90 > 0 ||
-    windows.last180 > 0 ||
-    windows.last730 > 0;
+    windows.last7 > 0 || windows.last30 > 0 || windows.last90 > 0;
 
   return (
     <Card className="bg-white/60 backdrop-blur-sm border-amber-100">
@@ -210,7 +175,7 @@ const StatCard: React.FC<StatCardProps> = ({
       <CardContent>
         {isSleep ? (
           <>
-            {/* Main value: all-time average — never changes with window selector */}
+            {/* Main value: all-time average — never changes with window values */}
             <div className="text-2xl font-bold text-emerald-900 font-mono">
               {unit}
             </div>
@@ -219,7 +184,7 @@ const StatCard: React.FC<StatCardProps> = ({
                 Efficiency: {efficiency.toFixed(1)}%
               </p>
             )}
-            {/* All-time high/low — never changes with window selector */}
+            {/* All-time high/low — never changes with window values */}
             {(high !== undefined || low !== undefined) && (
               <div className="flex justify-between text-xs text-emerald-600 mt-1">
                 {low !== undefined && (
@@ -237,7 +202,7 @@ const StatCard: React.FC<StatCardProps> = ({
           </>
         ) : (
           <>
-            {/* Main value: all-time average — never changes with window selector */}
+            {/* Main value: all-time average — never changes with window values */}
             <div className="text-2xl font-bold text-emerald-900 font-mono">
               {formatMetricValue(
                 keyName as import("@/components/metricDisplayUtils").MetricKey,
@@ -250,7 +215,7 @@ const StatCard: React.FC<StatCardProps> = ({
                 Total: {total.toFixed(0)} {unit}
               </p>
             )}
-            {/* All-time high/low — never changes with window selector */}
+            {/* All-time high/low — never changes with window values */}
             {(high !== undefined || low !== undefined) && (
               <div className="flex justify-between text-xs text-emerald-600 mt-1">
                 {low !== undefined && (
@@ -274,32 +239,25 @@ const StatCard: React.FC<StatCardProps> = ({
           </>
         )}
 
-        {/* Window selector — only this sub-section responds to time window changes */}
+        {/* Static 3-column window averages — all visible simultaneously */}
         {hasAnyWindow && (
           <div className="mt-2 pt-2 border-t border-emerald-100">
-            <div className="flex gap-0.5 mb-1.5">
-              {WINDOW_OPTIONS.map((opt) => (
-                <button
-                  key={opt.days}
-                  onClick={() => setSelectedDays(opt.days)}
-                  className={`flex-1 text-[10px] py-0.5 rounded transition-colors ${
-                    selectedDays === opt.days
-                      ? "bg-emerald-600 text-white font-medium"
-                      : "text-emerald-500 hover:bg-emerald-50"
-                  }`}
-                >
-                  {opt.label}
-                </button>
+            <div className="grid grid-cols-3 gap-1 text-center">
+              {(
+                [
+                  { label: "7d", value: windows.last7 },
+                  { label: "30d", value: windows.last30 },
+                  { label: "90d", value: windows.last90 },
+                ] as const
+              ).map(({ label, value }) => (
+                <div key={label}>
+                  <div className="text-[10px] text-emerald-500">{label}</div>
+                  <div className="text-xs font-medium text-emerald-800">
+                    {value > 0 ? fmtWindow(value) : "—"}
+                  </div>
+                </div>
               ))}
             </div>
-            {selectedWindowValue > 0 && (
-              <div className="text-center text-xs text-emerald-600">
-                <span className="font-medium text-emerald-800">
-                  {fmtWindow(selectedWindowValue)}
-                </span>
-                <span className="ml-1 text-[10px]">avg</span>
-              </div>
-            )}
           </div>
         )}
       </CardContent>

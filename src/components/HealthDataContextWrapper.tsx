@@ -351,8 +351,19 @@ export default function HealthDataContextWrapper({
       return;
     }
 
+    // For all-time stats (average/high/low) use the full Storj history when
+    // available. metricData falls back to 180-day IDB when the dirty-data guard
+    // triggers or Storj is unavailable; that guard is appropriate for AI agent
+    // context and windowed sub-values, but stat card headlines should always
+    // reflect the deepest available dataset.
+    const fullDataSource: HealthDataByType =
+      storjHealthData && Object.keys(storjHealthData).length > 0
+        ? storjHealthData
+        : metricData;
+
     // Process sleep data
-    const sleepData = metricData["HKCategoryTypeIdentifierSleepAnalysis"] || [];
+    const sleepData =
+      fullDataSource["HKCategoryTypeIdentifierSleepAnalysis"] || [];
     const processedSleepData = processSleepData(sleepData);
 
     // Helper: process numeric data for cumulative metrics (sum daily totals).
@@ -493,29 +504,28 @@ export default function HealthDataContextWrapper({
         .sort((a, b) => a.date.getTime() - b.date.getTime());
     };
 
-    // Process each metric using IndexedDB data
-    // NOTE: Data is already deduplicated during upload in HealthDataSelector
-    // No need to deduplicate again here - this was causing redundant processing
+    // Process each metric using fullDataSource (Storj full history, or metricData
+    // fallback). fullDataSource is the deepest available dataset for all-time stats.
     const steps = processCumulativeData(
-      metricData["HKQuantityTypeIdentifierStepCount"] || [],
+      fullDataSource["HKQuantityTypeIdentifierStepCount"] || [],
     );
     const exercise = processCumulativeData(
-      metricData["HKQuantityTypeIdentifierAppleExerciseTime"] || [],
+      fullDataSource["HKQuantityTypeIdentifierAppleExerciseTime"] || [],
     );
     const heartRate = processHeartRateData(
-      metricData["HKQuantityTypeIdentifierHeartRate"] || [],
+      fullDataSource["HKQuantityTypeIdentifierHeartRate"] || [],
     );
     const hrv = processHeartRateData(
-      metricData["HKQuantityTypeIdentifierHeartRateVariabilitySDNN"] || [],
+      fullDataSource["HKQuantityTypeIdentifierHeartRateVariabilitySDNN"] || [],
     );
     const restingHR = processHeartRateData(
-      metricData["HKQuantityTypeIdentifierRestingHeartRate"] || [],
+      fullDataSource["HKQuantityTypeIdentifierRestingHeartRate"] || [],
     );
     const respiratory = processRespiratoryData(
-      metricData["HKQuantityTypeIdentifierRespiratoryRate"] || [],
+      fullDataSource["HKQuantityTypeIdentifierRespiratoryRate"] || [],
     );
     const activeEnergy = processCumulativeData(
-      metricData["HKQuantityTypeIdentifierActiveEnergyBurned"] || [],
+      fullDataSource["HKQuantityTypeIdentifierActiveEnergyBurned"] || [],
     );
 
     // Days with value=0 for cumulative metrics (steps, exercise) represent days
@@ -526,6 +536,10 @@ export default function HealthDataContextWrapper({
     const exerciseActive = exercise.filter((d) => (d.value ?? 0) > 0);
 
     console.log("[HealthDataContextWrapper] metrics computation:", {
+      source:
+        storjHealthData && Object.keys(storjHealthData).length > 0
+          ? "storj"
+          : "metricData",
       stepDaysTotal: steps.length,
       stepDaysActive: stepsActive.length,
       stepRawAvgAllDays:
@@ -723,7 +737,7 @@ export default function HealthDataContextWrapper({
     });
 
     setHealthContext((prev) => ({ ...prev, metrics, trends }));
-  }, [metricData, healthContext.userProfile]);
+  }, [metricData, storjHealthData, healthContext.userProfile]);
 
   // --- Compute healthScores from Storj metricData (context fallback for components
   //     that don't use useStorjHealthScores directly, e.g. HealthReport) ---

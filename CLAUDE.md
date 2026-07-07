@@ -260,7 +260,7 @@ Located in `tests/agents/agentQualityTest.ts` - validates agent response quality
 This project uses **living documentation**:
 
 - **4 core docs only**: README, CONTRIBUTING, CODE_OF_CONDUCT, DEPLOYMENT
-- **Stale docs auto-purged**: DEBUG*\*, FIX*_, MIGRATION\__, etc.
+- **Stale docs auto-purged**: DEBUG*\*, FIX*\_, MIGRATION\_\_, etc.
 - **Inline docs preferred**: JSDoc in code over separate markdown
 
 Configure patterns in `.docs-config.json`.
@@ -299,6 +299,7 @@ Configure patterns in `.docs-config.json`.
 - **Don't skip type-check** - Build requires it
 - **Don't create debug markdown files** - They'll be auto-deleted
 - **Don't commit .env files** - They're gitignored
+- **Don't commit health data** - Real Apple Health exports and derived test fixtures/golden files stay OUT of git (privacy integrity starts at source). They live under `$AMACH_HEALTH_FIXTURE_DIR` outside the repo and are CI-injected; see `docs/architecture/13-data-integrity-harness.md`. `.gitignore` enforces this.
 - **Don't use `@ts-ignore`** - Fix the types properly
 - **Don't modify contract ABIs directly** - Update contracts first
 

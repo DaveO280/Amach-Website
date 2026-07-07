@@ -98,3 +98,16 @@ cache-zk/
 
 # Cursor editor
 .cursor/
+
+# ── Health data — NEVER commit (privacy integrity starts at source) ──
+# Real Apple Health exports and any derived test fixtures / golden files
+# live OUTSIDE the repo, referenced via $AMACH_HEALTH_FIXTURE_DIR and
+# injected in CI. See docs/architecture/13-data-integrity-harness.md.
+HealthData*.csv
+HealthData*.xml
+apple_health_export/
+export.xml
+*.health-export.*
+*.golden.json
+/.health-fixtures/
+**/fixtures/health/

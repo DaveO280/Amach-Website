@@ -213,4 +213,4 @@ forthcoming) prioritizes these findings into actionable work.
 **Doc set:** `00` (this) · `01` website-core · `02` website-ui · `03` ios-app ·
 `04` breathe-app · `05` storj · `06` privy · `07` venice-ai · `08` zk-contracts ·
 `09` data-flows-website · `10` data-flows-ios · `11` consolidation-plan ·
-`12` capabilities-and-roadmap.
+`12` capabilities-and-roadmap · `13` data-integrity-harness.

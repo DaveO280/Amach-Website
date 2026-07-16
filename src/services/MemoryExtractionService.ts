@@ -3,6 +3,7 @@
 
 import type { CriticalFact, SessionSummary } from "@/types/conversationMemory";
 import { VeniceApiService } from "@/api/venice/VeniceApiService";
+import { getPrimaryModel } from "@/config/aiModels";
 
 export interface ConversationMessage {
   role: "user" | "assistant";
@@ -96,7 +97,7 @@ export class MemoryExtractionService {
     this.veniceApi =
       veniceApi ??
       new VeniceApiService(
-        process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.7",
+        getPrimaryModel("chat"),
         process.env.NODE_ENV === "development",
       );
   }

@@ -8,6 +8,7 @@
 
 import type { MedicalRecordData } from "@/types/reportData";
 import { callVenice as callVeniceClient } from "./veniceClient";
+import { VENICE_PARSE_TEXT_MODEL } from "./parseConfig";
 
 function stripMarkdownFences(text: string): string {
   return text
@@ -84,8 +85,8 @@ Rules:
       "[AIMedicalRecordParser] Sending document text to AI for parsing...",
     );
 
-    const modelName =
-      process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.7";
+    // parseText tier (non-enclave: JSON mode is unsupported by TEE models).
+    const modelName = VENICE_PARSE_TEXT_MODEL;
 
     const messages: Array<{ role: "system" | "user"; content: string }> = [
       { role: "system", content: systemPrompt },

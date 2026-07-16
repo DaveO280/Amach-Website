@@ -413,6 +413,7 @@ export class CoordinatorAgent {
         userPrompt: summaryPrompt,
         temperature: 0.2,
         maxTokens: 8000,
+        tier: "agent",
         veniceParameters: {
           strip_thinking_response: true,
           include_venice_system_prompt: false,

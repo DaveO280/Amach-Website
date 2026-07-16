@@ -37,6 +37,7 @@ import {
 } from "@/utils/userProfileUtils";
 import { randomChoice } from "@/utils/utils";
 import { VeniceApiService } from "../api/venice/VeniceApiService";
+import { getPrimaryModel } from "../config/aiModels";
 import CharacteristicsLoader from "../components/ai/characteristicsLoader";
 import lumaCharacteristics from "../components/ai/luma";
 import type { HealthContextMetrics } from "../types/HealthContext";
@@ -1452,9 +1453,9 @@ Keep responses conversational and natural. If you mention research, weave it int
    * Creates a singleton instance using environment variables
    */
   static createFromEnv(): LumaAiService {
-    // Create the Venice API service instance with the correct configuration
+    // Model selection + enclave fallback is owned by the /api/venice route.
     const veniceApi = new VeniceApiService(
-      process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.7",
+      getPrimaryModel("chat"),
       process.env.NODE_ENV === "development",
     );
 

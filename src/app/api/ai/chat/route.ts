@@ -18,6 +18,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getModelChain } from "@/config/aiModels";
+import { callVeniceWithFallback } from "@/lib/venice/callVeniceWithFallback";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -470,51 +472,42 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const temperature =
       body.options?.temperature ?? (mode === "deep" ? 0.7 : 0.7);
 
-    const modelName =
-      process.env.NEXT_PUBLIC_VENICE_MODEL_NAME ||
-      process.env.VENICE_MODEL_NAME ||
-      "zai-org-glm-4.7";
+    // Chat tier: enclave-first fallback chain (src/config/aiModels.ts).
+    const modelChain = getModelChain("chat");
 
     // Log message summary before calling Venice
     const systemMsgCount = messages.filter((m) => m.role === "system").length;
     const totalChars = messages.reduce((sum, m) => sum + m.content.length, 0);
     console.log(
-      `[AI Chat] sending ${messages.length} messages (${systemMsgCount} system, ${totalChars} total chars) to ${modelName}`,
+      `[AI Chat] sending ${messages.length} messages (${systemMsgCount} system, ${totalChars} total chars); chain=${modelChain.join(",")}`,
     );
 
-    // Call Venice API
-    const response = await fetch(
-      "https://api.venice.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+    // Call Venice with model fallback (enclave overload / per-model rejection
+    // degrades down the chain to the legacy model).
+    const fb = await callVeniceWithFallback({
+      apiKey,
+      endpoint: "https://api.venice.ai/api/v1",
+      baseBody: {
+        messages,
+        max_tokens: maxTokens,
+        temperature,
+        stream: false,
+        venice_parameters: {
+          strip_thinking_response: true,
+          include_venice_system_prompt: false,
         },
-        body: JSON.stringify({
-          model: modelName,
-          messages,
-          max_tokens: maxTokens,
-          temperature,
-          stream: false,
-          venice_parameters: {
-            strip_thinking_response: true,
-            include_venice_system_prompt: false,
-          },
-        }),
       },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[AI Chat] Venice API error:", response.status, errorText);
-      return NextResponse.json(
-        { error: "AI service error", details: response.status },
-        { status: 502 },
-      );
-    }
-
-    const data = await response.json();
+      chain: modelChain,
+      label: "chat",
+    });
+    const data = fb.data as {
+      choices?: Array<{ message?: { content?: string } }>;
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      };
+    };
     let content = data.choices?.[0]?.message?.content ?? "";
 
     // GLM-4.7 with strip_thinking_response can return empty content if the
@@ -530,7 +523,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         "I'm processing a lot right now. Could you try rephrasing or narrowing your question?";
     }
 
-    return NextResponse.json({
+    const chatRes = NextResponse.json({
       content,
       usage: data.usage
         ? {
@@ -539,8 +532,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             totalTokens: data.usage.total_tokens,
           }
         : undefined,
-      model: modelName,
+      model: fb.modelUsed,
     });
+    chatRes.headers.set("x-amach-model", fb.modelUsed);
+    chatRes.headers.set("x-amach-tee", String(fb.teeServed));
+    if (fb.teeProvider)
+      chatRes.headers.set("x-amach-tee-provider", fb.teeProvider);
+    return chatRes;
   } catch (error) {
     console.error("[AI Chat] Error:", error);
     return NextResponse.json(

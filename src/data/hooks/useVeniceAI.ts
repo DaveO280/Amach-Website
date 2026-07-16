@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import axios, { type AxiosResponse } from "axios";
 import { shouldDisableVeniceThinking } from "@/utils/veniceThinking";
+import { getPrimaryModel } from "@/config/aiModels";
 
 interface VeniceAIRequest {
   prompt: string;
@@ -142,9 +143,9 @@ async function fetchVeniceAI({
   prompt,
   maxTokens = 2000,
 }: VeniceAIRequest): Promise<VeniceAIResponse> {
-  // Use environment variable or fallback to default
-  const modelName =
-    process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.7";
+  // Model selection + enclave fallback is owned by the /api/venice route; this
+  // is the request-body default it ignores in favor of the tier chain.
+  const modelName = getPrimaryModel("chat");
 
   console.log("[useVeniceAI] Making request to Venice API", {
     promptLength: prompt.length,

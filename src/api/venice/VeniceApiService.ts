@@ -8,6 +8,7 @@ import axios, {
   InternalAxiosRequestConfig,
 } from "axios";
 import { logger } from "../../utils/logger";
+import { getPrimaryModel } from "../../config/aiModels";
 
 interface RateLimitInfo {
   reset: Date;
@@ -157,8 +158,8 @@ export class VeniceApiService {
    */
   static fromEnv(): VeniceApiService {
     const debugMode = process.env.NODE_ENV === "development";
-    const modelName =
-      process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.7";
+    // Primary chat model; the /api/venice route owns final selection + fallback.
+    const modelName = getPrimaryModel("chat");
     return new VeniceApiService(modelName, debugMode);
   }
 
@@ -181,12 +182,19 @@ export class VeniceApiService {
     temperature = 0.7,
     maxTokens = 2000,
     veniceParameters,
+    tier,
   }: {
     systemPrompt?: string;
     userPrompt: string;
     temperature?: number;
     maxTokens?: number;
     veniceParameters?: Record<string, unknown>;
+    /**
+     * Model tier hint forwarded to the /api/venice route, which owns model
+     * selection + enclave fallback. "agent" routes to the fast enclave model;
+     * omit for the default "chat" tier. See src/config/aiModels.ts.
+     */
+    tier?: "chat" | "agent" | "memory";
   }): Promise<string> {
     const requestId = Date.now().toString();
     const startTime = Date.now();
@@ -204,6 +212,7 @@ export class VeniceApiService {
         temperature,
         model: this.modelName,
         stream: false,
+        ...(tier ? { tier } : {}),
         ...(veniceParameters ? { venice_parameters: veniceParameters } : {}),
       };
 

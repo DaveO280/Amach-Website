@@ -103,6 +103,7 @@ Return JSON:
             userPrompt: prompt,
             temperature: 0.4,
             maxTokens: 8000,
+            tier: "agent",
             veniceParameters: {
               strip_thinking_response: true,
               include_venice_system_prompt: false,

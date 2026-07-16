@@ -1,21 +1,17 @@
 /**
- * Centralized Venice model configuration for report parsing.
+ * Venice model configuration for report parsing — thin re-export of the central
+ * registry's parse tiers (src/config/aiModels.ts).
  *
- * Text model: used for all LLM-based extraction from PDF text.
- * Vision model: reserved for when PDF → image → vision becomes available.
+ * NOTE: report parsing uses `response_format` (JSON mode), which Venice's TEE
+ * enclave models reject (HTTP 400). So these tiers stay on non-enclave models.
+ * Moving report parsing into the enclave requires dropping response_format and
+ * re-verifying against the report fixtures — tracked as a follow-up.
  */
 
-export const VENICE_PARSE_TEXT_MODEL: string =
-  (typeof process !== "undefined" &&
-    (process.env.NEXT_PUBLIC_VENICE_MODEL_NAME ||
-      process.env.VENICE_MODEL_NAME)) ||
-  "zai-org-glm-4.7";
+import { getPrimaryModel } from "@/config/aiModels";
+
+export const VENICE_PARSE_TEXT_MODEL: string = getPrimaryModel("parseText");
 
 // Vision model for PDF page rendering passes (gauge/chart extraction).
-// qwen3-vl-235b-a22b: Venice-native VL model, supportsMultipleImages=true (up to 10).
-// kimi-k2-5: burns all tokens on reasoning for complex PDF pages — empty content output.
-// e2ee-qwen3-vl-30b-a3b-p: only e2ee vision model but chronically overloaded (HTTP 429).
-// Override via VENICE_VISION_MODEL_NAME env var.
-export const VENICE_PARSE_VISION_MODEL: string =
-  (typeof process !== "undefined" && process.env.VENICE_VISION_MODEL_NAME) ||
-  "qwen3-vl-235b-a22b";
+// Override via VENICE_VISION_MODEL_NAME (honored by the registry parseVision tier).
+export const VENICE_PARSE_VISION_MODEL: string = getPrimaryModel("parseVision");

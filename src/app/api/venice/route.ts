@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getModelChain, type ModelTier } from "@/config/aiModels";
+import { callVeniceWithFallback } from "@/lib/venice/callVeniceWithFallback";
 
 // Use Node.js runtime for longer timeout
 export const runtime = "nodejs";
@@ -37,11 +39,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Get API credentials from environment variables (server-side only)
     const apiKey = process.env.VENICE_API_KEY;
     const apiEndpoint = "https://api.venice.ai/api/v1";
-    // Read from NEXT_PUBLIC_ var first for consistency with client, fallback to server-only var
-    const modelName =
-      process.env.NEXT_PUBLIC_VENICE_MODEL_NAME ||
-      process.env.VENICE_MODEL_NAME ||
-      "zai-org-glm-4.7";
+    // Model tier + fallback chain (src/config/aiModels.ts). JSON mode
+    // (response_format) forces the non-enclave parseText chain — enclave models
+    // reject response_format. Otherwise honor an optional body.tier hint
+    // (agents pass "agent" for the fast enclave model), defaulting to "chat".
+    const hasResponseFormat = Boolean(
+      body.response_format || body.responseFormat,
+    );
+    const requestedTier =
+      typeof body.tier === "string" ? (body.tier as string) : undefined;
+    const tier: ModelTier = hasResponseFormat
+      ? "parseText"
+      : requestedTier === "agent" || requestedTier === "memory"
+        ? (requestedTier as ModelTier)
+        : "chat";
+    const modelChain = getModelChain(tier);
+    const modelName = modelChain[0]; // primary — for logging only
 
     // Enhanced logging for debugging - using console.error to ensure visibility in production
     console.error("[Venice API Route] Environment check:", {
@@ -157,70 +170,37 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
 
     try {
-      const fetchStartTime = Date.now();
-
-      // Add request size check for production
+      // Request size check for production
       const requestSize = JSON.stringify(requestBody).length;
       if (requestSize > 1000000) {
-        // 1MB limit
         console.warn("[Venice API Route] Large request detected:", {
           size: requestSize,
           messageCount: requestBody.messages?.length || 0,
         });
       }
 
-      // Forward the request to Venice API
-      // Only add timeout signal if explicitly configured
-      const fetchOptions: RequestInit = {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(requestBody),
+      // Forward to Venice with model fallback. Enclave overload (429) or a
+      // per-model parameter/availability rejection (400/404) degrades down the
+      // chain, ending at the legacy non-TEE model. Records which model served
+      // and whether it was TEE-attested (telemetry inside the helper).
+      const fb = await callVeniceWithFallback({
+        apiKey,
+        endpoint: apiEndpoint,
+        baseBody: requestBody as unknown as Record<string, unknown>,
+        chain: modelChain,
+        label: tier,
+        timeoutMs: REQUEST_TIMEOUT_MS,
+      });
+      const data = fb.data as {
+        choices?: unknown[];
       };
 
-      // Only add timeout if explicitly set
-      if (REQUEST_TIMEOUT_MS) {
-        fetchOptions.signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-      }
-
-      const response = await fetch(
-        `${apiEndpoint}/chat/completions`,
-        fetchOptions,
-      );
-
-      console.error("[Venice API Route] Venice API response received:", {
-        timestamp: new Date().toISOString(),
-        elapsedMs: Date.now() - startTime,
-        fetchDuration: Date.now() - fetchStartTime,
-        status: response.status,
-        statusText: response.statusText,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("[Venice API Route] API Error Response:", {
-          timestamp: new Date().toISOString(),
-          elapsedMs: Date.now() - startTime,
-          status: response.status,
-          statusText: response.statusText,
-          errorText,
-        });
-        return NextResponse.json(
-          {
-            error: `Venice API error: ${response.status} ${response.statusText}`,
-            details: errorText,
-          },
-          { status: response.status },
-        );
-      }
-
-      const data = await response.json();
       console.error("[Venice API Route] Response processed - SUCCESS:", {
         timestamp: new Date().toISOString(),
         elapsedMs: Date.now() - startTime,
+        modelUsed: fb.modelUsed,
+        teeServed: fb.teeServed,
+        fellBack: fb.fellBack,
         hasChoices: Boolean(data?.choices),
         choiceCount: data?.choices?.length || 0,
       });
@@ -243,14 +223,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       // Dev-only: echo back the effective venice_parameters to confirm thinking is disabled/stripped.
-      if (process.env.NODE_ENV === "development") {
-        return NextResponse.json({
-          ...data,
-          __debug_venice_parameters: requestBody.venice_parameters,
-        });
-      }
-
-      return NextResponse.json(data);
+      const payload =
+        process.env.NODE_ENV === "development"
+          ? {
+              ...data,
+              __debug_venice_parameters: requestBody.venice_parameters,
+            }
+          : data;
+      const res = NextResponse.json(payload);
+      // Surface TEE attestation to the client (for the "enclave-verified" badge).
+      res.headers.set("x-amach-model", fb.modelUsed);
+      res.headers.set("x-amach-tee", String(fb.teeServed));
+      if (fb.teeProvider)
+        res.headers.set("x-amach-tee-provider", fb.teeProvider);
+      return res;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       const name = error instanceof Error ? error.name : "UnknownError";

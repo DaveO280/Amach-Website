@@ -15,6 +15,8 @@
  */
 
 import { shouldDisableVeniceThinking } from "@/utils/veniceThinking";
+import { getModelChain } from "@/config/aiModels";
+import { callVeniceWithFallback } from "@/lib/venice/callVeniceWithFallback";
 
 const VENICE_API_BASE = "https://api.venice.ai/api/v1";
 const MIN_NARRATIVE_LENGTH = 50;
@@ -61,11 +63,6 @@ export async function generateClinicalNarrative(
     return null;
   }
 
-  const modelName =
-    process.env.NEXT_PUBLIC_VENICE_MODEL_NAME ||
-    process.env.VENICE_MODEL_NAME ||
-    "zai-org-glm-4.7";
-
   const userPrompt = `Report type: ${reportType}
 
 Structured data:
@@ -74,15 +71,12 @@ ${JSON.stringify(structuredData, null, 2)}
 Write the clinical narrative now.`;
 
   try {
-    const response = await fetch(`${VENICE_API_BASE}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        model: modelName,
+    // Narrative is quality-critical PHI prose → chat tier (enclave-first with
+    // fallback). Previously called Venice directly on a hardcoded model.
+    const fb = await callVeniceWithFallback({
+      apiKey,
+      endpoint: VENICE_API_BASE,
+      baseBody: {
         messages: [
           { role: "system", content: NARRATIVE_SYSTEM_PROMPT },
           { role: "user", content: userPrompt },
@@ -97,18 +91,16 @@ Write the clinical narrative now.`;
             ? { disable_thinking: true }
             : {}),
         },
-      }),
+      },
+      chain: getModelChain("chat"),
+      label: "clinical-narrative",
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(
-        `[ClinicalNarrativeService] Venice API error for ${reportType}: ${response.status} ${errorText}`,
-      );
-      return null;
-    }
-
-    const data = await response.json();
+    const data = fb.data as {
+      choices?: Array<{
+        message?: { content?: string; reasoning_content?: string };
+        finish_reason?: string;
+      }>;
+    };
     const message = data?.choices?.[0]?.message;
     const content = message?.content;
     if (typeof content !== "string") {

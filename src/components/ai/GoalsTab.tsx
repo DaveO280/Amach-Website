@@ -1,4 +1,5 @@
 import { VeniceApiService } from "@/api/venice/VeniceApiService";
+import { getPrimaryModel } from "@/config/aiModels";
 import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
 import { Button } from "@/components/ui/button";
 import { useSaveGoalsMutation } from "@/data/hooks/useGoalsMutation";
@@ -22,9 +23,7 @@ const GoalsTab: React.FC = (): JSX.Element => {
     () =>
       VeniceApiService.fromEnv
         ? VeniceApiService.fromEnv()
-        : new VeniceApiService(
-            process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.7",
-          ),
+        : new VeniceApiService(getPrimaryModel("chat")),
     [],
   );
   const aiService = useMemo(() => new LumaAiService(veniceApi), [veniceApi]);

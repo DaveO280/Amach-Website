@@ -10,6 +10,7 @@ import type {
 } from "@/types/reportData";
 import { callVenice as callVeniceClient } from "./veniceClient";
 import { ANTI_HALLUCINATION_RULES } from "./llmPipeline";
+import { VENICE_PARSE_TEXT_MODEL } from "./parseConfig";
 
 const JUNK_METRIC_NAMES = new Set([
   "name",
@@ -551,9 +552,9 @@ ${textToParse}`;
   try {
     console.log("[AIBloodworkParser] Sending PDF text to AI for parsing...");
 
-    // Make direct API call to access reasoning_content if needed
-    const modelName =
-      process.env.NEXT_PUBLIC_VENICE_MODEL_NAME || "zai-org-glm-4.7";
+    // Make direct API call to access reasoning_content if needed.
+    // parseText tier (non-enclave: JSON mode is unsupported by TEE models).
+    const modelName = VENICE_PARSE_TEXT_MODEL;
     const messages: Array<{ role: "system" | "user"; content: string }> = [];
     if (systemPrompt) {
       messages.push({ role: "system", content: systemPrompt });

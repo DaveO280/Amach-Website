@@ -5,15 +5,14 @@
  * - Client-side (no API key): proxies through /api/venice route.
  */
 
+import { getPrimaryModel } from "@/config/aiModels";
+
 const VENICE_API_URL = "https://api.venice.ai/api/v1/chat/completions";
 
 function getModelName(): string {
-  return (
-    (typeof process !== "undefined" &&
-      (process.env.NEXT_PUBLIC_VENICE_MODEL_NAME ||
-        process.env.VENICE_MODEL_NAME)) ||
-    "zai-org-glm-4.7"
-  );
+  // parseText tier (non-enclave: report parsing uses JSON mode / response_format,
+  // which Venice TEE models reject). See src/config/aiModels.ts.
+  return getPrimaryModel("parseText");
 }
 
 export async function callVenice(

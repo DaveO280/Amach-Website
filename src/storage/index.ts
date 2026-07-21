@@ -38,14 +38,6 @@ export {
 } from "./StorjConversationService";
 
 export {
-  StorjSyncService,
-  createStorjSyncService,
-  getStorjSyncService,
-  type SyncOptions,
-  type SyncResult,
-} from "./StorjSyncService";
-
-export {
   StorjReportService,
   getStorjReportService,
   type ReportStorageOptions,

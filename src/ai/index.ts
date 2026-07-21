@@ -16,14 +16,3 @@ export {
   type Pattern,
   type Anomaly,
 } from "./RelevanceScorer";
-
-export {
-  preprocessHealthContext,
-  cachePreprocessedContext,
-  getCachedContext,
-  getPreprocessedContext,
-  toAIPrompt,
-  getSummary,
-  type PreprocessedContext,
-  type PreprocessOptions,
-} from "./ContextPreprocessor";

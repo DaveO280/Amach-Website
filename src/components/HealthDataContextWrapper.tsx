@@ -16,8 +16,7 @@ import {
   ProcessingState,
 } from "@/types/healthData";
 import { calculateDailyHealthScores } from "@/utils/dailyHealthScoreCalculator";
-import { extractDatePart } from "@/utils/dataDeduplicator";
-import { processSleepData } from "@/utils/sleepDataProcessor";
+import { computeHealthMetricStats } from "@/utils/healthMetricStats";
 import React, {
   createContext,
   useContext,
@@ -59,9 +58,20 @@ interface MetricTrendSummary {
   outliers: number[];
 }
 
+/** Which store the currently-displayed metricData came from. */
+export type MetricDataSource = "storj" | "indexeddb";
+
 interface HealthDataContextType {
   // Health data
   metricData: HealthDataByType;
+  /**
+   * Where metricData came from. "storj" is the canonical full history;
+   * "indexeddb" is a shorter working set (or the dirty-data fallback), so
+   * all-time high/low/average are only "all-time" within that slice.
+   */
+  metricDataSource: MetricDataSource;
+  /** True when metricData is the canonical full history (Storj). */
+  isFullHistory: boolean;
   processingState: ProcessingState;
   setProcessingState: (state: ProcessingState) => void;
   updateProcessingProgress: (progress: number, status: string) => void;
@@ -202,9 +212,12 @@ export default function HealthDataContextWrapper({
   // summaries). We detect this by comparing the 7-day step average from Storj
   // against IndexedDB. If Storj is >1.5x IDB the upload is pre-dedup and we
   // fall back to IndexedDB until a clean upload runs (PR #88 + fresh import).
-  const metricData = useMemo((): HealthDataByType => {
+  const resolvedMetricData = useMemo((): {
+    data: HealthDataByType;
+    source: MetricDataSource;
+  } => {
     if (!storjHealthData || Object.keys(storjHealthData).length === 0) {
-      return indexedDbMetricData;
+      return { data: indexedDbMetricData, source: "indexeddb" };
     }
 
     if (Object.keys(indexedDbMetricData).length > 0) {
@@ -233,12 +246,18 @@ export default function HealthDataContextWrapper({
         console.warn(
           `[HealthDataContext] Storj 7d step avg (${Math.round(storjAvg)}) is >1.5× IDB avg (${Math.round(idbAvg)}) — Storj data appears doubled (pre-dedup upload). Falling back to IndexedDB until a clean Storj upload runs.`,
         );
-        return indexedDbMetricData;
+        return { data: indexedDbMetricData, source: "indexeddb" };
       }
     }
 
-    return storjHealthData;
+    return { data: storjHealthData, source: "storj" };
   }, [indexedDbMetricData, storjHealthData]);
+
+  const metricData = resolvedMetricData.data;
+  // Storj is the canonical full history; IndexedDB is a shorter working set.
+  // Consumers must not present "all-time" stats as final while this is false.
+  const metricDataSource = resolvedMetricData.source;
+  const isFullHistory = metricDataSource === "storj";
 
   // Load long-range processed aggregates on startup (enables fast charts / tool-use without reprocessing raw data).
   useEffect(() => {
@@ -351,334 +370,10 @@ export default function HealthDataContextWrapper({
       return;
     }
 
-    // Process sleep data
-    const sleepData = metricData["HKCategoryTypeIdentifierSleepAnalysis"] || [];
-    const processedSleepData = processSleepData(sleepData);
-
-    // Helper: process numeric data for cumulative metrics (sum daily totals).
-    // For Storj-native metricData (one pre-summed point per day at T12:00 UTC),
-    // the sum loop is a no-op (single-point days), but remains correct for
-    // IndexedDB raw records which may have many intraday entries per day.
-    const processCumulativeData = (
-      data: { startDate: string; value: string }[],
-    ): Array<{
-      day: string;
-      date: Date;
-      value: number;
-      count: number;
-      values: number[];
-    }> => {
-      const dailyData: Record<
-        string,
-        { total: number; count: number; values: number[] }
-      > = {};
-      data.forEach((point) => {
-        try {
-          const dayKey = extractDatePart(point.startDate);
-          const value = parseFloat(point.value);
-          if (!isNaN(value)) {
-            if (!dailyData[dayKey]) {
-              dailyData[dayKey] = { total: 0, count: 0, values: [] };
-            }
-            // For cumulative metrics, sum the values for the day
-            dailyData[dayKey].total += value;
-            dailyData[dayKey].count += 1;
-            dailyData[dayKey].values.push(value);
-          }
-        } catch (e) {
-          console.error("Error processing cumulative data point:", e);
-        }
-      });
-      return Object.entries(dailyData)
-        .map(([day, data]) => ({
-          day,
-          date: new Date(day + "T12:00:00"),
-          value: Math.round(data.total),
-          count: data.count,
-          values: data.values,
-        }))
-        .sort((a, b) => a.date.getTime() - b.date.getTime());
-    };
-
-    // Helper: process heart rate data (average daily values).
-    // For Storj-native metricData, storjAppleHealthConverter.extractNumericValue
-    // passes avg only (not min/max), so min/max will equal avg for Storj days.
-    const processHeartRateData = (
-      data: { startDate: string; value: string }[],
-    ): Array<{
-      day: string;
-      date: Date;
-      value: number;
-      count: number;
-      values: number[];
-      avg: number;
-      min: number;
-      max: number;
-    }> => {
-      const dailyData: Record<
-        string,
-        { values: number[]; min: number; max: number }
-      > = {};
-      data.forEach((point) => {
-        try {
-          const dayKey = extractDatePart(point.startDate);
-          const value = parseFloat(point.value);
-          if (!isNaN(value)) {
-            if (!dailyData[dayKey]) {
-              dailyData[dayKey] = {
-                values: [],
-                min: Number.MAX_SAFE_INTEGER,
-                max: Number.MIN_SAFE_INTEGER,
-              };
-            }
-            dailyData[dayKey].values.push(value);
-            dailyData[dayKey].min = Math.min(dailyData[dayKey].min, value);
-            dailyData[dayKey].max = Math.max(dailyData[dayKey].max, value);
-          }
-        } catch (e) {
-          console.error("Error processing heart rate data point:", e);
-        }
-      });
-      return Object.entries(dailyData)
-        .map(([day, data]) => ({
-          day,
-          date: new Date(day + "T12:00:00"),
-          value: Math.round(
-            data.values.reduce((sum, val) => sum + val, 0) / data.values.length,
-          ),
-          count: data.values.length,
-          values: data.values,
-          avg: Math.round(
-            data.values.reduce((sum, val) => sum + val, 0) / data.values.length,
-          ),
-          min: Math.round(data.min),
-          max: Math.round(data.max),
-        }))
-        .sort((a, b) => a.date.getTime() - b.date.getTime());
-    };
-
-    // Helper: process respiratory data (average daily values)
-    const processRespiratoryData = (
-      data: { startDate: string; value: string }[],
-    ): Array<{
-      day: string;
-      date: Date;
-      value: number;
-      count: number;
-      values: number[];
-    }> => {
-      const dailyData: Record<string, number[]> = {};
-      data.forEach((point) => {
-        try {
-          const dayKey = extractDatePart(point.startDate);
-          const value = parseFloat(point.value);
-          if (!isNaN(value)) {
-            if (!dailyData[dayKey]) {
-              dailyData[dayKey] = [];
-            }
-            dailyData[dayKey].push(value);
-          }
-        } catch (e) {
-          console.error("Error processing respiratory data point:", e);
-        }
-      });
-      return Object.entries(dailyData)
-        .map(([day, values]) => ({
-          day,
-          date: new Date(day + "T12:00:00"),
-          value: values.reduce((sum, v) => sum + v, 0) / values.length,
-          count: values.length,
-          values,
-        }))
-        .sort((a, b) => a.date.getTime() - b.date.getTime());
-    };
-
-    // Process each metric using IndexedDB data
-    // NOTE: Data is already deduplicated during upload in HealthDataSelector
-    // No need to deduplicate again here - this was causing redundant processing
-    const steps = processCumulativeData(
-      metricData["HKQuantityTypeIdentifierStepCount"] || [],
-    );
-    const exercise = processCumulativeData(
-      metricData["HKQuantityTypeIdentifierAppleExerciseTime"] || [],
-    );
-    const heartRate = processHeartRateData(
-      metricData["HKQuantityTypeIdentifierHeartRate"] || [],
-    );
-    const hrv = processHeartRateData(
-      metricData["HKQuantityTypeIdentifierHeartRateVariabilitySDNN"] || [],
-    );
-    const restingHR = processHeartRateData(
-      metricData["HKQuantityTypeIdentifierRestingHeartRate"] || [],
-    );
-    const respiratory = processRespiratoryData(
-      metricData["HKQuantityTypeIdentifierRespiratoryRate"] || [],
-    );
-    const activeEnergy = processCumulativeData(
-      metricData["HKQuantityTypeIdentifierActiveEnergyBurned"] || [],
-    );
-
-    // Days with value=0 for cumulative metrics (steps, exercise) represent days
-    // with no recorded device activity — Apple Watch simply omits records for
-    // unworn days, so a 0 in the dataset signals missing data, not genuine rest.
-    // Including them inflates the denominator and depresses the displayed average.
-    // metric.average and metric.low must NEVER include these zero-wear days;
-    // metric.high still uses all days so the all-time peak is correct.
-    const stepsActive = steps.filter((d) => (d.value ?? 0) > 0);
-    const exerciseActive = exercise.filter((d) => (d.value ?? 0) > 0);
-
-    console.log("[HealthDataContextWrapper] metrics computation:", {
-      stepDaysTotal: steps.length,
-      stepDaysActive: stepsActive.length,
-      stepRawAvgAllDays:
-        steps.length > 0
-          ? Math.round(
-              steps.reduce((s, d) => s + (d.value ?? 0), 0) / steps.length,
-            )
-          : 0,
-      stepAvgActiveDays:
-        stepsActive.length > 0
-          ? Math.round(
-              stepsActive.reduce((s, d) => s + (d.value ?? 0), 0) /
-                stepsActive.length,
-            )
-          : 0,
-      exerciseDaysTotal: exercise.length,
-      exerciseDaysActive: exerciseActive.length,
-    });
-    // Calculate metrics from processed data
-    const metrics = {
-      steps: {
-        average:
-          stepsActive.length > 0
-            ? Math.round(
-                stepsActive.reduce((sum, day) => sum + (day.value ?? 0), 0) /
-                  stepsActive.length,
-              )
-            : 0,
-        high: Math.max(...steps.map((day) => day.value ?? 0), 0),
-        low:
-          stepsActive.length > 0
-            ? Math.min(...stepsActive.map((day) => day.value ?? 0))
-            : 0,
-      },
-      exercise: {
-        average:
-          exerciseActive.length > 0
-            ? Math.round(
-                exerciseActive.reduce((sum, day) => sum + (day.value ?? 0), 0) /
-                  exerciseActive.length,
-              )
-            : 0,
-        high: Math.max(...exercise.map((day) => day.value ?? 0), 0),
-        low:
-          exerciseActive.length > 0
-            ? Math.min(...exerciseActive.map((day) => day.value ?? 0))
-            : 0,
-      },
-      heartRate: {
-        average:
-          heartRate.length > 0
-            ? Math.round(
-                heartRate.reduce((sum, day) => sum + (day.avg ?? 0), 0) /
-                  heartRate.length,
-              )
-            : 0,
-        high: Math.max(...heartRate.map((day) => day.max ?? 0), 0),
-        low:
-          heartRate.length > 0
-            ? Math.min(...heartRate.map((day) => day.min ?? 0))
-            : 0,
-      },
-      hrv: {
-        average:
-          hrv.length > 0
-            ? Math.round(
-                hrv.reduce((sum, day) => sum + (day.avg ?? 0), 0) / hrv.length,
-              )
-            : 0,
-        high: Math.max(...hrv.map((day) => day.max ?? 0), 0),
-        low: hrv.length > 0 ? Math.min(...hrv.map((day) => day.min ?? 0)) : 0,
-      },
-      restingHR: {
-        average:
-          restingHR.length > 0
-            ? Math.round(
-                restingHR.reduce((sum, day) => sum + (day.avg ?? 0), 0) /
-                  restingHR.length,
-              )
-            : 0,
-        high: Math.max(...restingHR.map((day) => day.max ?? 0), 0),
-        low:
-          restingHR.length > 0
-            ? Math.min(...restingHR.map((day) => day.min ?? 0))
-            : 0,
-      },
-      respiratory: {
-        average:
-          respiratory.length > 0
-            ? Math.round(
-                respiratory.reduce((sum, day) => sum + (day.value ?? 0), 0) /
-                  respiratory.length,
-              )
-            : 0,
-        high: Math.max(...respiratory.map((day) => day.value ?? 0), 0),
-        low:
-          respiratory.length > 0
-            ? Math.min(...respiratory.map((day) => day.value ?? 0))
-            : 0,
-      },
-      activeEnergy: {
-        average:
-          activeEnergy.length > 0
-            ? Math.round(
-                activeEnergy.reduce((sum, day) => sum + (day.value ?? 0), 0) /
-                  activeEnergy.length,
-              )
-            : 0,
-        high: Math.max(...activeEnergy.map((day) => day.value ?? 0), 0),
-        low:
-          activeEnergy.length > 0
-            ? Math.min(...activeEnergy.map((day) => day.value ?? 0))
-            : 0,
-      },
-      sleep: ((): {
-        average: number;
-        efficiency: number;
-        high: number;
-        low: number;
-      } => {
-        if (processedSleepData.length === 0) {
-          return { average: 0, efficiency: 0, high: 0, low: 0 };
-        }
-        // processSleepData now returns one corrected value per WAKE-date, with
-        // multi-night collisions excluded and flagged (day.anomaly set) rather
-        // than summed or capped. So these stats are computed directly from the
-        // corrected per-night durations — no <=900min cap masking bad data.
-        const flagged = processedSleepData.filter((d) => d.anomaly);
-        if (flagged.length > 0) {
-          console.warn(
-            `[HealthDataContext] ${flagged.length} of ${processedSleepData.length} sleep day(s) flagged as data-quality anomalies (corrected before display): ${flagged
-              .map((d) => `${d.date} (${d.anomaly?.type})`)
-              .join(", ")}`,
-          );
-        }
-        const durations = processedSleepData.map((d) => d.sleepDuration);
-        return {
-          average: Math.round(
-            durations.reduce((sum, v) => sum + v, 0) / durations.length,
-          ),
-          efficiency: Math.round(
-            processedSleepData.reduce(
-              (sum, day) => sum + day.metrics.sleepEfficiency,
-              0,
-            ) / processedSleepData.length,
-          ),
-          high: Math.max(...durations, 0),
-          low: Math.min(...durations),
-        };
-      })(),
-    };
+    // Metrics come from the single pure implementation so the numbers on stat
+    // cards, dashboard and agent context can never fork. Pinned by the golden
+    // test in tests/health-pipeline (docs/architecture/13-data-integrity-harness.md).
+    const metrics = computeHealthMetricStats(metricData);
 
     // Compute trends for each metric
     const computeMetricTrends = (
@@ -910,6 +605,8 @@ export default function HealthDataContextWrapper({
     <HealthDataContext.Provider
       value={{
         metricData,
+        metricDataSource,
+        isFullHistory,
         processingState,
         setProcessingState,
         updateProcessingProgress,

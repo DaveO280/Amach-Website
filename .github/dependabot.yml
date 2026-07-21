@@ -15,6 +15,14 @@ updates:
       security-updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    # OpenZeppelin is intentionally pinned to exact 5.4.0: 5.5+ dropped
+    # utils/ReentrancyGuardUpgradeable.sol, which SecureHealthProfileV1/V2 and
+    # the deployed V3_FromV1 lineage import. Bumping breaks `hardhat compile`.
+    # A future move to OZ 5.6+ must be a deliberate, storage-layout-validated
+    # contract migration — not an automated bump. See PR #107.
+    ignore:
+      - dependency-name: "@openzeppelin/contracts"
+      - dependency-name: "@openzeppelin/contracts-upgradeable"
     labels:
       - "security"
       - "dependencies"

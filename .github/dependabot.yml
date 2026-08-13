@@ -23,6 +23,13 @@ updates:
     ignore:
       - dependency-name: "@openzeppelin/contracts"
       - dependency-name: "@openzeppelin/contracts-upgradeable"
+      # Tailwind v4 is a breaking rewrite (PostCSS plugin moved to
+      # @tailwindcss/postcss, CSS-first @theme config, renamed utilities).
+      # A version-only bump fails the build. Adopting v4 is a deliberate
+      # migration tracked as R9 / the web design-system item in
+      # docs/architecture/11 & 12. Ignore MAJORs only; keep v3 patches/minors.
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
     labels:
       - "security"
       - "dependencies"

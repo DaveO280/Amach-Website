@@ -6,9 +6,18 @@
 
 The plan is ordered: each phase is safe to execute only after the one before it. Phase 0 protects unmerged work; everything after it is cleanup and consolidation.
 
+> **Progress (updated 2026-08-13):**
+>
+> - **Phase 0 — ✅ DONE.** Stale iOS clones salvaged + deleted, verifier committed, OpenZeppelin pinned. (PRs #105/#107)
+> - **Phase 1 — ✅ DONE.** 40-file dead-code removal, all grep-verified, full build green. (PR #106)
+> - **Phase 2 — 🟡 STARTED.** The health-stat computation was consolidated into one pure `src/utils/healthMetricStats.ts` (one of the "four bucketing implementations"), pinned by a golden test. Remaining twins below are open.
+> - **Phase 3 — ⬜ OPEN.** Highest-value un-started work (the contract security holes).
+> - **Phase 4 — ⬜ OPEN.** God-file splits.
+> - **Phase 5 — 🟡 ONGOING.** Dependency hygiene in progress (OpenZeppelin + Tailwind ignore rules).
+
 ---
 
-## Phase 0 — Salvage before anything is deleted ⚠️
+## Phase 0 — Salvage before anything is deleted ⚠️ ✅ DONE
 
 **`/Users/dave/AmachHealth-iOS` (the stale clone in your home dir) contains work that exists nowhere else.** Do these before touching it:
 
@@ -21,7 +30,7 @@ The plan is ordered: each phase is safe to execute only after the one before it.
 4. **Commit `contracts/AverageImprovementProofV1Verifier.sol`** in the website repo (deployed-contract source belongs in-repo). First fix its name collision: it declares `contract Groth16Verifier`, identical to `CoverageVerifier.sol`'s contract, which breaks `getContractFactory("Groth16Verifier")` — rename to `AverageImprovementVerifier`.
 5. **Decide `src/zk/merkleCommitmentLaneA.ts`** (untracked, orphaned): commit if Lane A is live on-chain, delete if superseded.
 
-## Phase 1 — Safe deletions (verified no unique content / zero importers)
+## Phase 1 — Safe deletions (verified no unique content / zero importers) ✅ DONE
 
 ### 1a. Whole trees
 
@@ -52,7 +61,7 @@ Delete: `luma-ios-audit.txt`, `mockup-*.png` ×7, `wiz-step*.png` ×3, `onboardi
 - iOS `App/AppState.swift`: written at launch but **read by no view**. Either delete it (+ its tests) or make it the real source of truth — don't leave it half-wired.
 - Breathe: `watchOS/Sources/App/WatchContentView.swift` (SessionView is the actual root).
 
-## Phase 2 — Deduplicate live twins (bugs waiting to diverge)
+## Phase 2 — Deduplicate live twins (bugs waiting to diverge) 🟡 STARTED
 
 | Duplication                                                                                                                                                                                                                              | Canonical                              | Action                                                                                                                                |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -71,7 +80,7 @@ Delete: `luma-ios-audit.txt`, `mockup-*.png` ×7, `wiz-step*.png` ×3, `onboardi
 | **Three parallel iOS sync pipelines run simultaneously** — `HealthDataSyncService` (legacy 1-year flow), `MerkleGenesisService` (90-day genesis), `SpringPushLeavesService` (90-day contest) — with no indication which supersedes which | decide one                             | Document the intended lifecycle, then retire or merge the others                                                                      |
 | **PBKDF2 wallet-key derivation hand-implemented 3×** (`walletEncryption.ts`, iOS `WalletService`, Breathe `WalletService`) with zero shared test vectors — one drift silently breaks cross-platform Storj decryption                     | web version                            | Add a shared cross-repo test-vector file (fixed passphrase → expected key) run by all three test suites                               |
 
-## Phase 3 — Security & correctness hotspots (fix independently, high value)
+## Phase 3 — Security & correctness hotspots (fix independently, high value) ⬜ OPEN
 
 1. **`contracts/CoverageRegistry.sol`** — `submitProof` doesn't bind the proof to `msg.sender`: anyone can replay another user's valid proof as their own; the Merkle-root public signal is never validated or stored.
 2. **`contracts/ProfileVerification.sol` (V1, the live one)** — owner-settable `delegatecall` in `generateMigrationProof`; `verifyProfileZKsync` bypasses whitelist/signature checks; plaintext emails on-chain.
@@ -82,7 +91,7 @@ Delete: `luma-ios-audit.txt`, `mockup-*.png` ×7, `wiz-step*.png` ×3, `onboardi
 7. **PII logging** — unconditional `console.log` of health content in `BaseHealthAgent`, `LumaAiService`, `aiStore`, `VeniceApiService`, `sharedDatabase` (+ 18–22 logs each in `secureHealthEncryption`, `pdfParser`). Add a gated logger and sweep.
 8. **iOS `AmachAPIClient.listTimelineEvents`** — serial N+1 Storj fetches; and `HealthEventService.ts` (web) makes ~200 RPC round-trips per 50-event timeline. Batch both.
 
-## Phase 4 — Structural refactors (the god-files)
+## Phase 4 — Structural refactors (the god-files) ⬜ OPEN
 
 Priority order (impact × risk):
 
@@ -94,12 +103,22 @@ Priority order (impact × risk):
 6. iOS **`HealthSyncView` (1,089)** / **`ProfileView` (933)** → extract sections; implement or remove the placeholder delete-account button.
 7. **iOS build definition** — the xcodeproj lists every file manually _and_ `Package.swift` declares a parallel target (privy-ios declared twice). Pick one: consume `AmachHealth/` as a local Swift package, or delete the SPM manifest.
 
-## Phase 5 — Keep it consolidated
+## Phase 5 — Keep it consolidated 🟡 ONGOING
 
 - **One checkout per repo**: `~/Amach-Website`, `~/amach-workspace/AmachHealth-iOS`, `~/AmachHealthBreathe`. Never Finder-copy a source tree (that's where `src 2/` came from) — use git branches/worktrees, and prune worktrees when done.
 - **Config single-source rule**: no contract address, RPC URL, or chain ID outside `networkConfig`/`contractConfig` (web) and one `NetworkConfig` (iOS). The audit found addresses hardcoded in 10+ files.
 - **Update CLAUDE.md** after Phase 1 (it still documents `CosaintAiService.ts` and other removed files) and keep `docs/architecture/` current — chapter docs list per-file verdicts to refresh as files change.
 - Tests that copy production logic inline (`endpoints.test.ts`, `storageService.test.ts`, `contextPreprocessor.test.ts`) should import the real functions — today they can't catch regressions.
+- **Dependency hygiene — pin deliberate choices against Dependabot.** `.github/dependabot.yml` ignores auto-bumps that would fight an intentional pin: `@openzeppelin/contracts[-upgradeable]` (5.6+ dropped `ReentrancyGuardUpgradeable`, breaking the deployed contract lineage — see #107/#111), and `tailwindcss` majors (v4 is a breaking rewrite — see the web-design-system item below). Both still receive patch/minor security updates.
+
+## Web design-system modernization (Tailwind v4) — ⬜ OPEN, deferred
+
+The audit captured the **native** design-system consolidation (SwiftUI: `AmachDesignSystem.swift`, tier-color token duplication, the Breathe↔iOS fork → the `AmachKit` Swift package in roadmap R1). It did **not** capture the **web** styling stack — this is that gap.
+
+- The web is on **Tailwind 3.3.0** (behind even v3's latest 3.4.x), with a v3 config (`postcss.config.mjs` uses `tailwindcss` as a PostCSS plugin, `globals.css` uses `@tailwind` directives, `tailwind.config.ts` JS config) plus 13 shadcn/ui primitives.
+- **Tailwind v4 is a breaking rewrite, not a bump.** A version-only bump fails the build immediately (PostCSS plugin moved to `@tailwindcss/postcss`; verified 2026-08-13). Real adoption = install `@tailwindcss/postcss`, rewrite postcss config, convert `globals.css` to `@import "tailwindcss"`, migrate the config to v4's `@theme` model, re-fit shadcn tokens, and visually audit every page (v4 renames some utilities). **No visual-regression harness exists** — this is verified by eyeball / Playwright, unlike the data pipeline.
+- **Benefits are infra/velocity, not user-facing:** ~5×/100× faster builds, CSS-variable-native design tokens (the web sibling of R1's token unification), container queries, OKLCH color, fewer config deps, and staying current with shadcn/ecosystem.
+- **Recommended sequencing:** do it _with_ a web design-token unification pass, not as a standalone chore — the CSS-variable token model is the shared payoff. Cheap interim: bump to latest **v3 (3.4.x)** to stay patched. The Dependabot ignore rule (Phase 5) parks the v4 nag until then.
 
 ---
 

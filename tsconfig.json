@@ -31,7 +31,6 @@
       "node-fetch",
       "offscreencanvas",
       "prop-types",
-      "uuid",
       "d3-array",
       "d3-color",
       "d3-ease",

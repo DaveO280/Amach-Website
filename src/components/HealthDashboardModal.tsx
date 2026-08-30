@@ -1,8 +1,9 @@
 "use client";
 
-import { Shield, Wallet, X } from "lucide-react";
+import { MessageCircle, Shield, Wallet, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import React, { useEffect, useRef, useState } from "react";
+import { useHealthDataContext } from "./HealthDataContextWrapper";
 import { useWalletService } from "../hooks/useWalletService";
 import { Badge } from "./ui/badge";
 
@@ -71,6 +72,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
   );
   const modalRef = useRef<HTMLDivElement>(null);
   const { isConnected, healthProfile } = useWalletService();
+  const { setIsAiCompanionOpen } = useHealthDataContext();
 
   // Check viewport size to adjust UI accordingly
   useEffect(() => {
@@ -115,7 +117,7 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
       role="dialog"
       aria-modal="true"
       aria-label="Health Dashboard"
-      className="fixed inset-0 z-[100] overflow-hidden bg-black/40 backdrop-blur-sm flex justify-center items-center p-2"
+      className="fixed inset-x-0 bottom-0 top-[76px] z-[90] overflow-hidden bg-black/40 backdrop-blur-sm flex justify-center items-center p-2"
     >
       <div
         ref={modalRef}
@@ -156,13 +158,24 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
                 </Badge>
               )}
             </div>
-            <button
-              onClick={props.onClose}
-              className="rounded-full p-2 dashboard-close-btn transition-colors sm:hidden"
-              aria-label="Close dashboard"
-            >
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setIsAiCompanionOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs sm:text-sm font-medium text-white bg-[#006B4F] hover:bg-[#004D38] transition-colors"
+                aria-label="Chat with Luma"
+              >
+                <MessageCircle className="h-4 w-4" />
+                Chat with Luma
+              </button>
+              <button
+                onClick={props.onClose}
+                className="rounded-full p-2 dashboard-close-btn transition-colors"
+                aria-label="Close dashboard"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {/* Tabs in a separate div with improved desktop layout */}
@@ -191,13 +204,6 @@ const HealthDashboardModal: React.FC<HealthDashboardModalProps> = (props) => {
                 Visualizations
               </button>
             </div>
-            <button
-              onClick={props.onClose}
-              className="absolute right-3 top-2 rounded-full p-2 dashboard-close-btn transition-colors hidden sm:block"
-              aria-label="Close dashboard"
-            >
-              <X className="h-5 w-5" />
-            </button>
           </div>
         </header>
 

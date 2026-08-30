@@ -1,5 +1,14 @@
 "use client";
 
+import { useEffect } from "react";
+
+function isRecoverablePrivyWalletError(message: string): boolean {
+  return (
+    message.includes("createWallet") ||
+    (message.includes("onSuccess") && message.includes("undefined"))
+  );
+}
+
 export default function Error({
   error,
   reset,
@@ -7,6 +16,18 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }): JSX.Element {
+  // Email OTP can succeed while Privy's embedded-wallet create throws.
+  // Recover automatically so the user stays signed in instead of hitting a dead error page.
+  useEffect(() => {
+    if (isRecoverablePrivyWalletError(error.message || "")) {
+      console.warn(
+        "Recovered from Privy wallet-create error after login:",
+        error.message,
+      );
+      reset();
+    }
+  }, [error, reset]);
+
   return (
     <div
       style={{

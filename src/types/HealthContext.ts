@@ -65,6 +65,7 @@ export interface HealthContextMetrics {
   respiratory: HealthMetricWithRange;
   activeEnergy: HealthMetricWithRange;
   sleep: SleepMetricWithRange;
+  vo2max: HealthMetricWithRange;
 }
 
 export interface HealthContext {
@@ -95,5 +96,6 @@ export interface HealthContext {
     respiratory: HealthMetricsSummary;
     activeEnergy: HealthMetricsSummary;
     sleep: SleepMetricsSummary;
+    vo2max: HealthMetricsSummary;
   };
 }

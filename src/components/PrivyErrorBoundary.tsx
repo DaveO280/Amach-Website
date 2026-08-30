@@ -28,7 +28,11 @@ export class PrivyErrorBoundary extends Component<Props, State> {
     const isPrivyHookError =
       errorMessage.includes("Rendered fewer hooks") ||
       errorMessage.includes("isActive") ||
-      errorMessage.includes("DOM element");
+      errorMessage.includes("DOM element") ||
+      // Privy auto-create-on-login can throw when createWallet is not ready yet
+      // ("Cannot destructure property 'onSuccess' of 't.createWallet' as it is undefined")
+      errorMessage.includes("createWallet") ||
+      (errorMessage.includes("onSuccess") && errorMessage.includes("undefined"));
 
     // If it's a Privy internal error, don't show error UI
     // These are known issues with Privy's styled-components
@@ -49,7 +53,11 @@ export class PrivyErrorBoundary extends Component<Props, State> {
     const isPrivyHookError =
       errorMessage.includes("Rendered fewer hooks") ||
       errorMessage.includes("isActive") ||
-      errorMessage.includes("DOM element");
+      errorMessage.includes("DOM element") ||
+      // Privy auto-create-on-login can throw when createWallet is not ready yet
+      // ("Cannot destructure property 'onSuccess' of 't.createWallet' as it is undefined")
+      errorMessage.includes("createWallet") ||
+      (errorMessage.includes("onSuccess") && errorMessage.includes("undefined"));
 
     if (!isPrivyHookError) {
       console.error("PrivyErrorBoundary caught an error:", error, errorInfo);

@@ -20,6 +20,7 @@ export type MetricKey =
   | "respiratory"
   | "activeEnergy"
   | "sleep"
+  | "vo2max"
   | "overall"
   | "activity"
   | "energy"
@@ -43,6 +44,8 @@ export const getMetricLabel = (key: MetricKey): string => {
       return "Active Energy";
     case "sleep":
       return "Sleep";
+    case "vo2max":
+      return "VO2 Max";
     case "overall":
       return "Overall Health Score";
     case "activity":
@@ -74,6 +77,8 @@ export const getMetricUnit = (key: MetricKey): string => {
       return "kcal";
     case "sleep":
       return "min";
+    case "vo2max":
+      return "ml/(kg·min)";
     default:
       return "";
   }
@@ -97,6 +102,8 @@ export const getMetricIcon = (key: MetricKey): React.ReactNode => {
       return <Activity className="h-4 w-4 text-emerald-600" />;
     case "sleep":
       return <Moon className="h-4 w-4 text-emerald-600" />;
+    case "vo2max":
+      return <Wind className="h-4 w-4 text-emerald-600" />;
     case "overall":
       return <Star className="h-5 w-5 text-emerald-900" />;
     case "activity":
@@ -119,6 +126,9 @@ export const formatSleepTime = (minutes: number): string => {
 export const formatMetricValue = (key: MetricKey, value: number): string => {
   if (key === "sleep") {
     return formatSleepTime(value);
+  }
+  if (key === "vo2max") {
+    return value.toFixed(1);
   }
   return value.toFixed(0);
 };

@@ -1,1 +1,1095 @@
-PLACEHOLDER_WILL_FAIL
+"use client";
+
+import { useHealthDataContext } from "@/components/HealthDataContextWrapper";
+import {
+  useClearHealthDataMutation,
+  useSaveHealthDataMutation,
+} from "@/data/hooks/useHealthDataMutations";
+import { healthDataProcessor } from "@/data/processors/HealthDataProcessor";
+import { healthDataStore } from "@/data/store/healthDataStore";
+import { useWalletService } from "@/hooks/useWalletService";
+import { SECURE_HEALTH_PROFILE_CONTRACT } from "@/lib/contractConfig";
+import { getActiveChain } from "@/lib/networkConfig";
+import { AppleHealthStorjService } from "@/storage/appleHealth";
+import {
+  AttestationService,
+  getAttestationErrorMessage,
+} from "@/storage/AttestationService";
+import type { HealthDataByType, HealthDataPoint } from "@/types/healthData";
+import { deduplicateData } from "@/utils/dataDeduplicator";
+import { getWalletDerivedEncryptionKey } from "@/utils/walletEncryption";
+import { AlertCircle, CheckCircle, Upload } from "lucide-react";
+import Papa from "papaparse";
+import React, { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { storjItemsCache } from "@/data/store/storjItemsCache";
+import { createPublicClient, http } from "viem";
+import { coreMetrics, timeFrameOptions } from "../core/metricDefinitions";
+import {
+  validateHealthExportFile,
+  XMLStreamParser,
+} from "../data/parsers/XMLStreamParser";
+import {
+  ActiveEnergyMetric,
+  DataSource,
+  ExerciseTimeMetric,
+  HealthMetric,
+  HeartRateMetric,
+  HRVMetric,
+  MetricType,
+  RespiratoryRateMetric,
+  RestingHeartRateMetric,
+  SleepAnalysisMetric,
+  SleepStage,
+  StepCountMetric,
+  VO2MaxMetric,
+} from "../data/types/healthMetrics";
+import { useSelection } from "../store/selectionStore";
+import { TimeFrame } from "../types/healthData";
+
+const HealthDataSelector: () => React.ReactElement = () => {
+  const {
+    timeFrame,
+    setTimeFrame,
+    selectedMetrics,
+    toggleMetric,
+    getAllSelectedMetrics,
+    uploadedFile,
+    setUploadedFile,
+  } = useSelection();
+
+  const {
+    processingState,
+    updateProcessingProgress,
+    setProcessingError,
+    clearData,
+    hasData,
+  } = useHealthDataContext();
+
+  const { mutate: saveHealthData } = useSaveHealthDataMutation();
+  const { mutate: clearHealthDataMutation } = useClearHealthDataMutation();
+  const queryClient = useQueryClient();
+
+  const { isConnected, address, signMessage, getWalletClient } =
+    useWalletService();
+
+  const [allMetricsForStorj, setAllMetricsForStorj] = useState<Record<
+    string,
+    HealthDataPoint[]
+  > | null>(null);
+  const [storjSaveStatus, setStorjSaveStatus] = useState<{
+    saving: boolean;
+    progress: number;
+    message: string;
+    success?: boolean;
+    error?: string;
+    storjUri?: string;
+  } | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  const handleFileSelect = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ): void => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setProcessingError("No file selected");
+      setUploadedFile(null);
+      return;
+    }
+
+    const isCSV =
+      file.name.toLowerCase().endsWith(".csv") || file.type === "text/csv";
+
+    if (!isCSV && !validateHealthExportFile(file)) {
+      setProcessingError("Please select a valid export.xml or .csv file");
+      setUploadedFile(null);
+      return;
+    }
+
+    setUploadedFile(file);
+    updateProcessingProgress(0, `File selected: ${file.name}`);
+  };
+
+  const convertToSleepStage = (rawValue: string): SleepStage => {
+    const sleepStageMap: Record<string, SleepStage> = {
+      HKCategoryValueSleepAnalysisInBed: "inBed",
+      HKCategoryValueSleepAnalysisAsleepCore: "core",
+      HKCategoryValueSleepAnalysisAsleepDeep: "deep",
+      HKCategoryValueSleepAnalysisAsleepREM: "rem",
+      HKCategoryValueSleepAnalysisAwake: "awake",
+      HKCategoryValueSleepAnalysisAsleepUnspecified: "core",
+      HKCategoryValueSleepAnalysisAsleep: "core",
+      inBed: "inBed",
+      core: "core",
+      deep: "deep",
+      rem: "rem",
+      awake: "awake",
+      asleep: "core",
+      unspecified: "core",
+      "0": "inBed",
+      "1": "core",
+      "2": "deep",
+      "3": "rem",
+      "4": "awake",
+    };
+
+    const stage = sleepStageMap[rawValue];
+    if (!stage) {
+      console.warn(`Unknown sleep stage value: ${rawValue}`);
+      return "core";
+    }
+    return stage;
+  };
+
+  const handleClearData = (): void => {
+    updateProcessingProgress(0, "Clearing data...");
+    clearHealthDataMutation(undefined, {
+      onSuccess: () => {
+        clearData();
+        setUploadedFile(null);
+        setAllMetricsForStorj(null);
+        updateProcessingProgress(100, "Data cleared successfully");
+      },
+      onError: (error: unknown) => {
+        if (error && typeof error === "object" && "message" in error) {
+          setProcessingError(
+            (error as { message?: string }).message || "Error clearing data",
+          );
+        } else {
+          setProcessingError("Error clearing data");
+        }
+      },
+    });
+  };
+
+  const handleSaveToStorj = async (): Promise<void> => {
+    if (!allMetricsForStorj || !address || !signMessage) {
+      setStorjSaveStatus({
+        saving: false,
+        progress: 0,
+        message: "Cannot save: missing data or wallet connection",
+        error: "No data or wallet not connected",
+      });
+      return;
+    }
+
+    setStorjSaveStatus({
+      saving: true,
+      progress: 0,
+      message: "Starting Storj save...",
+    });
+
+    try {
+      setStorjSaveStatus({
+        saving: true,
+        progress: 5,
+        message: "Requesting wallet signature for encryption...",
+      });
+
+      const encryptionKey = await getWalletDerivedEncryptionKey(
+        address,
+        signMessage,
+      );
+
+      const service = new AppleHealthStorjService();
+
+      const result = await service.saveToStorj(
+        allMetricsForStorj,
+        encryptionKey,
+        (progress, message) => {
+          setStorjSaveStatus({
+            saving: true,
+            progress: 5 + progress * 0.95,
+            message,
+          });
+        },
+      );
+
+      if (result.success && result.manifest && result.contentHash) {
+        setStorjSaveStatus({
+          saving: true,
+          progress: 85,
+          message: "Creating on-chain attestation...",
+        });
+
+        console.log(`[Storj] Apple Health data saved successfully:`, {
+          uri: result.storjUri,
+          metrics: result.manifest.metricsPresent.length,
+          daysCovered: result.manifest.completeness.daysCovered,
+          tier: result.manifest.completeness.tier,
+        });
+
+        let attestationResult: {
+          success: boolean;
+          tier?: string;
+          error?: string;
+        } = {
+          success: false,
+          error: "Attestation skipped",
+        };
+
+        try {
+          const walletClient = await getWalletClient();
+          if (walletClient) {
+            const rpcUrl =
+              process.env.NEXT_PUBLIC_ZKSYNC_RPC_URL ||
+              "https://sepolia.era.zksync.dev";
+            const publicClient = createPublicClient({
+              chain: getActiveChain(),
+              transport: http(rpcUrl),
+            });
+
+            const attestationService = new AttestationService(
+              walletClient,
+              publicClient,
+              SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
+            );
+
+            attestationResult =
+              await attestationService.attestAppleHealthFromManifest(
+                result.manifest,
+                result.contentHash,
+              );
+
+            if (attestationResult.success) {
+              console.log(
+                `[Attestation] Apple Health attestation created: ${attestationResult.tier} tier`,
+              );
+              const { notifyAttestationCreated } =
+                await import("@/hooks/useAttestations");
+              notifyAttestationCreated();
+            } else {
+              console.warn(
+                `[Attestation] Failed to create attestation:`,
+                attestationResult.error,
+              );
+            }
+          } else {
+            console.warn(
+              `[Attestation] No wallet client available for attestation`,
+            );
+          }
+        } catch (attestError) {
+          console.error(
+            "[Attestation] Error creating attestation:",
+            attestError,
+          );
+          attestationResult = {
+            success: false,
+            error: getAttestationErrorMessage(attestError),
+          };
+        }
+
+        const attestationNote = attestationResult.success
+          ? ` On-chain attestation: ${attestationResult.tier}`
+          : attestationResult.error
+            ? ` (Attestation: ${attestationResult.error})`
+            : "";
+
+        setStorjSaveStatus({
+          saving: false,
+          progress: 100,
+          message: `Saved to Storj! ${result.manifest.completeness.tier} tier (${result.manifest.completeness.score}% complete)${attestationNote}`,
+          success: true,
+          storjUri: result.storjUri,
+        });
+
+        setAllMetricsForStorj(null);
+
+        void queryClient.invalidateQueries({
+          queryKey: ["storj-apple-health"],
+        });
+
+        if (result.storjUri && address) {
+          void storjItemsCache
+            .cacheItem(address, {
+              uri: result.storjUri,
+              contentHash: result.contentHash ?? "",
+              size: result.size ?? 0,
+              uploadedAt: Date.now(),
+              dataType: "apple-health-full-export",
+            })
+            .catch(() => {
+              /* non-fatal */
+            });
+        }
+
+        setTimeout(() => setStorjSaveStatus(null), 10000);
+      } else if (result.success) {
+        setStorjSaveStatus({
+          saving: false,
+          progress: 100,
+          message: `Saved to Storj! ${result.manifest?.completeness.tier || "Unknown"} tier`,
+          success: true,
+          storjUri: result.storjUri,
+        });
+        setAllMetricsForStorj(null);
+
+        void queryClient.invalidateQueries({
+          queryKey: ["storj-apple-health"],
+        });
+
+        if (result.storjUri && address) {
+          void storjItemsCache
+            .cacheItem(address, {
+              uri: result.storjUri,
+              contentHash: result.contentHash ?? "",
+              size: result.size ?? 0,
+              uploadedAt: Date.now(),
+              dataType: "apple-health-full-export",
+            })
+            .catch(() => {
+              /* non-fatal */
+            });
+        }
+
+        setTimeout(() => setStorjSaveStatus(null), 10000);
+      } else {
+        setStorjSaveStatus({
+          saving: false,
+          progress: 0,
+          message: result.error || "Failed to save to Storj",
+          error: result.error,
+        });
+      }
+    } catch (error) {
+      console.error("[Storj] Error saving Apple Health data:", error);
+      setStorjSaveStatus({
+        saving: false,
+        progress: 0,
+        message: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  };
+
+  const normalizeDate = (dateStr: string): string => {
+    try {
+      let normalized = dateStr;
+      normalized = normalized.replace(" ", "T");
+      normalized = normalized.replace(/ ([+-])(\d{2})(\d{2})$/, "$1$2:$3");
+      const testDate = new Date(normalized);
+      if (!isNaN(testDate.getTime())) {
+        return normalized;
+      }
+      return dateStr;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const parseCSVFile = async (
+    file: File,
+  ): Promise<Partial<Record<MetricType, HealthMetric[]>>> => {
+    return new Promise((resolve, reject) => {
+      const healthDataResults: Partial<Record<MetricType, HealthMetric[]>> = {};
+      let rowCount = 0;
+      let lastProgressUpdate = Date.now();
+      const uniqueMetrics = new Set<string>();
+
+      Papa.parse<{
+        Date?: string;
+        "Start Date"?: string;
+        "End Date"?: string;
+        Metric?: string;
+        Value?: string;
+        Unit?: string;
+        Source?: string;
+        Device?: string;
+      }>(file, {
+        header: true,
+        skipEmptyLines: true,
+        step: (row) => {
+          try {
+            rowCount++;
+            const now = Date.now();
+            if (rowCount % 1000 === 0 || now - lastProgressUpdate > 500) {
+              const progress = 25 + Math.min(50, (rowCount / 10000) * 50);
+              updateProcessingProgress(
+                Math.round(progress),
+                `Loading CSV data... (${rowCount.toLocaleString()} rows processed)`,
+              );
+              lastProgressUpdate = now;
+            }
+
+            const data = row.data as {
+              Date?: string;
+              "Start Date"?: string;
+              "End Date"?: string;
+              Metric?: string;
+              Value?: string;
+              Unit?: string;
+              Source?: string;
+              Device?: string;
+            };
+
+            const metricType = data.Metric?.trim() as MetricType;
+            const startDateStr = (data["Start Date"] || data.Date)?.trim();
+            const endDateStr = (data["End Date"] || data.Date)?.trim();
+            const valueStr = data.Value?.trim();
+            const unit = data.Unit?.trim() || "";
+            const source = (data.Source?.trim() || "CSV Import") as DataSource;
+            const device = data.Device?.trim() || "";
+
+            if (!metricType || !startDateStr || !valueStr) return;
+
+            const normalizedStartDate = normalizeDate(startDateStr);
+            const normalizedEndDate = normalizeDate(endDateStr || startDateStr);
+
+            if (rowCount === 1) {
+              console.log("[Date Debug] Normalization example:", {
+                original: startDateStr,
+                normalized: normalizedStartDate,
+                parsedOk: !isNaN(new Date(normalizedStartDate).getTime()),
+              });
+            }
+
+            uniqueMetrics.add(metricType);
+
+            if (!healthDataResults[metricType]) {
+              healthDataResults[metricType] = [];
+            }
+
+            const baseMetric = {
+              type: metricType,
+              startDate: normalizedStartDate,
+              endDate: normalizedEndDate,
+              value: valueStr,
+              source,
+              device,
+            };
+
+            let metric: HealthMetric;
+
+            switch (metricType) {
+              case "HKQuantityTypeIdentifierStepCount":
+                metric = {
+                  ...baseMetric,
+                  unit: "count",
+                } as StepCountMetric;
+                break;
+              case "HKQuantityTypeIdentifierHeartRate":
+                metric = {
+                  ...baseMetric,
+                  unit: "bpm",
+                } as HeartRateMetric;
+                break;
+              case "HKQuantityTypeIdentifierHeartRateVariabilitySDNN":
+                metric = {
+                  ...baseMetric,
+                  unit: "ms",
+                } as HRVMetric;
+                break;
+              case "HKQuantityTypeIdentifierRespiratoryRate":
+                metric = {
+                  ...baseMetric,
+                  unit: "count/min",
+                } as RespiratoryRateMetric;
+                break;
+              case "HKQuantityTypeIdentifierAppleExerciseTime":
+                metric = {
+                  ...baseMetric,
+                  unit: "min",
+                } as ExerciseTimeMetric;
+                break;
+              case "HKQuantityTypeIdentifierRestingHeartRate":
+                metric = {
+                  ...baseMetric,
+                  unit: "bpm",
+                } as RestingHeartRateMetric;
+                break;
+              case "HKQuantityTypeIdentifierVO2Max":
+                metric = {
+                  ...baseMetric,
+                  unit: "ml/(kg*min)",
+                } as VO2MaxMetric;
+                break;
+              case "HKQuantityTypeIdentifierActiveEnergyBurned":
+                metric = {
+                  ...baseMetric,
+                  unit: "kcal",
+                } as ActiveEnergyMetric;
+                break;
+              case "HKCategoryTypeIdentifierSleepAnalysis":
+                metric = {
+                  ...baseMetric,
+                  value: convertToSleepStage(valueStr),
+                  unit: "hr",
+                } as SleepAnalysisMetric;
+                break;
+              default:
+                metric = {
+                  ...baseMetric,
+                  unit,
+                } as HealthMetric;
+            }
+
+            healthDataResults[metricType]!.push(metric);
+          } catch (error) {
+            console.error("Error processing CSV row:", error);
+          }
+        },
+        complete: () => {
+          updateProcessingProgress(
+            75,
+            `CSV loaded successfully (${rowCount.toLocaleString()} rows)`,
+          );
+
+          console.log("[CSV Debug] Parsing complete:");
+          console.log(`   - Total rows processed: ${rowCount}`);
+          console.log(
+            `   - Unique metrics found:`,
+            Array.from(uniqueMetrics).sort(),
+          );
+          console.log(
+            `   - Metrics with data:`,
+            Object.keys(healthDataResults).sort(),
+          );
+          Object.entries(healthDataResults).forEach(([metric, data]) => {
+            console.log(`   - ${metric}: ${data.length} records`);
+            if (data.length > 0) {
+              console.log(`     Sample:`, data[0]);
+            }
+          });
+
+          resolve(healthDataResults);
+        },
+        error: (error) => {
+          reject(new Error(`CSV parse error: ${error.message}`));
+        },
+      });
+    });
+  };
+
+  const handleProcess = async (): Promise<void> => {
+    if (!uploadedFile || selectedMetrics.length === 0) return;
+
+    updateProcessingProgress(0, "Starting file processing...");
+
+    try {
+      const selectedMetrics = getAllSelectedMetrics();
+      const isCSV =
+        uploadedFile.name.toLowerCase().endsWith(".csv") ||
+        uploadedFile.type === "text/csv";
+
+      let healthDataResults: Partial<Record<MetricType, HealthMetric[]>> = {};
+
+      if (isCSV) {
+        updateProcessingProgress(25, "Reading CSV file...");
+        healthDataResults = await parseCSVFile(uploadedFile);
+      } else {
+        updateProcessingProgress(
+          2,
+          "Loading existing data for deduplication...",
+        );
+        const existingRaw = await healthDataStore.getHealthData();
+        const existingData: Record<string, HealthDataPoint[]> | undefined =
+          existingRaw
+            ? Object.fromEntries(
+                Object.entries(existingRaw).map(([key, metrics]) => [
+                  key,
+                  metrics.map(
+                    (m): HealthDataPoint => ({
+                      startDate: m.startDate,
+                      endDate: m.endDate,
+                      value: m.value,
+                      unit: m.unit,
+                      source: m.source,
+                      device: m.device,
+                      type: m.type,
+                    }),
+                  ),
+                ]),
+              )
+            : undefined;
+
+        const parser = new XMLStreamParser({
+          selectedMetrics,
+          timeFrame,
+          captureAllForStorj: true,
+          existingData,
+          onProgress: (progress): void => {
+            updateProcessingProgress(
+              progress.progress,
+              `Processing: ${progress.progress}% complete (${progress.recordCount} records)`,
+            );
+          },
+        });
+
+        const results = await parser.parseFile(uploadedFile);
+
+        if (parser.hasStorjData()) {
+          const allData = parser.getAllMetricsData();
+          const mergedForStorj: Record<string, HealthDataPoint[]> = {
+            ...allData,
+          };
+          if (existingData) {
+            for (const [metric, points] of Object.entries(existingData)) {
+              if (mergedForStorj[metric]) {
+                mergedForStorj[metric] = [...mergedForStorj[metric], ...points];
+              } else {
+                mergedForStorj[metric] = [...points];
+              }
+            }
+          }
+          const dedupedForStorj: Record<string, HealthDataPoint[]> = {};
+          for (const [metricType, points] of Object.entries(mergedForStorj)) {
+            dedupedForStorj[metricType] = deduplicateData(points, metricType);
+          }
+          setAllMetricsForStorj(dedupedForStorj);
+          console.log(
+            `[Storj] Captured ${Object.keys(dedupedForStorj).length} metric types for potential Storj backup:`,
+            Object.entries(dedupedForStorj).map(
+              ([k, v]) => `${k}: ${v.length}`,
+            ),
+          );
+        }
+
+        for (const [metricType, dataPoints] of Object.entries(results)) {
+          const metricTypeKey = metricType as MetricType;
+          const source = (dataPoints[0]?.source ||
+            "Apple Health") as DataSource;
+
+          const processedPoints = deduplicateData(dataPoints, metricTypeKey);
+
+          const metrics = processedPoints.map((point) => {
+            const baseMetric = {
+              type: metricTypeKey,
+              startDate: point.startDate,
+              endDate: point.endDate,
+              value: point.value,
+              source,
+              device: point.device,
+            };
+
+            switch (metricTypeKey) {
+              case "HKQuantityTypeIdentifierStepCount":
+                return { ...baseMetric, unit: "count" } as StepCountMetric;
+              case "HKQuantityTypeIdentifierHeartRate":
+                return { ...baseMetric, unit: "bpm" } as HeartRateMetric;
+              case "HKQuantityTypeIdentifierHeartRateVariabilitySDNN":
+                return { ...baseMetric, unit: "ms" } as HRVMetric;
+              case "HKQuantityTypeIdentifierRespiratoryRate":
+                return {
+                  ...baseMetric,
+                  unit: "count/min",
+                } as RespiratoryRateMetric;
+              case "HKQuantityTypeIdentifierAppleExerciseTime":
+                return { ...baseMetric, unit: "min" } as ExerciseTimeMetric;
+              case "HKQuantityTypeIdentifierRestingHeartRate":
+                return { ...baseMetric, unit: "bpm" } as RestingHeartRateMetric;
+              case "HKQuantityTypeIdentifierVO2Max":
+                return {
+                  ...baseMetric,
+                  unit: "ml/(kg*min)",
+                } as VO2MaxMetric;
+              case "HKQuantityTypeIdentifierActiveEnergyBurned":
+                return { ...baseMetric, unit: "kcal" } as ActiveEnergyMetric;
+              case "HKCategoryTypeIdentifierSleepAnalysis":
+                return {
+                  ...baseMetric,
+                  value: convertToSleepStage(point.value),
+                  unit: "hr",
+                } as SleepAnalysisMetric;
+              default:
+                return { ...baseMetric, unit: "count" } as HealthMetric;
+            }
+          });
+
+          healthDataResults[metricTypeKey] = metrics;
+        }
+      }
+
+      console.log("[Save Debug] About to save health data:");
+      console.log(`   - Metrics to save:`, Object.keys(healthDataResults));
+      console.log(
+        `   - Total records:`,
+        Object.values(healthDataResults).reduce(
+          (sum, arr) => sum + arr.length,
+          0,
+        ),
+      );
+
+      updateProcessingProgress(90, "Computing long-range aggregates...");
+      await healthDataProcessor.processRawData(
+        healthDataResults as unknown as HealthDataByType,
+        true,
+      );
+
+      saveHealthData(healthDataResults as Record<MetricType, HealthMetric[]>);
+
+      console.log("[Save Debug] saveHealthData called successfully");
+
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      if (!isMobile && !isCSV) {
+        const headers = [
+          "Start Date",
+          "End Date",
+          "Metric",
+          "Value",
+          "Unit",
+          "Source",
+          "Device",
+        ];
+        const rows = Object.entries(healthDataResults).flatMap(
+          ([metricType, metrics]) => {
+            return metrics.map((metric) => [
+              metric.startDate,
+              metric.endDate,
+              metricType,
+              metric.value,
+              metric.unit || "",
+              metric.source || "",
+              metric.device || "",
+            ]);
+          },
+        );
+
+        const csvContent = [
+          headers.join(","),
+          ...rows.map((row) =>
+            row
+              .map((field) => {
+                const fieldStr = String(field);
+                return fieldStr.includes(",") ||
+                  fieldStr.includes('"') ||
+                  fieldStr.includes("\n")
+                  ? `"${fieldStr.replace(/"/g, '""')}"`
+                  : fieldStr;
+              })
+              .join(","),
+          ),
+        ].join("\n");
+
+        const blob = new Blob([csvContent], {
+          type: "text/csv;charset=utf-8;",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `HealthData(${new Date().toISOString().split("T")[0]}).csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      updateProcessingProgress(
+        100,
+        isCSV
+          ? "CSV imported successfully!"
+          : isMobile
+            ? "Data imported successfully!"
+            : "Processing complete - CSV exported",
+      );
+    } catch (error) {
+      setProcessingError(
+        error instanceof Error ? error.message : "Error processing file",
+      );
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto p-6">
+      <div className="border-none shadow-lg bg-transparent p-6">
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold dashboard-selector-title">
+            Health Data Selector
+          </h2>
+        </div>
+
+        <div className="mb-8">
+          <h3 className="text-xl font-semibold mb-4 dashboard-selector-subtitle">
+            Select Time Frame
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {timeFrameOptions.map((option) => (
+              <button
+                key={option.value}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTimeFrame(option.value as TimeFrame);
+                }}
+                className={`p-3 rounded-lg text-sm font-medium transition-colors ${
+                  timeFrame === option.value
+                    ? "bg-[#006B4F] text-white border-b-2 border-[#005540]"
+                    : "dashboard-metric-inactive"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl font-semibold dashboard-selector-subtitle">
+              Health Metrics
+            </h3>
+            <span className="text-sm dashboard-selector-hint">
+              (
+              {
+                selectedMetrics.filter((id) =>
+                  coreMetrics.some((m) => m.id === id),
+                ).length
+              }
+              /{coreMetrics.length} selected)
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {coreMetrics.map((metric) => (
+              <button
+                key={metric.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleMetric(metric.id);
+                }}
+                disabled={processingState.isProcessing}
+                className={`p-3 rounded-lg text-sm transition-colors ${
+                  selectedMetrics.includes(metric.id)
+                    ? "bg-[#006B4F] text-white border-b-2 border-[#005540]"
+                    : "dashboard-metric-inactive"
+                }`}
+              >
+                {metric.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-amber-50/20 pt-6">
+          <h3 className="text-xl font-semibold mb-4 dashboard-selector-subtitle">
+            Upload Health Export
+          </h3>
+          <p className="text-sm dashboard-description mb-3">
+            Upload your Apple Health export.xml file or a previously exported
+            CSV file
+          </p>
+
+          <div className="space-y-4">
+            <input
+              type="file"
+              accept=".xml,.csv"
+              onChange={handleFileSelect}
+              disabled={processingState.isProcessing}
+              className="file-input w-full p-2 border border-[rgba(0,107,79,0.22)] dark:border-[rgba(0,107,79,0.25)] rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+
+            {/* Warn only for actually large XML exports, not every .xml */}
+            {uploadedFile &&
+              !uploadedFile.name.toLowerCase().endsWith(".csv") &&
+              uploadedFile.size >= 5 * 1024 * 1024 && (
+                <div className="p-3 rounded-lg border-l-4 border-amber-400 bg-[rgba(245,158,11,0.06)] dark:bg-[rgba(245,158,11,0.04)] text-sm">
+                  <p className="font-semibold text-amber-700 dark:text-amber-400 mb-1">
+                    Large file detected
+                  </p>
+                  <p className="text-[#6B8C7A]">
+                    XML files can be resource-intensive and may cause issues on
+                    mobile. For best results, process on desktop and upload the
+                    exported CSV.
+                  </p>
+                </div>
+              )}
+
+            <div className="flex gap-4">
+              <button
+                onClick={handleProcess}
+                disabled={
+                  processingState.isProcessing ||
+                  !uploadedFile ||
+                  selectedMetrics.length === 0
+                }
+                className="flex-1 companion-send-btn text-white py-3 px-4 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {processingState.isProcessing
+                  ? "Processing..."
+                  : "Process Selected Data"}
+              </button>
+
+              <button
+                onClick={() => setShowClearConfirm(true)}
+                disabled={processingState.isProcessing || !hasData()}
+                className="flex-1 border border-[rgba(239,68,68,0.4)] text-red-500 dark:text-red-400 bg-transparent hover:bg-[rgba(239,68,68,0.07)] py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Clear All Data
+              </button>
+            </div>
+
+            <div className="mt-2 text-center text-sm dashboard-description">
+              {selectedMetrics.length === 0 ? (
+                <span className="text-red-500">
+                  Please select at least one metric to process
+                </span>
+              ) : (
+                <span>
+                  Processing {selectedMetrics.length} selected metric(s)
+                </span>
+              )}
+            </div>
+
+            {processingState.status && (
+              <div className="p-3 rounded-lg text-sm dashboard-status">
+                {processingState.status}
+              </div>
+            )}
+
+            {processingState.isProcessing && (
+              <div
+                className="w-full rounded-full h-2"
+                style={{ background: "var(--color-companion-surface-border)" }}
+              >
+                <div
+                  className="h-2 rounded-full transition-all duration-300 bg-emerald-600"
+                  style={{
+                    width: `${processingState.progress}%`,
+                  }}
+                />
+              </div>
+            )}
+
+            {processingState.error && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center">
+                  <svg
+                    className="w-5 h-5 text-red-600 mr-2"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-red-700">{processingState.error}</span>
+                </div>
+              </div>
+            )}
+
+            {allMetricsForStorj && (
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                  <Upload className="h-5 w-5" />
+                  Save Complete Health Data to Storj
+                </h4>
+                <p className="text-sm text-blue-700 mb-3">
+                  All {Object.keys(allMetricsForStorj).length} metric types from
+                  your Apple Health export are ready to be encrypted and saved
+                  to decentralized storage. This includes daily summaries with
+                  proper aggregation for each metric type.
+                </p>
+
+                {!isConnected ? (
+                  <div className="p-3 dashboard-upload-info rounded text-sm">
+                    Connect your wallet to enable Storj save functionality.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <button
+                      onClick={handleSaveToStorj}
+                      disabled={
+                        storjSaveStatus?.saving || storjSaveStatus?.success
+                      }
+                      className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {storjSaveStatus?.saving ? (
+                        <>
+                          <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                          Saving to Storj...
+                        </>
+                      ) : storjSaveStatus?.success ? (
+                        <>
+                          <CheckCircle className="h-5 w-5" />
+                          Saved Successfully!
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-5 w-5" />
+                          Save to Storj (Encrypted)
+                        </>
+                      )}
+                    </button>
+
+                    {storjSaveStatus?.saving && (
+                      <div className="space-y-1">
+                        <div
+                          className="w-full rounded-full h-2"
+                          style={{
+                            background: "var(--color-companion-surface-border)",
+                          }}
+                        >
+                          <div
+                            className="h-2 rounded-full transition-all duration-300 bg-blue-600"
+                            style={{ width: `${storjSaveStatus.progress}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-blue-700 text-center">
+                          {storjSaveStatus.message}
+                        </p>
+                      </div>
+                    )}
+
+                    {storjSaveStatus && !storjSaveStatus.saving && (
+                      <div
+                        className={`flex items-center gap-2 text-sm p-2 rounded ${
+                          storjSaveStatus.success
+                            ? "bg-emerald-50 text-emerald-700"
+                            : storjSaveStatus.error
+                              ? "bg-red-50 text-red-700"
+                              : "bg-blue-50 text-blue-700"
+                        }`}
+                      >
+                        {storjSaveStatus.success ? (
+                          <CheckCircle className="h-4 w-4" />
+                        ) : storjSaveStatus.error ? (
+                          <AlertCircle className="h-4 w-4" />
+                        ) : null}
+                        <span>{storjSaveStatus.message}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white dark:bg-[#0B140F] border border-[rgba(0,107,79,0.15)] rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl">
+            <h3 className="text-[#0A1A0F] dark:text-[#F0F7F3] font-semibold text-base mb-2">
+              Clear all data?
+            </h3>
+            <p className="text-[#6B8C7A] text-sm mb-6">
+              This will permanently remove all processed health data from your
+              session. This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="flex-1 py-2 px-4 rounded-lg border border-[rgba(0,107,79,0.25)] text-[#6B8C7A] bg-transparent hover:bg-[rgba(0,107,79,0.07)] transition-colors text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handleClearData();
+                  setShowClearConfirm(false);
+                }}
+                className="flex-1 py-2 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors text-sm font-medium"
+              >
+                Accept
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default HealthDataSelector;

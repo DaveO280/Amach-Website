@@ -70,11 +70,9 @@ const HealthDataSelector: () => React.ReactElement = () => {
   const { mutate: clearHealthDataMutation } = useClearHealthDataMutation();
   const queryClient = useQueryClient();
 
-  // Wallet integration for Storj save and attestation
   const { isConnected, address, signMessage, getWalletClient } =
     useWalletService();
 
-  // State for ALL metrics captured for Storj backup
   const [allMetricsForStorj, setAllMetricsForStorj] = useState<Record<
     string,
     HealthDataPoint[]
@@ -99,11 +97,9 @@ const HealthDataSelector: () => React.ReactElement = () => {
       return;
     }
 
-    // Check if it's a CSV file
     const isCSV =
       file.name.toLowerCase().endsWith(".csv") || file.type === "text/csv";
 
-    // If not CSV, validate as XML
     if (!isCSV && !validateHealthExportFile(file)) {
       setProcessingError("Please select a valid export.xml or .csv file");
       setUploadedFile(null);
@@ -115,16 +111,14 @@ const HealthDataSelector: () => React.ReactElement = () => {
   };
 
   const convertToSleepStage = (rawValue: string): SleepStage => {
-    // Map Apple Health sleep stage values to our internal format
     const sleepStageMap: Record<string, SleepStage> = {
       HKCategoryValueSleepAnalysisInBed: "inBed",
       HKCategoryValueSleepAnalysisAsleepCore: "core",
       HKCategoryValueSleepAnalysisAsleepDeep: "deep",
       HKCategoryValueSleepAnalysisAsleepREM: "rem",
       HKCategoryValueSleepAnalysisAwake: "awake",
-      HKCategoryValueSleepAnalysisAsleepUnspecified: "core", // Unspecified sleep maps to core
-      HKCategoryValueSleepAnalysisAsleep: "core", // Generic asleep maps to core
-      // Handle short format values
+      HKCategoryValueSleepAnalysisAsleepUnspecified: "core",
+      HKCategoryValueSleepAnalysisAsleep: "core",
       inBed: "inBed",
       core: "core",
       deep: "deep",
@@ -132,7 +126,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
       awake: "awake",
       asleep: "core",
       unspecified: "core",
-      // Handle numeric values
       "0": "inBed",
       "1": "core",
       "2": "deep",
@@ -143,7 +136,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
     const stage = sleepStageMap[rawValue];
     if (!stage) {
       console.warn(`Unknown sleep stage value: ${rawValue}`);
-      return "core"; // Default to core for unknown sleep values
+      return "core";
     }
     return stage;
   };
@@ -154,7 +147,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
       onSuccess: () => {
         clearData();
         setUploadedFile(null);
-        setAllMetricsForStorj(null); // Clear Storj data too
+        setAllMetricsForStorj(null);
         updateProcessingProgress(100, "Data cleared successfully");
       },
       onError: (error: unknown) => {
@@ -169,10 +162,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
     });
   };
 
-  /**
-   * Handle saving ALL Apple Health data to Storj
-   * This includes all 56+ metric types aggregated into daily summaries
-   */
   const handleSaveToStorj = async (): Promise<void> => {
     if (!allMetricsForStorj || !address || !signMessage) {
       setStorjSaveStatus({
@@ -191,7 +180,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
     });
 
     try {
-      // Get wallet encryption key
       setStorjSaveStatus({
         saving: true,
         progress: 5,
@@ -203,7 +191,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
         signMessage,
       );
 
-      // Initialize service and save
       const service = new AppleHealthStorjService();
 
       const result = await service.saveToStorj(
@@ -212,28 +199,26 @@ const HealthDataSelector: () => React.ReactElement = () => {
         (progress, message) => {
           setStorjSaveStatus({
             saving: true,
-            progress: 5 + progress * 0.95, // Scale to 5-100%
+            progress: 5 + progress * 0.95,
             message,
           });
         },
       );
 
       if (result.success && result.manifest && result.contentHash) {
-        // Update status for attestation step
         setStorjSaveStatus({
           saving: true,
           progress: 85,
           message: "Creating on-chain attestation...",
         });
 
-        console.log(`✅ [Storj] Apple Health data saved successfully:`, {
+        console.log(`[Storj] Apple Health data saved successfully:`, {
           uri: result.storjUri,
           metrics: result.manifest.metricsPresent.length,
           daysCovered: result.manifest.completeness.daysCovered,
           tier: result.manifest.completeness.tier,
         });
 
-        // Create on-chain attestation
         let attestationResult: {
           success: boolean;
           tier?: string;
@@ -260,9 +245,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
               SECURE_HEALTH_PROFILE_CONTRACT as `0x${string}`,
             );
 
-            // Use manifest's pre-computed completeness so on-chain score matches storage UI (88% not 18%).
-            // Recomputing from manifest.metricsPresent would use normalized keys that don't match
-            // HealthKit IDs and produce a much lower score.
             attestationResult =
               await attestationService.attestAppleHealthFromManifest(
                 result.manifest,
@@ -271,20 +253,20 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
             if (attestationResult.success) {
               console.log(
-                `✅ [Attestation] Apple Health attestation created: ${attestationResult.tier} tier`,
+                `[Attestation] Apple Health attestation created: ${attestationResult.tier} tier`,
               );
               const { notifyAttestationCreated } =
                 await import("@/hooks/useAttestations");
               notifyAttestationCreated();
             } else {
               console.warn(
-                `⚠️ [Attestation] Failed to create attestation:`,
+                `[Attestation] Failed to create attestation:`,
                 attestationResult.error,
               );
             }
           } else {
             console.warn(
-              "⚠️ [Attestation] No wallet client available for attestation",
+              `[Attestation] No wallet client available for attestation`,
             );
           }
         } catch (attestError) {
@@ -298,7 +280,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
           };
         }
 
-        // Update final status
         const attestationNote = attestationResult.success
           ? ` On-chain attestation: ${attestationResult.tier}`
           : attestationResult.error
@@ -313,16 +294,12 @@ const HealthDataSelector: () => React.ReactElement = () => {
           storjUri: result.storjUri,
         });
 
-        // Clear the pending data after successful save
         setAllMetricsForStorj(null);
 
-        // Invalidate React Query so the dashboard picks up fresh Storj health data
         void queryClient.invalidateQueries({
           queryKey: ["storj-apple-health"],
         });
 
-        // Update the IndexedDB Storj items cache so the wallet page shows the
-        // correct upload date without requiring a manual "Refresh" click.
         if (result.storjUri && address) {
           void storjItemsCache
             .cacheItem(address, {
@@ -337,10 +314,8 @@ const HealthDataSelector: () => React.ReactElement = () => {
             });
         }
 
-        // Auto-clear status after 10 seconds
         setTimeout(() => setStorjSaveStatus(null), 10000);
       } else if (result.success) {
-        // Storj save succeeded but no manifest/hash for attestation
         setStorjSaveStatus({
           saving: false,
           progress: 100,
@@ -350,12 +325,10 @@ const HealthDataSelector: () => React.ReactElement = () => {
         });
         setAllMetricsForStorj(null);
 
-        // Invalidate React Query so the dashboard picks up fresh Storj health data
         void queryClient.invalidateQueries({
           queryKey: ["storj-apple-health"],
         });
 
-        // Update the IndexedDB Storj items cache
         if (result.storjUri && address) {
           void storjItemsCache
             .cacheItem(address, {
@@ -390,28 +363,15 @@ const HealthDataSelector: () => React.ReactElement = () => {
     }
   };
 
-  // Parse CSV file and convert to health data structure
-  // Normalize date string to iOS-compatible ISO 8601 format
   const normalizeDate = (dateStr: string): string => {
-    // iOS Safari is strict about date formats
-    // Convert "2025-08-17 17:38:00 -0400" to "2025-08-17T17:38:00-04:00"
     try {
       let normalized = dateStr;
-
-      // Replace first space with T (date and time separator)
       normalized = normalized.replace(" ", "T");
-
-      // Fix timezone format: " -0400" -> "-04:00"
-      // Handle space before timezone and add colon
       normalized = normalized.replace(/ ([+-])(\d{2})(\d{2})$/, "$1$2:$3");
-
-      // Test if it parses correctly
       const testDate = new Date(normalized);
       if (!isNaN(testDate.getTime())) {
         return normalized;
       }
-
-      // If that didn't work, return original
       return dateStr;
     } catch {
       return dateStr;
@@ -442,11 +402,9 @@ const HealthDataSelector: () => React.ReactElement = () => {
         step: (row) => {
           try {
             rowCount++;
-
-            // Update progress every 1000 rows or every 500ms
             const now = Date.now();
             if (rowCount % 1000 === 0 || now - lastProgressUpdate > 500) {
-              const progress = 25 + Math.min(50, (rowCount / 10000) * 50); // Progress from 25% to 75%
+              const progress = 25 + Math.min(50, (rowCount / 10000) * 50);
               updateProcessingProgress(
                 Math.round(progress),
                 `Loading CSV data... (${rowCount.toLocaleString()} rows processed)`,
@@ -466,7 +424,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
             };
 
             const metricType = data.Metric?.trim() as MetricType;
-            // Support both old format (Date) and new format (Start Date/End Date)
             const startDateStr = (data["Start Date"] || data.Date)?.trim();
             const endDateStr = (data["End Date"] || data.Date)?.trim();
             const valueStr = data.Value?.trim();
@@ -476,23 +433,19 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
             if (!metricType || !startDateStr || !valueStr) return;
 
-            // Normalize dates for iOS compatibility
             const normalizedStartDate = normalizeDate(startDateStr);
             const normalizedEndDate = normalizeDate(endDateStr || startDateStr);
 
-            // Debug: Log first normalized date to verify iOS compatibility
             if (rowCount === 1) {
-              console.log("📅 [Date Debug] Normalization example:", {
+              console.log("[Date Debug] Normalization example:", {
                 original: startDateStr,
                 normalized: normalizedStartDate,
                 parsedOk: !isNaN(new Date(normalizedStartDate).getTime()),
               });
             }
 
-            // Track unique metric types
             uniqueMetrics.add(metricType);
 
-            // Initialize array for this metric type if not exists
             if (!healthDataResults[metricType]) {
               healthDataResults[metricType] = [];
             }
@@ -506,7 +459,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
               device,
             };
 
-            // Parse value based on metric type
             let metric: HealthMetric;
 
             switch (metricType) {
@@ -583,8 +535,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
             `CSV loaded successfully (${rowCount.toLocaleString()} rows)`,
           );
 
-          // Debug: Log what we found in the CSV
-          console.log("📊 [CSV Debug] Parsing complete:");
+          console.log("[CSV Debug] Parsing complete:");
           console.log(`   - Total rows processed: ${rowCount}`);
           console.log(
             `   - Unique metrics found:`,
@@ -624,18 +575,9 @@ const HealthDataSelector: () => React.ReactElement = () => {
       let healthDataResults: Partial<Record<MetricType, HealthMetric[]>> = {};
 
       if (isCSV) {
-        // Parse CSV file
         updateProcessingProgress(25, "Reading CSV file...");
         healthDataResults = await parseCSVFile(uploadedFile);
       } else {
-        // Parse XML file with captureAllForStorj enabled
-        // This captures ALL 56+ metric types in the background for Storj backup
-        // while only displaying the selected 9 metrics in the UI
-
-        // Load existing data from IndexedDB for overlap prevention.
-        // Apple Health exports always contain the full dataset, so on successive
-        // uploads we skip records that already exist (startDate <= lastEndDate
-        // per metric+device) to avoid duplicating data.
         updateProcessingProgress(
           2,
           "Loading existing data for deduplication...",
@@ -664,8 +606,8 @@ const HealthDataSelector: () => React.ReactElement = () => {
         const parser = new XMLStreamParser({
           selectedMetrics,
           timeFrame,
-          captureAllForStorj: true, // Enable full metric capture for Storj
-          existingData, // Pass existing data for overlap prevention
+          captureAllForStorj: true,
+          existingData,
           onProgress: (progress): void => {
             updateProcessingProgress(
               progress.progress,
@@ -676,20 +618,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
         const results = await parser.parseFile(uploadedFile);
 
-        // Store ALL metrics data for potential Storj save.
-        // Deduplicate first using the same Watch-priority / iPhone-fallback
-        // hourly-block algorithm applied to the IndexedDB path below (line 650).
-        // Without this, raw XML records from both Apple Watch and iPhone flow
-        // into buildDailySummaries(), which sums them naively and produces
-        // inflated daily totals (e.g. 14K steps when HealthKit shows 12K).
-        //
-        // The parser's overlap prevention skips XML records whose startDate is
-        // within the IndexedDB history (to avoid re-importing data the user
-        // already has locally). This is correct for the UI/IndexedDB path, but
-        // it means allMetricsData is missing those records for the Storj path.
-        // Fix: supplement allMetricsData with existingData so the Storj backup
-        // always contains the complete dataset regardless of what is already in
-        // IndexedDB. The deduplication step below handles any overlap.
         if (parser.hasStorjData()) {
           const allData = parser.getAllMetricsData();
           const mergedForStorj: Record<string, HealthDataPoint[]> = {
@@ -710,7 +638,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
           }
           setAllMetricsForStorj(dedupedForStorj);
           console.log(
-            `📦 [Storj] Captured ${Object.keys(dedupedForStorj).length} metric types for potential Storj backup:`,
+            `[Storj] Captured ${Object.keys(dedupedForStorj).length} metric types for potential Storj backup:`,
             Object.entries(dedupedForStorj).map(
               ([k, v]) => `${k}: ${v.length}`,
             ),
@@ -722,7 +650,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
           const source = (dataPoints[0]?.source ||
             "Apple Health") as DataSource;
 
-          // Apply proper deduplication for each metric type
           const processedPoints = deduplicateData(dataPoints, metricTypeKey);
 
           const metrics = processedPoints.map((point) => {
@@ -773,8 +700,7 @@ const HealthDataSelector: () => React.ReactElement = () => {
         }
       }
 
-      // Debug: Log what we're about to save
-      console.log("💾 [Save Debug] About to save health data:");
+      console.log("[Save Debug] About to save health data:");
       console.log(`   - Metrics to save:`, Object.keys(healthDataResults));
       console.log(
         `   - Total records:`,
@@ -784,9 +710,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
         ),
       );
 
-      // Compute and persist long-range aggregates ("bins") BEFORE saving raw data.
-      // Raw IndexedDB storage will be limited to a recent window for performance,
-      // while processed aggregates preserve long-range charts/queries.
       updateProcessingProgress(90, "Computing long-range aggregates...");
       await healthDataProcessor.processRawData(
         healthDataResults as unknown as HealthDataByType,
@@ -795,13 +718,11 @@ const HealthDataSelector: () => React.ReactElement = () => {
 
       saveHealthData(healthDataResults as Record<MetricType, HealthMetric[]>);
 
-      console.log("✅ [Save Debug] saveHealthData called successfully");
+      console.log("[Save Debug] saveHealthData called successfully");
 
-      // Only export CSV on desktop (not mobile) to avoid interrupting the app
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
       if (!isMobile && !isCSV) {
-        // Convert to CSV format (only for XML uploads on desktop)
         const headers = [
           "Start Date",
           "End Date",
@@ -841,7 +762,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
           ),
         ].join("\n");
 
-        // Create and download CSV file
         const blob = new Blob([csvContent], {
           type: "text/csv;charset=utf-8;",
         });
@@ -958,12 +878,13 @@ const HealthDataSelector: () => React.ReactElement = () => {
               onClick={(e) => e.stopPropagation()}
             />
 
-            {/* Dynamic warning for XML files */}
+            {/* Warn only for actually large XML exports, not every .xml */}
             {uploadedFile &&
-              !uploadedFile.name.toLowerCase().endsWith(".csv") && (
+              !uploadedFile.name.toLowerCase().endsWith(".csv") &&
+              uploadedFile.size >= 5 * 1024 * 1024 && (
                 <div className="p-3 rounded-lg border-l-4 border-amber-400 bg-[rgba(245,158,11,0.06)] dark:bg-[rgba(245,158,11,0.04)] text-sm">
                   <p className="font-semibold text-amber-700 dark:text-amber-400 mb-1">
-                    ⚠️ Large file detected
+                    Large file detected
                   </p>
                   <p className="text-[#6B8C7A]">
                     XML files can be resource-intensive and may cause issues on
@@ -1048,7 +969,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
               </div>
             )}
 
-            {/* Storj Save Section - shows when ALL metrics data is available */}
             {allMetricsForStorj && (
               <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
@@ -1093,7 +1013,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
                       )}
                     </button>
 
-                    {/* Storj save progress */}
                     {storjSaveStatus?.saving && (
                       <div className="space-y-1">
                         <div
@@ -1113,7 +1032,6 @@ const HealthDataSelector: () => React.ReactElement = () => {
                       </div>
                     )}
 
-                    {/* Storj save status */}
                     {storjSaveStatus && !storjSaveStatus.saving && (
                       <div
                         className={`flex items-center gap-2 text-sm p-2 rounded ${

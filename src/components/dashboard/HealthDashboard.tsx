@@ -19,6 +19,7 @@ import HRVChart from "./charts/HRVChart";
 import HeartRateChart from "./charts/HeartRateChart";
 import SleepAnalysisChart from "./charts/SleepAnalysisChart";
 import StepCountChart from "./charts/StepCountChart";
+import VO2MaxChart from "./charts/VO2MaxChart";
 
 const cardClass =
   "rounded-xl border bg-white dark:bg-[#0B140F] border-[rgba(0,107,79,0.12)] dark:border-[rgba(0,107,79,0.15)] p-5";
@@ -148,6 +149,16 @@ export const HealthDashboard: () => JSX.Element = () => {
       return toHealthData(samples, "HKQuantityTypeIdentifierAppleExerciseTime");
     return (metricData["HKQuantityTypeIdentifierAppleExerciseTime"] ||
       []) as HealthData[];
+  }, [metricData, toHealthData]);
+
+  const vo2maxForCharts = useMemo(() => {
+    const samples = healthDataProcessor.getDataForVisualization(
+      "HKQuantityTypeIdentifierVO2Max",
+      { aggregationLevel: "daily" },
+    );
+    if (samples.length > 0)
+      return toHealthData(samples, "HKQuantityTypeIdentifierVO2Max");
+    return (metricData["HKQuantityTypeIdentifierVO2Max"] || []) as HealthData[];
   }, [metricData, toHealthData]);
 
   const sleepRawCount = (
@@ -344,6 +355,22 @@ export const HealthDashboard: () => JSX.Element = () => {
                 </div>
                 <div className="pt-2">
                   <HRVChart data={hrvForCharts} height={400} />
+                </div>
+              </div>
+            )}
+
+            {vo2maxForCharts.length > 0 && (
+              <div className={cardClass}>
+                <div className="mb-4">
+                  <h3 className="text-xl font-bold text-[#0A1A0F] dark:text-[#F0F7F3]">
+                    VO2 Max
+                  </h3>
+                  <p className="text-[#6B8C7A] text-sm mt-1">
+                    Maximal oxygen uptake (ml/(kg·min))
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <VO2MaxChart data={vo2maxForCharts} height={400} />
                 </div>
               </div>
             )}

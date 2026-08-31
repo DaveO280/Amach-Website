@@ -28,6 +28,9 @@ export default function PrivyProvider({
       defaultChain: activeChain,
       supportedChains: [zkSyncSepoliaTestnet, zkSyncMainnet],
       embeddedWallets: {
+        // Top-level + nested: Privy 2.x reads createOnLogin here; 3.x reads ethereum.
+        // Missing either can leave createWallet undefined and throw on email OTP.
+        createOnLogin: "users-without-wallets" as const,
         ethereum: {
           createOnLogin: "users-without-wallets" as const,
         },
@@ -98,7 +101,6 @@ export default function PrivyProvider({
 
   if (isBuildTime) {
     // During build without app ID, just render children to allow static generation
-     
     return children as JSX.Element;
   }
 

@@ -60,6 +60,7 @@ export interface HealthMetricStats {
   respiratory: MetricSummary;
   activeEnergy: MetricSummary;
   sleep: SleepSummary;
+  vo2max: MetricSummary;
 }
 
 type RawPoint = { startDate: string; value: string };
@@ -222,6 +223,10 @@ export function computeHealthMetricStats(
   const respiratory = processRespiratoryData(
     (metricData["HKQuantityTypeIdentifierRespiratoryRate"] || []) as RawPoint[],
   );
+  // VO2 Max is a sparse once-daily cardio metric (same 9th type as Data Selector).
+  const vo2max = processRateData(
+    (metricData["HKQuantityTypeIdentifierVO2Max"] || []) as RawPoint[],
+  );
 
   const sleepRaw = metricData["HKCategoryTypeIdentifierSleepAnalysis"] || [];
   const processedSleep = processSleepData(sleepRaw);
@@ -336,5 +341,23 @@ export function computeHealthMetricStats(
           : 0,
     },
     sleep,
+    vo2max: {
+      average:
+        vo2max.length > 0
+          ? Math.round(
+              (vo2max.reduce((sum, d) => sum + (d.avg ?? 0), 0) /
+                vo2max.length) *
+                10,
+            ) / 10
+          : 0,
+      high:
+        vo2max.length > 0
+          ? Math.round(Math.max(...vo2max.map((d) => d.max ?? 0)) * 10) / 10
+          : 0,
+      low:
+        vo2max.length > 0
+          ? Math.round(Math.min(...vo2max.map((d) => d.min ?? 0)) * 10) / 10
+          : 0,
+    },
   };
 }

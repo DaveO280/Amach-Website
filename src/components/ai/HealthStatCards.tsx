@@ -20,7 +20,8 @@ type MetricKey =
   | "restingHR"
   | "respiratory"
   | "activeEnergy"
-  | "sleep";
+  | "sleep"
+  | "vo2max";
 
 const HK_KEY: Record<MetricKey, string> = {
   steps: "HKQuantityTypeIdentifierStepCount",
@@ -31,6 +32,7 @@ const HK_KEY: Record<MetricKey, string> = {
   respiratory: "HKQuantityTypeIdentifierRespiratoryRate",
   activeEnergy: "HKQuantityTypeIdentifierActiveEnergyBurned",
   sleep: "HKCategoryTypeIdentifierSleepAnalysis",
+  vo2max: "HKQuantityTypeIdentifierVO2Max",
 };
 
 function windowedAvg(
@@ -112,6 +114,7 @@ function useMetricWindows(
       "respiratory",
       "activeEnergy",
       "sleep",
+      "vo2max",
     ];
     return Object.fromEntries(
       keys.map((k) => [
@@ -282,6 +285,7 @@ const HealthStatCards: React.FC = React.memo((): React.ReactNode => {
           "respiratory",
           "activeEnergy",
           "sleep",
+          "vo2max",
         ] as const
       ).map((key) => {
         const metric = metrics[key];

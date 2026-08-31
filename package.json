@@ -95,7 +95,7 @@
     "@svgr/webpack": "^8.1.0",
     "@tailwindcss/forms": "^0.5.10",
     "@tailwindcss/typography": "^0.5.19",
-    "@types/better-sqlite3": "^7.6.13",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/crypto-js": "^4.2.2",
     "@types/d3-array": "^3.2.2",
     "@types/d3-color": "^3.1.3",

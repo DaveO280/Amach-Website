@@ -2877,6 +2877,7 @@ const CosaintChatUI: React.FC<CosaintChatUIProps> = ({
                 .map((key) => {
                   if (key === "hrv") return "HRV";
                   if (key === "restingHR") return "Resting HR";
+                  if (key === "vo2max") return "VO2 Max";
                   return (
                     key.charAt(0).toUpperCase() +
                     key

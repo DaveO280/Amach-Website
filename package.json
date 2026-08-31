@@ -163,7 +163,7 @@
       "tmp": "^0.2.3",
       "next": "16.3.0",
       "h3": "1.15.9",
-      "hono": "4.12.25",
+      "hono": "^4.12.34",
       "defu": "6.1.5",
       "underscore": "1.13.8",
       "qs": "^6.15.2",
@@ -177,7 +177,7 @@
       "ws": "^8.21.0",
       "uuid": "^14.0.1",
       "postcss": "^8.5.15",
-      "socket.io-parser": "4.2.6",
+      "socket.io-parser": "^4.2.7",
       "router>path-to-regexp": "8.4.0",
       "yaml": "1.10.3",
       "bn.js": "^5.2.3",
@@ -205,7 +205,7 @@
       "request": "The 'request' package has SSRF vulnerability (CVE-2023-28155) but is only used in dev/test via @nomiclabs/hardhat-waffle. It's deprecated and has no patched version. This is acceptable risk as it never runs in production.",
       "lodash": "CVE lodash _.template code injection (High): lodash 4.x is abandoned at 4.17.21, no patched version exists. Privy SDK pulls this in as a transitive dep. Attack requires caller to pass untrusted input to _.template() directly — Amach does not do this. Acceptable known risk until Privy removes the lodash dependency.",
       "elliptic": "Elliptic has a low-severity vulnerability (risky cryptographic implementation) but is a transitive dependency required by crypto libraries. This is tolerated as it's a low-risk issue and no alternative is available without breaking changes.",
-      "hono-ws-uuid-postcss": "Transitive Privy/x402 and AWS SDK paths; overrides pin hono>=4.12.25, ws>=8.21.0, form-data>=4.0.6, uuid>=11.1.1, postcss>=8.5.15, fast-xml-parser>=5.7, qs>=6.15.2 for audit:ci."
+      "hono-ws-uuid-postcss": "Transitive Privy/x402 and AWS SDK paths; overrides pin hono>=4.12.34 (6 moderate advisories incl. per-request context leak GHSA-hvrm-45r6-mjfj, JSX XSS GHSA-w62v-xxxg-mg59, CORS ReDoS, memo() SSR leak, lang-middleware DoS), socket.io-parser>=4.2.7 (GHSA-2m8v-j782-fhvr memory exhaustion), ws>=8.21.0, form-data>=4.0.6, uuid>=11.1.1, postcss>=8.5.15, fast-xml-parser>=5.7, qs>=6.15.2 for audit:ci."
     },
     "patchedDependencies": {
       "viem": "patches/viem.patch"
